@@ -304,6 +304,7 @@ Marks and fills are never activity.
 Starting a title is activity: choosing Watching, a tick that puts it in Watching, or starting a rewatch.
 A log is one item on its calendar day, separate from that day's start or progress (AC-2).
 Imports and webhooks' marks start nothing.
+Choosing Paused or Dropped, and choosing Watching from either, records the move once the title was started, as TV-703 does; a tick that ends a pause is just the tick. A move adds nothing to any number and shows nowhere yet (AC-1).
 
 ### AN-704: Stats read viewings
 

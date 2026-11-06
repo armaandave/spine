@@ -37,8 +37,8 @@ hearts, follows, or adding to a list.
   attempt, or a game playthrough deletes its start and progress with it.
 - A status move the person chooses is recorded the same way, as a step of kind
   `status` with value 0 in previous and current and its `move`: `paused`, `stopped`
-  or `picked back up`. It's on a book, game, show, manga or comic, never anime, and
-  never from an import, a mark, a restore or Restart. It adds nothing to any number,
+  or `picked back up`. It's on a book, game, show, anime, manga or comic, and never
+  from an import, a mark, a restore or Restart. It adds nothing to any number,
   and nothing shows it yet (AC-1). A book's Restart writes `began_over` on its start
   row, and so does a reread, which opens over a finished read: deleting that log later
   can't change where it began. A pick-up with nothing before it to carry on from, a

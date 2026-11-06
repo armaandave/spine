@@ -1,6 +1,7 @@
 """AC-1: status moves get recorded, and recording them changes nothing anyone sees.
 
-Pause, resume, stop, pick-up and Restart on a book, game, show, manga and comic.
+Pause, resume, stop, pick-up and Restart on a book, game, show, manga and comic, and
+pause, stop and pick-up on an anime (decision 63).
 Deleting only the status rows leaves Stats, Home, the profile list and the post page
 byte-identical, same-day order included. latest_progress_change never reports one, on
 either path.
@@ -18,8 +19,9 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.test import APIClient
 
 from api.serializers.common import latest_progress_change_for, prime_collection_items
-from app import book_tracking, game_tracking, series_tracking, tv_tracking
+from app import anime_tracking, book_tracking, game_tracking, series_tracking, tv_tracking
 from app.models import Book, Comic, Game, Item, Manga, MediaTypes, Sources, Status
+from app.tests.anime_fixtures import FakeAnimeProvider, make_item
 from app.tests.tv_fixtures import FakeTVProvider, make_show, make_user, patch_now
 from integrations.imports.margins.importer import MarginsImporter
 from social.models import Follow, FollowStatus, ProgressChange
@@ -86,7 +88,7 @@ class StatusRowBase(TestCase):
         pages = {}
         for name, params in (("all_time", ALL_TIME), ("year", YEAR)):
             pages[f"stats_{name}"] = self.get("/api/v1/stats/me/summary/", params)
-            for tab in ("book", "game", "tv", "manga", "comic"):
+            for tab in ("book", "game", "tv", "anime", "manga", "comic"):
                 pages[f"stats_{name}_{tab}"] = self.get("/api/v1/stats/me/summary/", {**params, "media_type": tab})
         pages["home"] = self.get("/api/v1/feed/", user=self.friend)
         pages["profile"] = self.get("/api/v1/users/reader/activity/", user=self.friend)
@@ -382,6 +384,70 @@ class ShowMoveTests(StatusRowBase):
         self.assertEqual(self.moves(self.show), [STOPPED])
         starts = ProgressChange.objects.filter(item=self.show, current_progress__kind=ProgressChange.START)
         self.assertEqual(starts.count(), 1)
+
+
+class AnimeMoveTests(StatusRowBase):
+    """Anime records them as a show does (AN-703, decision 63)."""
+
+    def setUp(self):
+        super().setUp()
+        self.fake = FakeAnimeProvider().__enter__()
+        self.addCleanup(self.fake.__exit__, None, None, None)
+        self.anime = make_item(self.fake, total=12)
+
+    def test_pause_stop_and_pick_up_once_started(self):
+        anime_tracking.tick(self.user, self.anime, 1)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.PAUSED)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.WATCHING)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.DROPPED)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.WATCHING)
+        self.assertEqual(self.moves(self.anime), [PAUSED, BACK, STOPPED, BACK])
+        move = ProgressChange.objects.filter(item=self.anime, current_progress__kind=ProgressChange.STATUS).first()
+        self.assertEqual(move.saved_on, date(2026, 10, 25))
+        self.assertEqual((move.previous_progress["value"], move.current_progress["value"]), (0, 0))
+
+    def test_an_anime_never_started_writes_nothing(self):
+        anime_tracking.choose(self.user, self.anime, anime_tracking.PAUSED)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.DROPPED)
+        self.assertEqual(self.moves(self.anime), [])
+
+    def test_a_marked_anime_was_never_started(self):
+        anime_tracking.mark_watched(self.user, self.anime)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.DROPPED)
+        self.assertEqual(self.moves(self.anime), [])
+
+    def test_a_tick_that_ends_a_pause_is_just_the_tick(self):
+        anime_tracking.tick(self.user, self.anime, 1)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.PAUSED)
+        self.later()
+        anime_tracking.tick(self.user, self.anime, 2)
+        self.assertEqual(self.moves(self.anime), [PAUSED])
+
+    def test_a_webhook_and_an_import_choose_nothing(self):
+        anime_tracking.tick(self.user, self.anime, 1)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.PAUSED, entry_point=anime_tracking.WEBHOOK)
+        other = make_item(self.fake, total=12)
+        anime_tracking.import_title(self.user, other, status=Status.DROPPED.value, count=3)
+        self.assertEqual((self.moves(self.anime), self.moves(other)), ([], []))
+
+    def test_recording_them_changes_nothing_anyone_sees(self):
+        anime_tracking.tick(self.user, self.anime, 1)
+        anime_tracking.tick(self.user, self.anime, 2)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.PAUSED)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.WATCHING)
+        self.later()
+        anime_tracking.choose(self.user, self.anime, anime_tracking.DROPPED)
+        self.assert_status_rows_change_nothing()
 
 
 class NothingMovesTests(StatusRowBase):
