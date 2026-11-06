@@ -8,7 +8,7 @@ the Stats endpoint, and every file goes through its real importer with no networ
 """
 
 import io
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import patch
 
 from django.test import override_settings
@@ -88,6 +88,15 @@ class YamtrackPlayTests(ImportBase):
         self.assertEqual([is_rewatch for _, is_rewatch, _ in self.logs()], [False, True])
         self.watches(2, 2)
 
+    def test_a_dated_row_before_the_only_log_is_no_rewatch(self):
+        """Eye, a log off on Mar 1, then a file's older play: the first watch is the file's."""
+        self.eye()
+        self.log(rewatch=False, day=date(2026, 3, 1))
+        self.watches(1, 1)
+        self.load(("Completed", "2026-01-10", ""), mode="overwrite")
+        self.assertEqual([is_rewatch for _, is_rewatch, _ in self.logs()], [False, False])
+        self.watches(2, 2)
+
     def test_a_row_still_in_progress_is_no_play(self):
         self.load(("In progress", "2026-02-01", ""))
         self.assertEqual(self.logs(), [])
@@ -117,6 +126,56 @@ class YamtrackAlbumPlayTests(YamtrackPlayTests):
 
     media_type = MediaTypes.MUSIC.value
     minutes = 60
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class ImportedPlayOrderTests(ImportBase):
+    """A play with no Rewatch value is a rewatch only after an earlier log (decision 38).
+
+    Trakt's film history comes in this way. A log on a later day doesn't make it one.
+    """
+
+    def play(self, *days):
+        rows = [{"source_id": day.isoformat(), "consumed_at": day, "is_rewatch": None} for day in days]
+        single_weight.import_logs(self.user, self.item, rows, source="trakt")
+
+    def rewatches(self):
+        return [is_rewatch for _, is_rewatch, _ in self.logs()]
+
+    def test_a_play_before_the_only_log_is_no_rewatch(self):
+        self.eye()
+        self.log(rewatch=False, day=date(2026, 3, 1))
+        self.watches(1, 1)
+        self.play(date(2026, 1, 10))
+        self.assertEqual(self.rewatches(), [False, False])
+        self.watches(2, 2)
+
+    def test_plays_either_side_of_a_log(self):
+        self.log(rewatch=False, day=date(2026, 2, 1))
+        self.play(date(2026, 1, 10), date(2026, 3, 1))
+        self.assertEqual(self.rewatches(), [False, False, True])
+        self.watches(3, 3)
+
+    def test_a_play_on_a_logged_day_follows_that_log(self):
+        self.log(rewatch=False, day=date(2026, 3, 1))
+        self.play(date(2026, 3, 1))
+        self.assertEqual(self.rewatches(), [False, True])
+
+    def test_a_later_play_in_the_same_import_is_a_rewatch(self):
+        self.play(date(2026, 1, 10), date(2026, 2, 1))
+        self.assertEqual(self.rewatches(), [False, True])
+
+    def test_an_old_logs_moment_is_read_on_the_owners_calendar(self):
+        """11:30 pm on Jan 10 in New York is Jan 11 in UTC; it's still the Jan 10 log."""
+        self.eye()
+        DiaryEntry.objects.create(
+            user=self.user,
+            item=self.item,
+            consumed_at=datetime(2026, 1, 11, 4, 30, tzinfo=UTC),
+            is_rewatch=False,
+        )
+        self.play(date(2026, 1, 10))
+        self.assertEqual(sorted(self.rewatches()), [False, True])
 
 
 @override_settings(TIME_ZONE=NEW_YORK)
