@@ -637,7 +637,7 @@ An episode log never reopens a finished season or show (TV-603).
 
 When a tick or an episode log in the app finishes a season, the app opens that season's Log Season composer, dated with the day of that tick or log (TV-404).
 
-- **Save** creates one season log, sets the season's stars and heart under TV-501, and posts one feed item. It fills nothing, because the season is already watched, and it covers the season (TV-400).
+- **Save** creates one season log, sets the season's stars and heart under TV-501, and posts one feed item. It fills nothing, because the season is already watched, and it covers the season (TV-400). As it opens it adds nothing to Stats, because the ticks already counted this time through: during a rewatch it opens with Rewatch on and still adds nothing, so a rewatch ticked to the end and then logged is 270, not 405 (decision 42, STAT-104). Only Rewatch turned on outside a rewatch counts the season again. The same holds when the target is switched to Whole show: a show rewatch ticked through, with Season 1 logged on the way, then the finale logged as the whole show, counts each episode twice in all, once in each time through.
 - **Not now** saves nothing (SW-301). The season stays finished, and Log Season stays in its + menu.
 
 Spine offers the composer at most once for each season in each pass, so unticking and re-ticking the finale doesn't offer it again.
@@ -710,9 +710,11 @@ TV-407 sets the date limits.
 ### TV-406: Deleting a log removes only its own viewing and fills
 
 Deleting an episode log removes the viewing it added.
+A review that added no viewing, because it describes the watch already there (TV-402), removes nothing but itself.
 Deleting a season or show log removes the fills it made, including fills it took over from a mark (TV-302).
 A tick the log claimed stays as an unlogged tick, on the calendar day it has now.
 Other viewings, marks and logs stay.
+What a log counted only when Stats read it goes with it, with nothing to remove: a Rewatch-on log's second count, the mark's watch a Rewatch-off log dated, which goes back to All Time's undated pile, and the ticks a backdated log took, which go back to their own days (STAT-104).
 
 When the deletion will unmark episodes, ask first, for example "Delete this log? 7 episodes it marked watched will be unmarked." (GM-221)
 Then work out the state again and apply TV-208.
@@ -1233,6 +1235,7 @@ No application code was changed while writing this contract.
 Follow-up documents, as for books and games: `tv-tracking-coverage.md`, mapping each law to its tests, and a simulator verification document.
 
 TV-703's status moves are provisional until the phone test of Activity's first phase accepts them.
+TV-403's and TV-406's Stats sentences are provisional until the phone test of Activity's third phase accepts them.
 
 ## Scope boundary
 

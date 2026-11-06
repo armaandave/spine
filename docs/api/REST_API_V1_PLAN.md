@@ -230,10 +230,15 @@ TV logs (`tv`, `season`, `episode`) follow `docs/tv-tracking-contract.md`. Every
 TV log puts the show in the library and counts its target watched, whatever
 `auto_mark_consumed` says (TV-400): a season or show log fills the aired episodes
 not yet watched (TV-401), and an episode log claims the episode's latest unlogged
-tick or adds a viewing on its date (TV-402). `consumed_at` is a calendar date on
+tick, describes a watch already there and adds nothing, or adds a viewing on its
+date (TV-402). `consumed_at` is a calendar date on
 the user's calendar; a datetime from installed builds is converted to it, and a
 future date is a `400` (TV-407). Omitting `is_rewatch` applies the server's
-default (TV-404). A `mutation_id` saves the log at most once. The `201` response
+default (TV-404). On a season or show log the saved `is_rewatch` also decides
+Stats' hours: whether a mark stands for an earlier watch, and whether the log counts
+what it covers again (STAT-104); a movie's or album's decides the first (STAT-201).
+A season or show log from a build that sends a datetime and no `mutation_id` keeps
+Rewatch on only as a label (TV-900). A `mutation_id` saves the log at most once. The `201` response
 adds `tv`, `finished` and `earlier_unwatched`. Diary entries carry
 `media.show_title` and `media.episode_title`; `tv_log` (what a TV log covers and
 would unmark) is filled only on the log's own detail, create and update
@@ -244,8 +249,11 @@ diary field: `consumed_at`, `rating`, `review`, `review_title`, `tags`,
 `visibility`, `contains_spoilers`, `is_rewatch`, and `liked`. The diary media
 reference is not changed by PATCH. Editing `consumed_at` syncs the completion
 date on existing completed tracking rows for the same item and re-queues daily
-statistics. For a TV episode log it moves only that log's own viewing; a season
-or show log's date moves no viewing (TV-405).
+statistics. For a TV episode log it moves only the viewing the log added: a tick
+it claimed keeps its own day. A season or show log's date moves no viewing (TV-405).
+On a movie, album, season or show log, changing `is_rewatch` writes only the saved
+value, which Stats read (STAT-104, STAT-201); on an episode log it also decides again
+whether the log claims a tick or adds a viewing (TV-402).
 
 `DELETE /api/v1/diary/{id}/` removes the diary entry and mirrors web tracking
 side effects. If it was the last diary entry for a movie or diary-completed

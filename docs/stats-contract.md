@@ -52,7 +52,7 @@ The following rules apply without another approval step:
 | Title | What a row counts as. A TV season or episode counts as its show; everything else counts as itself (STAT-102). |
 | Target | The Item a log is about: an episode, season or show for TV, otherwise the title. |
 | Viewing | A TV `Episode` row: one watching of one episode (TV terms). |
-| Dated viewing | A viewing with a calendar day: its `watched_on`, or for a viewing that isn't a fill, its `end_date` on the owner's calendar (the same rule as `tv_tracking._viewing_day`). Fills have no day (TV-301). |
+| Dated viewing | A viewing with a day Stats read it on: its `watched_on`, or for a viewing that isn't a fill, its `end_date` on the owner's calendar (the same rule as `tv_tracking._viewing_day`); a log's fills on that log's day; a mark's fill on the day of the Rewatch-off log that dates it. A backdated log can count a tick on its own day instead (STAT-104). A fill nothing dates has no day (TV-301). |
 | Hidden viewing | A viewing that belongs to a log (`Episode.diary_entry`) the viewer can't see. |
 | Event | One title on one day (STAT-106). |
 | Undated completion | A title consumed with no log, counted only in All Time (STAT-105). |
@@ -171,10 +171,10 @@ A title counts once however many of these it has. A start with no reading is an 
 
 Events are the distinct (day, title) pairs from visible logs, from dated viewings that aren't hidden, and from each day's progress and starts, as the activity feed counts them (docs/activity-contract.md, AC-1, AC-2).
 A day's progress is the owner's recorded progress changes on a title in one local day, kept when it moved forward on net; starting a title counts the same way.
-TV and anime count only their starts this way: their ticks already are events, as dated viewings on the day watched.
+TV and anime count only their starts this way: their viewings already are events, on the day each is read for under STAT-104. So a tick a backdated log takes is an event on the log's day, not its own, and a start on a day whose ticks all went to that log is no event (decision 43).
 Three episodes of one show watched on one day are one event, and so are a manga's chapters read and logged on one day.
 Fills and undated completions are never events.
-A book's, game's, manga's, comic's or anime's events are its rows with an amount, a told number, a real start or a log, on the day each stored. A status move adds no event, and neither does a pick-up with no reading, a typo fixed to nothing, a retype, or a mark.
+Every type's events are its rows in `api.services.activity_rows` with an amount, a told number, a real start or a log, on the day each is read for: books, games, manga, comics and anime from Phases 1 and 2, and TV, movies and music from Phase 3. A log counts its day even when it adds nothing, such as a Rewatch-off season log over a season already watched. A status move adds no event, and neither does a pick-up with no reading, a typo fixed to nothing, a retype, or a mark.
 Events drive active days, streaks, "Days with 2+ titles", the activity charts and the busiest day and month.
 
 ### STAT-107: Reads and completions always add the undated fact in All Time
@@ -193,7 +193,7 @@ A log is a rewatch when one of these holds:
    - **Books and games:** `completed_manually` always counts, because an undated completion is earlier than every dated one (BK-406, GM-216). The saved reread or replay toggle is never read (BK-405, GM-217).
    - **Movies and music:** the direct-consumption marker counts only when the log was saved as a rewatch (`DiaryEntry.is_rewatch`, SW-010, SW-503). The saved value is the user's or the import's own statement; the marker alone can't say whether it came first, because imports set it after importing the diary.
    - **TV season and show logs:** a mark's fill under the target, created before the log, counts only when the log was saved as a rewatch.
-   - **TV episode logs:** the episode had a viewing created before the log's own viewing that the log didn't claim (TV-402). The saved toggle is never read.
+   - **TV episode logs:** the episode had a viewing created before the log's own viewing that the log didn't claim (TV-402). The saved toggle is never read. A review that adds no viewing, because it describes the watch already there (TV-402), has no own viewing, so this rule never makes it a rewatch.
    - **Anime:** a mark's fill of the title, created before the log, counts only when the log was saved as a rewatch, as for a TV season log (AN-400).
    - **Manga and comics:** only rule 1 applies.
 
@@ -1266,6 +1266,8 @@ Writing the laws settled details those decisions leave open. These are provision
 - **Header details (STAT-200).** The list of per-type details and their labels, and that "right now" TV counts appear only in All Time.
 - **Specials (STAT-104).** Viewings of specials count in time, events and episodes watched.
 - **Group keys and labels (STAT-211).** The keys are fixed here; the labels follow the plan ("Thriller & Crime", "Music & Musicals"). Milestone 1 built them in `api.services.genre_groups` (`GROUPS`).
+
+Activity's third phase moved TV, movies and music onto it, with the Rewatch switch's rules, and gave anime TV's rules (decision 62). STAT-104's switch rules, the Terms row for a dated viewing, STAT-106 and STAT-108 for these types, and STAT-201's Movie, TV and Music rows are provisional until its phone test accepts them.
 
 Activity's second phase (2026-11-05) moved anime, manga, comics and games onto it too. Anime's numbers are the same. STAT-106 for these types, STAT-201's anime, manga, comic and game rows with `known` and `total` counting titles, `approximate` false in a range, an anime held only by a mark or a stored number becoming an All Time title (STAT-105), and a manga or comic's typo fix coming off the newest amounts are provisional until its phone test accepts them.
 
