@@ -597,3 +597,25 @@ class NewYearTests(TVCalcBase):
             self.assertEqual((self.number(2025), self.number(2026)), (3 * E, 0))
         finally:
             user_calendar.REQUEST_TIMEZONE.reset(token)
+
+
+class ManyMovedTests(TVCalcBase):
+    """Thousands of marked episodes a Rewatch-off log dates stay one branch per day."""
+
+    def test_three_thousand_moved_viewings(self):
+        shows = [self.show(200, minutes=1) for _ in range(15)]
+        self.on(date(2026, 1, 15))
+        for show in shows:
+            self.eye(show)
+        for number, show in enumerate(shows, start=1):
+            self.on(date(2026, 3, number))
+            self.log(self.season(show), is_rewatch=False)
+        moved = rows_for([self.user], self.user, types=[TV]).moved
+        self.assertEqual((len(moved), len(set(moved.values()))), (3000, 15))
+        self.assert_minutes(2026, 3000, 3000)
+        scope = build_scope(self.user, self.user, {"start_date": "2026-01-01", "end_date": "2026-12-31", "media_type": TV})
+        sql = str(scope.dated_viewings.annotate(day=scope.viewing_day()).query)
+        self.assertLess(sql.count("WHEN"), 40, "One branch per moved day, not per viewing")
+        march = scope.all_viewings.filter(scope.viewing_days_q(date(2026, 3, 1), date(2026, 3, 1)))
+        self.assertEqual(march.count(), 200)
+        self.assertEqual(scope.dated_viewings.count(), 3000)

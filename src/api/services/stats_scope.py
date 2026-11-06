@@ -27,6 +27,7 @@ What a scope holds:
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from functools import cached_property, reduce
@@ -799,11 +800,21 @@ class StatsScope:
 
 
 def _with_moves(day, moved):
-    """Return a viewing's day, with the days logs moved some to (decision 43)."""
+    """Return a viewing's day, with the days logs moved some to (decision 43).
+
+    One branch per day moved to, not per viewing: a long show under one log moves
+    hundreds of viewings to a single day.
+    """
     if not moved:
         return day
+    by_day = defaultdict(list)
+    for viewing_id, moved_to in moved.items():
+        by_day[moved_to].append(viewing_id)
     return Case(
-        *(When(id=viewing_id, then=Value(moved_to, output_field=DateField())) for viewing_id, moved_to in moved.items()),
+        *(
+            When(id__in=sorted(ids), then=Value(moved_to, output_field=DateField()))
+            for moved_to, ids in sorted(by_day.items())
+        ),
         default=day,
         output_field=DateField(),
     )
