@@ -151,7 +151,7 @@ class GameStoriesTests(GameCalcBase):
         self.assertEqual((row.counts_title, row.known, row.told_unit), (True, False, "percent"))
 
     def test_playtime_and_a_percent_on_one_day_tell_the_playtime(self):
-        """AC-2 for either order: that day's hours are told, so the day is known (decision 20)."""
+        """AC-2 either way: the day's hours are told, so it's known (decision 20)."""
         hours_first = self.game("hours-first")
         self.begin(hours_first, d(2026, 2, 1))
         self.save(hours_first, h(5), d(2026, 2, 2))
@@ -477,7 +477,7 @@ class GameImportTests(GameCalcBase):
         self.assertEqual(self.lines(), [])
 
     def legacy_mark_file(self, item):
-        """Mark a game finished as 0078 leaves an old one, with its date and hours; export it."""
+        """Mark a game finished as 0078 leaves one, dated, with hours; export."""
         with self.on(d(2026, 1, 10)):
             game_tracking.mark_completed(self.owner, item)
         Game.objects.filter(user=self.owner, item=item).update(end_date=datetime(2026, 3, 1, 5, tzinfo=UTC), progress=h(10))
@@ -495,7 +495,7 @@ class GameImportTests(GameCalcBase):
         return (row and row["value"], year["header"]["active_days"], time_row(all_time, GAME)["value"], all_time["header"]["active_days"])
 
     def test_spines_own_file_brings_a_marked_game_back_as_a_mark(self):
-        """A mark is never activity: its date and hours stay out of 2026, whichever mode."""
+        """A mark is never activity: its date and hours stay out of 2026."""
         for mode in ("new", "overwrite"):
             with self.subTest(mode=mode):
                 item = self.game(f"legacy-{mode}")

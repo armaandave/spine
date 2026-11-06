@@ -287,20 +287,26 @@ class Title:
             row.last_at = max(filter(None, (row.last_at, note.at)))
             row.progress_id = min(filter(None, (row.progress_id, *(note.change_ids or note.status_ids))), default=None)
 
-    def _take_amount(self, amount, unit):
-        if not amount.value:
-            return
+    def _amount_row(self, amount):
+        """Return the row an amount lands on, or None if it went to the pile."""
         if amount.log_id:
-            row = self.logs[amount.log_id]
-        elif amount.day is None:
+            return self.logs[amount.log_id]
+        if amount.day is None:
             if self.unit == EPISODE:
                 self.add_told_to_pile(amount.value)
             else:
                 self.add_to_pile(amount.value)
+            return None
+        row = self._day(amount.day)
+        row.last_at = max(filter(None, (row.last_at, amount.at)), default=None)
+        return row
+
+    def _take_amount(self, amount, unit):
+        if not amount.value:
             return
-        else:
-            row = self._day(amount.day)
-            row.last_at = max(filter(None, (row.last_at, amount.at)), default=None)
+        row = self._amount_row(amount)
+        if row is None:
+            return
         if unit == PERCENT:
             # A game's hours and percent are apart (GM-100): a day with its hours told
             # is known. A book's percent is the same place as its pages, so it isn't.
