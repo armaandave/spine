@@ -395,6 +395,21 @@ class GameWritesTests(GameCalcBase):
         days = activity._progress_days(ProgressChange.objects.filter(actor=self.owner))
         self.assertEqual(sorted(row["day"] for row in days), [d(2026, 1, 1), d(2026, 1, 2)])
 
+    def test_the_old_feed_shows_a_logs_rise_on_its_day_once_the_log_is_gone(self):
+        """GM-219, as Stats counts it: the rise is that day's progress again."""
+        from api.services import activity
+
+        item = self.game()
+        self.begin(item, d(2026, 1, 1))
+        self.save(item, h(10), d(2026, 1, 2))
+        _game, entry = self.finish(item, d(2026, 1, 5), total_minutes=h(12))
+        with self.on(d(2026, 1, 6)):
+            game_tracking.delete_completion(self.owner, entry)
+        days = activity._progress_days(ProgressChange.objects.filter(actor=self.owner))
+        minutes = {row["day"]: row["amount_minute"] for row in days}
+        self.assertEqual(minutes, {d(2026, 1, 1): None, d(2026, 1, 2): h(10), d(2026, 1, 5): h(2)})
+        self.assert_years(0, 12, 12)
+
     def test_a_log_dated_before_the_start_moves_it_and_its_delete_puts_it_back(self):
         """Decision 10, the sheet's G6."""
         item = self.game()
