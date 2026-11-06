@@ -37,8 +37,8 @@ hearts, follows, or adding to a list.
   attempt, or a game playthrough deletes its start and progress with it.
 - A status move the person chooses is recorded the same way, as a step of kind
   `status` with value 0 in previous and current and its `move`: `paused`, `stopped`
-  or `picked back up`. It's on a book, game, show, manga or comic, never anime, and
-  never from an import, a mark, a restore or Restart. It adds nothing to any number,
+  or `picked back up`. It's on a book, game, show, anime, manga or comic, and never
+  from an import, a mark, a restore or Restart. It adds nothing to any number,
   and nothing shows it yet (AC-1). A book's Restart writes `began_over` on its start
   row, and so does a reread, which opens over a finished read: deleting that log later
   can't change where it began. A pick-up with nothing before it to carry on from, a
@@ -48,10 +48,10 @@ hearts, follows, or adding to a list.
   reads its moment on the server's zone.
 - Anime keeps its own rules (docs/anime-tracking-contract.md, AN-703): only ticks move
   its progress steps, and choosing Watching, a tick that puts it in Watching or starting
-  a rewatch is its start, each with its `saved_on`. Stats count its viewings (AN-704).
-  The calculation's anime adapter is switched off: it reads anime's history rows, where
-  anime_tracking writes no change reason, at their moments, and only the comparison
-  runs it. It has to read viewings before anime can switch to it.
+  a rewatch is its start, each with its `saved_on`. The calculation reads its viewings,
+  as Stats did (AN-704): a tick on its day, a log's fills on the log's calendar date, a
+  mark's fills and a stored number with no viewings in the undated pile. Each log is its
+  own row, so a log that fills nothing still counts its day.
 
 ## AC-3: Newest date first
 

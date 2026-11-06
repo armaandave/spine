@@ -19,9 +19,12 @@ from django.db.models import (
     CharField,
     Count,
     DateField,
+    Exists,
     FloatField,
+    IntegerField,
     Max,
     Min,
+    OuterRef,
     Q,
     Sum,
     Value,
@@ -316,9 +319,13 @@ def _progress_days(changes):
     A show's and its seasons' changes count toward the show. Each unit's net change is
     summed, and a day that didn't move forward is left out. Only rows in a counted unit
     enter the group: a status move can't change a day's id or its place in the order.
+    A game's change that a log wrote is that log's while it exists, not a day's
+    progress; once the log is deleted it's its saved day's again (GM-219).
     """
     return (
         changes.filter(current_progress__unit__in=UNITS)
+        .annotate(log_ref=Cast(KT("current_progress__log_id"), IntegerField()))
+        .exclude(Exists(DiaryEntry.objects.filter(pk=OuterRef("log_ref"))))
         .annotate(
             day=saved_day(),
             title_key=Case(

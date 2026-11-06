@@ -36,7 +36,7 @@ The following rules are inherited without another approval step.
 | Starting | BK-104 | One tap, at place zero, with today as the start date. Planning is unavailable during an attempt. Starting after Read is a reread, except under MC-200. |
 | Logs | BK-105, BK-106, BK-107 | Log with no attempt under way creates a finished attempt and its log. Log during an attempt finishes it. Log after Did Not Finish keeps the closed attempt. |
 | Heart and stars | BK-200 to BK-203 | With no attempt under way they mark the series Read. During an attempt they open the log screen with that value set (MC-104). |
-| Attempts | BK-300, BK-303, BK-304, BK-306, BK-307, BK-308, BK-309 | One attempt under way at a time. Pause keeps the place. Restart from Beginning keeps the old attempt as Did Not Finish. Reading History lists closed attempts. Attempts can be deleted explicitly. BK-306's rules for a log's date reach these types with their counting, not before. |
+| Attempts | BK-300, BK-303, BK-304, BK-306, BK-307, BK-308, BK-309 | One attempt under way at a time. Pause keeps the place. Restart from Beginning keeps the old attempt as Did Not Finish. Reading History lists closed attempts. Attempts can be deleted explicitly. BK-306's rules for a log's date reach these types with their counting: a log can carry any date up to today, and one before the attempt's start moves the start with it (MC-007). |
 | Finishing and the diary | BK-400 to BK-406 | The log and the finished attempt save together. Cancelling changes nothing. Deleting the log restores the attempt. Reread is derived. Read counts unique series. |
 | Opinions and diary fields | BK-202, SW-100 to SW-108, SW-202, SW-203, SW-300 to SW-303 | Each log keeps its own stars and heart. A new log becomes the current source. The same editor is used everywhere. |
 | Dates | SW-005 to SW-007 | Local calendar dates. Distinct same-day logs are allowed. |
@@ -103,8 +103,9 @@ These are the maintainer's counting decisions of 2026-11-02, and the same as boo
 
 - Each save counts on the day it was saved.
 - Lowering a number fixes a typo. It is not a new read.
-- The first save on an attempt counts whole on that day, even if it is catch-up.
+- A first save with nothing before it counts whole on that day, even if it is catch-up. One that opens at a place, after Keep Reading, a pick-up or a new issue, adds only the rise (MC-200 to MC-202).
 - A log adds only what is left, on the log's day. Editing its date moves that count.
+- A log can be dated before the attempt's start or its saves (the maintainer's decision 10, as BK-306). Dated before the attempt's first activity, everything that read counted moves to the log's date, and the start moves with it. Otherwise saves stay on their days and the rest lands on the log's date. Deleting the log puts the start back. Did Not Finish, Restart and Edit Dates keep their date checks.
 - A reread counts again, by a direct log too.
 - What is undone counts on no day: an undone eye, a deleted attempt, a deleted log.
 
@@ -215,7 +216,7 @@ No account on production had a manga or comic record on 2026-11-02, so this cont
 ## Scope boundary
 
 This contract doesn't cover anime, volumes, chapter or issue lists, the same series tracked under two sources, or a manga also tracked as a book.
-How Stats add these numbers up belongs to the activity and stats work (`docs/stats-contract.md`), which follows MC-007.
+Stats add these numbers up through the activity calculation (`api.services.activity_rows`, `docs/activity-contract.md` AC-2, `docs/stats-contract.md` STAT-201), which follows MC-007 and MC-200 to MC-202.
 
 ## Contract change policy
 

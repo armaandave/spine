@@ -81,6 +81,8 @@ struct StatsLabelValueRow: View {
     let value: String
     var showsChevron = false
     var showsSeparator = false
+    /// A small line under the value, on the right: "Based on 4 of 5 books".
+    var note: String? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -91,12 +93,19 @@ struct StatsLabelValueRow: View {
 
             Spacer(minLength: 12)
 
-            Text(value)
-                .font(.body.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.trailing)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(value)
+                    .font(.body.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                if let note {
+                    Text(note)
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+            .multilineTextAlignment(.trailing)
+            .fixedSize(horizontal: false, vertical: true)
 
             if showsChevron {
                 Image(systemName: "chevron.right")

@@ -49,7 +49,16 @@ from api.services import stats_cache
 from api.services.filters import _runtime_minutes, update_item_filter_metadata
 from app import anime_titles
 from app.mixins import collect_external_rating_item_id, collect_external_rating_item_ids
-from app.models import Book, DiaryEntry, ItemCredit, MediaTypes, Sources
+from app.models import (
+    Anime,
+    Book,
+    Comic,
+    DiaryEntry,
+    ItemCredit,
+    Manga,
+    MediaTypes,
+    Sources,
+)
 
 # The metadata rules each media type is filled under. Bump a type when what is stored
 # for it changes, so the fill revisits its Items (Item.metadata_version).
@@ -157,17 +166,29 @@ def fill_book_pages(item, pages):
         return
     item.total_pages = pages
     item.save(update_fields=["total_pages"])
-    bump_book_holders(item)
+    bump_holders(item)
 
 
-def bump_book_holders(item):
-    """Move the stats version of everyone holding a book of a new length (STAT-006)."""
+# The types whose numbers are worked out from a title's length when read: a book's page
+# count, an anime's runtime, a manga's or comic's total.
+LENGTH_HOLDERS = {
+    MediaTypes.BOOK.value: Book,
+    MediaTypes.ANIME.value: Anime,
+    MediaTypes.MANGA.value: Manga,
+    MediaTypes.COMIC.value: Comic,
+}
+
+
+def bump_holders(item):
+    """Move the stats version of everyone holding a title of a new length (STAT-006)."""
+    model = LENGTH_HOLDERS.get(item.media_type)
     holders = {
-        *Book.objects.filter(item=item).values_list("user_id", flat=True),
+        *(model.objects.filter(item=item).values_list("user_id", flat=True) if model else ()),
         *DiaryEntry.objects.filter(item=item).values_list("user_id", flat=True),
     }
     for user_id in holders:
         stats_cache.bump_user(user_id)
+
 
 
 def store_series_total(item, metadata):
@@ -193,6 +214,7 @@ def store_series_total(item, metadata):
             return
         item.series_total = count
         item.save(update_fields=["series_total"])
+        bump_holders(item)
         return
 
 

@@ -1,4 +1,4 @@
-"""The one calculation on manga and comics, switched off until Phase 2.
+"""The one calculation on manga and comics, which Stats read from Phase 2.
 
 docs/manga-comics-tracking-contract.md, MC-007 and MC-200 to MC-202, with the same
 stories the branch's probe told, on merged code. A New York server and a pinned clock.
@@ -7,10 +7,20 @@ stories the branch's probe told, on merged code. A New York server and a pinned 
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
+
 from api.services.activity_rows import list_rows, piled, rows_for
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from app import series_tracking as series
-from app.models import Comic, ComicAttempt, DiaryEntry, Manga, MediaTypes, Status
+from app.models import (
+    Comic,
+    ComicAttempt,
+    DiaryEntry,
+    Manga,
+    MangaAttempt,
+    MediaTypes,
+    Status,
+)
 from social.models import Follow, FollowStatus
 
 MANGA = MediaTypes.MANGA.value
@@ -244,6 +254,67 @@ class ContinuingTests(SeriesCalcBase):
         self.do(series.restart, item, d(2026, 2, 2))
         self.save(item, 10, d(2026, 2, 3))
         self.assert_years(0, 40, 40)
+
+
+class BackdatedLogTests(SeriesCalcBase):
+    """Decision 10 through the real writer; the start comes back when the log goes."""
+
+    def attempt(self, item):
+        return MangaAttempt.objects.filter(tracking__item=item).order_by("-id").first()
+
+    def test_a_log_before_the_reads_start_takes_the_whole_read_and_moves_the_start(self):
+        item = self.title("before", total=400)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 100, d(2026, 3, 10))
+        _row, entry = self.finish(item, d(2025, 12, 20), saved_on=d(2026, 3, 11))
+        self.assert_years(400, 0, 400)
+        self.assertEqual(self.lines(), ["2025-12-20 log +400"])
+        self.assertEqual(self.attempt(item).start_date, d(2025, 12, 20))
+        self.assertEqual(self.attempt(item).pre_completion["start_date"], "2026-03-01")
+        with self.on(d(2026, 3, 12)):
+            series.delete_completion(self.owner, entry)
+        self.assertEqual(self.attempt(item).start_date, d(2026, 3, 1))
+        self.assert_years(0, 100, 100)
+
+    def test_a_log_after_the_start_and_before_a_save_leaves_the_saves_on_their_days(self):
+        item = self.title("between", total=400)
+        self.begin(item, d(2025, 12, 1))
+        self.save(item, 100, d(2026, 1, 10))
+        self.finish(item, d(2025, 12, 20), saved_on=d(2026, 1, 11))
+        self.assert_years(300, 100, 400)
+        self.assertEqual(self.attempt(item).start_date, d(2025, 12, 1))
+
+    def test_a_log_date_edited_before_the_start_moves_it_and_back_no_further(self):
+        item = self.title("edited", total=400)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 100, d(2026, 3, 10))
+        _row, entry = self.finish(item, d(2026, 3, 20))
+        with self.on(d(2026, 3, 21)):
+            series.update_completion(entry, {"consumed_at": d(2025, 12, 20)})
+        self.assertEqual(self.attempt(item).start_date, d(2025, 12, 20))
+        self.assert_years(400, 0, 400)
+        with self.on(d(2026, 3, 22)):
+            series.update_completion(entry, {"consumed_at": d(2026, 3, 15)})
+        self.assertEqual(self.attempt(item).start_date, d(2026, 3, 1))
+        self.assert_years(0, 400, 400)
+
+    def test_an_old_shape_log_with_no_start_key_leaves_the_start_alone(self):
+        item = self.title("old", total=400)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 100, d(2026, 3, 10))
+        _row, entry = self.finish(item, d(2026, 3, 20))
+        attempt = self.attempt(item)
+        snapshot = {key: value for key, value in attempt.pre_completion.items() if key != "start_date"}
+        MangaAttempt.objects.filter(pk=attempt.pk).update(pre_completion=snapshot)
+        with self.on(d(2026, 3, 21)):
+            series.delete_completion(self.owner, entry)
+        self.assertEqual(self.attempt(item).start_date, d(2026, 3, 1))
+
+    def test_drop_restart_and_edit_dates_keep_their_checks(self):
+        item = self.title("checks", total=400)
+        self.begin(item, d(2026, 3, 1))
+        with self.on(d(2026, 3, 2)), self.assertRaises(ValidationError):
+            series.drop(self.owner, item, end_date=d(2026, 2, 1))
 
 
 class MarkTests(SeriesCalcBase):

@@ -23,6 +23,8 @@ struct StatsHeaderSection: View {
         var approximate = false
         /// What a tap opens on your own stats; nil when it opens nothing.
         var drillDown: StatsDrillDown?
+        /// "Based on 4 of 5 books" under the label, when some lengths are missing.
+        var note: String?
 
         var id: String { label }
     }
@@ -44,8 +46,16 @@ struct StatsHeaderSection: View {
         ForEach(Self.rows(for: header, mediaType: mediaType, time: time)) { row in
             switch row {
             case .counts:
-                countsCard
-                    .padding(.bottom, details.isEmpty ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap)
+                VStack(alignment: .leading, spacing: 8) {
+                    countsCard
+                    if let footnote = Self.countsFootnote(header, mediaType: mediaType, time: time) {
+                        Text(footnote)
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.horizontal, 4)
+                    }
+                }
+                .padding(.bottom, details.isEmpty ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap)
             case let .detail(detail, isFirst, isLast):
                 if let onOpen, let drillDown = Self.drillDown(for: detail) {
                     Button {
@@ -77,7 +87,8 @@ struct StatsHeaderSection: View {
         let counts = Self.counts(for: header, mediaType: mediaType, time: time)
         return Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 18) {
             ForEach(Array(stride(from: 0, to: counts.count, by: 2)), id: \.self) { start in
-                GridRow {
+                // Top-aligned, so a note under one number keeps its neighbour in line.
+                GridRow(alignment: .top) {
                     ForEach(counts[start ..< min(start + 2, counts.count)]) { count in
                         countCell(count)
                     }
@@ -133,6 +144,15 @@ struct StatsHeaderSection: View {
             }
             .font(.subheadline)
             .foregroundStyle(.white.opacity(0.6))
+
+            if let note = count.note {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -225,7 +245,14 @@ struct StatsHeaderSection: View {
             value = row.value
             label = (value == 1 ? singular : singular + "s").capitalized
         }
-        return Count(label: label, value: value, unit: nil, approximate: row.approximate)
+        return Count(label: label, value: value, unit: nil, approximate: row.approximate, note: StatsChartCopy.lengthNote(row))
+    }
+
+    /// The note on a type tab whose measure counts nothing, so it has no number to sit under:
+    /// a book with only a percent reads "Based on 0 of 1 book".
+    static func countsFootnote(_ header: StatsHeader, mediaType: String?, time: StatsTime?) -> String? {
+        guard let mediaType, primaryMeasure(time: time, mediaType: mediaType) == nil else { return nil }
+        return StatsChartCopy.lengthNote(time?.rows.first { $0.mediaType == mediaType })
     }
 
     /// "1,204", or "≈ 340" for an estimate.

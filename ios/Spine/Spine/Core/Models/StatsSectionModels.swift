@@ -280,7 +280,9 @@ struct StatsHeader: Decodable, Hashable {
     /// the server doesn't send it.
     var longestDailyStreakRange: StatsDayRange? = nil
 
-    var isEmpty: Bool { titles == 0 && logs == 0 }
+    /// A tab with only a start, or a percent with no length, still has its active days to show
+    /// (STAT-302).
+    var isEmpty: Bool { titles == 0 && logs == 0 && activeDays == 0 }
 }
 
 struct StatsHeaderDetail: Decodable, Hashable, Identifiable {

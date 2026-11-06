@@ -83,6 +83,7 @@ from app.tv_tracking import (
     _mutation_uuid,
     _parse_log_day,
     _raw_delete,
+    _record_status_move,
     _set_like_row,
     _set_rating_activity,
     _short_date,
@@ -1561,6 +1562,7 @@ def _do_choose(ctx, status, *, quiet=False):
     ctx.set_row(**values)
     ctx.changed = True
     ctx.may_start = status == WATCHING
+    _record_status_move(ctx, status, ctx.item)
     return {"changed": True}
 
 

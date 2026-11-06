@@ -318,13 +318,13 @@ class GameTrackingContractTests(TestCase):
         self.assertEqual(
             self.state()["game"]["current_playthrough"]["total_minutes"], 3000
         )
-        for day in (past - timedelta(days=1), self.today + timedelta(days=1)):
-            response = self.client.patch(
-                f"/api/v1/diary/{result['diary_entry']['id']}/",
-                {"consumed_at": str(day)},
-                format="json",
-            )
-            self.assertEqual(response.status_code, 400, response.data)
+        # A log may predate its start (decision 10); only a future one is refused.
+        response = self.client.patch(
+            f"/api/v1/diary/{result['diary_entry']['id']}/",
+            {"consumed_at": str(self.today + timedelta(days=1))},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400, response.data)
         for day in (None, str(self.today)):
             response = self.client.patch(
                 f"{self.url}playthroughs/{started['id']}/",
@@ -650,22 +650,8 @@ class GameTrackingContractTests(TestCase):
         session = self.action("start", start_date=str(start)).data["game"][
             "current_playthrough"
         ]
-        response = self.client.post(
-            f"{self.url}complete/",
-            {
-                "completion_date": str(start - timedelta(days=1)),
-                "mutation_id": str(uuid4()),
-            },
-            format="json",
-        )
-        self.assertEqual(response.status_code, 400, response.data)
-        self.assertIn(
-            "Completion date cannot be before the playthrough start date.",
-            str(response.data),
-        )
-        self.assertFalse(DiaryEntry.objects.exists())
-        self.assertEqual(self.state()["status"], Status.IN_PROGRESS)
         completed = self.complete(completion_date=str(start + timedelta(days=2)))
+        # A log may predate its start, which moves with it (decision 10, GM-213).
         response = self.client.patch(
             f"/api/v1/diary/{completed['diary_entry']['id']}/",
             {
@@ -673,10 +659,19 @@ class GameTrackingContractTests(TestCase):
             },
             format="json",
         )
-        self.assertEqual(response.status_code, 400, response.data)
-        self.assertIn(
-            "Completion date cannot be before the playthrough start date.",
-            str(response.data),
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            self.state()["game"]["current_playthrough"]["start_date"],
+            str(start - timedelta(days=1)),
+        )
+        response = self.client.patch(
+            f"/api/v1/diary/{completed['diary_entry']['id']}/",
+            {"consumed_at": str(start + timedelta(days=2))},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            self.state()["game"]["current_playthrough"]["start_date"], str(start)
         )
         self.assertEqual(
             self.state()["game"]["current_playthrough"]["end_date"],

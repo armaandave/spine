@@ -1,5 +1,6 @@
 """Game playthrough transitions using shared diary, opinion, and date rules."""
 
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
@@ -426,12 +427,30 @@ def _log_day(user, session, day):
     return day
 
 
-def _validate_completion_date(session, day):
-    if session.start_date and day < session.start_date:
-        raise ValidationError(
-            "Completion date cannot be before the playthrough start date."
-        )
-    _validate_dates(session, end_date=day)
+def _fit_start_to_log(session, day, snapshot):
+    """Move a playthrough's start back to its log's date when the log is before it.
+
+    A log can carry any date (decision 10). The start moves in the same write as the
+    end, or the dates-ordered constraint refuses. A log's date edited later brings the
+    start back, no further than where it was. Only a log finished since the start was
+    kept in its snapshot remembers it, so an old-shape log keeps its start unless this
+    move changes it.
+    """
+    kept = snapshot.get("start_date")
+    original = date.fromisoformat(kept) if kept else session.start_date
+    if original is None:
+        return
+    if "start_date" not in snapshot and day < original:
+        snapshot["start_date"] = original.isoformat()
+    session.start_date = min(_restorable_start(session, original), day)
+
+
+def _restorable_start(session, original):
+    """Return a kept start, no later than the playthrough's first progress.
+
+    Progress saved while a log held the start back can predate where it was.
+    """
+    return min(filter(None, (original, session.first_progress_on)))
 
 
 @transaction.atomic
@@ -465,15 +484,28 @@ def update_progress(
         day = max(filter(None, (today, session.start_date, session.minutes_updated_on, session.percentage_updated_on)))
     elif session.start_date and day < session.start_date:
         raise ValidationError("Progress cannot predate the start date.")
-    _record_progress_change(user, item, session, "minute", session.total_minutes, minutes, saved_on)
-    _record_progress_change(user, item, session, "percent", session.completion, percent, saved_on)
+    sent = (
+        _record_progress_change(user, item, session, "minute", session.total_minutes, minutes, saved_on),
+        _record_progress_change(user, item, session, "percent", session.completion, percent, saved_on),
+    )
+    # A save moves a field's day only when its number really changed, so a retype
+    # keeps it. Unknown sent again still says unknown from that day, so a log dated
+    # earlier leaves it unknown (GM-222).
+    minutes_moved, percent_moved = (
+        result == MOVED or value is None for result, value in zip(sent, (minutes, percent), strict=True)
+    )
+    if SAME in sent and MOVED not in sent:
+        # Only the game sheet resends a number (GameTrackingViews.swift).
+        _record_touch(user, item, session, saved_on)
     if minutes is not UNSET:
         session.total_minutes = minutes
-        session.minutes_updated_on = day
+        if minutes_moved:
+            session.minutes_updated_on = day
         session.minutes_linked = False
     if percent is not UNSET:
         session.set_completion(percent)
-        session.percentage_updated_on = day
+        if percent_moved:
+            session.percentage_updated_on = day
         session.percentage_linked = False
     if minutes is not UNSET or percent is not UNSET:
         session.first_progress_on = min(session.first_progress_on or day, day)
@@ -481,23 +513,86 @@ def update_progress(
     return _sync_state(game)
 
 
-def _record_progress_change(user, item, session, unit, previous, current, saved_on):
-    """Record playtime or percentage moving, the history daily activity reads."""
-    if current is UNSET or current is None or current == (previous or 0):
-        return
-    kind, maximum = ("minutes", None) if unit == "minute" else ("percentage", 100)
+def _start_set_by_hand(user, item, session):
+    """A start set by hand is when the playthrough began (decision 10).
 
-    def snapshot(value):
-        number = exact_percentage(value) if unit == "percent" else value
-        return {"kind": kind, "value": number, "max": maximum, "unit": unit, "playthrough_id": session.pk}
+    Its start row moves to that day, where a log's own move doesn't, and a log that
+    kept the old start keeps this one instead.
+    """
+    ProgressChange.objects.filter(
+        actor=user,
+        item=item,
+        current_progress__playthrough_id=session.pk,
+        current_progress__kind=ProgressChange.START,
+    ).update(saved_on=session.start_date)
+    entry = session.completion_diary_entry
+    if entry and "start_date" in (entry.progress_snapshot or {}):
+        entry.progress_snapshot = {**entry.progress_snapshot, "start_date": session.start_date.isoformat()}
+        entry.save(update_fields=["progress_snapshot"])
 
+
+# What _record_progress_change says a sent number did.
+MOVED = "moved"
+SAME = "same"
+
+
+def _record_progress_change(user, item, session, unit, previous, current, saved_on, *, log_id=None):  # noqa: PLR0913
+    """Record playtime or percentage moving, the history daily activity reads.
+
+    Returns MOVED when the stored number really changed, compared exactly (None isn't
+    0), SAME when the same number was sent again, and None when none was sent. A clear
+    records the drop to 0. A log's own change carries its `log_id`, so it lands on the
+    log's date while the log exists (GM-219).
+    """
+    if current is UNSET:
+        return None
+    if current == previous:
+        return None if current is None else SAME
+    if (current or 0) != (previous or 0):
+        kind, maximum = ("minutes", None) if unit == "minute" else ("percentage", 100)
+
+        def snapshot(value):
+            number = exact_percentage(value) if unit == "percent" else value
+            values = {"kind": kind, "value": number, "max": maximum, "unit": unit, "playthrough_id": session.pk}
+            return {**values, "log_id": log_id} if log_id is not None else values
+
+        _write_change(user, item, snapshot(previous or 0), snapshot(current or 0), saved_on)
+    return MOVED
+
+
+def _record_touch(user, item, session, saved_on):
+    """Record a retype: it moves its day up and adds nothing (plan 5.3).
+
+    It holds 0 in previous and current, as a status row does.
+    """
+    shape = {
+        "kind": ProgressChange.TOUCH,
+        "value": 0,
+        "max": None,
+        "unit": ProgressChange.TOUCH,
+        "playthrough_id": session.pk,
+    }
+    _write_change(user, item, shape, shape, saved_on)
+
+
+def _write_change(user, item, previous, current, saved_on):
     ProgressChange.objects.create(
         actor=user,
         item=item,
-        previous_progress=snapshot(previous or 0),
-        current_progress=snapshot(current),
+        previous_progress=previous,
+        current_progress=current,
         saved_on=saved_on,
     )
+
+
+def _record_linked_changes(user, item, session, before, entry):
+    """Record a log's linked playtime or percent moving, with the log's id (GM-219)."""
+    if before is None:
+        return
+    saved_on = user_calendar.today(user)
+    minutes, percent = before
+    _record_progress_change(user, item, session, "minute", minutes, session.total_minutes, saved_on, log_id=entry.pk)
+    _record_progress_change(user, item, session, "percent", percent, session.completion, saved_on, log_id=entry.pk)
 
 
 def _record_status(user, item, session, move):
@@ -547,6 +642,8 @@ def update_playthrough(
         session.end_date = _day(end_date, user)
     _validate_dates(session)
     session.save()
+    if start_date is not UNSET and session.start_date:
+        _start_set_by_hand(user, item, session)
     if total_minutes is not UNSET or percentage is not UNSET:
         return update_progress(
             user,
@@ -622,7 +719,10 @@ def complete(
     if start_date is not UNSET:
         session.start_date = _day(start_date, user) if start_date is not None else None
     day = _log_day(user, session, day)
-    _validate_completion_date(session, day)
+    # Deleting the log restores where the playthrough began (decision 10).
+    snapshot = {"start_date": session.start_date.isoformat()} if session.start_date else {}
+    _fit_start_to_log(session, day, snapshot)
+    _validate_dates(session, end_date=day)
     minutes = (
         session.total_minutes if total_minutes is UNSET else _integer(total_minutes)
     )
@@ -648,7 +748,7 @@ def complete(
         review_title=review_title,
         contains_spoilers=contains_spoilers,
         is_rewatch=bool(replay),
-        progress_snapshot={"total_minutes": minutes, "percentage": exact_percentage(percent)},
+        progress_snapshot={"total_minutes": minutes, "percentage": exact_percentage(percent), **snapshot},
         visibility="public",
         import_source=import_source,
         import_source_id=import_source_id,
@@ -660,6 +760,7 @@ def complete(
     session.percentage_linked = not (
         session.percentage_updated_on and session.percentage_updated_on > day
     )
+    before = (session.total_minutes, session.completion)
     if session.minutes_linked:
         session.total_minutes = minutes
     if session.percentage_linked:
@@ -669,6 +770,10 @@ def complete(
     session.completion_diary_entry = entry
     session.completion_mutation_id = mutation_id
     session.save()
+    if not import_source:
+        # A file's log records no progress (AC-1, SW-500): its hours land on its date
+        # as the playthrough's total.
+        _record_linked_changes(user, item, session, before, entry)
     single_weight._replace_tags(entry, tags or [])
     if update_current:
         single_weight.couple_current_to_log(game, entry)
@@ -692,14 +797,16 @@ def update_completion(entry, data, *, tags=UNSET):
     )
     old_date = entry.consumed_at
     old_rating = entry.rating
+    snapshot = dict(entry.progress_snapshot or {})
+    before = (session.total_minutes, session.completion) if session else None
     if "consumed_at" in data:
         day = _day(data["consumed_at"], entry.user)
         if session:
             day = _log_day(entry.user, session, day)
-            _validate_completion_date(session, day)
+            _fit_start_to_log(session, day, snapshot)
+            _validate_dates(session, end_date=day)
             session.end_date = day
         entry.consumed_at = _carrier(day)
-    snapshot = dict(entry.progress_snapshot or {})
     for field, linked in (
         ("total_minutes", "minutes_linked"),
         ("percentage", "percentage_linked"),
@@ -724,6 +831,7 @@ def update_completion(entry, data, *, tags=UNSET):
     entry.save()
     if session:
         session.save()
+        _record_linked_changes(entry.user, entry.item, session, before, entry)
     if tags is not UNSET:
         single_weight._replace_tags(entry, tags or [])
     single_weight.update_current_from_source_log(game, entry, data, previous_rating=old_rating)
@@ -759,9 +867,13 @@ def delete_completion(user, entry):
         and event.get("playthrough_id") == session.pk
     )
     old_date = entry.consumed_at
+    kept_start = (entry.progress_snapshot or {}).get("start_date")
     entry.delete()
     if session:
         if reopen:
+            if kept_start:
+                # Only a log that kept it can say where its playthrough began.
+                session.start_date = _restorable_start(session, date.fromisoformat(kept_start))
             game.status_history = [
                 event
                 for event in game.status_history

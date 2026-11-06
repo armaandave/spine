@@ -6,7 +6,7 @@ from django.contrib.admin.sites import AlreadyRegistered
 from django.db.models import Q
 from django.utils import timezone
 
-from api.services.item_metadata import bump_book_holders
+from api.services.item_metadata import bump_holders
 from app.external_ratings import RATING_SOURCES
 
 from app.models import (
@@ -75,10 +75,10 @@ class ItemAdmin(admin.ModelAdmin):
     list_filter = ["media_type", "source"]
 
     def save_model(self, request, obj, form, change):
-        """A book's numbers are worked out from its length, so a new one is its holders' (STAT-006)."""
+        """Numbers are worked out from a title's length, so a new one is its holders' (STAT-006)."""
         super().save_model(request, obj, form, change)
-        if "total_pages" in form.changed_data:
-            bump_book_holders(obj)
+        if {"total_pages", "runtime_minutes", "series_total"} & set(form.changed_data):
+            bump_holders(obj)
 
 
 @admin.register(ExternalRating)

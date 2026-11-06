@@ -178,7 +178,10 @@ class YearsOnlyTheOldCounterHasTests(CompareTests):
         self.assertIn("value=3000->0", line)
 
     def test_a_game_whose_hours_a_later_fix_took_back_keeps_their_year(self):
-        """Only today's events name 2024: the session's own date moved on to the fix."""
+        """Only today's events name 2024: the session's own date moved on to the fix.
+
+        Read as it was before games switched, when today's events were the old ones.
+        """
         item = self.item(MediaTypes.GAME.value, "taken-back", title="taken-back")
         with self.on(d(2023, 3, 1)):
             game_tracking.start(self.owner, item)
@@ -186,7 +189,9 @@ class YearsOnlyTheOldCounterHasTests(CompareTests):
             game_tracking.update_progress(self.owner, item, total_minutes=100)
         with self.on(d(2025, 3, 1)):
             game_tracking.update_progress(self.owner, item, total_minutes=0)
-        line = self.line(self.compare(), f"user {self.owner.pk} game 2024:")
+        with patch.object(activity_rows, "CALCULATED_TYPES", frozenset({MediaTypes.BOOK.value})):
+            lines = self.compare()
+        line = self.line(lines, f"user {self.owner.pk} game 2024:")
         self.assertIn("active_days=1->0", line)
 
     def test_a_year_holding_nothing_either_way_prints_nothing(self):
