@@ -11,6 +11,7 @@ import io
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from django.core.management import call_command
 
@@ -40,7 +41,7 @@ class AnimeCalcBase(AnimeTestCase):
 
     def on(self, day):
         """Move the clock to noon on this day, on the account's calendar."""
-        self.clock.set(datetime(day.year, day.month, day.day, 12), tz=LOS_ANGELES)
+        self.clock.set(datetime(day.year, day.month, day.day, 12, tzinfo=ZoneInfo(LOS_ANGELES)))
 
     def calc(self, viewer=None):
         return rows_for([self.user], viewer or self.user, types=[ANIME])
@@ -74,7 +75,7 @@ class AnimeCalcBase(AnimeTestCase):
         return lines
 
     def assert_counter_agrees(self, viewers=None):
-        """The calculation gives the viewings counter's minutes and episodes (AN-704)."""
+        """Check the calculation gives the old counter's minutes and episodes."""
         for viewer in viewers or (self.user, self.follower, self.stranger):
             for year in (*YEARS, None):
                 params = {"start_date": "all", "end_date": "all"}

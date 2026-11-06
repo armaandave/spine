@@ -19,7 +19,13 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.test import APIClient
 
 from api.serializers.common import latest_progress_change_for, prime_collection_items
-from app import anime_tracking, book_tracking, game_tracking, series_tracking, tv_tracking
+from app import (
+    anime_tracking,
+    book_tracking,
+    game_tracking,
+    series_tracking,
+    tv_tracking,
+)
 from app.models import Book, Comic, Game, Item, Manga, MediaTypes, Sources, Status
 from app.tests.anime_fixtures import FakeAnimeProvider, make_item
 from app.tests.tv_fixtures import FakeTVProvider, make_show, make_user, patch_now

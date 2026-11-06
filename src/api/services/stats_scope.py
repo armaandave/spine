@@ -257,7 +257,7 @@ class StatsScope:
 
     @property
     def anime_reads_viewings(self):
-        """Whether anime's titles and events come from its viewings, not the calculation."""
+        """Return whether anime's titles and events read viewings, not the rows."""
         return self.counts_anime and MediaTypes.ANIME.value not in activity_rows.CALCULATED_TYPES
 
     @property
