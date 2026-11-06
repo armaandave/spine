@@ -513,7 +513,7 @@ class GameImportTests(GameCalcBase):
         self.assertFalse(Game.objects.get(user=self.owner, item=item).completed_manually)
 
     def test_an_import_writes_no_progress_and_its_log_counts_on_its_date(self):
-        """AC-1, SW-500: a file's log writes no change saved on the day it was imported."""
+        """AC-1, SW-500: a file's log writes no change saved on its import's day."""
         from app import game_imports
 
         filed = self.game("filed")
