@@ -3,8 +3,8 @@
 Decision 47: Yamtrack's and Simkl's dated plays land on their dates as Letterboxd's and
 Trakt's do. A row states no Rewatch, so only an earlier log makes it one (decision 38).
 IMDb's dates say when a title was rated or listed, so its rows stay undated marks.
-Numbers come through the Stats endpoint, and every file goes through its real importer
-with no network.
+Letterboxd's blank Rewatch is a No in every order (decision 57). Numbers come through
+the Stats endpoint, and every file goes through its real importer with no network.
 """
 
 import io
@@ -18,6 +18,8 @@ from app import single_weight
 from app.models import DiaryEntry, Item, MediaTypes, Movie, Music, Sources
 from integrations import exports
 from integrations.imports import helpers, imdb, simkl, yamtrack
+from integrations.imports.letterboxd.importer import LetterboxdImporter
+from integrations.tests.imports.test_letterboxd import FakeResolver, export_zip
 
 MOVIE = MediaTypes.MOVIE.value
 NEW_YORK = "America/New_York"
@@ -200,6 +202,92 @@ class IMDbRatingTests(ImportBase):
         tracking = self.tracking()
         self.assertEqual((tracking.direct_consumption, tracking.score, tracking.end_date), (True, 9, None))
         self.watches(0, 1)
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class LetterboxdOrderTests(ImportBase):
+    """S-06 and decision 57: a Yes is a second watch; a blank or No dates the one."""
+
+    minutes = 100
+    URI = "https://boxd.it/film-one-watched"
+    WATCHED = f"Date,Name,Year,Letterboxd URI\n2026-02-01,Film One,1999,{URI}\n"
+
+    def setUp(self):
+        super().setUp()
+        self.item = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MOVIE,
+            media_id="101",
+            title="Film One",
+            image="https://example.com/x.jpg",
+            runtime_minutes=self.minutes,
+        )
+
+    def diary(self, *rows):
+        """Return a diary file of (watched date, Rewatch) rows."""
+        header = "Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date\n"
+        return header + "".join(f"{day},Film One,1999,{self.URI}-{day},4,{rewatch},,{day}\n" for day, rewatch in rows)
+
+    def load(self, files, mode="new"):
+        metadata = {"title": "Film One", "image": "https://example.com/x.jpg", "runtime": self.minutes}
+        with (
+            patch("integrations.imports.letterboxd.importer.tmdb.movie", return_value=metadata),
+            patch("app.signals.update_daily_statistics.delay"),
+        ):
+            LetterboxdImporter(export_zip(files), self.user, mode, resolver=self.resolver()).import_data()
+
+    def resolver(self):
+        resolver = FakeResolver()
+        resolver.resolve_rows = lambda rows: {row["uri"]: {"tmdb_id": "101", "confidence": "scrape"} for row in rows}
+        return resolver
+
+    def test_a_yes_with_the_film_in_watched_is_two_watches(self):
+        self.load({"diary.csv": self.diary(("2026-02-01", "Yes")), "watched.csv": self.WATCHED})
+        self.watches(1, 2)
+
+    def test_a_blank_or_a_no_is_one_watch(self):
+        for rewatch in ("", "No"):
+            with self.subTest(rewatch=rewatch):
+                DiaryEntry.objects.filter(user=self.user).delete()
+                Movie.objects.filter(user=self.user).delete()
+                self.load({"diary.csv": self.diary(("2026-02-01", rewatch)), "watched.csv": self.WATCHED})
+                self.watches(1, 1)
+
+    def test_an_earlier_file_marked_it_then_a_later_export(self):
+        self.load({"watched.csv": self.WATCHED})
+        self.watches(0, 1)
+        self.load({"diary.csv": self.diary(("2026-02-01", "")), "watched.csv": self.WATCHED})
+        self.watches(1, 1)
+
+    def test_an_eye_in_the_app_then_a_file(self):
+        self.eye()
+        self.load({"diary.csv": self.diary(("2026-02-01", "")), "watched.csv": self.WATCHED})
+        self.watches(1, 1)
+
+    def test_a_file_then_an_eye_in_the_app(self):
+        self.load({"diary.csv": self.diary(("2026-02-01", ""))})
+        self.eye()
+        self.watches(1, 1)
+
+    def test_the_same_file_in_overwrite_mode(self):
+        files = {"diary.csv": self.diary(("2026-02-01", "")), "watched.csv": self.WATCHED}
+        self.load(files)
+        self.load(files, mode="overwrite")
+        self.assertEqual(len(self.logs()), 1)
+        self.watches(1, 1)
+
+    def test_a_yes_file_in_overwrite_mode_stays_two_watches(self):
+        files = {"diary.csv": self.diary(("2026-02-01", "Yes")), "watched.csv": self.WATCHED}
+        self.load(files)
+        self.load(files, mode="overwrite")
+        self.assertEqual([is_rewatch for _, is_rewatch, _ in self.logs()], [True])
+        self.watches(1, 2)
+
+    def test_two_imports_each_play_counts(self):
+        self.load({"diary.csv": self.diary(("2026-01-10", "")), "watched.csv": self.WATCHED})
+        self.load({"diary.csv": self.diary(("2026-01-10", ""), ("2026-02-20", "")), "watched.csv": self.WATCHED})
+        self.assertEqual([day for day, _, _ in self.logs()], [date(2026, 1, 10), date(2026, 2, 20)])
+        self.watches(2, 2)
 
 
 @override_settings(TIME_ZONE=NEW_YORK)
