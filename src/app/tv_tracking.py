@@ -2762,6 +2762,10 @@ def _untick_target(ctx, season_number, episode_number, calc=None):
     if not unlogged:
         return None, MSG_DELETE_EPISODE_LOG
     target = max(unlogged, key=lambda viewing: (viewing.created_at, viewing.id or 0))
+    others = [viewing for viewing in ctx.facts.viewings if viewing.pos == target.pos and viewing.id != target.id]
+    if not others and _sitting_episode_logs(ctx, target.pos):
+        # A review sits on this last viewing.
+        return None, MSG_DELETE_EPISODE_LOG
     return target, None
 
 
@@ -2943,6 +2947,15 @@ def _eye_case(ctx, season_number, calc=None):  # noqa: C901, PLR0912
         for viewing in mark_fills:
             season_logs, show_logs = _covering_logs(ctx, viewing.season, viewing.episode, calc)
             owner = (season_logs or show_logs or [None])[0]
+            if owner is not None and any(
+                other.entry_id == owner.id and other.pos == viewing.pos for other in ctx.facts.viewings
+            ):
+                # That log holds its own fill there already, so the mark just goes.
+                owner = None
+            others = [other for other in ctx.facts.viewings if other.pos == viewing.pos and other.id != viewing.id]
+            if owner is None and not others:
+                # A review sitting on the mark keeps it (TV-400).
+                owner = (_sitting_episode_logs(ctx, viewing.pos) or [None])[0]
             if owner is not None:
                 reassign[viewing.id] = owner.id
             else:
@@ -3678,9 +3691,11 @@ def _rewatch_default(ctx, level, season_number, episode_number, calc=None):
         if _claimable_tick(ctx, season_number, episode_number, calc) is not None:
             return False
         position = (season_number, episode_number)
-        return position in calc.viewed_any or any(
-            log.level == EPISODE and (log.season, log.episode) == position for log in ctx.facts.logs
-        )
+        logged = any(log.level == EPISODE and (log.season, log.episode) == position for log in ctx.facts.logs)
+        if not logged and any(_covering_logs(ctx, season_number, episode_number, calc)):
+            # A review after a season or show log describes that watch (decision 14).
+            return False
+        return position in calc.viewed_any or logged
     if level == SEASON:
         if any(log.level == SEASON and log.season == season_number for log in ctx.facts.logs):
             return True
@@ -3772,6 +3787,9 @@ def _do_create_log(  # noqa: C901, PLR0912, PLR0915
         for number, episode in covered:
             covers.setdefault(str(number), []).append(episode)
         snapshot["tv"]["covers"] = covers
+        if is_rewatch and ctx.entry_point == LEGACY_APP:
+            # An installed build's switch stays a badge: it adds nothing (TV-900).
+            snapshot["tv"]["label_only"] = True
     entry = DiaryEntry.objects.create(
         user=ctx.user,
         item=item,
@@ -3792,13 +3810,17 @@ def _do_create_log(  # noqa: C901, PLR0912, PLR0915
         ctx.add_fills([position for position in covered if position not in calc.watched_pass], entry=entry)
     else:
         claim = None
-        if not is_rewatch or _rewatch_covers(calc, EPISODE, season_number):
+        describes = not is_rewatch or _rewatch_covers(calc, EPISODE, season_number)
+        if describes:
             claim = _claimable_tick(ctx, season_number, episode_number, calc)
         if claim is not None:
-            fields = {"diary_entry": entry}
-            if claim.day != day:
-                fields["watched_on"] = day
-            Episode.objects.filter(pk=claim.id).update(**fields)
+            # The tick keeps the day it was saved (decision 3); only a backdated log
+            # moves it, and that's worked out when read (decision 10).
+            Episode.objects.filter(pk=claim.id).update(diary_entry=entry)
+        elif describes and (season_number, episode_number) in calc.watched_pass:
+            # A review of an episode watched in this pass: it adds no viewing (decision
+            # 14). A mark under it is dated when read (decision 59).
+            pass
         else:
             ctx.add_viewing(
                 season_number,
@@ -3958,7 +3980,8 @@ def update_log(entry, data, *, tags=None, entry_point=APP):
         if tags is not None:
             single_weight._replace_tags(locked, tags)
         if "consumed_at" in fields and level == EPISODE:
-            Episode.objects.filter(diary_entry=locked).exclude(kind=FILL).update(
+            # Only the log's own viewing moves: a claimed tick keeps its day (decision 3).
+            Episode.objects.filter(diary_entry=locked, kind=LOG).update(
                 watched_on=new_day,
                 end_date=_start_of_day(new_day, user),
             )
@@ -4008,7 +4031,23 @@ def _keeping_log(ctx, viewing, deleted_id, calc):
             season_logs.append(log)
         elif log.level == SHOW:
             show_logs.append(log)
-    return (season_logs or show_logs or [None])[0]
+    return (season_logs or show_logs or _sitting_episode_logs(ctx, viewing.pos, deleted_id) or [None])[0]
+
+
+def _sitting_episode_logs(ctx, position, deleted_id=None):
+    """Return episode logs of a position that hold no viewing: a review of a watch.
+
+    A review of a watched episode adds no viewing (decision 14), so it sits on the
+    viewings under it. The last of them stays while it does (TV-102, TV-400).
+    """
+    return [
+        log
+        for log in ctx.facts.logs
+        if log.id != deleted_id
+        and log.level == EPISODE
+        and (log.season, log.episode) == position
+        and not any(viewing.entry_id == log.id for viewing in ctx.facts.viewings)
+    ]
 
 
 def _log_effect(ctx, log, calc=None):

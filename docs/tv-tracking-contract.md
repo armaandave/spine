@@ -235,8 +235,9 @@ An untick from the app names the viewing it removes, taken from the episode's wa
 
 Change nothing, and say which log to delete first, when:
 
-- every viewing of the episode in the current pass belongs to a log; or
-- a season or show log in the current pass covers the episode (TV-400).
+- every viewing of the episode in the current pass belongs to a log;
+- a season or show log in the current pass covers the episode (TV-400); or
+- the viewing is the episode's last and an episode log that added no viewing sits on it (TV-402).
 
 Use "Delete your log of this episode first." for an episode log, "Delete your Season 1 log first." for a season log, and "Delete your show log first." for a show log.
 
@@ -513,7 +514,7 @@ Fills, and the episode records they need, are written in bulk, with no provider 
 Tapping a filled show or season eye works through these cases in order:
 
 1. **A log covers that level.** If that level has its own log in the current pass, or, for a regular season, the show has a show log in the current pass, change nothing. Say "Delete your show log first." or "Delete your Season 2 log first." (SW-008)
-2. **Marks finished it.** If removing every mark fill inside that level in the current pass would leave an aired episode the eye covers unwatched, remove those fills. This applies whichever action made them: that level's eye, the show eye, Mark watched up to here, a Yes to the earlier-episodes question, or stars or a heart. Keep ticks, logs with their viewings and fills, and mark fills outside that level. Fills of episodes that a season or show log covers stay, and become that log's fills.
+2. **Marks finished it.** If removing every mark fill inside that level in the current pass would leave an aired episode the eye covers unwatched, remove those fills. This applies whichever action made them: that level's eye, the show eye, Mark watched up to here, a Yes to the earlier-episodes question, or stars or a heart. Keep ticks, logs with their viewings and fills, and mark fills outside that level. Fills of episodes that a season or show log covers stay, and become that log's fills, unless that log already holds its own fill of the episode: then the mark's fill goes. A mark's fill that is an episode's last viewing, with an episode log sitting on it (TV-402), stays as that log's fill.
 3. **Anything else finished it.** Otherwise ask "Mark all 62 episodes unwatched?", counting the watched episodes it will unmark. This option is unavailable while any log under that level exists in the current pass, with the reason "Delete the logs first." Confirming removes, in the current pass, every viewing and mark of the episodes that eye covers.
 
 Then work out the state again and apply TV-208.
@@ -615,17 +616,20 @@ For example, with E1 to E3 and E5 to E10 ticked, logging Season 1 fills E4 and k
 ### TV-402: An episode log describes your tick, or adds a viewing
 
 An episode log claims the most recently recorded tick of that episode in the current pass that belongs to no log.
-The claimed tick becomes the log's own viewing.
-When the tick's calendar day differs from the log's, the viewing takes the log's calendar day; its recorded time is kept only for ordering.
+The claimed tick becomes the log's own viewing, and it keeps the calendar day it was saved on (decision 3).
+Only a log dated before it moves where it counts, and that is worked out when Stats read it, never written (STAT-104).
+
+When there is no such tick, the log describes the watch already there and adds no viewing, as long as the episode is watched in the current pass and Rewatch is off or a rewatch covers it.
+A fill is never claimed, so a review of a marked or season-logged episode adds no viewing: with Rewatch off, it dates the mark's watch when read (decision 59, STAT-104).
 
 The log adds a new viewing on its own date instead when either of these holds:
 
-- the current pass has no such tick; or
+- the episode isn't watched in the current pass; or
 - the user turns Rewatch on outside a rewatch that covers the episode.
 
 During a rewatch that covers the episode, the toggle never stops a claim.
-A fill is never claimed, so logging a marked or season-logged episode adds a viewing.
 Ticking and then logging an episode therefore counts one viewing, and the log creates one feed item.
+A review that sits on a watch it didn't add keeps that watch: the last viewing under it can't be unticked (TV-102), and a mark under it stays when the mark is undone (TV-302) or when a season log holding it goes (TV-400).
 An episode log never reopens a finished season or show (TV-603).
 
 ### TV-403: Finishing a season offers its log once
@@ -684,16 +688,20 @@ The first rule that matches decides:
 
 - During a rewatch that covers the target, the default is on.
 - An episode log that will claim a tick defaults off.
+- An episode log of an episode a season or show log covers in the current pass, with no episode log of its own yet, defaults off: it describes that watch (decision 14).
 - Any other episode log defaults on when the episode already has a viewing or a log, in any pass, and off otherwise.
 - Any other season or show log defaults on when a log of that same season, or of the show for a show log, already exists in any pass, or when the target has at least one watched episode and every watched episode in it is watched only by marks. That matches the movie rule for marking watched and logging later. Otherwise the default is off, because the log describes this time through.
 
-On a season or show log, the saved toggle controls only the badge; outside a rewatch it never changes what the log fills.
-On an episode log, it also decides whether the log claims a tick (TV-402).
+On a season or show log, the saved toggle never changes what the log fills; it decides what the log counts when Stats read it (STAT-104).
+On, the log counts each episode it covers again, unless it holds its own fill there or a second time through that no earlier log described sits there (decisions 14, 42, 48 and 61).
+Off, it adds nothing more, and it dates a mark's watch it covers when it's the first log over that mark (decision 38).
+A Rewatch-on season or show log saved by an installed build that sends no mutation id stays only a badge: its snapshot carries `tv.label_only` (TV-900).
+On an episode log, it also decides whether the log claims a tick or adds a viewing (TV-402).
 Editing or deleting another log never recalculates a saved value (SW-010).
 
 ### TV-405: Editing a log's date moves only that log's own viewing
 
-Changing an episode log's date moves the date of that log's own viewing and no other viewing of the episode.
+Changing an episode log's date moves the date of that log's own added viewing and no other viewing of the episode: a claimed tick keeps its day (TV-402).
 Changing a season or show log's date moves no viewing; its fills stay undated.
 Changing a date never changes which pass a viewing belongs to (TV-601), or whether anything is watched.
 TV-407 sets the date limits.
@@ -1087,7 +1095,7 @@ Installed builds keep these limits until the next build:
 - Their stars and heart on a partway show or season don't open a composer: the server refuses them with the reason in TV-304. Their logs still work.
 - They never open the season-finish composer or ask the earlier-episodes question, so nothing earlier is filled.
 - They send a date and time for TV logs; the server converts it to the user's calendar date, and a future date returns a validation error. Their logs of a season or show with nothing aired fail (TV-106).
-- A season log made from the show page may save with Rewatch on (`ios/Spine/Spine/Features/MediaDetail/MediaLogView.swift:89`), which only labels the log (TV-404).
+- A season log made from the show page may save with Rewatch on (`ios/Spine/Spine/Features/MediaDetail/MediaLogView.swift:89`), which only labels the log: the server stamps `tv.label_only` on a Rewatch-on season or show log they save, so it adds nothing (TV-404). A later edit of the switch is counted, because edits carry no build marker.
 - A retried TV log from them can still duplicate, because they send no mutation ID with it (`ios/Spine/Spine/Features/MediaDetail/MediaLogView.swift:304-315`; TV-705).
 - They delete logs without asking first (TV-406).
 - Their Home lists seasons, not shows (`ios/Spine/Spine/Core/Repositories/InProgressLibraryLoader.swift:6-19`). A show chosen as Watching with nothing watched, or one whose next season just aired, appears there only after its first tick, and a caught-up season still airing stays listed, although Continue Watching hides it (TV-701).
