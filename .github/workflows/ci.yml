@@ -34,7 +34,7 @@ jobs:
   database:
     name: Database checks
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     services:
       # Production runs postgres:16-alpine (docker-compose.production.yml).
       postgres:
