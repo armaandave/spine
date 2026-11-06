@@ -22,7 +22,7 @@ from api.services import stats_cache
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from api.tests.test_stats_v2_activity import ALL_TIME, YEAR_2025, YEAR_2026
 from app import book_tracking
-from app.models import Book, BookSession, Game, MediaTypes, Status
+from app.models import Book, BookSession, Game, Item, MediaTypes, Status
 from social.models import ProgressChange
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "activity-steps"}}
@@ -558,3 +558,102 @@ class PickedUpBooksTests(StepBase):
             before = cache.get(key)
             run("fill_picked_up_books", apply=True)
         self.assertNotEqual(cache.get(key), before)
+
+
+class TwerpTests(StepBase):
+    """Twerp, a Read with a date and no log or mark, gets the eye (2026-11-04's yes)."""
+
+    def twerp(self, owner=None, **fields):
+        """Write Twerp as it sits on account 1: Completed on 2026-06-24, with no log."""
+        owner = owner or self.owner
+        count = Item.objects.count()
+        item = self.item(MediaTypes.BOOK.value, f"twerp-{owner.pk}-{count}", title="Twerp")
+        self.set_item(item, total_pages=290)
+        fields = {
+            "status": Status.COMPLETED.value,
+            "progress": 290,
+            "completed_manually": False,
+            "end_date": datetime(2026, 6, 24, tzinfo=UTC),
+            **fields,
+        }
+        Book.objects.bulk_create([Book(user=owner, item=item, **fields)])
+        return item
+
+    def step(self, **options):
+        return run("mark_twerp", user=self.owner.pk, **options)
+
+    def stats(self):
+        """Return Books' pages in 2025, 2026 and All Time, as Stats send them."""
+        pages = []
+        for params in (YEAR_2025, YEAR_2026, ALL_TIME):
+            cache.clear()
+            data = self.get(self.owner, {**params, "media_type": MediaTypes.BOOK.value}).json()
+            row = next((row for row in data["time"]["rows"] if row["media_type"] == MediaTypes.BOOK.value), None)
+            pages.append(row["value"] if row else 0)
+        return pages
+
+    def test_the_dry_run_prints_the_count_and_pages_and_writes_nothing(self):
+        item = self.twerp()
+        out, err = self.step()
+        self.assertEqual(out, "")
+        self.assertIn("twerp: 1 found (expected 1), pages: 290 (expected 290)", err)
+        self.assertIn("dry run: nothing changed", err)
+        self.assertFalse(Book.objects.get(item=item).completed_manually)
+
+    def test_apply_raises_all_time_by_its_length_and_moves_no_year_or_row(self):
+        item = self.twerp()
+        self.assert_numbers(0, 0, 0)
+        before = self.stats()
+        version = self.version()
+        connection.run_on_commit = []
+        with self.captureOnCommitCallbacks(execute=True):
+            out, err = self.step(apply=True)
+        old = json.loads(out)
+        self.assertEqual((old["completed_manually"], old["progress"]), (False, 290))
+        self.assertEqual(old["end_date"], "2026-06-24T00:00:00Z")
+        self.assertIn("marked read with no date", err)
+        self.assertNotEqual(self.version(), version, "The owner's stats version moves")
+        self.assert_numbers(0, 0, 290)
+        self.assertEqual(self.rows(), [])
+        after = self.stats()
+        self.assertEqual(after[:2], before[:2], "No year moves")
+        self.assertEqual(after[2], before[2] + 290)
+        book = Book.objects.get(item=item)
+        self.assertTrue(book.completed_manually)
+        self.assertIsNone(book.end_date)
+
+    def test_a_second_run_finds_nothing(self):
+        self.twerp()
+        self.step(apply=True)
+        out, err = self.step(apply=True)
+        self.assertEqual(out, "")
+        self.assertIn("twerp: 0 found", err)
+        self.assertIn("nothing matches, so nothing changed", err)
+
+    def test_none_or_two_matches_change_nothing(self):
+        out, err = self.step(apply=True)
+        self.assertEqual(out, "")
+        self.assertIn("nothing matches, so nothing changed", err)
+        first = self.twerp()
+        second = self.item(MediaTypes.BOOK.value, "twerp-again", title="Twerp")
+        Book.objects.bulk_create(
+            [Book(user=self.owner, item=second, status=Status.COMPLETED.value, end_date=datetime(2026, 6, 24, tzinfo=UTC))],
+        )
+        out, err = self.step(apply=True)
+        self.assertEqual(out, "")
+        self.assertIn("twerp: 2 found", err)
+        self.assertIn("more than one matches, so nothing changed", err)
+        self.assertFalse(Book.objects.filter(item__in=[first, second], completed_manually=True).exists())
+
+    def test_a_log_a_mark_another_day_or_another_account_is_left_alone(self):
+        logged = self.twerp()
+        self.log(logged, datetime(2026, 6, 24, tzinfo=UTC))
+        _, err = self.step()
+        self.assertIn("twerp: 0 found", err)
+        Book.objects.filter(item=logged).delete()
+        self.twerp(end_date=datetime(2026, 6, 25, tzinfo=UTC))
+        _, err = self.step()
+        self.assertIn("twerp: 0 found", err)
+        self.twerp(owner=self.follower)
+        _, err = self.step()
+        self.assertIn("twerp: 0 found", err)
