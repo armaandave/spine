@@ -994,6 +994,7 @@ Imports may write in bulk, but Spine works out each imported show once afterward
 - Spine never infers Paused or Dropped from provider inactivity (GM-501).
 - Overwrite replaces the show's viewings, marks and choices with the source's, as today, so it drops marks, choices, a rewatch in progress and star sources made in Spine.
 - Logs survive an overwrite, and each log's own viewing and fills are rebuilt (TV-400). Rebuilding an episode log's viewing claims an imported viewing of that episode on the log's calendar day before adding one.
+- The imported Completed status then fills only what the logs left, so a season or show log saved with Rewatch on over marks becomes that season's only watch: it held no fills before and holds them now, and Stats count it once (STAT-104).
 
 ### TV-801: Data from before this contract
 

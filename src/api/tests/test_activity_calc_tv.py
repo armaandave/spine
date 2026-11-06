@@ -15,7 +15,7 @@ from django.test import TestCase, override_settings
 from api.services import stats_time
 from api.services.activity_rows import list_rows, piled, rows_for
 from api.services.stats_scope import build_scope
-from app import tv_tracking, user_calendar
+from app import models, tv_tracking, user_calendar
 from app.models import DiaryEntry, Episode, Item, MediaTypes, Season
 from app.tests.tv_fixtures import make_manual_show, make_user, patch_now
 from social.models import Follow, FollowStatus
@@ -473,6 +473,30 @@ class OldLogTests(TVCalcBase):
         ).entry
         self.assertTrue(entry.progress_snapshot["tv"]["label_only"])
         self.assert_minutes(2026, 0, 3 * E)
+
+
+class OverwriteImportTests(TVCalcBase):
+    """TV-800: an overwrite drops the marks; each log that stays gets its own fills."""
+
+    def eye_log_overwrite(self, *, on):
+        show = self.show(3)
+        self.on(date(2026, 1, 5))
+        self.eye(show)
+        self.on(date(2026, 3, 2))
+        entry = self.log(self.season(show), is_rewatch=on)
+        before = (self.number(2026), self.number())
+        self.clock.advance(minutes=5)
+        models.TV.objects.filter(user=self.user, item=show).delete()
+        models.TV.objects.create(user=self.user, item=show, status="Completed")
+        tv_tracking.reconcile_imported(self.user, [show], overwritten_show_item_ids=[show.pk])
+        self.assertEqual(Episode.objects.filter(diary_entry=entry).count(), 3, "The log holds its own fills")
+        return before, (self.number(2026), self.number())
+
+    def test_a_rewatch_off_log_reads_the_same(self):
+        self.assertEqual(self.eye_log_overwrite(on=False), ((3 * E, 3 * E), (3 * E, 3 * E)))
+
+    def test_a_rewatch_on_log_becomes_the_only_watch(self):
+        self.assertEqual(self.eye_log_overwrite(on=True), ((3 * E, 6 * E), (3 * E, 3 * E)))
 
 
 class UndatedPlayTests(TVCalcBase):
