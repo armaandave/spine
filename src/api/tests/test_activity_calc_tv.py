@@ -8,8 +8,10 @@ All Time's rows plus the undated pile.
 
 from datetime import date, datetime
 from decimal import Decimal
+from itertools import product
 from zoneinfo import ZoneInfo
 
+from django.db import transaction
 from django.test import TestCase, override_settings
 
 from api.services import stats_time
@@ -497,6 +499,115 @@ class OverwriteImportTests(TVCalcBase):
 
     def test_a_rewatch_on_log_becomes_the_only_watch(self):
         self.assertEqual(self.eye_log_overwrite(on=True), ((3 * E, 6 * E), (3 * E, 3 * E)))
+
+
+class OverwriteRewatchImportTests(TVCalcBase):
+    """An overwrite import of a log and a Rewatch-on log of the same season."""
+
+    def test_both_logs_keep_their_watches(self):
+        show = self.show(3)
+        self.on(date(2025, 5, 1))
+        self.log(self.season(show), is_rewatch=False)
+        self.on(date(2026, 2, 1))
+        self.log(self.season(show), is_rewatch=True)
+        self.assertEqual((self.number(2025), self.number(2026), self.number()), (3 * E, 3 * E, 6 * E))
+        self.clock.advance(minutes=5)
+        models.TV.objects.filter(user=self.user, item=show).delete()
+        models.TV.objects.create(user=self.user, item=show, status="Completed")
+        tv_tracking.reconcile_imported(self.user, [show], overwritten_show_item_ids=[show.pk])
+        self.assertEqual((self.number(2025), self.number(2026), self.number()), (3 * E, 3 * E, 6 * E))
+        self.assert_stats_agree(2026)
+
+
+class WholeShowFinaleTests(TVCalcBase):
+    """TV-403: a ticked show rewatch, S1 logged on, the finale logged as Whole show."""
+
+    def test_the_whole_show_log_adds_nothing_the_ticks_counted(self):
+        show = self.show(3, 3)
+        self.on(date(2025, 5, 1))
+        for season in (1, 2):
+            self.tick(show, 1, 2, 3, season=season)
+        self.on(date(2026, 1, 10))
+        self.clock.advance(minutes=1)
+        tv_tracking.start_rewatch(self.user, show)
+        self.tick(show, 1, 2, 3)
+        self.on(date(2026, 1, 11))
+        self.log(self.season(show, 1), is_rewatch=True)
+        self.on(date(2026, 1, 12))
+        self.tick(show, 1, 2, 3, season=2)
+        self.on(date(2026, 1, 13))
+        entry = self.log(show, is_rewatch=True)
+        self.assertEqual(entry.item_id, show.pk, "the composer switched to Whole show")
+        self.assertEqual((self.number(2025), self.number(2026), self.number()), (6 * E, 6 * E, 12 * E))
+        self.assert_stats_agree(2026)
+
+
+class PrivateSeasonLogTests(TVCalcBase):
+    """A private season log counts for its owner only (AC-5): 225, 135 and 90."""
+
+    def test_owner_follower_and_stranger(self):
+        show = self.show(5)
+        self.on(date(2026, 3, 1))
+        self.tick(show, 1, 2)
+        self.on(date(2026, 3, 2))
+        self.log(self.episode(show, 1, 3), visibility="followers")
+        self.on(date(2026, 3, 5))
+        entry = self.log(self.season(show), visibility="private")
+        self.assertFalse(entry.is_rewatch)
+        self.assert_minutes(2026, 5 * E, 5 * E)
+        self.assert_minutes(2026, 3 * E, 3 * E, viewer=self.follower)
+        self.assert_minutes(2026, 2 * E, 2 * E, viewer=self.stranger)
+
+
+class StepSequenceTests(TVCalcBase):
+    """Every sequence of up to three steps on one season, against the closed form.
+
+    Eye or no eye, then logs saved on or off, flips and deletes, all on one day in save
+    order. In watches of the season: the year is 0 with no log, else 1 plus the
+    Rewatch-on logs after the first. All Time is the year, plus 1 when the mark stands:
+    no log, or a first log that's on. Ported from the final TV switch prototype.
+    """
+
+    STEPS = ("on", "off", "flip_first", "flip_last", "del_first", "del_last")
+
+    def test_every_sequence(self):
+        show = self.show(3)
+        sequences = [seq for length in (1, 2, 3) for seq in product(self.STEPS, repeat=length)]
+        wrong = []
+        for has_mark in (False, True):
+            for seq in sequences:
+                got, want = self.run_steps(show, has_mark, seq)
+                if got != want:
+                    wrong.append((has_mark, seq, want, got))
+        self.assertEqual(wrong, [])
+
+    def run_steps(self, show, has_mark, seq):
+        with transaction.atomic():
+            self.on(date(2026, 3, 1))
+            if has_mark:
+                self.eye(show)
+            logs = []
+            self.on(date(2026, 3, 2))
+            for step in seq:
+                if step in ("on", "off"):
+                    logs.append(self.log(self.season(show), is_rewatch=step == "on"))
+                elif not logs:
+                    continue
+                elif step.startswith("flip"):
+                    entry = DiaryEntry.objects.get(pk=(logs[0] if step == "flip_first" else logs[-1]).pk)
+                    self.flip(entry, on=not entry.is_rewatch)
+                else:
+                    self.delete(logs.pop(0) if step == "del_first" else logs.pop())
+            states = list(
+                DiaryEntry.objects.filter(pk__in=[log.pk for log in logs]).order_by("id").values_list("is_rewatch", flat=True),
+            )
+            year = 1 + sum(states[1:]) if states else 0
+            stands = has_mark and (not states or states[0])
+            watched = Episode.objects.filter(related_season__user=self.user).values("item").distinct().count()
+            got = (self.number(2026), self.number(), watched if states or has_mark else 0)
+            want = (year * 3 * E, (year + stands) * 3 * E, 3 if states or has_mark else 0)
+            transaction.set_rollback(True)
+        return got, want
 
 
 class UndatedPlayTests(TVCalcBase):
