@@ -1,4 +1,4 @@
-"""Phase 1's phone sheet: Spine Dev's user, set up through the real tracking functions.
+"""Phases 1 and 2's phone sheets: Spine Dev's user, set up through real tracking writes.
 
 scripts/ios/seed-activity-checkpoint.sh runs this on the test backend's throwaway copy,
 and test_activity_checkpoints.py runs the same steps in CI. It clears the dev user
@@ -27,7 +27,15 @@ import events.tasks  # noqa: F401
 from api.services import activity as activity_service
 from api.services import social as social_service
 from api.services import stats_cache
-from app import book_tracking, tv_tracking, user_calendar
+from api.services.item_metadata import store_series_total
+from app import (
+    anime_tracking,
+    book_tracking,
+    game_tracking,
+    series_tracking,
+    tv_tracking,
+    user_calendar,
+)
 from app.models import (
     Book,
     DiaryEntry,
@@ -95,6 +103,24 @@ OTHER_TITLES = {
     MediaTypes.MOVIE.value: "F1",
     MediaTypes.MUSIC.value: "P1",
 }
+ANIME_MINUTES = 24
+# Phase 2's titles: each one's type and its total. On the list too, so a title
+# untouched until its row opens without search.
+PHASE_2 = {
+    "M1": (MediaTypes.MANGA.value, {"series_total": 100}),
+    "M2": (MediaTypes.MANGA.value, {"series_total": 100}),
+    "M4": (MediaTypes.MANGA.value, {}),
+    "C1": (MediaTypes.COMIC.value, {}),
+    "C2": (MediaTypes.COMIC.value, {"series_total": 10}),
+    **{f"G{number}": (MediaTypes.GAME.value, {}) for number in range(1, 9)},
+    "G2023": (MediaTypes.GAME.value, {}),
+    "Q": (MediaTypes.BOOK.value, {}),
+}
+
+
+def hours(number):
+    """Return hours in minutes."""
+    return number * 60
 
 
 @contextmanager
@@ -189,6 +215,7 @@ def _make_titles(dev):
         )
         if name in LISTED_BOOKS:
             titles.append(item)
+    runtimes = {MediaTypes.MOVIE.value: 120, MediaTypes.MUSIC.value: 120, MediaTypes.ANIME.value: ANIME_MINUTES}
     for media_type, name in OTHER_TITLES.items():
         titles.append(
             Item.objects.create(
@@ -197,7 +224,18 @@ def _make_titles(dev):
                 media_id=media_id(name),
                 title=f"{media_type.title()} {name}",
                 image=IMAGE,
-                runtime_minutes=120 if media_type in (MediaTypes.MOVIE.value, MediaTypes.MUSIC.value) else None,
+                runtime_minutes=runtimes.get(media_type),
+            ),
+        )
+    for name, (media_type, fields) in PHASE_2.items():
+        titles.append(
+            Item.objects.create(
+                source=Sources.MANUAL.value,
+                media_type=media_type,
+                media_id=media_id(name),
+                title=f"{media_type.title()} {name}",
+                image=IMAGE,
+                **fields,
             ),
         )
     titles.append(_make_show())
@@ -285,7 +323,54 @@ def seed():
             tv_tracking.choose(dev, show_z(), PLANNING, entry_point=tv_tracking.APP)
         Follow.objects.create(from_user=dev, to_user=friend_user(), status=FollowStatus.ACCEPTED)
         _friend_reads(friend_user())
+        _phase_2(dev)
         stats_cache.bump_user(dev)
+
+
+def _series(user, name, start, *saves):
+    """Start a manga or comic on a day and save each (value, day)."""
+    item = title(PHASE_2[name][0], name)
+    with on(start):
+        series_tracking.start(user, item)
+    for value, day in saves:
+        with on(day):
+            series_tracking.update_progress(user, item, value=value)
+    return item
+
+
+def _play(user, name, start, *saves):
+    """Start a game on a day and save each (minutes, day), as its sheet does."""
+    item = title(MediaTypes.GAME.value, name)
+    with on(start):
+        game_tracking.start(user, item)
+    for minutes, day in saves:
+        with on(day):
+            game_tracking.update_progress(user, item, total_minutes=minutes, progressed_on=day)
+    return item
+
+
+def _phase_2(dev):
+    """Phase 2's opening: manga 30, 20, 150; comics 30, none, 40; games 90h, 4h, 94h."""
+    _series(dev, "M1", date(2025, 12, 20), (30, date(2025, 12, 20)), (50, date(2026, 3, 1)))
+    with on(date(2026, 1, 15)):
+        series_tracking.mark_read(dev, title(MediaTypes.MANGA.value, "M2"))
+    _series(dev, "C1", date(2025, 12, 28), (300, date(2025, 12, 28)), (30, date(2026, 1, 2)))
+    with on(date(2026, 1, 15)):
+        series_tracking.mark_read(dev, title(MediaTypes.COMIC.value, "C2"))
+    anime = title(MediaTypes.ANIME.value, OTHER_TITLES[MediaTypes.ANIME.value])
+    with on(date(2026, 2, 1)):
+        # A manual anime's total is what its owner types (AN-100): 12 ticks that day.
+        anime_tracking.write_progress(dev, anime, 12)
+        anime_tracking.create_log(dev, anime, consumed_at=date(2026, 2, 1))
+    _play(dev, "G1", date(2025, 12, 20), (hours(10), date(2025, 12, 20)), (hours(12), date(2026, 3, 1)))
+    _play(dev, "G2", date(2025, 12, 20), (hours(40), date(2025, 12, 20)), (hours(40), date(2026, 1, 2)))
+    g3 = _play(dev, "G3", date(2025, 12, 20), (hours(10), date(2025, 12, 20)))
+    with on(date(2026, 1, 5)):
+        game_tracking.complete(dev, g3, completion_date=date(2026, 1, 5), total_minutes=hours(12), mutation_id=uuid4())
+    g4 = _play(dev, "G4", date(2026, 2, 1))
+    with on(date(2026, 2, 2)):
+        game_tracking.update_progress(dev, g4, percentage=40, progressed_on=date(2026, 2, 2))
+    _play(dev, "G5", date(2025, 12, 20), (hours(300), date(2025, 12, 20)), (hours(30), date(2026, 1, 2)))
 
 
 def yesterday():
@@ -331,6 +416,44 @@ def add_r():
     )
     day = date(2024, 3, 10)
     _read(dev_user(), "R", day, (285, day))
+
+
+def new_issue_c2():
+    """Run the new-issue job on C2, as the calendar does: an 11th issue is out."""
+    item = title(MediaTypes.COMIC.value, "C2")
+    store_series_total(item, {"max_progress": 11})
+    series_tracking.new_issue_out(item, previous_total=10)
+
+
+def add_g6():
+    """Add G6: started and 10 hours on Mar 1 2026."""
+    _play(dev_user(), "G6", date(2026, 3, 1), (hours(10), date(2026, 3, 1)))
+
+
+def add_g8():
+    """Add G8: 5 hours on Dec 20 2025, stopped Dec 21."""
+    item = _play(dev_user(), "G8", date(2025, 12, 20), (hours(5), date(2025, 12, 20)))
+    with on(date(2025, 12, 21)):
+        game_tracking.drop(dev_user(), item, end_date=date(2025, 12, 21))
+
+
+def add_m4():
+    """Add M4: a manga with no total, marked with the eye."""
+    with on(date(2026, 1, 15)):
+        series_tracking.mark_read(dev_user(), title(MediaTypes.MANGA.value, "M4"))
+
+
+def add_q():
+    """Add Q: a book with no page count, 25% on Jun 2 2023."""
+    item = title(MediaTypes.BOOK.value, "Q")
+    with on(date(2023, 6, 2)):
+        book_tracking.start(dev_user(), item)
+        book_tracking.update_progress(dev_user(), item, progress_type="percentage", value=25)
+
+
+def add_game_2023():
+    """Add a game started Jul 1 2023 with no hours."""
+    _play(dev_user(), "G2023", date(2023, 7, 1))
 
 
 def _friend_save():
@@ -388,4 +511,10 @@ STEPS = {
     "like-from-tokyo": like_from_tokyo,
     "friend-starts-over": friend_starts_over,
     "print-rows": print_rows,
+    "new-issue-c2": new_issue_c2,
+    "add-g6": add_g6,
+    "add-g8": add_g8,
+    "add-m4": add_m4,
+    "add-q": add_q,
+    "add-game-2023": add_game_2023,
 }

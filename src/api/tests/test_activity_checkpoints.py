@@ -626,6 +626,198 @@ class StoredRowsTests(CheckpointBase):
         )
 
 
+YEAR_2023 = {"schema": "2", "start_date": "2023-01-01", "end_date": "2023-12-31"}
+MANGA = MediaTypes.MANGA.value
+COMIC = MediaTypes.COMIC.value
+GAME = MediaTypes.GAME.value
+ANIME = MediaTypes.ANIME.value
+
+
+def h(hours):
+    """Return hours in minutes."""
+    return hours * 60
+
+
+class Phase2SheetTests(CheckpointBase):
+    """Phase 2's sheet: games, anime, manga, comics and the note, row by row."""
+
+    def measure(self, params, tab, *, tab_only=True):
+        """Return a type's Time row as the phone reads it, or None: plain ints, no ≈."""
+        rows = self.stats(params, tab=tab if tab_only else None)["time"]["rows"]
+        row = next((row for row in rows if row["media_type"] == tab), None)
+        if row is not None:
+            for key in ("value", "known", "total"):
+                self.assertIs(type(row[key]), int, row)
+            self.assertFalse(row["approximate"], row)
+        return row
+
+    def value(self, params, tab):
+        row = self.measure(params, tab)
+        return row["value"] if row else None
+
+    def assert_type(self, tab, in_2025, in_2026, all_time):
+        self.assertEqual(
+            (self.value(YEAR_2025, tab), self.value(YEAR_2026, tab), self.value(ALL_TIME, tab)),
+            (in_2025, in_2026, all_time),
+        )
+        for params in (YEAR_2025, YEAR_2026, ALL_TIME):
+            self.assert_header_numbers(params)
+        self.assert_type_adds_up(tab)
+
+    def assert_type_adds_up(self, tab):
+        """Check this type's list adds up to its number, for three viewers."""
+        for viewer in (self.dev, self.follower, self.other):
+            calculation = rows_for([self.dev], viewer, types=[tab])
+            for params, start, end in (
+                (YEAR_2025, date(2025, 1, 1), date(2025, 12, 31)),
+                (YEAR_2026, date(2026, 1, 1), date(2026, 12, 31)),
+                (ALL_TIME, None, None),
+            ):
+                data = self.stats(params, tab=tab, user=None if viewer == self.dev else viewer)
+                pile = piled(calculation.piles, tab) if end is None else piled([], tab)
+                listed = list_rows(calculation.rows, media_type=tab, start_date=start, end_date=end)
+                time_rows = [row["value"] for row in data["time"]["rows"] if row["media_type"] == tab]
+                self.assertEqual(int(sum(row.amount for row in listed) + pile.amount), sum(time_rows), (tab, params))
+                titles = list_rows(calculation.rows, media_type=tab, start_date=start, end_date=end, counts=TITLES)
+                self.assertEqual(len(titles) + len(pile.titles - {row.title_id for row in titles}), data["header"]["titles"])
+                days = {row.day for row in list_rows(calculation.rows, media_type=tab, start_date=start, end_date=end, counts=DAYS)}
+                self.assertEqual(len(days), data["header"]["active_days"], (tab, params))
+
+    def url(self, media_type, name, suffix=""):
+        return f"/api/v1/tracking/manual/{media_type}/{seed.media_id(name)}/{suffix}"
+
+    def send(self, method, path, body=None, expected=200):
+        response = getattr(self.phone(), method)(path, body or {}, format="json")
+        self.assertEqual(response.status_code, expected, response.content)
+        return response.json() if response.content else None
+
+    def series_save(self, media_type, name, value):
+        self.step(self.send, "post", self.url(media_type, name, "progress/"), {"value": value, "mutation_id": str(uuid4())})
+
+    def series_log(self, media_type, name):
+        body = {"completion_date": TODAY.isoformat(), "mutation_id": str(uuid4())}
+        return self.step(self.send, "post", self.url(media_type, name, "complete/"), body, 201)["diary_entry"]["id"]
+
+    def playthrough(self, name):
+        return self.send("get", self.url(GAME, name))["game"]["current_playthrough"]
+
+    def game_save(self, name, minutes):
+        """Send the game sheet's Save: hours, and the percent it holds, together."""
+        playthrough = self.playthrough(name)
+        body = {"total_minutes": minutes, "percentage": playthrough["percentage"], "progressed_on": TODAY.isoformat()}
+        self.step(self.send, "patch", self.url(GAME, name, f"playthroughs/{playthrough['id']}/"), body)
+
+    def game_log(self, name, minutes, day=TODAY):
+        playthrough = self.playthrough(name)
+        body = {
+            "playthrough_id": playthrough["id"],
+            "completion_date": day.isoformat(),
+            "total_minutes": minutes,
+            "percentage": playthrough["percentage"],
+            "review": "",
+            "review_title": "",
+            "liked": False,
+            "is_rewatch": False,
+            "contains_spoilers": False,
+            "tags": [],
+            "mutation_id": str(uuid4()),
+        }
+        return self.step(self.send, "post", self.url(GAME, name, "complete/"), body, 201)["diary_entry"]["id"]
+
+    def note(self, params, tab, *, global_row=False):
+        row = self.measure(params, tab, tab_only=not global_row)
+        return (row["known"], row["total"])
+
+    def test_manga(self):
+        self.assert_type(MANGA, 30, 20, 150)
+        self.series_save(MANGA, "M1", 60)
+        self.assert_type(MANGA, 30, 30, 160)
+        entry = self.series_log(MANGA, "M1")
+        self.assert_type(MANGA, 30, 70, 200)
+        self.step(self.delete_log, entry)
+        self.assert_type(MANGA, 30, 30, 160)
+        self.assertEqual(self.send("get", self.url(MANGA, "M1"))["progress"]["value"], 60)
+        self.step(seed.add_m4)
+        self.assertEqual(self.value(ALL_TIME, MANGA), 160)
+        self.assertEqual(self.note(ALL_TIME, MANGA), (2, 3), "Based on 2 of 3 manga")
+
+    def test_comics(self):
+        self.assert_type(COMIC, 30, None, 40)
+        self.assertTrue(self.is_nothing_yet(YEAR_2026, COMIC))
+        self.series_save(COMIC, "C1", 35)
+        self.assert_type(COMIC, 30, 5, 45)
+        self.step(seed.new_issue_c2)
+        self.assertEqual(self.send("get", self.url(COMIC, "C2"))["progress"]["value"], 10, "Its sheet opens at 10")
+        self.series_save(COMIC, "C2", 11)
+        self.assert_type(COMIC, 30, 6, 46)
+        known, total = self.note(ALL_TIME, COMIC)
+        self.assertEqual(known, total, "No note: C1 has no total, but it has a counted amount")
+
+    def is_nothing_yet(self, params, tab):
+        header = self.stats(params, tab=tab)["header"]
+        return not (header["titles"] or header["logs"] or header["active_days"])
+
+    def test_games(self):
+        self.assert_type(GAME, h(90), h(4), h(94))
+        self.game_save("G1", h(14))
+        self.assert_type(GAME, h(90), h(6), h(96))
+        entry = self.game_log("G1", h(16))
+        self.assert_type(GAME, h(90), h(8), h(98))
+        self.step(self.delete_log, entry)
+        self.assert_type(GAME, h(90), h(8), h(98))
+        state = self.send("get", self.url(GAME, "G1"))["game"]["current_playthrough"]
+        self.assertEqual((state["status"], state["total_minutes"]), ("In progress", h(16)), "GM-219")
+        self.game_save("G2", h(40))
+        self.assert_type(GAME, h(90), h(8), h(98))
+        self.step(seed.add_g6)
+        self.assert_type(GAME, h(90), h(18), h(108))
+        entry = self.game_log("G6", h(10), date(2025, 12, 20))
+        self.assert_type(GAME, h(100), h(8), h(108))
+        self.step(self.delete_log, entry)
+        self.assert_type(GAME, h(90), h(18), h(108))
+        self.step(self.send, "post", self.url(GAME, "G7", "actions/mark_completed/"), {"mutation_id": str(uuid4())})
+        self.assert_type(GAME, h(90), h(18), h(108))
+        self.assertEqual(self.note(ALL_TIME, GAME), (5, 6), "Based on 5 of 6 games: G4 has only a percent, G7 no hours")
+        self.step(seed.add_g8)
+        self.step(self.send, "post", self.url(GAME, "G8", "actions/start/"), {"mutation_id": str(uuid4()), "start_date": TODAY.isoformat()})
+        self.game_save("G8", h(8))
+        self.assert_type(GAME, h(95), h(26), h(121))
+
+    def test_anime(self):
+        year = self.stats(YEAR_2026, tab=ANIME)
+        self.assertEqual(self.measure(YEAR_2026, ANIME)["value"], 12 * seed.ANIME_MINUTES)
+        details = {row["key"]: row["value"] for row in year["header"]["details"]}
+        self.assertEqual(details["episodes"], 12)
+        self.assert_type(ANIME, None, 12 * seed.ANIME_MINUTES, 12 * seed.ANIME_MINUTES)
+        future = {
+            "ref": {"source": "manual", "media_type": ANIME, "media_id": seed.media_id("AN")},
+            "consumed_at": "2026-11-04",
+        }
+        self.step(self.send, "post", "/api/v1/diary/", future, 400)
+
+    def test_the_notes(self):
+        self.assertEqual(self.measure(YEAR_2026, BOOK)["value"], 360)
+        self.assertEqual(self.note(YEAR_2026, BOOK), (4, 5), "Based on 4 of 5 books")
+        self.assertEqual(self.note(ALL_TIME, BOOK), (7, 8), "Based on 7 of 8 books")
+        self.assertEqual(self.note(YEAR_2026, BOOK, global_row=True), (4, 5), "Global's Books row carries it too")
+        self.step(seed.add_r)
+        self.assertEqual(self.note(ALL_TIME, BOOK), (8, 9), "Based on 8 of 9 books")
+
+    def test_a_year_with_only_a_percent_or_a_start_keeps_its_header(self):
+        self.step(seed.add_q)
+        header = self.stats(YEAR_2023)["header"]
+        self.assertEqual((header["titles"], header["logs"], header["active_days"]), (1, 0, 1))
+        self.assertEqual(self.note(YEAR_2023, BOOK), (0, 1), "Based on 0 of 1 book")
+        self.step(seed.add_game_2023)
+        games = self.stats(YEAR_2023, tab=GAME)["header"]
+        self.assertEqual((games["titles"], games["logs"], games["active_days"]), (0, 0, 1))
+
+
+@override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase2SheetOnUTCTests(Phase2SheetTests):
+    """The test backend's settings resolve to UTC, so the phone test runs there."""
+
+
 @override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
 class BooksSheetOnUTCTests(BooksSheetTests):
     """The test backend's settings resolve to UTC, so the phone test runs there."""
