@@ -155,7 +155,7 @@ The `titles` of a scope are the distinct titles of:
    - movies and music: the direct-consumption marker;
    - books and games: `completed_manually`;
    - TV, anime, manga and comics: the latest tracking row is Completed.
-   Books count every title with anything undated, a place with no journey included.
+   Books count every title with anything undated, a place with no journey included, and anime every title with a mark's fills or a stored number with no viewings.
 
 A title counts once however many of these it has. A start with no reading is an event (STAT-106), not a title that year.
 
@@ -260,7 +260,7 @@ It is a fact like the streak itself, so every viewer gets it.
 | --- | --- | --- | --- | --- |
 | Movie | minutes | Sum of `runtime_minutes` over visible logs in the range; each log counts, rewatches included. | The same over every visible log, plus each undated completed film once. | Never. |
 | TV | minutes | Sum over dated viewings in the range of the episode's runtime, falling back to its season's, then its show's. | Every viewing, fills included. | When a season or show runtime stood in for an episode's own. |
-| Anime | minutes | Sum over dated viewings in the range of the title's per-episode runtime: ticks on their day, and a log's fills on that log's day (AN-704). A mark's fills never count. | Every viewing, fills included, plus a stored `progress` with no viewings, times the runtime. | Never. |
+| Anime | minutes | Sum over dated viewings in the range of the title's per-episode runtime: ticks on their day, and a log's fills on that log's day (AN-704), read through the calculation (below). A mark's fills never count. | Every viewing, fills included, plus a stored `progress` with no viewings, times the runtime. | Never. |
 | Manga | chapters | Sum of positive progress changes dated in the range. | Sum of `progress` over every manga tracking row. | Always in a dated range. |
 | Comic | issues | As manga. | As manga. | Always in a dated range. |
 | Game | minutes | Sum of `GameSession.total_minutes` for sessions whose `minutes_updated_on`, or else `end_date`, is in the range. | Sum over every session. | Always in a dated range. |
@@ -270,7 +270,7 @@ It is a fact like the streak itself, so every viewer gets it.
 A progress change is the difference between one history row (`HistoricalManga`, `HistoricalComic`) and the previous row of the same tracking row, ordered by `history_date`, dated by its `history_date` on the owner's calendar.
 Only increases count. The row that created the tracking row is never a change, so an imported row adds nothing to the year it was imported.
 Steam's imported lifetime playtime is never added (GM-500).
-Each row reports `known` and `total`: how many of the things it counted (logs, viewings, tracking rows or sessions, plus undated completions) had a length, out of all of them. On books they count titles: how many in the range have a known length, out of all of them. A percent with no page count, and a log with no length anywhere, are the unknown ones.
+Each row reports `known` and `total`: how many of the things it counted (logs, viewings, tracking rows or sessions, plus undated completions) had a length, out of all of them. On books and anime they count titles: how many in the range have a known length, out of all of them. An anime with no runtime is the unknown one. A percent with no page count, and a log with no length anywhere, are the unknown ones.
 
 Books read `api.services.activity_rows`, the same calculation the Activity list reads, so a list adds up to its number. Saves are read in the order they were saved. A rise adds to that save's fixed day, and a drop comes off the newest amounts first, even last year's. A log adds what's left, on its own date, up to the length on its snapshot, else `total_pages`, else the last typed page. A log dated before its read's first activity takes all of that read's amounts onto its date (BK-306). Stopped and picked back up is one read; only Restart begins at zero. A reread counts again. A place with no journey, and `completed_manually`'s `total_pages` less what the read before the mark holds, sit in the undated pile: All Time only, never a row and never in a year. A finish on such a place adds only what's left. A file's read is its own: it joins no read beside it, so its date moves none of that read's pages (BK-306).
 
@@ -1255,6 +1255,8 @@ Writing the laws settled details those decisions leave open. These are provision
 - **Header details (STAT-200).** The list of per-type details and their labels, and that "right now" TV counts appear only in All Time.
 - **Specials (STAT-104).** Viewings of specials count in time, events and episodes watched.
 - **Group keys and labels (STAT-211).** The keys are fixed here; the labels follow the plan ("Thriller & Crime", "Music & Musicals"). Milestone 1 built them in `api.services.genre_groups` (`GROUPS`).
+
+Activity's second phase (2026-11-05) moved anime onto it too, with every number the same: STAT-201's anime `known` and `total` counting titles, and an anime held only by a mark or a stored number becoming an All Time title (STAT-105), are provisional until its phone test accepts them.
 
 Activity's first phase (2026-11-03) moved books onto one calculation. STAT-005's fixed day for a save, STAT-006's page count arriving, STAT-105, STAT-106, STAT-201's book row with `known` and `total`, `years.first` reading a book's day (STAT-302) and New vs older leaving out a book with no log (STAT-209) are provisional until its phone test accepts them. Every other type keeps its row here until its own phase.
 

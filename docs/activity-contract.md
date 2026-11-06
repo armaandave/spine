@@ -48,10 +48,10 @@ hearts, follows, or adding to a list.
   reads its moment on the server's zone.
 - Anime keeps its own rules (docs/anime-tracking-contract.md, AN-703): only ticks move
   its progress steps, and choosing Watching, a tick that puts it in Watching or starting
-  a rewatch is its start, each with its `saved_on`. Stats count its viewings (AN-704).
-  The calculation's anime adapter is switched off: it reads anime's history rows, where
-  anime_tracking writes no change reason, at their moments, and only the comparison
-  runs it. It has to read viewings before anime can switch to it.
+  a rewatch is its start, each with its `saved_on`. The calculation reads its viewings,
+  as Stats did (AN-704): a tick on its day, a log's fills on the log's calendar date, a
+  mark's fills and a stored number with no viewings in the undated pile. Each log is its
+  own row, so a log that fills nothing still counts its day.
 
 ## AC-3: Newest date first
 

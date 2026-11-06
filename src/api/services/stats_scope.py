@@ -256,6 +256,11 @@ class StatsScope:
         return MediaTypes.ANIME.value in self.primary_types
 
     @property
+    def anime_reads_viewings(self):
+        """Whether anime's titles and events come from its viewings, not the calculation."""
+        return self.counts_anime and MediaTypes.ANIME.value not in activity_rows.CALCULATED_TYPES
+
+    @property
     def has_collections(self):
         return self.media_type in COLLECTION_TABS
 
@@ -586,9 +591,22 @@ class StatsScope:
         if self.counts_tv:
             viewings = self.all_viewings.filter(self.viewing_has_day_q(), self.viewing_days_q(start_date, end_date))
             parts.append(viewings.annotate(stats_title_id=self.title_id()).values("stats_title_id"))
-        if self.counts_anime:
+        if self.anime_reads_viewings:
             viewings = self.all_anime_viewings.filter(self._anime_has_day_q(), self._anime_days_q(start_date, end_date))
             parts.append(viewings.annotate(stats_title_id=F("anime__item_id")).values("stats_title_id"))
+        elif self.counts_anime:
+            # The same viewings, as the calculation dates them.
+            dated = {
+                row.title_id
+                for row in activity_rows.in_range(
+                    self.calculation().rows,
+                    media_type=MediaTypes.ANIME.value,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                if row.counts_title
+            }
+            parts.append(Item.objects.filter(id__in=dated).values("id"))
         return union_ids(*parts)
 
     def first_seen_q(self, field):
@@ -651,7 +669,7 @@ class StatsScope:
         parts = [self.log_title_ids()]
         if self.counts_tv:
             parts.append(self.viewing_title_ids())
-        if self.counts_anime:
+        if self.anime_reads_viewings:
             parts.append(self.anime_viewing_title_ids())
         parts.extend(self.undated_completion_item_ids())
         calculated = self._calculated_title_ids()
@@ -747,7 +765,7 @@ class StatsScope:
         viewings = []
         if self.counts_tv:
             viewings.append(self.viewing_events())
-        if self.counts_anime:
+        if self.anime_reads_viewings:
             viewings.append(self.anime_viewing_events())
         events = self.log_events().union(*viewings) if viewings else self.log_events().distinct()
         return sorted(set(events) | self.progress_events())

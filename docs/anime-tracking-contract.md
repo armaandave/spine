@@ -316,6 +316,7 @@ An anime counts as a show does (STAT-201's TV row, STAT-104):
 - A stored progress number with no viewings counts as it does today, in All Time only.
 
 Each viewing's length is the title's runtime.
+Stats read these viewings through the activity calculation (`api.services.activity_rows`, the activity contract's AC-2), so each number is the same, and `known` and `total` count titles (STAT-201).
 
 ### AN-705: An anime goes by its English title
 

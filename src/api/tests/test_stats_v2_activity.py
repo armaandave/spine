@@ -556,14 +556,15 @@ class TimeTests(ActivityBase):
         self.anime_tick(row, 7, date(2025, 3, 10))
         self.anime_tick(row, 8, date(2025, 3, 11))
 
+        # Known and total count titles: one anime, whose length is known.
         year = time_row(self.summary(YEAR_2025, tab="anime"), "anime")
         self.assertEqual(
             year,
-            {"media_type": "anime", "unit": "minutes", "value": 2 * 24, "known": 2, "total": 2, "approximate": False},
+            {"media_type": "anime", "unit": "minutes", "value": 2 * 24, "known": 1, "total": 1, "approximate": False},
         )
         self.assertEqual(time_row(self.summary(YEAR_2024, tab="anime"), "anime")["value"], 24)
         all_time = time_row(self.summary(ALL_TIME, tab="anime"), "anime")
-        self.assertEqual((all_time["value"], all_time["total"], all_time["approximate"]), (8 * 24, 8, False))
+        self.assertEqual((all_time["value"], all_time["total"], all_time["approximate"]), (8 * 24, 1, False))
 
     def test_manga_time_counts_rises_and_skips_the_creation_row(self):
         series = self.item(MediaTypes.MANGA.value, "series")
@@ -797,6 +798,7 @@ class ActivityChartTests(ActivityBase):
         self.change(show, 0, 3, datetime(2025, 5, 5, 15, tzinfo=UTC))
         self.change(show, 0, 1, datetime(2025, 5, 6, 15, tzinfo=UTC), "start")
         anime = self.item(MediaTypes.ANIME.value, "anime")
+        self.tracking(Anime, anime, status=Status.IN_PROGRESS.value)
         self.change(anime, 0, 3, datetime(2025, 5, 7, 15, tzinfo=UTC))
         self.change(anime, 0, 1, datetime(2025, 5, 8, 15, tzinfo=UTC), "start")
 
