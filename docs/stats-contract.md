@@ -1215,7 +1215,7 @@ Run each case for the owner, a follower and a public viewer where it applies.
 | S-01 | A movie log and a TV episode log dated 1 Jan 2025, and a MAL-export anime log stored at 2025-01-01T00:00Z. | All three count in 2025, in stats and in the diary's `watched_from=2025-01-01`. | STAT-100, STAT-400 |
 | S-02 | An anime logged in the app before the anime contract, at 23:30 on 31 Dec 2025 in the owner's zone, viewed by someone in Auckland. | It counts in 2025 for both. | STAT-100, STAT-005 |
 | S-03 | A show with a show log, a season log and an episode log in 2025. | 1 title, 3 logs. | STAT-102, STAT-103 |
-| S-04 | Three episodes of one show ticked on one day, and a season log of that show the same day that fills the rest of the season. | 1 event. The fills count in episodes watched and time only in All Time. | STAT-104, STAT-106 |
+| S-04 | Three episodes of one show ticked on one day, and a season log of that show the same day that fills the rest of the season. | 1 event, the progress row and the log beside it. The fills count on the log's day, in episodes watched and time (STAT-104). | STAT-104, STAT-106 |
 | S-05 | A film marked watched with no log; a book marked read with one dated log. | All Time: the film adds 1 title; the book counts 1 title and 2 reads. 2025: neither undated fact counts. | STAT-105, STAT-107 |
 | S-06 | A Letterboxd import of a film with one diary row (not a rewatch) that is also in watched.csv. | 0 rewatches. | STAT-108 |
 | S-07 | Logs of S1 E1 and S1 E2; then a second log of S1 E1 with Rewatch saved on and off. | Only the second S1 E1 log is a rewatch, whatever its toggle. | STAT-108 |
