@@ -222,48 +222,74 @@ and only if its count finds any.
 
 Remove this section once Phase 2 has shipped.
 
-### Activity's Phase 2: games, anime, manga, comics and the note
+### Activity's Phase 3: TV, movies and music
 
-Anime, manga, comics and games read the calculation too (`CALCULATED_TYPES`). No migration.
-It changes the app (the note, the header with only active days, the filtered Diary's empty
-words, a stopped book's sheet opening at its place), so Xcode Cloud makes a TestFlight build.
+TV, movies and music read the calculation too (`CALCULATED_TYPES` now holds every type), and
+anime takes TV's rules for the Rewatch switch, logging something marked and backdated logs
+(decision 62). No migration, and no app change, so Xcode Cloud makes no build.
 
-Its message (Workflow A, step 5) says a refusal becomes a success here, which is safe on
-installed code: a game, manga or comic log dated before its start, or its date edited there,
-now moves the start back with it (decision 10). These keep their type and change meaning, and
-installed builds decode them and never show them: `known` and `total` count titles on these
-four types, and `approximate` is false in a dated range for games, manga and comics. Anime's
-numbers don't move. On the real app it also names that a game played with no log becomes a
-Games title in its year (account 5's 2026 Titles go from 0 to 1), and that anime held only by
-a mark or a stored number becomes an All Time title.
+Its message (Workflow A, step 5) names these, which keep their type and change meaning, and
+which installed builds decode and never show as numbers:
 
-**Before the phone test:** run `docker exec spine python manage.py compare_activity_numbers`
-again and read each account's `game`, `anime`, `manga` and `comic` lines, with count 13 (manga,
-comic and anime rows per account, plan 5.12), because anime shipped after Phase 1's count. Bring
-Armaan every difference on a real row before he tests. This run is on the deployed Phase 1
-code, and only it means anything for these four types: once this ship is deployed, their
-`titles` and `active_days` columns read the calculation on both sides, so a run after the
-deploy agrees with itself there. Don't rerun it then and read those as agreement; only `value`,
-`known` and `total` still come from the old counters.
+- `is_rewatch` on a movie, album, TV season or show, or anime log now decides hours as well as
+  the badge (decisions 14, 38, 48). A Rewatch-on season or show log saved by an installed
+  build (no mutation id) is stamped `tv.label_only` and stays a badge (TV-900).
+- An episode log no longer moves the tick it claims to its date, and a date edit moves only
+  the log's own viewing (TV-402, TV-405). A review of an episode a season or show log covers
+  opens with Rewatch off, and a review with Rewatch off of a watched episode adds no viewing.
+  An untick or an eye that would take the last viewing from under such a review is refused or
+  hands the viewing to it.
+- A Letterboxd file's blank Rewatch now saves No (decision 57). Logs already saved keep theirs.
+- `known` and `total` stay episodes on TV, watches on movies and listens on music, and a marked
+  film or album whose first log has Rewatch on now counts as a second watch or listen.
+
+**Your real numbers, which this ship moves on purpose** (plan, Phase 3's "Your real numbers"):
+
+- Movies All Time rises by up to 5,295 minutes (41 films) on account 1, and Music All Time by
+  543 (10 albums), with no year moving. Account 6's film rise hasn't been read.
+- TV and Global All Time Titles can rise: a marked show with no row becomes a title.
+- Game of Thrones holds: 2,229 minutes in 2026 and 4,458 in All Time.
+- Ticks under older season logs can move to the log's year (at most 17 episodes, account 1),
+  and a Rewatch-off log over a mark moves those minutes from the pile into the log's year,
+  with All Time the same. Account 5's TV holds at 486 and 486 unless its one log is on.
+- Anime had no rows on any account on Nov 6, so none moves.
+
+Anything else in the comparison below is a stop.
+
+**Before the phone test.** Phase 2's ship carried no TV, movie or music adapter, so no comparison
+of these three types has run on production, and none can before this code is deployed. Run the
+read-only counts 8 and 11 (plan 5.12; drafts `prod_count8_readonly.py` and
+`prod_count11_readonly.py` in the plan's folder) in the production container and bring Armaan
+their numbers: they size what moves. The speed gate must have passed on this branch too (plan
+5.2): a Stats miss on Global, TV and Movies, with a non-empty moved map, median of 5, on a
+throwaway Postgres, under 1.5 seconds and under 2 times today's.
 
 **The phone test comes first.** Serve the branch with `scripts/ios/test-backend.sh use 12`, then
-run `scripts/ios/seed-activity-checkpoint.sh seed` and work through the plan's Phase 2 sheet.
+run `scripts/ios/seed-activity-checkpoint.sh seed` and work through the plan's Phase 3 sheet.
+`add-t4` and `add-t6` are its two Mac steps.
 
 **Each step below waits for the user's request; the ship request doesn't cover it.** The ship
-message (step 5) names it as waiting and prints its dry run. Armaan's yes is on record
-(2026-11-04), and that yes is the request, so it runs after the deploy unless he says stop to
-the message below.
+message (step 5) names it as waiting. Armaan's yes is on record (decision 49), and that yes is
+the request, so it runs after the deploy unless he says stop to the message below.
 
-1. **Twerp,** after the deploy is verified (step 8): `scripts/activity-steps-production.sh
-   twerp` prints how many books match (expected 1) and their pages (expected 290), with each
-   one's journeys and saves. Send him a short message with those and what `--apply` will do.
-   If it finds none or more than one, it changes nothing: say so and stop. Otherwise wait 10
-   minutes, then `scripts/activity-steps-production.sh twerp --apply`, and don't run it if he
-   says stop. Twerp gets the eye: Books All Time rises by 290 and no year moves. Tapping the
-   filled eye later puts it at To Read, as with the undated Reads step, not back to a dated
-   Read.
+1. **Old eye taps,** after the deploy is verified (step 8):
+   `scripts/activity-steps-production.sh old-eye-taps` prints each account's taps and
+   episodes, per year with minutes (expected at most 17 episodes, all on account 1). Send him a
+   short message with those and what `--apply` will do. If it finds none, the step is done.
+   Otherwise wait 10 minutes, then `scripts/activity-steps-production.sh old-eye-taps --apply`,
+   and don't run it if he says stop. Those episodes become marks with no date: their year
+   falls and All Time holds, and the show's start row on that day goes.
+2. **The closing look,** after step 1: `docker exec spine python manage.py
+   compare_activity_numbers`. Read each account's `tv`, `movie` and `music` lines: `value`,
+   `known` and `total` are the old counters beside the calculation, on the same live lengths.
+   Only the moves named above may differ. Its `user N feed:` lines time Home's walk for each
+   account that follows someone; bring Armaan those with the speed gate's before and after,
+   before Phase 4's "ship this".
 
-Remove this section once Phase 3 has shipped.
+Letterboxd logs a blank Rewatch already saved on (decision 57) aren't touched here. Count 8
+lists them; any step for them waits for Armaan's export file and his own yes.
+
+Remove this section once Phase 4 has shipped.
 
 ### The metadata fill, with the ship that adds `src/app/migrations/0091_itemcredit.py`
 
