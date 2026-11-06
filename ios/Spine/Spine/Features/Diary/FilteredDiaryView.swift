@@ -3,6 +3,10 @@ import SwiftUI
 /// The diary narrowed by a filter, such as a stats drill-down ("Sci-Fi & Fantasy · 2025").
 /// It pages like the Diary and uses its month cards; pushed onto the caller's navigation stack.
 struct FilteredDiaryView: View {
+    /// A Stats number can count reading with no log, or a mark, which this list of logs can't
+    /// show (STAT-105).
+    static let emptyMessage = "Titles in progress, or marked as done, aren't listed here."
+
     @State private var viewModel: DiaryViewModel
 
     private let title: String
@@ -92,7 +96,7 @@ struct FilteredDiaryView: View {
             DiaryStateCard(
                 title: "No logs",
                 systemImage: "calendar",
-                message: "Titles marked as done without a log aren't listed here."
+                message: Self.emptyMessage
             )
         } else {
             DiaryEntryList(monthSections: viewModel.monthSections) { entry in

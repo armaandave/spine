@@ -28,7 +28,7 @@ from api.tests.test_stats_v2_shape import (
     StatsV2Base,
     clear_library,
 )
-from app import book_tracking
+from app import book_tracking, series_tracking
 from app.models import (
     TV,
     Anime,
@@ -144,6 +144,11 @@ class ActivityBase(StatsV2Base):
 
     def stamp(self, row, created_at):
         type(row).objects.filter(pk=row.pk).update(created_at=created_at)
+
+    def saved_at(self, moment, write, item, **values):
+        """Run one of series_tracking's writes at a chosen moment."""
+        with patch("django.utils.timezone.now", return_value=moment):
+            return write(self.owner, item, **values)
 
 
 class HeaderTests(ActivityBase):
@@ -556,29 +561,36 @@ class TimeTests(ActivityBase):
         self.anime_tick(row, 7, date(2025, 3, 10))
         self.anime_tick(row, 8, date(2025, 3, 11))
 
+        # Known and total count titles: one anime, whose length is known.
         year = time_row(self.summary(YEAR_2025, tab="anime"), "anime")
         self.assertEqual(
             year,
-            {"media_type": "anime", "unit": "minutes", "value": 2 * 24, "known": 2, "total": 2, "approximate": False},
+            {"media_type": "anime", "unit": "minutes", "value": 2 * 24, "known": 1, "total": 1, "approximate": False},
         )
         self.assertEqual(time_row(self.summary(YEAR_2024, tab="anime"), "anime")["value"], 24)
         all_time = time_row(self.summary(ALL_TIME, tab="anime"), "anime")
-        self.assertEqual((all_time["value"], all_time["total"], all_time["approximate"]), (8 * 24, 8, False))
+        self.assertEqual((all_time["value"], all_time["total"], all_time["approximate"]), (8 * 24, 1, False))
 
-    def test_manga_time_counts_rises_and_skips_the_creation_row(self):
+    def test_manga_time_counts_each_saves_rise_and_a_fix_comes_off_the_newest(self):
         series = self.item(MediaTypes.MANGA.value, "series")
-        row = self.tracking(Manga, series, progress=10)
-        # Imported with 20 chapters in 2024: the creation row adds nothing.
-        self.history(row, 20, datetime(2024, 6, 1, 12, tzinfo=UTC), kind="+")
-        self.history(row, 22, datetime(2025, 1, 10, 12, tzinfo=UTC))
-        self.history(row, 5, datetime(2025, 2, 10, 12, tzinfo=UTC))
-        self.history(row, 10, datetime(2025, 3, 10, 12, tzinfo=UTC))
+        # Imported at 20 chapters in 2024: a place with no day, All Time's only.
+        self.saved_at(
+            datetime(2024, 6, 1, 12, tzinfo=UTC),
+            series_tracking.import_title,
+            series,
+            status=Status.IN_PROGRESS.value,
+            place=20,
+            import_source="test",
+        )
+        self.saved_at(datetime(2025, 1, 10, 12, tzinfo=UTC), series_tracking.update_progress, series, value=22)
+        # A typo fix: it comes off the newest amounts first, January's 2, then the pile.
+        self.saved_at(datetime(2025, 2, 10, 12, tzinfo=UTC), series_tracking.update_progress, series, value=5)
+        self.saved_at(datetime(2025, 3, 10, 12, tzinfo=UTC), series_tracking.update_progress, series, value=10)
 
         year = time_row(self.summary(YEAR_2025, tab="manga"), "manga")
-        # +2, then a drop ignored, then +5.
         self.assertEqual(
             year,
-            {"media_type": "manga", "unit": "chapters", "value": 7, "known": 1, "total": 1, "approximate": True},
+            {"media_type": "manga", "unit": "chapters", "value": 5, "known": 1, "total": 1, "approximate": False},
         )
         self.assertIsNone(time_row(self.summary(YEAR_2024, tab="manga"), "manga"))
         all_time = time_row(self.summary(ALL_TIME, tab="manga"), "manga")
@@ -587,15 +599,12 @@ class TimeTests(ActivityBase):
     def test_manga_chapters_on_the_owners_calendar(self):
         for zone in OWNER_ZONES:
             with self.subTest(owner_zone=zone):
-                Manga.objects.all().delete()
-                Manga.history.model.objects.all().delete()
                 self.set_zone(zone)
                 volume = self.item(MediaTypes.MANGA.value, f"manga-{zone}")
-                row = self.tracking(Manga, volume, progress=8)
-                self.history(row, 0, datetime(2025, 12, 1, 12, tzinfo=UTC), kind="+")
+                self.saved_at(datetime(2025, 12, 1, 12, tzinfo=ZoneInfo(zone)), series_tracking.start, volume)
                 # 23:30 on 31 December in the owner's zone stays in 2025.
                 late = datetime(2025, 12, 31, 23, 30, tzinfo=ZoneInfo(zone))
-                self.history(row, 8, late)
+                self.saved_at(late, series_tracking.update_progress, volume, value=8)
                 # A viewer in Auckland sees the owner's days (STAT-005).
                 year = time_row(
                     self.summary(YEAR_2025, viewer=self.follower, tab="manga", zone=AUCKLAND),
@@ -603,6 +612,7 @@ class TimeTests(ActivityBase):
                 )
                 self.assertEqual((year["unit"], year["value"], year["known"], year["total"]), ("chapters", 8, 1, 1))
                 self.assertIsNone(time_row(self.summary(YEAR_2026, tab="manga"), "manga"))
+                Manga.objects.filter(item=volume).delete()
 
     def test_game_minutes_land_on_minutes_updated_on_else_end_date(self):
         title = self.item(MediaTypes.GAME.value, "title")
@@ -612,11 +622,12 @@ class TimeTests(ActivityBase):
         self.session(game, total_minutes=None, end_date=date(2025, 6, 1))
         self.session(game, total_minutes=60, end_date=date(2024, 6, 1))
 
+        # Known and total count games: one, whose hours are known. A year is exact.
         year = time_row(self.summary(YEAR_2025, tab="game"), "game")
-        self.assertEqual((year["value"], year["known"], year["total"], year["approximate"]), (720, 2, 3, True))
+        self.assertEqual((year["value"], year["known"], year["total"], year["approximate"]), (720, 1, 1, False))
         all_time = time_row(self.summary(ALL_TIME, tab="game"), "game")
         # Steam's imported lifetime playtime is never added (GM-500).
-        self.assertEqual((all_time["value"], all_time["known"], all_time["total"], all_time["approximate"]), (780, 3, 4, False))
+        self.assertEqual((all_time["value"], all_time["known"], all_time["total"], all_time["approximate"]), (780, 1, 1, False))
 
     def test_imported_read_books_gain_pages_when_metadata_is_filled(self):
         novel = self.item(MediaTypes.BOOK.value, "imported-read")
@@ -779,15 +790,19 @@ class ActivityChartTests(ActivityBase):
 
     def test_each_days_progress_and_starts_are_events(self):
         series = self.item(MediaTypes.MANGA.value, "series")
-        # Two changes on one day are one event, on the owner's (New York) day.
-        self.change(series, 0, 2, datetime(2025, 3, 2, 15, tzinfo=UTC), "chapter")
-        self.change(series, 2, 4, datetime(2025, 3, 3, 3, tzinfo=UTC), "chapter")
-        # A day that went back on net isn't; a day in another year is outside 2025.
-        self.change(series, 4, 5, datetime(2025, 3, 9, 15, tzinfo=UTC), "chapter")
-        self.change(series, 5, 3, datetime(2025, 3, 9, 16, tzinfo=UTC), "chapter")
-        self.change(series, 3, 6, datetime(2024, 6, 1, 15, tzinfo=UTC), "chapter")
+        save = series_tracking.update_progress
+        # Two saves on one day are one event, on the owner's (New York) day.
+        self.saved_at(datetime(2025, 3, 2, 14, tzinfo=UTC), series_tracking.start, series)
+        self.saved_at(datetime(2025, 3, 2, 15, tzinfo=UTC), save, series, value=2)
+        self.saved_at(datetime(2025, 3, 3, 3, tzinfo=UTC), save, series, value=4)
+        # A day whose fix took back what it added isn't (decision 5).
+        self.saved_at(datetime(2025, 3, 9, 15, tzinfo=UTC), save, series, value=5)
+        self.saved_at(datetime(2025, 3, 9, 16, tzinfo=UTC), save, series, value=3)
+        # A day in another year is outside 2025.
+        older = self.item(MediaTypes.MANGA.value, "older")
+        self.saved_at(datetime(2024, 6, 1, 15, tzinfo=UTC), save, older, value=6)
         # Starting a title is activity, as in the feed.
-        self.change(self.item(MediaTypes.MANGA.value, "started"), 0, 1, datetime(2025, 4, 1, 15, tzinfo=UTC), "start")
+        self.saved_at(datetime(2025, 4, 1, 15, tzinfo=UTC), series_tracking.start, self.item(MediaTypes.MANGA.value, "started"))
         # A book's pages count, through a real save. TV and anime ticks don't (their
         # viewings are their events), but their starts do.
         novel = self.item(MediaTypes.BOOK.value, "novel")
@@ -797,6 +812,7 @@ class ActivityChartTests(ActivityBase):
         self.change(show, 0, 3, datetime(2025, 5, 5, 15, tzinfo=UTC))
         self.change(show, 0, 1, datetime(2025, 5, 6, 15, tzinfo=UTC), "start")
         anime = self.item(MediaTypes.ANIME.value, "anime")
+        self.tracking(Anime, anime, status=Status.IN_PROGRESS.value)
         self.change(anime, 0, 3, datetime(2025, 5, 7, 15, tzinfo=UTC))
         self.change(anime, 0, 1, datetime(2025, 5, 8, 15, tzinfo=UTC), "start")
 

@@ -287,7 +287,7 @@ def _bulk_create_media(bulk_media_list, user, source, warnings):
             continue
 
         if media_type == MediaTypes.GAME.value:
-            _import_game_rows(bulk_media, user)
+            _import_game_rows(bulk_media, user, source, warnings)
             continue
 
         if media_type == MediaTypes.BOOK.value:
@@ -425,13 +425,39 @@ def _read_day(row, user):
     return day if day <= user_calendar.today(user) else None
 
 
-def _import_game_rows(rows, user):
-    """Reconcile explicit imported game states without deleting playthroughs."""
-    from app import game_tracking
+def _import_game_rows(rows, user, source, warnings):
+    """Reconcile explicit imported game states without deleting playthroughs.
+
+    A finished row with a real date is a play on that date: it becomes a log, with an
+    identity from source, title and date, so the same file again adds nothing (decision
+    47, SW-504). A row marked finished stays a mark whatever its date, and a title
+    already logged on that day keeps its log.
+    """
+    from app import game_imports, game_tracking
 
     # Multiple rows for one title describe current title state, not new attempts.
     rows_by_item = {row.item_id: row for row in rows}
     for row in rows_by_item.values():
+        day = _read_day(row, user) if source and row.status == app.models.Status.COMPLETED.value else None
+        if day and not row.completed_manually and not book_log_on(user, row.item, day):
+            log = {
+                "consumed_at": day,
+                "source_id": f"{row.item.source}:{row.item.media_id}:{day.isoformat()}",
+                "rating": _log_rating(row, warnings),
+                "total_minutes": row.progress or None,
+            }
+            start = row.start_date and user_calendar.day_of(row.start_date, user)
+            if start and start <= day:
+                log["start_date"] = start
+            game_imports.import_logs(user, row.item, [log], source=source)
+            fields = {
+                field: getattr(row, field)
+                for field in ("notes", "imported_lifetime_minutes", "imported_lifetime_source")
+                if getattr(row, field)
+            }
+            if fields:
+                app.models.Game.objects.filter(user=user, item=row.item).update(**fields)
+            continue
         game_tracking.import_title_state(
             user,
             row.item,

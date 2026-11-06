@@ -316,7 +316,9 @@ final class StatsPresentationTests: XCTestCase {
     // MARK: - Null versus empty (STAT-302)
 
     func testEmptySectionsFollowTheContract() {
-        XCTAssertTrue(StatsHeader(titles: 0, logs: 0, activeDays: 4, longestDailyStreak: 2, details: []).isEmpty)
+        // Active days with no title or log still show the header: a start alone (STAT-302).
+        XCTAssertFalse(StatsHeader(titles: 0, logs: 0, activeDays: 4, longestDailyStreak: 2, details: []).isEmpty)
+        XCTAssertTrue(StatsHeader(titles: 0, logs: 0, activeDays: 0, longestDailyStreak: 0, details: []).isEmpty)
         XCTAssertFalse(StatsHeader(titles: 0, logs: 1, activeDays: 0, longestDailyStreak: 0, details: []).isEmpty)
         XCTAssertTrue(StatsRatings(averageStars: nil, rated: 0, distribution: []).isEmpty)
         XCTAssertTrue(StatsEventActivity(months: [], weekdays: [], weekStartsOn: "monday", busiestDay: nil, busiestMonth: nil).isEmpty)

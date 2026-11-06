@@ -7,16 +7,22 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
   undated completion once in All Time.
 - TV: viewings in the range (dated ones; every one, fills included, in All Time), each
   the episode's runtime, else its season's, else its show's.
-- Anime: as TV, each viewing the title's runtime (AN-704). A tick counts on its day and
-  a log's fills on the log's day; a mark's fills count only in All Time. All Time adds
-  a stored progress number with no viewings.
-- Manga and comics: in a dated range, positive progress changes between consecutive
-  history rows of one tracking row, dated by ``history_date`` on the owner's calendar;
-  the row that created the tracking row is never a change. In All Time, ``progress``
-  over every tracking row.
-- Games: ``GameSession.total_minutes`` on ``minutes_updated_on``, else ``end_date``.
-  Steam's imported lifetime playtime is never read (GM-500).
+- Anime: the calculation's rows, which read its viewings as this module's
+  ``_anime_runtime`` does (AN-704), plus its pile in All Time.
+- Manga and comics: the calculation's rows, plus its pile in All Time. ``_progress``
+  still counts them for the comparison: in a dated range, positive progress changes
+  between consecutive history rows of one tracking row, dated by ``history_date`` on the
+  owner's calendar, the creation row never a change; in All Time, ``progress`` over
+  every tracking row.
+- Games: the calculation's rows, plus its pile in All Time. ``_game_minutes`` still
+  counts them for the comparison: ``GameSession.total_minutes`` on
+  ``minutes_updated_on``, else ``end_date``. Steam's imported lifetime playtime is never
+  read (GM-500).
 - Books: the calculation's rows, plus its pile in All Time.
+
+``_anime_runtime`` still counts anime viewings for the comparison: a tick on its day, a
+log's fills on the log's day, a mark's fills only in All Time, which also adds a stored
+progress number with no viewings.
 
 ``known`` and ``total`` count the things counted (logs, viewings, tracking rows with a
 change or with progress, sessions, undated completions) with a length, out of all. A

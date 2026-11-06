@@ -118,10 +118,37 @@ enum StatsChartCopy {
     }
 
     /// "Based on 110 of 120 titles with a release year", only when some titles are missing.
-    static func coverageNote(_ coverage: StatsCoverage?, qualifier: String) -> String? {
+    /// `noun` names what was counted, singular then plural.
+    static func coverageNote(
+        _ coverage: StatsCoverage?,
+        qualifier: String,
+        noun: (singular: String, plural: String) = ("title", "titles")
+    ) -> String? {
         guard let coverage, coverage.total > 0, coverage.known < coverage.total else { return nil }
-        let base = "Based on \(coverage.known.formatted()) of \(coverage.total.formatted()) \(coverage.total == 1 ? "title" : "titles")"
+        let base = "Based on \(coverage.known.formatted()) of \(coverage.total.formatted()) \(coverage.total == 1 ? noun.singular : noun.plural)"
         return qualifier.isEmpty ? base : "\(base) \(qualifier)"
+    }
+
+    /// A Time row's note when some lengths are missing (STAT-201): "Based on 4 of 5 books".
+    static func lengthNote(_ row: StatsTimeRow?) -> String? {
+        guard let row else { return nil }
+        return coverageNote(StatsCoverage(known: row.known, total: row.total), qualifier: "", noun: countNoun(for: row.mediaType))
+    }
+
+    /// What a type's Time row counts in `known` and `total`: titles, or a film's watches, an
+    /// album's listens and a show's episodes.
+    static func countNoun(for mediaType: String) -> (singular: String, plural: String) {
+        switch mediaType {
+        case "book": ("book", "books")
+        case "game": ("game", "games")
+        case "anime": ("anime", "anime")
+        case "manga": ("manga", "manga")
+        case "comic": ("comic", "comics")
+        case "movie": ("watch", "watches")
+        case "music": ("listen", "listens")
+        case "tv": ("episode", "episodes")
+        default: ("title", "titles")
+        }
     }
 
     /// Footnote lines joined into one line.

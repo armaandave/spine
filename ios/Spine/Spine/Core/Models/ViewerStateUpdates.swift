@@ -341,18 +341,26 @@ enum TrackingProjection {
     static func startBook(today: String) -> Projection {
         { state in
             state.isTracked = true
+            let stopped = state.status == "Dropped"
             state.status = "In progress"
             var book = state.book ?? BookTrackingState()
             if book.currentJourney?.status == "Paused" {
                 book.currentJourney?.status = "In progress"
             } else if book.currentJourney?.status != "In progress" {
-                // BK-104: a new journey starts today with no progress; after a completion it is a reread.
+                // BK-104: a new journey starts today; after a completion it is a reread. A
+                // stopped book picks up at its place (BK-305), so a sheet opened before the
+                // answer lands opens there.
                 let isReread = book.lifetimeReadCount > 0
-                book.currentJourney = .pending(startDate: today, isReread: isReread)
+                var journey = BookJourneyState.pending(startDate: today, isReread: isReread)
+                if stopped {
+                    journey.progress = state.progress
+                } else {
+                    state.progress = nil
+                }
+                book.currentJourney = journey
                 book.canRemoveTracking = false
                 book.isRereading = isReread
                 state.startDate = today
-                state.progress = nil
             }
             state.book = book
         }

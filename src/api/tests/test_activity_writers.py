@@ -46,6 +46,8 @@ NAMING = {
     "app/management/commands/fill_picked_up_books.py",
     "app/management/commands/fill_progress_days.py",
     "app/management/commands/flag_past_restarts.py",
+    # Reads only: its dry run counts Twerp's saves.
+    "app/management/commands/mark_twerp.py",
     "app/music_move.py",
     "app/series_tracking.py",
     "app/tv_tracking.py",

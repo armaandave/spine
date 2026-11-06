@@ -329,7 +329,8 @@ class ProgressHistoryTests(TestCase):
                 .exclude(current_progress__kind=ProgressChange.START)
                 .order_by("id")
             ],
-            [("minute", 0, 90), ("minute", 90, 150), ("percent", 0, 20)],
+            # The same 150 sent again is a retype: one touch row (plan 5.3).
+            [("minute", 0, 90), ("minute", 90, 150), ("percent", 0, 20), ("touch", 0, 0)],
         )
 
     @patch("app.providers.services.get_media_metadata")

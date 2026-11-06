@@ -6,12 +6,20 @@ functions under a pinned clock on a New York server.
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from io import BytesIO
+from unittest.mock import patch
 from uuid import uuid4
+
+from rest_framework.test import APIClient
 
 from api.services.activity_rows import list_rows, piled, rows_for
 from api.tests.test_activity_calc_books import BookCalcBase, d
+from api.tests.test_stats_v2_activity import YEAR_2026, time_row
+from api.tests.test_stats_v2_shape import ALL_TIME
 from app import game_tracking
 from app.models import DiaryEntry, Game, GameSession, MediaTypes, Status
+from integrations import exports
+from integrations.imports import yamtrack
 from social.models import ProgressChange
 
 GAME = MediaTypes.GAME.value
@@ -143,7 +151,7 @@ class GameStoriesTests(GameCalcBase):
         self.assertEqual((row.counts_title, row.known, row.told_unit), (True, False, "percent"))
 
     def test_playtime_and_a_percent_on_one_day_tell_the_playtime(self):
-        """AC-2 for either order, and the percent is unknown as on any other day."""
+        """AC-2 either way: the day's hours are told, so it's known (decision 20)."""
         hours_first = self.game("hours-first")
         self.begin(hours_first, d(2026, 2, 1))
         self.save(hours_first, h(5), d(2026, 2, 2))
@@ -155,7 +163,42 @@ class GameStoriesTests(GameCalcBase):
         for item in (hours_first, percent_first):
             with self.subTest(item=item.title):
                 row = next(row for row in self.calc().rows if row.title_id == item.pk and row.told)
-                self.assertEqual((row.told, row.told_unit, row.amount, row.known), (h(5), "minute", h(5), False))
+                self.assertEqual((row.told, row.told_unit, row.amount, row.known), (h(5), "minute", h(5), True))
+
+    def test_a_log_with_hours_and_a_percent_is_known(self):
+        """GM-310's 40 hours and 65 percent: the hours are its length."""
+        item = self.game("both")
+        self.begin(item, d(2026, 2, 1))
+        _, entry = self.finish(item, d(2026, 2, 2), total_minutes=h(40), percentage=65)
+        row = next(row for row in self.calc().rows if row.log_id == entry.pk)
+        self.assertEqual((row.amount, row.known), (h(40), True))
+
+    def test_a_percent_on_a_day_with_no_hours_stays_unknown(self):
+        """That day's play has no hours, so the game's hours aren't all known."""
+        item = self.game("next-day")
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, h(3), d(2026, 2, 2))
+        self.percent(item, 20, d(2026, 2, 3))
+        row = next(row for row in self.calc().rows if row.day == d(2026, 2, 3))
+        self.assertEqual((row.told_unit, row.known), ("percent", False))
+
+    def test_the_sheet_saving_hours_and_a_percent_together_counts_every_hour(self):
+        """Edit Playthrough sends both fields; the number says no note under 3 hours."""
+        item = self.game("together")
+        self.begin(item, d(2026, 2, 1))
+        playthrough = GameSession.objects.get(related_game__item=item)
+        client = APIClient()
+        client.force_authenticate(self.owner)
+        with self.on(d(2026, 2, 2)):
+            response = client.patch(
+                f"/api/v1/tracking/{item.source}/game/{item.media_id}/playthroughs/{playthrough.pk}/",
+                {"total_minutes": h(3), "percentage": 20, "progressed_on": "2026-02-02"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        with self.on(d(2026, 11, 5)):
+            row = time_row(self.summary(YEAR_2026, tab=GAME), GAME)
+        self.assertEqual((row["value"], row["known"], row["total"], row["approximate"]), (h(3), 1, 1, False))
 
     def test_steams_lifetime_never_adds(self):
         item = self.game()
@@ -264,3 +307,293 @@ class GapTests(GameCalcBase):
         rows = rows_for([self.owner, self.follower], self.owner, types=[GAME]).rows
         amounts = {row.actor_id: int(row.amount) for row in rows if row.amount}
         self.assertEqual(amounts, {self.owner.pk: 60, self.follower.pk: 30})
+
+
+class GameWritesTests(GameCalcBase):
+    """Phase 2's game writes, through the real functions (plan 5.4)."""
+
+    Y2025 = {"start": d(2025, 1, 1), "end": d(2025, 12, 31)}
+    Y2026 = {"start": d(2026, 1, 1), "end": d(2026, 12, 31)}
+
+    def session(self, item):
+        return GameSession.objects.filter(related_game__item=item).order_by("-id").first()
+
+    def rows_of(self, item, kind):
+        return ProgressChange.objects.filter(item=item, current_progress__kind=kind).order_by("id")
+
+    def assert_years(self, in_2025, in_2026, all_time):
+        numbers = (self.number(**self.Y2025), self.number(**self.Y2026), self.number(pile=True))
+        self.assertEqual(numbers, (h(in_2025), h(in_2026), h(all_time)))
+
+    def test_a_retype_writes_one_touch_row_and_keeps_the_saved_day(self):
+        item = self.game()
+        self.begin(item, d(2025, 12, 1))
+        self.save(item, h(40), d(2025, 12, 20))
+        self.save(item, h(40), d(2026, 1, 2))
+        touches = list(self.rows_of(item, ProgressChange.TOUCH))
+        self.assertEqual([row.saved_on for row in touches], [d(2026, 1, 2)])
+        self.assertEqual(touches[0].current_progress["playthrough_id"], self.session(item).pk)
+        self.assertEqual((touches[0].current_progress["value"], touches[0].current_progress["unit"]), (0, "touch"))
+        self.assertEqual(self.session(item).minutes_updated_on, d(2025, 12, 20))
+        self.assert_years(40, 0, 40)
+
+    def test_a_percent_resent_keeps_its_day_and_none_is_not_zero(self):
+        item = self.game()
+        self.begin(item, d(2026, 2, 1))
+        self.percent(item, 40, d(2026, 2, 2))
+        self.percent(item, 40, d(2026, 2, 5))
+        self.assertEqual(self.session(item).percentage_updated_on, d(2026, 2, 2))
+        self.save(item, 0, d(2026, 2, 6))
+        self.assertEqual(self.session(item).minutes_updated_on, d(2026, 2, 6))
+        self.save(item, 0, d(2026, 2, 7))
+        self.assertEqual(self.session(item).minutes_updated_on, d(2026, 2, 6))
+
+    def test_a_finish_typing_a_new_total_writes_its_rise_with_the_log(self):
+        """GM-219: deleting the log leaves the rise on the day it was typed."""
+        item = self.game()
+        self.begin(item, d(2025, 12, 1))
+        self.save(item, h(10), d(2025, 12, 20))
+        _game, entry = self.finish(item, d(2026, 1, 5), total_minutes=h(12))
+        linked = list(self.rows_of(item, "minutes").filter(current_progress__has_key="log_id"))
+        self.assertEqual([(row.current_progress["log_id"], row.current_progress["value"]) for row in linked], [(entry.pk, h(12))])
+        self.assert_years(10, 2, 12)
+        with self.on(d(2026, 1, 6)):
+            game_tracking.delete_completion(self.owner, entry)
+        self.assertEqual(self.session(item).status, Status.IN_PROGRESS.value)
+        self.assertEqual(self.session(item).total_minutes, h(12))
+        self.assert_years(10, 2, 12)
+
+    def test_a_logs_total_edited_writes_its_change_with_the_log(self):
+        item = self.game()
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, h(5), d(2026, 2, 2))
+        _game, entry = self.finish(item, d(2026, 2, 3))
+        with self.on(d(2026, 2, 4)):
+            game_tracking.update_completion(entry, {"total_minutes": h(7)})
+        linked = self.rows_of(item, "minutes").filter(current_progress__has_key="log_id")
+        self.assertEqual([row.current_progress["value"] for row in linked], [h(7)])
+        self.assertEqual(self.lines(item)[0], "2026-02-03 log +120")
+
+    def test_a_percent_after_a_log_that_raised_it_is_measured_from_the_log(self):
+        """40%, a log at 100%, then 95%: the last save adds nothing (decision 5)."""
+        item = self.game()
+        self.begin(item, d(2026, 2, 1))
+        self.percent(item, 40, d(2026, 2, 2))
+        self.finish(item, d(2026, 2, 3), percentage=100)
+        with self.on(d(2026, 2, 4)):
+            game_tracking.update_progress(self.owner, item, playthrough_id=self.session(item).pk, percentage=95)
+        told = [row for row in self.calc().rows if row.day == d(2026, 2, 4) and row.told]
+        self.assertEqual(told, [])
+
+    def test_the_old_feed_leaves_out_a_logs_own_rise(self):
+        from api.services import activity
+
+        item = self.game()
+        self.begin(item, d(2026, 1, 1))
+        self.save(item, h(10), d(2026, 1, 2))
+        self.finish(item, d(2026, 1, 5), total_minutes=h(12))
+        days = activity._progress_days(ProgressChange.objects.filter(actor=self.owner))
+        self.assertEqual(sorted(row["day"] for row in days), [d(2026, 1, 1), d(2026, 1, 2)])
+
+    def test_the_old_feed_shows_a_logs_rise_on_its_day_once_the_log_is_gone(self):
+        """GM-219, as Stats counts it: the rise is that day's progress again."""
+        from api.services import activity
+
+        item = self.game()
+        self.begin(item, d(2026, 1, 1))
+        self.save(item, h(10), d(2026, 1, 2))
+        _game, entry = self.finish(item, d(2026, 1, 5), total_minutes=h(12))
+        with self.on(d(2026, 1, 6)):
+            game_tracking.delete_completion(self.owner, entry)
+        days = activity._progress_days(ProgressChange.objects.filter(actor=self.owner))
+        minutes = {row["day"]: row["amount_minute"] for row in days}
+        self.assertEqual(minutes, {d(2026, 1, 1): None, d(2026, 1, 2): h(10), d(2026, 1, 5): h(2)})
+        self.assert_years(0, 12, 12)
+
+    def test_a_log_dated_before_the_start_moves_it_and_its_delete_puts_it_back(self):
+        """Decision 10, the sheet's G6."""
+        item = self.game()
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, h(10), d(2026, 3, 2))
+        _game, entry = self.finish(item, d(2025, 12, 20), saved_on=d(2026, 3, 3))
+        self.assertEqual(self.session(item).start_date, d(2025, 12, 20))
+        self.assertEqual(entry.progress_snapshot["start_date"], "2026-03-01")
+        self.assert_years(10, 0, 10)
+        with self.on(d(2026, 3, 4)):
+            game_tracking.delete_completion(self.owner, entry)
+        self.assertEqual(self.session(item).start_date, d(2026, 3, 1))
+        self.assert_years(0, 10, 10)
+
+    def test_a_start_comes_back_no_later_than_the_first_progress(self):
+        """Progress saved under a backdated log keeps the playthrough editable."""
+        for undo in ("delete", "edit"):
+            with self.subTest(undo=undo):
+                item = self.game(f"first-progress-{undo}")
+                self.begin(item, d(2026, 3, 1))
+                self.save(item, h(10), d(2026, 3, 2))
+                _game, entry = self.finish(item, d(2025, 12, 20), saved_on=d(2026, 3, 3))
+                playthrough = self.session(item).pk
+                with self.on(d(2026, 3, 4)):
+                    game_tracking.update_progress(
+                        self.owner, item, playthrough_id=playthrough, total_minutes=h(11), progressed_on=d(2026, 1, 5)
+                    )
+                with self.on(d(2026, 3, 5)):
+                    if undo == "delete":
+                        game_tracking.delete_completion(self.owner, entry)
+                    else:
+                        game_tracking.update_completion(entry, {"consumed_at": d(2026, 3, 5)})
+                self.assertEqual(self.session(item).start_date, d(2026, 1, 5))
+                with self.on(d(2026, 3, 6)):
+                    game_tracking.update_playthrough(self.owner, item, playthrough, total_minutes=h(12))
+                    if undo == "delete":
+                        game_tracking.complete(self.owner, item, completion_date=d(2026, 3, 6))
+
+    def test_a_log_date_edited_before_the_start_moves_it_and_back_no_further(self):
+        item = self.game()
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, h(10), d(2026, 3, 2))
+        _game, entry = self.finish(item, d(2026, 3, 5))
+        with self.on(d(2026, 3, 6)):
+            game_tracking.update_completion(entry, {"consumed_at": d(2025, 12, 20)})
+        self.assertEqual(self.session(item).start_date, d(2025, 12, 20))
+        with self.on(d(2026, 3, 7)):
+            game_tracking.update_completion(entry, {"consumed_at": d(2026, 3, 4)})
+        self.assertEqual(self.session(item).start_date, d(2026, 3, 1))
+
+    def test_an_old_shape_log_with_no_start_key_leaves_the_start_alone(self):
+        item = self.game()
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, h(10), d(2026, 3, 2))
+        _game, entry = self.finish(item, d(2026, 3, 5))
+        snapshot = {key: value for key, value in entry.progress_snapshot.items() if key != "start_date"}
+        DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot=snapshot)
+        entry.refresh_from_db()
+        with self.on(d(2026, 3, 6)):
+            game_tracking.delete_completion(self.owner, entry)
+        self.assertEqual(self.session(item).start_date, d(2026, 3, 1))
+
+    def test_a_start_edited_by_hand_moves_its_start_row(self):
+        item = self.game()
+        self.begin(item, d(2026, 3, 1))
+        with self.on(d(2026, 3, 2)):
+            game_tracking.update_playthrough(self.owner, item, self.session(item).pk, start_date=d(2026, 2, 20))
+        self.assertEqual([row.saved_on for row in self.rows_of(item, ProgressChange.START)], [d(2026, 2, 20)])
+        self.assertEqual(self.lines(), ["2026-02-20 started"])
+
+    def test_stopped_then_playing_again_typing_8_is_13_hours(self):
+        """Decision 44, the sheet's G8: a new playthrough."""
+        item = self.game()
+        self.begin(item, d(2025, 12, 1))
+        self.save(item, h(5), d(2025, 12, 20))
+        with self.on(d(2025, 12, 21)):
+            game_tracking.drop(self.owner, item)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, h(8), d(2026, 2, 2))
+        self.assert_years(5, 8, 13)
+
+
+class GameImportTests(GameCalcBase):
+    """A dated finished game in a file lands in its year (decision 47, plan 5.4)."""
+
+    def import_row(self, item, **fields):
+        from integrations.imports.helpers import bulk_create_media
+
+        fields.setdefault("status", Status.COMPLETED.value)
+        with self.on(d(2026, 10, 20)):
+            bulk_create_media({GAME: [Game(user=self.owner, item=item, **fields)]}, self.owner, source="hltb")
+
+    def test_a_dated_finished_row_becomes_a_log_in_its_year(self):
+        item = self.game("dated")
+        finished = datetime(2025, 6, 1, tzinfo=UTC)
+        self.import_row(item, end_date=finished, progress=h(30), score=Decimal(8))
+        logs = list(DiaryEntry.objects.filter(user=self.owner, item=item))
+        self.assertEqual([(log.consumed_at.date(), log.import_source, log.rating) for log in logs], [(d(2025, 6, 1), "hltb", Decimal(8))])
+        self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), h(30))
+        self.assertEqual(self.number(pile=True), h(30))
+        self.assertFalse(Game.objects.get(user=self.owner, item=item).completed_manually)
+
+    def test_an_import_writes_no_progress_and_its_log_counts_on_its_date(self):
+        """AC-1, SW-500: a file's log writes no change saved on its import's day."""
+        from app import game_imports
+
+        filed = self.game("filed")
+        self.import_row(filed, end_date=datetime(2025, 6, 1, tzinfo=UTC), progress=h(30))
+        direct = self.game("direct")
+        with self.on(d(2026, 10, 20)):
+            game_imports.import_logs(
+                self.owner,
+                direct,
+                [{"consumed_at": d(2025, 7, 1), "source_id": "one", "total_minutes": h(5), "percentage": 80}],
+                source="hltb",
+            )
+        self.assertFalse(ProgressChange.objects.filter(actor=self.owner).exists())
+        self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), h(35))
+        self.assertEqual(self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), 0)
+
+    def test_a_score_off_the_half_stars_rounds_and_warns_rather_than_stopping(self):
+        from integrations.imports.helpers import bulk_create_media
+
+        item = self.game("half")
+        warnings = []
+        with self.on(d(2026, 10, 20)):
+            bulk_create_media(
+                {GAME: [Game(user=self.owner, item=item, status=Status.COMPLETED.value, end_date=datetime(2025, 6, 1, tzinfo=UTC), score=Decimal("8.5"))]},
+                self.owner,
+                source="hltb",
+                warnings=warnings,
+            )
+        self.assertEqual([log.rating for log in DiaryEntry.objects.filter(user=self.owner, item=item)], [Decimal(9)])
+        self.assertEqual(len(warnings), 1)
+
+    def test_the_same_file_twice_adds_nothing(self):
+        item = self.game("twice")
+        for _ in range(2):
+            self.import_row(item, end_date=datetime(2025, 6, 1, tzinfo=UTC), progress=h(30))
+        self.assertEqual(DiaryEntry.objects.filter(user=self.owner, item=item).count(), 1)
+        self.assertEqual(self.number(pile=True), h(30))
+
+    def test_a_marked_row_with_a_date_stays_a_mark(self):
+        item = self.game("marked")
+        self.import_row(item, end_date=datetime(2025, 6, 1, tzinfo=UTC), completed_manually=True)
+        self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+        self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), 0)
+        self.assertEqual(self.lines(), [])
+
+    def legacy_mark_file(self, item):
+        """Mark a game finished as 0078 leaves one, dated, with hours; export."""
+        with self.on(d(2026, 1, 10)):
+            game_tracking.mark_completed(self.owner, item)
+        Game.objects.filter(user=self.owner, item=item).update(end_date=datetime(2026, 3, 1, 5, tzinfo=UTC), progress=h(10))
+        self.assertTrue(Game.objects.get(user=self.owner, item=item).completed_manually)
+        return "".join(exports.generate_rows(self.owner)).encode()
+
+    def from_file(self, payload, mode):
+        with self.on(d(2026, 10, 20)), patch("app.models.Item.fetch_releases"), patch("app.signals.update_daily_statistics.delay"):
+            yamtrack.importer(BytesIO(payload), self.owner, mode)
+
+    def numbers_and_days(self):
+        year = self.summary(YEAR_2026, tab=GAME)
+        row = time_row(year, GAME)
+        all_time = self.summary(ALL_TIME, tab=GAME)
+        return (row and row["value"], year["header"]["active_days"], time_row(all_time, GAME)["value"], all_time["header"]["active_days"])
+
+    def test_spines_own_file_brings_a_marked_game_back_as_a_mark(self):
+        """A mark is never activity: its date and hours stay out of 2026."""
+        for mode in ("new", "overwrite"):
+            with self.subTest(mode=mode):
+                item = self.game(f"legacy-{mode}")
+                payload = self.legacy_mark_file(item)
+                before = self.numbers_and_days()
+                if mode == "new":
+                    Game.objects.filter(user=self.owner, item=item).delete()
+                self.from_file(payload, mode)
+                self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+                self.assertTrue(Game.objects.get(user=self.owner, item=item).completed_manually)
+                self.assertEqual(self.numbers_and_days(), before)
+                Game.objects.filter(user=self.owner, item=item).delete()
+
+    def test_an_undated_finished_row_stays_a_mark(self):
+        item = self.game("undated")
+        self.import_row(item, progress=h(3))
+        self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+        self.assertEqual(self.lines(), [])

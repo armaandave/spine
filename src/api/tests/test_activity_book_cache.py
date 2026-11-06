@@ -172,8 +172,9 @@ class SeriesEditDatesTests(BookCalcBase):
                     self.do(series_tracking.start, item, d(2026, 3, 1))
                     self.do(series_tracking.drop, item, d(2026, 3, 2))
                     self.do(series_tracking.start, item, d(2026, 4, 1))
-                self.assertEqual(self.active_days(media_type), 2)
+                # Picking a stopped read back up isn't a start (decision 8, MC-201).
+                self.assertEqual(self.active_days(media_type), 1)
                 older = attempts.objects.filter(tracking__item=item).order_by("id").first()
                 with self.captureOnCommitCallbacks(execute=True):
                     self.do(series_tracking.update_journey, item, d(2026, 5, 1), older.pk, start_date=d(2025, 12, 15))
-                self.assertEqual(self.active_days(media_type), 1)
+                self.assertEqual(self.active_days(media_type), 0)

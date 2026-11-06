@@ -344,6 +344,23 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertNil(StatsChartCopy.coverageNote(nil, qualifier: ""))
     }
 
+    func testATimeRowsNoteNamesWhatItCounted() {
+        func row(_ type: String, _ known: Int, _ total: Int) -> StatsTimeRow {
+            StatsTimeRow(mediaType: type, unit: "minutes", value: 600, known: known, total: total, approximate: false)
+        }
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("book", 4, 5)), "Based on 4 of 5 books")
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("book", 0, 1)), "Based on 0 of 1 book", "Its singular")
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("game", 5, 6)), "Based on 5 of 6 games")
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("manga", 2, 3)), "Based on 2 of 3 manga")
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("anime", 1, 2)), "Based on 1 of 2 anime")
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("comic", 1, 2)), "Based on 1 of 2 comics")
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("music", 349, 350)), "Based on 349 of 350 listens")
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("movie", 1, 2)), "Based on 1 of 2 watches")
+        XCTAssertEqual(StatsChartCopy.lengthNote(row("tv", 1_926, 1_927)), "Based on \(1_926.formatted()) of \(1_927.formatted()) episodes")
+        XCTAssertNil(StatsChartCopy.lengthNote(row("book", 5, 5)), "Every length known: no note")
+        XCTAssertNil(StatsChartCopy.lengthNote(nil))
+    }
+
     func testLanguagesNoteNamesTheTypesOnGlobalOnly() {
         let languages = StatsLanguages(
             rows: [language("English", titles: 140)],
