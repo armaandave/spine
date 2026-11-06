@@ -1084,7 +1084,7 @@ class _Watch:
     id: int
     kind: str
     entry_id: int | None
-    # A mark's fill: TV's fill with no log, anime's with a mark.
+    # A mark's watch: TV's fill or undated play with no log, anime's fill with a mark.
     marked: bool
     # Its own stored day: a tick's, or an episode log's own viewing's.
     day: date | None
@@ -1147,6 +1147,7 @@ def _second_time_undescribed(log, pos, at_position, all_logs):
     described = {other.id for other in earlier}
     return any(
         watch.kind in (TICK, LOG_VIEWING)
+        and not watch.marked
         and first < watch.created_at <= log.created_at
         and (newest is None or watch.created_at > newest)
         and watch.entry_id not in described
@@ -1163,7 +1164,11 @@ def _marks_dated(seen, logs, own_by_log, at_position, all_logs):
     taken = set()
     absorbed = set()
     homes = {}
-    marks = [watch for watch in seen if watch.kind == FILL and watch.entry_id is None and watch.marked]
+    marks = [
+        watch
+        for watch in seen
+        if watch.entry_id is None and watch.marked and (watch.kind == FILL or watch.day is None)
+    ]
     for watch in sorted(marks, key=lambda value: (value.created_at, value.id), reverse=True):
         # A mark made after the log stays in the pile.
         candidates = [log for log in covering[watch.pos] if watch.created_at < log.created_at]
@@ -1221,8 +1226,9 @@ def _ticks_taken(logs, seen):  # noqa: C901
             if since is None or watch.created_at > since:
                 fresh.append(watch)
         second = [watch for watch in fresh if earliest[watch.pos] < watch.created_at]
-        window = second or ([] if log.is_rewatch else fresh)
-        days = [watch.day for watch in window if watch.day is not None]
+        # An undated play is a mark, and only decision 38 dates it.
+        window = [watch for watch in second or ([] if log.is_rewatch else fresh) if watch.day is not None]
+        days = [watch.day for watch in window]
         if days and log.day < min(days):
             for watch in window:
                 taken.setdefault(watch.id, log.id)
@@ -1252,14 +1258,14 @@ def _place_watches(every, all_logs, sees, *, own):  # noqa: C901, PLR0912
     taken = _ticks_taken(logs, seen)
     for watch in seen:
         log = logs.get(watch.entry_id)
-        if watch.kind == FILL:
-            if watch.id in absorbed:
-                continue
-            if watch.id in homes:
-                home = logs[homes[watch.id]]
-                placed.on_logs[home.id].append(watch)
-                placed.moved[watch.id] = home.day
-            elif log is not None:
+        if watch.id in absorbed:
+            continue
+        if watch.id in homes:
+            home = logs[homes[watch.id]]
+            placed.on_logs[home.id].append(watch)
+            placed.moved[watch.id] = home.day
+        elif watch.kind == FILL:
+            if log is not None:
                 placed.on_logs[log.id].append(watch)
                 if watch.marked and log.is_rewatch:
                     # A single's first log took over the mark's fill. On, it's another
@@ -1272,7 +1278,8 @@ def _place_watches(every, all_logs, sees, *, own):  # noqa: C901, PLR0912
             placed.on_logs[home.id].append(watch)
             placed.moved[watch.id] = home.day
             placed.taken_from.add(watch.day)
-        elif watch.kind == LOG_VIEWING and log is not None:
+        elif (watch.kind == LOG_VIEWING or watch.day is None) and log is not None:
+            # A log's own viewing, or an undated play it claimed: on the log's date.
             placed.on_logs[log.id].append(watch)
             if watch.day != log.day:
                 placed.moved[watch.id] = log.day
@@ -1473,7 +1480,7 @@ def _tv_rows(result, owners, viewer, titles, piles):
                 pk,
                 kind,
                 entry_id,
-                kind == FILL and entry_id is None,
+                entry_id is None and (kind == FILL or day is None),
                 day,
                 created_at,
                 (season, episode),

@@ -140,6 +140,7 @@ A log counts once whatever its target.
 Dated viewings count in the range that holds their day.
 A fill a log made (TV-301) counts on that log's day (STAT-100): logging a season on 3 April puts its filled episodes, and their hours, on 3 April.
 A mark's fills have no day: they never count in a dated range, and count in All Time.
+An imported play with no date is read as a mark: only a log dates it, under the rules below for logging something marked, and an episode log that claims one counts it on the log's day. A backdated log never takes it.
 Viewings of specials count like any other viewing; TV-004 keeps specials out of progress, not out of Stats.
 Hidden viewings never count (STAT-003).
 Anime viewings count the same way (AN-704): a tick on its day, a log's fills on that log's day, and a mark's fills only in All Time.

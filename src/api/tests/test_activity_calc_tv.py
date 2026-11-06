@@ -16,7 +16,7 @@ from api.services import stats_time
 from api.services.activity_rows import list_rows, piled, rows_for
 from api.services.stats_scope import build_scope
 from app import tv_tracking, user_calendar
-from app.models import DiaryEntry, Episode, Item, MediaTypes
+from app.models import DiaryEntry, Episode, Item, MediaTypes, Season
 from app.tests.tv_fixtures import make_manual_show, make_user, patch_now
 from social.models import Follow, FollowStatus
 
@@ -473,6 +473,56 @@ class OldLogTests(TVCalcBase):
         ).entry
         self.assertTrue(entry.progress_snapshot["tv"]["label_only"])
         self.assert_minutes(2026, 0, 3 * E)
+
+
+class UndatedPlayTests(TVCalcBase):
+    """An imported play with no date is a mark: only a log dates it (decision 38)."""
+
+    def undated(self, show, *numbers):
+        """Add plays as an import with no date saves them: ticks with no day."""
+        row = Season.objects.get(user=self.user, item=self.season(show))
+        for number in numbers:
+            self.clock.advance(minutes=1)
+            Episode.objects.create(item=self.episode(show, 1, number), related_season=row, end_date=None)
+
+    def test_an_episode_log_over_an_undated_play_dates_it(self):
+        show = self.show(3)
+        self.on(date(2026, 3, 1))
+        self.tick(show, 3)
+        self.undated(show, 1)
+        self.assert_minutes(2026, E, 2 * E)
+        self.on(date(2026, 3, 5))
+        entry = self.log(self.episode(show, 1, 1))
+        self.assertFalse(entry.is_rewatch, "It claims the play")
+        self.assert_minutes(2026, 2 * E, 2 * E)
+        log = next(row for row in rows_for([self.user], self.user, types=[TV]).rows if row.log_id)
+        self.assertEqual((log.day, int(log.told), int(log.amount)), (date(2026, 3, 5), 1, E))
+        self.delete(entry)
+        self.assert_minutes(2026, E, 2 * E)
+
+    def test_a_season_log_off_dates_undated_plays_whatever_a_ticks_day(self):
+        show = self.show(4)
+        self.on(date(2026, 3, 1))
+        self.tick(show, 4)
+        self.undated(show, 1, 2, 3)
+        self.assert_minutes(2026, E, 4 * E)
+        self.on(date(2026, 3, 5))
+        entry = self.log(self.season(show), day=date(2026, 3, 4), is_rewatch=False)
+        self.assert_minutes(2026, 4 * E, 4 * E)
+        self.delete(entry)
+        self.on(date(2026, 3, 6))
+        self.log(self.season(show), day=date(2025, 6, 1), is_rewatch=False)
+        self.assert_minutes(2025, 4 * E, 4 * E)
+        self.assertEqual(self.number(2026), 0)
+
+    def test_undated_plays_stay_in_the_pile_under_a_rewatch_on_log(self):
+        show = self.show(4)
+        self.on(date(2026, 3, 1))
+        self.tick(show, 4)
+        self.undated(show, 1, 2, 3)
+        self.on(date(2026, 3, 5))
+        self.log(self.season(show), is_rewatch=True)
+        self.assert_minutes(2026, 5 * E, 8 * E)
 
 
 class BackdatedTests(TVCalcBase):
