@@ -14,6 +14,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from django.core.management import call_command
+from rest_framework.test import APIClient
 
 from api.services import stats_time
 from api.services.activity_rows import list_rows, piled, rows_for
@@ -206,6 +207,90 @@ class MarkTests(AnimeCalcBase):
         self.assert_episodes(0, 0, 5)
         self.assertEqual(self.lines(), [])
         self.assert_counter_agrees()
+
+
+class MarkMatrixTests(AnimeCalcBase):
+    """Matrix 11 on anime: each mark leaves every year and the list as they were."""
+
+    LIFETIME_SECTIONS = ("list_rings", "collections")
+
+    def setUp(self):
+        super().setUp()
+        # Something counted in each year, so a moved year would show.
+        counted = self.title()
+        self.on(date(2025, 6, 1))
+        self.tick(counted, 1)
+        self.on(date(2026, 2, 1))
+        self.tick(counted, 2)
+        self.on(date(2026, 3, 1))
+
+    def client_of(self, viewer):
+        client = APIClient()
+        client.force_authenticate(viewer)
+        return client
+
+    def snapshot(self):
+        seen = []
+        for viewer in (self.user, self.follower, self.stranger):
+            client = self.client_of(viewer)
+            path = "/api/v1/stats/me/summary/" if viewer == self.user else f"/api/v1/users/{self.user.username}/stats/summary/"
+            for year in YEARS:
+                for tab in ({}, {"media_type": ANIME}):
+                    params = {"schema": "2", "start_date": f"{year}-01-01", "end_date": f"{year}-12-31", **tab}
+                    response = client.get(path, params)
+                    self.assertEqual(response.status_code, 200, response.content)
+                    seen.append({key: value for key, value in response.json().items() if key not in self.LIFETIME_SECTIONS})
+            response = client.get(f"/api/v1/users/{self.user.username}/activity/")
+            self.assertEqual(response.status_code, 200, response.content)
+            seen.append(response.json())
+        return seen
+
+    def check(self, mark, adds, *, planning_too=True):
+        """Run a mark on a new title and on one first set to Planning."""
+        for planning in (False, True) if planning_too else (False,):
+            with self.subTest(planning=planning):
+                item = self.title()
+                if planning:
+                    anime_tracking.choose(self.user, item, anime_tracking.PLANNING)
+                before, value = self.snapshot(), self.number()
+                mark(item)
+                self.assertEqual(self.snapshot(), before)
+                self.assertEqual(self.number(), value + adds * RUNTIME)
+                self.assertFalse([row for row in self.calc().rows if row.title_id == item.pk])
+                self.assert_counter_agrees(viewers=(self.user,))
+
+    def test_the_eye(self):
+        self.check(lambda item: anime_tracking.mark_watched(self.user, item), 12)
+
+    def test_the_eye_through_the_api(self):
+        self.check(lambda item: self.action(item, "mark_watched"), 12)
+
+    def test_a_heart(self):
+        self.check(lambda item: anime_tracking.set_like(self.user, item, liked=True), 12)
+
+    def test_stars(self):
+        self.check(lambda item: anime_tracking.set_rating(self.user, item, Decimal("7.0")), 12)
+
+    def test_mark_watched_up_to_here(self):
+        self.check(lambda item: anime_tracking.mark_up_to(self.user, item, 6), 6)
+
+    def test_status_set_to_completed_through_patch(self):
+        self.check(lambda item: self.write(item, status=Status.COMPLETED.value), 12)
+
+    def test_an_undated_import(self):
+        # An import leaves a title already tracked as it is, so only a new one.
+        def imported(item):
+            anime_tracking.import_title(self.user, item, status=Status.COMPLETED.value, count=12)
+
+        self.check(imported, 12, planning_too=False)
+
+    def test_unhearting_keeps_the_mark(self):
+        item = self.title()
+        anime_tracking.set_like(self.user, item, liked=True)
+        before, value = self.snapshot(), self.number()
+        anime_tracking.set_like(self.user, item, liked=False)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.number(), value)
 
 
 class AnimeTrackingWritesTests(AnimeCalcBase):

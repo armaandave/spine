@@ -1,9 +1,10 @@
 """Stories told across the calculation, and marks that never touch a year (decision 11).
 
-Matrix 11 joins each family at its switch, so this holds books: every way to mark a
-book, on a new title and on one first set to To Read, because today's leak needs a
-previous history row. Marking as watched, read, played or listened is never activity,
-never in a year and never on a feed. It only feeds All Time's undated pile.
+Matrix 11 joins each family at its switch, so this holds books, games, manga and
+comics (anime's are in test_activity_calc_anime): every way to mark a title, on a new
+one and on one first set to To Read, because today's leak needs a previous history row.
+Marking as watched, read, played or listened is never activity, never in a year and
+never on a feed. It only feeds All Time's undated pile.
 """
 
 from decimal import Decimal
@@ -17,8 +18,8 @@ from api.services.activity_rows import piled
 from api.tests.test_activity_book_imports import OneBook, goodreads_file
 from api.tests.test_activity_calc_books import BOOK, NEW_YORK, BookCalcBase, d
 from api.tests.test_stats_v2_activity import ALL_TIME, YEAR_2025, YEAR_2026
-from app import book_tracking
-from app.models import Book, DiaryEntry, Item, Sources, Status
+from app import book_tracking, game_tracking, series_tracking
+from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
 from integrations import exports
 from integrations.imports import goodreads, yamtrack
 
@@ -346,6 +347,137 @@ class MarkMatrixTests(BookCalcBase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.all_time(), value + self.PAGES)
+
+
+class TypeMarkMatrix:
+    """Matrix 11 on one more type: a mark moves no year and no row, only the pile.
+
+    A mixin, so only the types below run it.
+    """
+
+    media_type = None
+    tracking = None
+    # What a mark adds to All Time: a series' total; a game has no hours to add.
+    length = 0
+
+    def setUp(self):
+        super().setUp()
+        # Something counted in each year, so a moved year would show.
+        other = self.title("other")
+        with self.on(d(2025, 3, 1)):
+            self.tracking.start(self.owner, other)
+        self.save(other, d(2026, 2, 2))
+
+    def title(self, name):
+        item = self.item(self.media_type, name, title=name)
+        if self.length:
+            self.set_item(item, series_total=self.length)
+        return item
+
+    def save(self, item, day):
+        with self.on(day):
+            if self.media_type == MediaTypes.GAME.value:
+                game_tracking.update_progress(self.owner, item, total_minutes=90, progressed_on=day)
+            else:
+                series_tracking.update_progress(self.owner, item, value=5)
+
+    def snapshot(self):
+        seen = []
+        for viewer in (self.owner, self.follower, self.stranger):
+            for params in (YEAR_2025, YEAR_2026):
+                seen.append(frozen(self.summary(params, viewer=viewer)))
+                seen.append(frozen(self.summary(params, viewer=viewer, tab=self.media_type)))
+            response = self.client_for(viewer).get(ACTIVITY)
+            self.assertEqual(response.status_code, 200, response.content)
+            seen.append(response.json())
+        return seen
+
+    def all_time(self):
+        rows = self.summary(ALL_TIME, tab=self.media_type)["time"]["rows"]
+        return next((row["value"] for row in rows if row["media_type"] == self.media_type), 0)
+
+    def check(self, mark):
+        for planning in (False, True):
+            with self.subTest(planning=planning):
+                item = self.title(f"{mark.__name__}-{planning}")
+                if planning:
+                    self.do(self.tracking.assign_status, item, d(2026, 1, 20), Status.PLANNING.value)
+                before, value = self.snapshot(), self.all_time()
+                days = self.summary(ALL_TIME, tab=self.media_type)["header"]["active_days"]
+                with self.on(d(2026, 3, 1)):
+                    mark(item)
+                self.assertEqual(self.snapshot(), before)
+                self.assertEqual(self.all_time(), value + self.length)
+                self.assertEqual(self.summary(ALL_TIME, tab=self.media_type)["header"]["active_days"], days)
+                self.assertFalse([row for row in self.calc_type().rows if row.title_id == item.pk])
+
+    def calc_type(self):
+        from api.services.activity_rows import rows_for
+
+        return rows_for([self.owner], self.owner, types=[self.media_type])
+
+    def eye(self, item):
+        if self.media_type == MediaTypes.GAME.value:
+            game_tracking.mark_completed(self.owner, item)
+        else:
+            series_tracking.mark_read(self.owner, item)
+
+    def heart(self, item):
+        self.tracking.set_like(self.owner, item, liked=True)
+
+    def stars(self, item):
+        self.tracking.set_rating(self.owner, item, 7)
+
+    def status_completed(self, item):
+        self.tracking.assign_status(self.owner, item, Status.COMPLETED.value)
+
+    def test_the_eye(self):
+        self.check(self.eye)
+
+    def test_a_heart(self):
+        self.check(self.heart)
+
+    def test_stars(self):
+        self.check(self.stars)
+
+    def test_status_set_to_completed(self):
+        self.check(self.status_completed)
+
+    def test_unhearting_keeps_the_mark(self):
+        item = self.title("unheart")
+        with self.on(d(2026, 3, 1)):
+            self.heart(item)
+        before, value = self.snapshot(), self.all_time()
+        with self.on(d(2026, 3, 2)):
+            self.tracking.set_like(self.owner, item, liked=False)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.all_time(), value)
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class GameMarkMatrixTests(TypeMarkMatrix, BookCalcBase):
+    """Matrix 11's marks on this type."""
+
+    media_type = MediaTypes.GAME.value
+    tracking = game_tracking
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class MangaMarkMatrixTests(TypeMarkMatrix, BookCalcBase):
+    """Matrix 11's marks on this type."""
+
+    media_type = MediaTypes.MANGA.value
+    tracking = series_tracking
+    length = 100
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class ComicMarkMatrixTests(TypeMarkMatrix, BookCalcBase):
+    """Matrix 11's marks on this type."""
+
+    media_type = MediaTypes.COMIC.value
+    tracking = series_tracking
+    length = 12
 
 
 @override_settings(TIME_ZONE=NEW_YORK)
