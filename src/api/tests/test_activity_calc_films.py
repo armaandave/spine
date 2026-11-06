@@ -43,7 +43,7 @@ class FilmCalcBase(TestCase):
         self.item = Item.objects.create(
             source=Sources.MANUAL.value,
             media_type=self.media_type,
-            media_id=f"film-{uuid4()}",
+            media_id=str(uuid4()),
             title="Title",
             image="https://example.com/x.jpg",
             runtime_minutes=self.minutes,
