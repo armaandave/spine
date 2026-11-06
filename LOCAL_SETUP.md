@@ -254,4 +254,3 @@ If running manually:
 
 1. Create an account or login
 2. Start tracking media!
-3. Check out the documentation in `APP_CORE_LOGIC_DOCUMENTATION.md` for understanding the app structure
