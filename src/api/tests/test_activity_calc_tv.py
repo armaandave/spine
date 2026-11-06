@@ -6,9 +6,11 @@ provider is reached. Numbers are minutes, read as Stats read them: a year's rows
 All Time's rows plus the undated pile.
 """
 
+from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from itertools import product
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
@@ -608,6 +610,54 @@ class StepSequenceTests(TVCalcBase):
             want = (year * 3 * E, (year + stands) * 3 * E, 3 if states or has_mark else 0)
             transaction.set_rollback(True)
         return got, want
+
+
+class QueueTests(TVCalcBase):
+    """Phase 3's changed TV writes still queue each day's statistics task."""
+
+    @contextmanager
+    def queued(self):
+        """Yield the list of days queued while the block runs, once it commits."""
+        days = []
+        with (
+            patch("app.signals.update_daily_statistics.delay") as signal,
+            patch("app.single_weight.update_daily_statistics.delay") as direct,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            yield days
+        days.extend(sorted(call.kwargs["date_str"][:10] for call in (*signal.call_args_list, *direct.call_args_list)))
+
+    def test_a_claimed_ticks_log_moved_queues_both_days_and_leaves_the_tick(self):
+        show = self.show(3)
+        self.on(date(2026, 3, 1))
+        self.tick(show, 1)
+        self.on(date(2026, 3, 5))
+        entry = self.log(self.episode(show, 1, 1), day=date(2026, 3, 4))
+        with self.queued() as days:
+            tv_tracking.update_log(DiaryEntry.objects.get(pk=entry.pk), {"consumed_at": date(2026, 3, 3)})
+        self.assertEqual(days, ["2026-03-03", "2026-03-04"])
+        self.assertEqual(Episode.objects.get(related_season__user=self.user).watched_on, date(2026, 3, 1))
+
+    def test_a_review_that_adds_no_viewing_queues_its_day(self):
+        show = self.show(3)
+        self.on(date(2026, 2, 1))
+        self.log(self.season(show))
+        self.on(date(2026, 2, 2))
+        with self.queued() as days:
+            review = self.log(self.episode(show, 1, 2))
+        self.assertFalse(Episode.objects.filter(diary_entry=review).exists())
+        self.assertEqual(days, ["2026-02-02"])
+
+    def test_a_reviews_flipped_switch_queues_its_day(self):
+        show = self.show(3)
+        self.on(date(2026, 2, 1))
+        self.log(self.season(show))
+        self.on(date(2026, 2, 2))
+        review = self.log(self.episode(show, 1, 2))
+        with self.queued() as days:
+            self.flip(review, on=True)
+        self.assertEqual(days, ["2026-02-02"])
+        self.assertTrue(Episode.objects.filter(diary_entry=review, kind=Episode.Kind.LOG).exists())
 
 
 class UndatedPlayTests(TVCalcBase):
