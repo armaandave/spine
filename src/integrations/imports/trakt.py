@@ -12,7 +12,7 @@ from django_celery_beat.models import PeriodicTask
 import app
 from api.services.item_metadata import store_item_metadata
 from app import helpers as app_helpers
-from app import single_weight
+from app import single_weight, user_calendar
 from app.models import MediaTypes, Sources, Status
 from app.providers import services
 from integrations.imports import helpers
@@ -421,7 +421,7 @@ class TraktImporter:
             {
                 "source_id": str(source_id),
                 "source_order": source_order,
-                "consumed_at": watched_at.date(),
+                "consumed_at": user_calendar.day_of(watched_at, self.user),
                 "is_rewatch": None,
             },
         )
