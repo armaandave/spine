@@ -801,38 +801,45 @@ def _game_title(actor_id, item, game, sessions, saves, entries, zone):
 def _game_rows(result, owners, _viewer, titles, piles):
     """Add games' rows. Game logs show to every viewer (AC-5), so all read alike."""
     only = {} if titles is None else {"item__in": titles}
+    # Plain values and no Game rows, as books read: a Game's FieldTracker was most of
+    # this walk, and every Stats miss runs it.
     changes = defaultdict(list)
-    for change in ProgressChange.objects.filter(
-        actor__in=owners,
-        item__media_type=MediaTypes.GAME.value,
-        **only,
-    ).order_by("id"):
-        playthrough_id = change.current_progress.get("playthrough_id")
+    for pk, created_at, saved_on, current in (
+        ProgressChange.objects.filter(actor__in=owners, item__media_type=MediaTypes.GAME.value, **only)
+        .order_by("id")
+        .values_list("pk", "created_at", "saved_on", "current_progress")
+    ):
+        playthrough_id = current.get("playthrough_id")
         if playthrough_id is not None:
-            changes[playthrough_id].append(change)
+            changes[playthrough_id].append(_Save(pk, created_at, saved_on, {}, current))
     sessions = defaultdict(list)
-    items = {}
     for session in (
         GameSession.objects.filter(
             related_game__user__in=owners,
             related_game__legacy_archived=False,
             **({} if titles is None else {"related_game__item__in": titles}),
         )
-        .select_related("completion_diary_entry", "related_game__item")
+        .annotate(owner_id=F("related_game__user_id"), title_id=F("related_game__item_id"))
+        .select_related("completion_diary_entry")
         .order_by("id")
     ):
-        game = session.related_game
-        sessions[game.user_id, game.item_id].append(session)
-        items[game.item_id] = game.item
-    entries = _logs_by_title(owners, MediaTypes.GAME.value, only)
-    for (_, item_id), logs in entries.items():
-        items[item_id] = logs[0].item
+        sessions[session.owner_id, session.title_id].append(session)
+    entries = defaultdict(list)
+    for entry in DiaryEntry.objects.filter(user__in=owners, item__media_type=MediaTypes.GAME.value, **only).order_by("id"):
+        entries[entry.user_id, entry.item_id].append(entry)
     games = {}
-    for game in Game.objects.filter(user__in=owners, legacy_archived=False, **only).select_related("item"):
+    for fields in Game.objects.filter(user__in=owners, legacy_archived=False, **only).values(
+        "user_id",
+        "item_id",
+        "progress",
+        "completed_manually",
+    ):
+        game = SimpleNamespace(**fields)
         games[game.user_id, game.item_id] = game
-        items[game.item_id] = game.item
+    keys = {*sessions, *entries, *games}
+    items = Item.objects.only("id").in_bulk({item_id for _actor_id, item_id in keys})
     zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
-    for key in {*sessions, *entries, *games}:
+    for key in keys:
         actor_id, item_id = key
         title = _game_title(actor_id, items[item_id], games.get(key), sessions[key], changes, entries[key], zones[actor_id])
         _collect(result, title, piles=piles)
