@@ -442,7 +442,15 @@ def _fit_start_to_log(session, day, snapshot):
         return
     if "start_date" not in snapshot and day < original:
         snapshot["start_date"] = original.isoformat()
-    session.start_date = min(original, day)
+    session.start_date = min(_restorable_start(session, original), day)
+
+
+def _restorable_start(session, original):
+    """Return a kept start, no later than the playthrough's first progress.
+
+    Progress saved while a log held the start back can predate where it was.
+    """
+    return min(filter(None, (original, session.first_progress_on)))
 
 
 @transaction.atomic
@@ -862,7 +870,7 @@ def delete_completion(user, entry):
         if reopen:
             if kept_start:
                 # Only a log that kept it can say where its playthrough began.
-                session.start_date = date.fromisoformat(kept_start)
+                session.start_date = _restorable_start(session, date.fromisoformat(kept_start))
             game.status_history = [
                 event
                 for event in game.status_history

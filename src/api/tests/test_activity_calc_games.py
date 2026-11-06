@@ -424,6 +424,30 @@ class GameWritesTests(GameCalcBase):
         self.assertEqual(self.session(item).start_date, d(2026, 3, 1))
         self.assert_years(0, 10, 10)
 
+    def test_a_start_comes_back_no_later_than_the_first_progress(self):
+        """Progress saved under a backdated log keeps the playthrough editable."""
+        for undo in ("delete", "edit"):
+            with self.subTest(undo=undo):
+                item = self.game(f"first-progress-{undo}")
+                self.begin(item, d(2026, 3, 1))
+                self.save(item, h(10), d(2026, 3, 2))
+                _game, entry = self.finish(item, d(2025, 12, 20), saved_on=d(2026, 3, 3))
+                playthrough = self.session(item).pk
+                with self.on(d(2026, 3, 4)):
+                    game_tracking.update_progress(
+                        self.owner, item, playthrough_id=playthrough, total_minutes=h(11), progressed_on=d(2026, 1, 5)
+                    )
+                with self.on(d(2026, 3, 5)):
+                    if undo == "delete":
+                        game_tracking.delete_completion(self.owner, entry)
+                    else:
+                        game_tracking.update_completion(entry, {"consumed_at": d(2026, 3, 5)})
+                self.assertEqual(self.session(item).start_date, d(2026, 1, 5))
+                with self.on(d(2026, 3, 6)):
+                    game_tracking.update_playthrough(self.owner, item, playthrough, total_minutes=h(12))
+                    if undo == "delete":
+                        game_tracking.complete(self.owner, item, completion_date=d(2026, 3, 6))
+
     def test_a_log_date_edited_before_the_start_moves_it_and_back_no_further(self):
         item = self.game()
         self.begin(item, d(2026, 3, 1))
