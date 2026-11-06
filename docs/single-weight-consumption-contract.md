@@ -453,6 +453,13 @@ so standalone rating rows are not shown.
 - A book row marked Completed with a date is a dated diary entry too, with a source
   identity, unless the title has a log that day or the row says it's an undated mark.
   A book row marked Completed with no date is the undated mark, from every source.
+- A film or album row marked Completed with a date, from Yamtrack or Simkl, is a dated
+  diary entry too (decision 47), with a source identity, unless the title has a log that
+  day. It states no Rewatch, so it's a rewatch only after an earlier log of the title
+  (SW-503). With no date it's the undated mark. IMDb's dates say when a title was rated
+  or listed, not watched, so an IMDb row is always the undated mark. Your own export
+  coming back leaves a film's or album's logs and All Time as they were: the row's date
+  is its newest log's, which is already there.
 - An imported diary rating remains attached to its diary entry.
 - Imports do not emit social feed activity.
 - Your own export coming back in overwrite mode leaves a book's All Time alone, except
@@ -559,3 +566,5 @@ Behavior omitted from this working contract is not implicitly decided.
 SW-500's dated book rows, what your own export can't bring back, and a Read with no date
 staying unflagged on a title that has a log (your own export coming back), are provisional
 until the phone test of Activity's first phase accepts them.
+SW-500's dated film and album rows are provisional until the phone test of Activity's
+third phase accepts them.
