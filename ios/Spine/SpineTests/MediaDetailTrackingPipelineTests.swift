@@ -142,6 +142,26 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         XCTAssertEqual(state.displayStartDate, "2026-10-23", "Resuming keeps the journey's start.")
     }
 
+    func testPickingUpAStoppedBookKeepsItsPlace() {
+        // BK-305: a stopped book reopens at its place, a page or a percent (decision 51).
+        let place = ProgressState(kind: "pages", value: 200, max: 400, unit: "page")
+        var state = UserMediaState(isTracked: true, status: "Dropped", progress: place)
+        TrackingProjection.startBook(today: "2026-10-23")(&state)
+        XCTAssertEqual(state.status, "In progress")
+        XCTAssertTrue(state.book?.currentJourney?.isPending == true)
+        XCTAssertEqual(state.progress, place)
+        XCTAssertEqual(state.book?.currentJourney?.progress, place)
+
+        let percent = ProgressState(kind: "percentage", value: 25, max: 100, unit: "percent")
+        var unpaged = UserMediaState(isTracked: true, status: "Dropped", progress: percent)
+        TrackingProjection.startBook(today: "2026-10-23")(&unpaged)
+        XCTAssertEqual(unpaged.progress, percent)
+
+        var reread = UserMediaState(isTracked: true, status: "Completed", progress: place)
+        TrackingProjection.startBook(today: "2026-10-23")(&reread)
+        XCTAssertNil(reread.progress, "A reread begins at zero")
+    }
+
     func testRatingAndHeartProjections() {
         var state = UserMediaState.untracked
         TrackingProjection.rating("4.0", impliesCompletion: true)(&state)

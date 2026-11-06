@@ -693,7 +693,7 @@ Every section key is always present; STAT-302 says when it is null.
 
   | Section | Empty when |
   | --- | --- |
-  | `header` | `titles` and `logs` are 0 |
+  | `header` | `titles`, `logs` and `active_days` are 0: a start alone, or a percent with no length, keeps it |
   | `time` | `rows` is empty |
   | `top`, `highest_rated`, `most_logged` | `items` is empty |
   | `activity` | `busiest_day` is null |
