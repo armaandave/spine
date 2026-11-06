@@ -264,3 +264,136 @@ class GapTests(GameCalcBase):
         rows = rows_for([self.owner, self.follower], self.owner, types=[GAME]).rows
         amounts = {row.actor_id: int(row.amount) for row in rows if row.amount}
         self.assertEqual(amounts, {self.owner.pk: 60, self.follower.pk: 30})
+
+
+class GameWritesTests(GameCalcBase):
+    """Phase 2's game writes, through the real functions (plan 5.4)."""
+
+    Y2025 = {"start": d(2025, 1, 1), "end": d(2025, 12, 31)}
+    Y2026 = {"start": d(2026, 1, 1), "end": d(2026, 12, 31)}
+
+    def session(self, item):
+        return GameSession.objects.filter(related_game__item=item).order_by("-id").first()
+
+    def rows_of(self, item, kind):
+        return ProgressChange.objects.filter(item=item, current_progress__kind=kind).order_by("id")
+
+    def assert_years(self, in_2025, in_2026, all_time):
+        numbers = (self.number(**self.Y2025), self.number(**self.Y2026), self.number(pile=True))
+        self.assertEqual(numbers, (h(in_2025), h(in_2026), h(all_time)))
+
+    def test_a_retype_writes_one_touch_row_and_keeps_the_saved_day(self):
+        item = self.game()
+        self.begin(item, d(2025, 12, 1))
+        self.save(item, h(40), d(2025, 12, 20))
+        self.save(item, h(40), d(2026, 1, 2))
+        touches = list(self.rows_of(item, ProgressChange.TOUCH))
+        self.assertEqual([row.saved_on for row in touches], [d(2026, 1, 2)])
+        self.assertEqual(touches[0].current_progress["playthrough_id"], self.session(item).pk)
+        self.assertEqual((touches[0].current_progress["value"], touches[0].current_progress["unit"]), (0, "touch"))
+        self.assertEqual(self.session(item).minutes_updated_on, d(2025, 12, 20))
+        self.assert_years(40, 0, 40)
+
+    def test_a_percent_resent_keeps_its_day_and_none_is_not_zero(self):
+        item = self.game()
+        self.begin(item, d(2026, 2, 1))
+        self.percent(item, 40, d(2026, 2, 2))
+        self.percent(item, 40, d(2026, 2, 5))
+        self.assertEqual(self.session(item).percentage_updated_on, d(2026, 2, 2))
+        self.save(item, 0, d(2026, 2, 6))
+        self.assertEqual(self.session(item).minutes_updated_on, d(2026, 2, 6))
+        self.save(item, 0, d(2026, 2, 7))
+        self.assertEqual(self.session(item).minutes_updated_on, d(2026, 2, 6))
+
+    def test_a_finish_typing_a_new_total_writes_its_rise_with_the_log(self):
+        """GM-219: deleting the log leaves the rise on the day it was typed."""
+        item = self.game()
+        self.begin(item, d(2025, 12, 1))
+        self.save(item, h(10), d(2025, 12, 20))
+        _game, entry = self.finish(item, d(2026, 1, 5), total_minutes=h(12))
+        linked = list(self.rows_of(item, "minutes").filter(current_progress__has_key="log_id"))
+        self.assertEqual([(row.current_progress["log_id"], row.current_progress["value"]) for row in linked], [(entry.pk, h(12))])
+        self.assert_years(10, 2, 12)
+        with self.on(d(2026, 1, 6)):
+            game_tracking.delete_completion(self.owner, entry)
+        self.assertEqual(self.session(item).status, Status.IN_PROGRESS.value)
+        self.assertEqual(self.session(item).total_minutes, h(12))
+        self.assert_years(10, 2, 12)
+
+    def test_a_logs_total_edited_writes_its_change_with_the_log(self):
+        item = self.game()
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, h(5), d(2026, 2, 2))
+        _game, entry = self.finish(item, d(2026, 2, 3))
+        with self.on(d(2026, 2, 4)):
+            game_tracking.update_completion(entry, {"total_minutes": h(7)})
+        linked = self.rows_of(item, "minutes").filter(current_progress__has_key="log_id")
+        self.assertEqual([row.current_progress["value"] for row in linked], [h(7)])
+        self.assertEqual(self.lines(item)[0], "2026-02-03 log +120")
+
+    def test_the_old_feed_leaves_out_a_logs_own_rise(self):
+        from api.services import activity
+
+        item = self.game()
+        self.begin(item, d(2026, 1, 1))
+        self.save(item, h(10), d(2026, 1, 2))
+        self.finish(item, d(2026, 1, 5), total_minutes=h(12))
+        days = activity._progress_days(ProgressChange.objects.filter(actor=self.owner))
+        self.assertEqual(sorted(row["day"] for row in days), [d(2026, 1, 1), d(2026, 1, 2)])
+
+    def test_a_log_dated_before_the_start_moves_it_and_its_delete_puts_it_back(self):
+        """Decision 10, the sheet's G6."""
+        item = self.game()
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, h(10), d(2026, 3, 2))
+        _game, entry = self.finish(item, d(2025, 12, 20), saved_on=d(2026, 3, 3))
+        self.assertEqual(self.session(item).start_date, d(2025, 12, 20))
+        self.assertEqual(entry.progress_snapshot["start_date"], "2026-03-01")
+        self.assert_years(10, 0, 10)
+        with self.on(d(2026, 3, 4)):
+            game_tracking.delete_completion(self.owner, entry)
+        self.assertEqual(self.session(item).start_date, d(2026, 3, 1))
+        self.assert_years(0, 10, 10)
+
+    def test_a_log_date_edited_before_the_start_moves_it_and_back_no_further(self):
+        item = self.game()
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, h(10), d(2026, 3, 2))
+        _game, entry = self.finish(item, d(2026, 3, 5))
+        with self.on(d(2026, 3, 6)):
+            game_tracking.update_completion(entry, {"consumed_at": d(2025, 12, 20)})
+        self.assertEqual(self.session(item).start_date, d(2025, 12, 20))
+        with self.on(d(2026, 3, 7)):
+            game_tracking.update_completion(entry, {"consumed_at": d(2026, 3, 4)})
+        self.assertEqual(self.session(item).start_date, d(2026, 3, 1))
+
+    def test_an_old_shape_log_with_no_start_key_leaves_the_start_alone(self):
+        item = self.game()
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, h(10), d(2026, 3, 2))
+        _game, entry = self.finish(item, d(2026, 3, 5))
+        snapshot = {key: value for key, value in entry.progress_snapshot.items() if key != "start_date"}
+        DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot=snapshot)
+        entry.refresh_from_db()
+        with self.on(d(2026, 3, 6)):
+            game_tracking.delete_completion(self.owner, entry)
+        self.assertEqual(self.session(item).start_date, d(2026, 3, 1))
+
+    def test_a_start_edited_by_hand_moves_its_start_row(self):
+        item = self.game()
+        self.begin(item, d(2026, 3, 1))
+        with self.on(d(2026, 3, 2)):
+            game_tracking.update_playthrough(self.owner, item, self.session(item).pk, start_date=d(2026, 2, 20))
+        self.assertEqual([row.saved_on for row in self.rows_of(item, ProgressChange.START)], [d(2026, 2, 20)])
+        self.assertEqual(self.lines(), ["2026-02-20 started"])
+
+    def test_stopped_then_playing_again_typing_8_is_13_hours(self):
+        """Decision 44, the sheet's G8: a new playthrough."""
+        item = self.game()
+        self.begin(item, d(2025, 12, 1))
+        self.save(item, h(5), d(2025, 12, 20))
+        with self.on(d(2025, 12, 21)):
+            game_tracking.drop(self.owner, item)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, h(8), d(2026, 2, 2))
+        self.assert_years(5, 8, 13)

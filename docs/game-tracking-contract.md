@@ -232,6 +232,7 @@ The progress editor exposes two optional fields.
 Users can change one field or both fields in the same update.
 An untouched field keeps its saved value.
 An explicit clear action returns that field to unknown.
+Saving the same number again changes nothing and moves no saved date. Activity records it as a retype, which adds nothing (`docs/activity-contract.md`).
 
 ### GM-102: Hours are a playthrough total
 
@@ -440,9 +441,10 @@ If the playthrough has since reached 50 hours, the same correction leaves its 50
 Every completion log has a date in the user's local timezone.
 The new log form defaults to today.
 Users can choose any date that is not in the future.
-If the playthrough has a start date, completion cannot precede that date.
+A completion may precede the playthrough's start date (the maintainer's decision 10): the start moves back to the log's date, and deleting the log, or editing its date later, puts it back no further than where it was. The log's snapshot keeps that start as `start_date`; a log saved before this rule keeps its start when deleted.
 Apply these limits when creating or editing a completion log.
 A date equal to the phone's today is never refused: after a flight west today can fall before the start, so the log lands on the start.
+A start edited by hand is when the playthrough began, so its day moves in activity; a log's own move doesn't.
 
 Progress-update dates do not restrict the completion date.
 Users can log a past completion even after recording more playtime.
@@ -512,6 +514,7 @@ Do not restore older progress values merely because the completion log was delet
 
 For example, a user finishes at 40 hours and later records 50 hours through side quests.
 Deleting that completion log restores Playing with 50 hours when Playing was the pre-finish status.
+When a log changes a linked playtime or percentage, that change is recorded with the log's id. It counts on the log's date while the log exists, and on the day it was saved once the log is gone.
 Apply the shared source-deletion rules in GM-303 to current rating and heart.
 GM-220 defines deletion of older completions. GM-221 defines deletion of direct-log playthroughs.
 
@@ -707,7 +710,7 @@ Run shared book and single-weight regression cases alongside these game cases.
 | G-28 | Heart or rate an actual Playing or Paused attempt. | Open its completion composer with that choice. Save all effects together, or preserve all prior state on cancellation. | GM-300 |
 | G-29 | Hide a replay badge, or insert a backdated first completion. | Recalculate actual chronology and counts without overwriting saved badge choices. Dropped attempts never count as completions. | GM-216 through GM-218 |
 | G-30 | Remove all tracking or undo undated completion through the eye. | Apply current-opinion cleanup. Preserve independent custom lists and protected history. | GM-000, GM-304 |
-| G-31 | Set a future completion date, or one before the known start date. | Reject it. Later progress does not prevent a valid earlier completion date. | GM-213 |
+| G-31 | Set a future completion date, or one before the known start date. | Reject a future date. One before the start moves the start back with it, and deleting the log puts it back. Later progress does not prevent a valid earlier completion date. | GM-213 |
 | G-32 | Clear a tracked start date, or move it after the first progress, completion, or drop date. | Reject the edit. Direct completion logs may retain an unknown start date. | GM-014 |
 | G-33 | Import 300 Steam lifetime hours while a replay has 10 hours. | Keep the replay at 10 hours. Store the provider total separately. A repeat import does not add hours. | GM-500 |
 | G-34 | Import Steam data for a tracked game, then a previously untracked game. | Preserve the tracked status. Put the new game in Planning, with no invented attempt or start date. | GM-501 |

@@ -36,7 +36,10 @@ class GameTrackingReviewTests(TestCase):
         log.refresh_from_db()
         self.assertIsNone(current.total_minutes)
         self.assertIsNone(current.percentage)
-        self.assertEqual(log.progress_snapshot, {"total_minutes": None, "percentage": 0})
+        self.assertEqual(
+            log.progress_snapshot,
+            {"total_minutes": None, "percentage": 0, "start_date": self.today.isoformat()},
+        )
         game_tracking.update_completion(log, {"total_minutes": 0, "percentage": 40})
         current.refresh_from_db()
         self.assertEqual(current.total_minutes, 0)
@@ -112,7 +115,10 @@ class GameTrackingReviewTests(TestCase):
         current = self.game().current_session
         self.assertEqual(current.total_minutes, 0)
         self.assertIsNone(current.percentage)
-        self.assertEqual(log.progress_snapshot, {"total_minutes": 700, "percentage": 70})
+        self.assertEqual(
+            log.progress_snapshot,
+            {"total_minutes": 700, "percentage": 70, "start_date": start.isoformat()},
+        )
 
     def test_drop_date_correction_has_start_limit_without_changing_newer_progress(self):
         start = self.today - timedelta(days=4)

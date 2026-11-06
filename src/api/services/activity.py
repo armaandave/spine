@@ -316,9 +316,11 @@ def _progress_days(changes):
     A show's and its seasons' changes count toward the show. Each unit's net change is
     summed, and a day that didn't move forward is left out. Only rows in a counted unit
     enter the group: a status move can't change a day's id or its place in the order.
+    A game's change that a log wrote is that log's, not a day's progress (GM-219).
     """
     return (
         changes.filter(current_progress__unit__in=UNITS)
+        .exclude(current_progress__has_key="log_id")
         .annotate(
             day=saved_day(),
             title_key=Case(
