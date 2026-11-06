@@ -136,6 +136,24 @@ class FilmTests(FilmCalcBase):
         self.eye()
         self.watches(1, 2)
 
+    def test_an_import_with_no_rewatch_value_dates_the_marked_watch(self):
+        """Trakt sends no Rewatch: its first play over a mark saves off, so it dates that watch."""
+        self.eye()
+        rows = [
+            {"source_id": "a", "consumed_at": date(2026, 2, 1), "is_rewatch": None},
+            {"source_id": "b", "consumed_at": date(2026, 2, 20), "is_rewatch": None},
+        ]
+        single_weight.import_logs(self.user, self.item, rows[:1], source="trakt")
+        self.assertEqual(list(DiaryEntry.objects.values_list("is_rewatch", flat=True)), [False])
+        self.watches(1, 1)
+        single_weight.import_logs(self.user, self.item, rows, source="trakt")
+        self.assertEqual(
+            list(DiaryEntry.objects.order_by("consumed_at").values_list("is_rewatch", flat=True)),
+            [False, True],
+            "A later play in the same history is still a rewatch",
+        )
+        self.watches(2, 2)
+
     def test_the_log_row_carries_the_amount_and_its_note_counts_watches(self):
         self.eye()
         self.log(rewatch=True)

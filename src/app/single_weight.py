@@ -314,9 +314,9 @@ def import_logs(user, item, rows, *, source):
         tracking and tracking.score is not None and tracking.rating_source_id is None
     )
     like_is_independent = bool(tracking and tracking.like_is_independent)
-    prior_consumed = bool(
-        tracking and tracking.direct_consumption
-    ) or DiaryEntry.objects.filter(user=user, item=item).exists()
+    # A row with no Rewatch value is a rewatch only after an earlier log. Over a mark alone
+    # it saves off, so it dates the marked watch (decision 38).
+    prior_consumed = DiaryEntry.objects.filter(user=user, item=item).exists()
     created_entries = []
     today = user_calendar.today(user)
     normalized_rows = sorted(
