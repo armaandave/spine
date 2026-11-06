@@ -397,3 +397,44 @@ class GameWritesTests(GameCalcBase):
         self.begin(item, d(2026, 2, 1))
         self.save(item, h(8), d(2026, 2, 2))
         self.assert_years(5, 8, 13)
+
+
+class GameImportTests(GameCalcBase):
+    """A dated finished game in a file lands in its year (decision 47, plan 5.4)."""
+
+    def import_row(self, item, **fields):
+        from integrations.imports.helpers import bulk_create_media
+
+        fields.setdefault("status", Status.COMPLETED.value)
+        with self.on(d(2026, 10, 20)):
+            bulk_create_media({GAME: [Game(user=self.owner, item=item, **fields)]}, self.owner, source="hltb")
+
+    def test_a_dated_finished_row_becomes_a_log_in_its_year(self):
+        item = self.game("dated")
+        finished = datetime(2025, 6, 1, tzinfo=UTC)
+        self.import_row(item, end_date=finished, progress=h(30), score=Decimal(8))
+        logs = list(DiaryEntry.objects.filter(user=self.owner, item=item))
+        self.assertEqual([(log.consumed_at.date(), log.import_source, log.rating) for log in logs], [(d(2025, 6, 1), "hltb", Decimal(8))])
+        self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), h(30))
+        self.assertEqual(self.number(pile=True), h(30))
+        self.assertFalse(Game.objects.get(user=self.owner, item=item).completed_manually)
+
+    def test_the_same_file_twice_adds_nothing(self):
+        item = self.game("twice")
+        for _ in range(2):
+            self.import_row(item, end_date=datetime(2025, 6, 1, tzinfo=UTC), progress=h(30))
+        self.assertEqual(DiaryEntry.objects.filter(user=self.owner, item=item).count(), 1)
+        self.assertEqual(self.number(pile=True), h(30))
+
+    def test_a_marked_row_with_a_date_stays_a_mark(self):
+        item = self.game("marked")
+        self.import_row(item, end_date=datetime(2025, 6, 1, tzinfo=UTC), completed_manually=True)
+        self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+        self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), 0)
+        self.assertEqual(self.lines(), [])
+
+    def test_an_undated_finished_row_stays_a_mark(self):
+        item = self.game("undated")
+        self.import_row(item, progress=h(3))
+        self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+        self.assertEqual(self.lines(), [])
