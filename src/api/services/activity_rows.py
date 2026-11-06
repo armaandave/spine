@@ -19,10 +19,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
-from functools import partial
+from functools import partial, reduce
+from operator import or_
 from types import SimpleNamespace
 
-from django.db.models import F, Q
+from django.db.models import F, IntegerField, Q, Value
+from django.db.models.functions import NullIf
 
 from app import user_calendar
 from app.models import (
@@ -33,19 +35,22 @@ from app.models import (
     Comic,
     ComicAttempt,
     DiaryEntry,
+    Episode,
     Game,
     GameSession,
     Item,
     Manga,
     MangaAttempt,
     MediaTypes,
+    Movie,
+    Music,
     SeriesAttempt,
     Status,
 )
 from social.models import Follow, FollowStatus, ProgressChange, Visibility
 
-# The types Stats reads through this calculation. Every other type's readers use their
-# old counters.
+# The types Stats reads through this calculation: every type, since Phase 3. The old
+# counters stay in api.services.stats_time for the comparison only.
 CALCULATED_TYPES = frozenset(
     {
         MediaTypes.BOOK.value,
@@ -53,6 +58,9 @@ CALCULATED_TYPES = frozenset(
         MediaTypes.MANGA.value,
         MediaTypes.COMIC.value,
         MediaTypes.GAME.value,
+        MediaTypes.TV.value,
+        MediaTypes.MOVIE.value,
+        MediaTypes.MUSIC.value,
     },
 )
 
@@ -105,6 +113,10 @@ class Row:
     progress_id: int | None = None
     last_at: datetime | None = None
     log_id: int | None = None
+    # Of what's told, how many have no length: a TV episode or a film with no runtime.
+    unknown_told: Decimal = ZERO
+    # A TV episode counted at its season's or show's runtime, not its own.
+    approximate: bool = False
 
     @property
     def counts_title(self):
@@ -135,11 +147,17 @@ class Pile:
     # Titles with nothing to add up, which count as titles but not in known and total: a
     # game marked finished has no hours to know.
     no_amount: set = field(default_factory=set)
+    unknown_told: Decimal = ZERO
+    approximate: bool = False
 
 
 @dataclass
 class Calculation:
-    """What rows_for returns. `moved` is viewing id to day, for TV."""
+    """What rows_for returns.
+
+    `moved` is (type, viewing id) to day: a TV or anime viewing a log took to its own
+    date, a mark's fill under a Rewatch-off first log or a tick under a backdated log.
+    """
 
     rows: list = field(default_factory=list)
     piles: list = field(default_factory=list)
@@ -247,6 +265,8 @@ class Title:
         self.in_pile = False
         self.pile_known = True
         self.pile_no_amount = False
+        self.pile_unknown_told = ZERO
+        self.pile_approximate = False
 
     def _row(self, kind, day):
         return Row(kind, self.actor_id, day, self.title_key, self.item_id, self.item_id, self.bucket)
@@ -685,6 +705,8 @@ def _collect(result, title, *, piles):
                 titles={title.item_id},
                 known={title.item_id} if title.pile_known else set(),
                 no_amount={title.item_id} if title.pile_no_amount else set(),
+                unknown_told=title.pile_unknown_told,
+                approximate=title.pile_approximate,
             ),
         )
 
@@ -1026,60 +1048,567 @@ def _series_rows(model, attempt_model, unit, result, owners, viewer, titles, pil
         _collect(result, title, piles=piles)
 
 
-# Anime: docs/anime-tracking-contract.md, AN-704. Its viewings are its saves, as a
-# show's are: a tick on its day, a log's fills on that log's day, a mark's fills in the
-# pile. No position fold is needed: an untick deletes its viewing and lowering removes
-# the newest unlogged ones, so a drop already comes off the newest (decision 5).
+# TV and anime: docs/tv-tracking-contract.md and docs/anime-tracking-contract.md. Their
+# viewings are their saves: a tick on its day, a log's fills on that log's day, a mark's
+# fills in the pile. No position fold is needed: an untick deletes its viewing and
+# lowering removes the newest unlogged ones, so a drop already comes off the newest
+# (decision 5). Anime is one TV season with no show around it (decision 62), so both
+# read the same rules, worked out here when read and never written:
+# - Logging something marked (decision 38): the first log the viewer can see over a
+#   mark's fill, by log day then id, decides. Rewatch on, the mark stays in the pile and
+#   the log counts too; off, the fill counts on that log's day instead.
+# - Rewatch on (decisions 14, 42, 48 and 61): a season or show log adds each episode it
+#   covers again, unless it holds its own fill there or a second time through that no
+#   earlier log described sits there.
+# - Backdated (decisions 10 and 43): a log dated before the first tick it covers in that
+#   pass takes those ticks to its date.
 
-# What the calculation reads of a viewing.
-VIEWING_FIELDS = ("anime_id", "watched_on", "watched_at", "diary_entry_id", "created_at")
+SHOW_LEVEL = "show"
+SEASON_LEVEL = "season"
+EPISODE_LEVEL = "episode"
+TICK = "tick"
+LOG_VIEWING = "log"
+FILL = "fill"
+# The logs that describe a viewing for a log of each level: its own level or wider.
+WIDER = {
+    SHOW_LEVEL: (SHOW_LEVEL,),
+    SEASON_LEVEL: (SEASON_LEVEL, SHOW_LEVEL),
+    EPISODE_LEVEL: (EPISODE_LEVEL, SEASON_LEVEL, SHOW_LEVEL),
+}
 
 
-def _place_viewings(reading, viewings, live, sees, *, own):
-    """Give each viewing its day: a tick's own, else its log's, else none (AN-704).
+@dataclass(slots=True)
+class _Watch:
+    """One viewing of one episode, as the rules read it."""
 
-    A viewing of a log the viewer can't see adds nothing anywhere. One whose log is gone
-    has no day (AN-901), and only its owner still holds it, as All Time does today.
+    id: int
+    kind: str
+    entry_id: int | None
+    # A mark's fill: TV's fill with no log, anime's with a mark.
+    marked: bool
+    # Its own stored day: a tick's, or an episode log's own viewing's.
+    day: date | None
+    created_at: datetime
+    pos: tuple
+    minutes: Decimal | None
+    stood_in: bool = False
+
+
+@dataclass(slots=True)
+class _WatchLog:
+    """One log of a show, a season, an episode or an anime."""
+
+    entry: object
+    id: int
+    level: str
+    covers: frozenset
+    day: date
+    created_at: datetime
+    is_rewatch: bool
+    # A Rewatch-on log an installed build saved: its switch stays a badge (TV-900).
+    label_only: bool = False
+
+
+@dataclass
+class _Placed:
+    """Where one title's viewings land for one viewer."""
+
+    pile: list = field(default_factory=list)
+    days: dict = field(default_factory=lambda: defaultdict(list))
+    on_logs: dict = field(default_factory=lambda: defaultdict(list))
+    # Viewing id to the day a log took it to.
+    moved: dict = field(default_factory=dict)
+    # Days a tick was taken from, where a start alone shows nothing.
+    taken_from: set = field(default_factory=set)
+    logs: dict = field(default_factory=dict)
+
+
+def _second_time_undescribed(log, pos, at_position, all_logs):
+    """Return whether a second time through sits at pos that no earlier log described.
+
+    Decision 42: a tick or an episode log's own viewing recorded after the episode's
+    first viewing, and after the newest earlier log of this level or wider covering it.
+    The log describes that viewing, so it adds nothing more. It reads viewings the
+    viewer can't see too, so a stranger never reads more than the owner.
     """
-    for viewing in viewings:
-        entry = live.get(viewing.diary_entry_id)
-        if viewing.diary_entry_id is not None and not (sees(entry) if entry else own):
+    watches = at_position.get(pos)
+    if not watches:
+        return False
+    first = watches[0].created_at
+    earlier = [
+        other
+        for other in all_logs
+        if other.id != log.id
+        and other.level in WIDER[log.level]
+        and pos in other.covers
+        and other.created_at < log.created_at
+    ]
+    newest = max((other.created_at for other in earlier), default=None)
+    described = {other.id for other in earlier}
+    return any(
+        watch.kind in (TICK, LOG_VIEWING)
+        and first < watch.created_at <= log.created_at
+        and (newest is None or watch.created_at > newest)
+        and watch.entry_id not in described
+        for watch in watches
+    )
+
+
+def _marks_dated(seen, logs, own_by_log, at_position, all_logs):
+    """Decision 38: return (marks a log holds already, mark id to the log dating it)."""
+    covering = defaultdict(list)
+    for log in logs.values():
+        for pos in log.covers:
+            covering[pos].append(log)
+    taken = set()
+    absorbed = set()
+    homes = {}
+    marks = [watch for watch in seen if watch.kind == FILL and watch.entry_id is None and watch.marked]
+    for watch in sorted(marks, key=lambda value: (value.created_at, value.id), reverse=True):
+        # A mark made after the log stays in the pile.
+        candidates = [log for log in covering[watch.pos] if watch.created_at < log.created_at]
+        if not candidates:
             continue
-        at = viewing.watched_at or viewing.created_at
-        if viewing.watched_on is not None:
-            reading.counted.amounts.append(Amount(viewing.watched_on, Decimal(1), at))
-        elif entry is not None:
-            reading.counted.amounts.append(Amount(None, Decimal(1), at, entry.pk))
+        first = min(candidates, key=lambda log: (log.day, log.id))
+        if first.is_rewatch or (first.id, watch.pos) in taken:
+            continue
+        if _second_time_undescribed(first, watch.pos, at_position, all_logs):
+            # The log describes that second time, so the mark is the first.
+            continue
+        taken.add((first.id, watch.pos))
+        if watch.pos in own_by_log[first.id]:
+            absorbed.add(watch.id)
         else:
-            reading.counted.amounts.append(Amount(None, Decimal(1), None))
+            homes[watch.id] = first.id
+    return absorbed, homes
 
 
-def _anime_title(actor_id, item, tracking_rows, viewings, logs, changes, zone, sees, *, own):
-    """Fold one person's anime title into rows (AN-704)."""
-    title = Title(actor_id, item.pk, MediaTypes.ANIME.value, EPISODE, length=Decimal(item.runtime_minutes or 0))
-    for entry in logs:
-        if sees(entry):
-            title.add_log(entry, log_day(entry.consumed_at, zone), known=bool(tracking_rows and title.length))
-    reading = Reading()
-    _place_viewings(reading, viewings, {entry.pk: entry for entry in logs}, sees, own=own)
+def _ticks_taken(logs, seen):  # noqa: C901
+    """Decision 43: return tick id to the backdated log that takes it.
+
+    A season or show log describes the ticks it covers recorded since the last log
+    covering the same episode: those of a second time through when there are any, else,
+    with Rewatch off, all of them. Dated before the first of them, it takes them. An
+    episode log takes its claimed tick when dated before it. Starts never count.
+    """
+    taken = {}
+    ordered = sorted(logs.values(), key=lambda log: (log.created_at, log.id))
+    earliest = {}
+    for watch in seen:
+        if watch.pos not in earliest or watch.created_at < earliest[watch.pos]:
+            earliest[watch.pos] = watch.created_at
+    for log in ordered:
+        if log.level == EPISODE_LEVEL:
+            for watch in seen:
+                if watch.entry_id == log.id and watch.kind == TICK and watch.day is not None and log.day < watch.day:
+                    taken.setdefault(watch.id, log.id)
+            continue
+        fresh = []
+        for watch in seen:
+            if watch.kind != TICK or watch.pos not in log.covers or watch.created_at > log.created_at:
+                continue
+            since = max(
+                (
+                    other.created_at
+                    for other in ordered
+                    if other.id != log.id
+                    and other.level != EPISODE_LEVEL
+                    and other.created_at < log.created_at
+                    and watch.pos in other.covers
+                ),
+                default=None,
+            )
+            if since is None or watch.created_at > since:
+                fresh.append(watch)
+        second = [watch for watch in fresh if earliest[watch.pos] < watch.created_at]
+        window = second or ([] if log.is_rewatch else fresh)
+        days = [watch.day for watch in window if watch.day is not None]
+        if days and log.day < min(days):
+            for watch in window:
+                taken.setdefault(watch.id, log.id)
+    return taken
+
+
+def _place_watches(every, all_logs, sees, *, own):  # noqa: C901, PLR0912
+    """Work out where one title's viewings land for this viewer, and what logs add.
+
+    `every` is every viewing in save order and `all_logs` every log, seen or not. A
+    viewing of a log the viewer can't see adds nothing anywhere. One whose log is gone
+    has no day (AN-901), and only its owner still holds it.
+    """
+    placed = _Placed()
+    placed.logs = logs = {log.id: log for log in all_logs if sees(log.entry)}
+    log_ids = {log.id for log in all_logs}
+    at_position = defaultdict(list)
+    own_by_log = defaultdict(set)
+    seen = []
+    for watch in every:
+        at_position[watch.pos].append(watch)
+        if watch.entry_id is not None:
+            own_by_log[watch.entry_id].add(watch.pos)
+        if watch.entry_id is None or watch.entry_id in logs or (own and watch.entry_id not in log_ids):
+            seen.append(watch)
+    absorbed, homes = _marks_dated(seen, logs, own_by_log, at_position, all_logs)
+    taken = _ticks_taken(logs, seen)
+    for watch in seen:
+        log = logs.get(watch.entry_id)
+        if watch.kind == FILL:
+            if watch.id in absorbed:
+                continue
+            if watch.id in homes:
+                home = logs[homes[watch.id]]
+                placed.on_logs[home.id].append(watch)
+                placed.moved[watch.id] = home.day
+            elif log is not None:
+                placed.on_logs[log.id].append(watch)
+                if watch.marked and log.is_rewatch:
+                    # A single's first log took over the mark's fill. On, it's another
+                    # watch, so the mark stands too.
+                    placed.pile.append(watch)
+            else:
+                placed.pile.append(watch)
+        elif watch.id in taken:
+            home = logs[taken[watch.id]]
+            placed.on_logs[home.id].append(watch)
+            placed.moved[watch.id] = home.day
+            placed.taken_from.add(watch.day)
+        elif watch.kind == LOG_VIEWING and log is not None:
+            placed.on_logs[log.id].append(watch)
+            if watch.day != log.day:
+                placed.moved[watch.id] = log.day
+        elif watch.day is None:
+            placed.pile.append(watch)
+        else:
+            placed.days[watch.day].append(watch)
+    for log in logs.values():
+        if log.level == EPISODE_LEVEL or not log.is_rewatch or log.label_only:
+            continue
+        for pos in sorted(log.covers):
+            if pos in own_by_log[log.id] or _second_time_undescribed(log, pos, at_position, all_logs):
+                continue
+            if at_position.get(pos):
+                # Watched again: the episode once more, at its runtime, on its day.
+                placed.on_logs[log.id].append(at_position[pos][0])
+    return placed
+
+
+def _tell(row, watch, unit=EPISODE):
+    """Add one viewing, watch or listen to a row or a pile, told and in minutes."""
+    row.told += 1
+    if isinstance(row, Row):
+        row.told_unit = unit
+    if watch.minutes:
+        row.amount += watch.minutes
+        row.approximate = row.approximate or watch.stood_in
+    else:
+        row.unknown_told += 1
+        if isinstance(row, Row):
+            row.known = False
+
+
+def _watch_rows(result, key, placed, changes, zone, *, piles, logs_known=True):  # noqa: C901, PLR0912
+    """Turn placed viewings, logs, starts and status moves into one title's rows."""
+    actor_id, title_id, title_key, bucket = key
+    progress = {}
+
+    def day_row(day):
+        if day not in progress:
+            progress[day] = Row(PROGRESS, actor_id, day, title_key, title_id, title_id, bucket)
+        return progress[day]
+
+    for day, watches in placed.days.items():
+        row = day_row(day)
+        for watch in watches:
+            _tell(row, watch)
+            row.last_at = max(filter(None, (row.last_at, watch.created_at)))
+    log_rows = []
+    for log in placed.logs.values():
+        row = Row(LOG, actor_id, log.day, title_key, title_id, title_id, bucket)
+        row.last_at = log.created_at
+        row.log_id = log.id
+        row.known = logs_known
+        for watch in placed.on_logs.get(log.id, ()):
+            _tell(row, watch)
+        log_rows.append(row)
     for change in changes:
         saved = change.current_progress
-        if saved.get("kind") == ProgressChange.STATUS:
-            reading.touch(saved_day(change, zone), change, move=saved["move"])
+        day = saved_day(change, zone)
+        is_status = saved.get("kind") == ProgressChange.STATUS
+        if not is_status and day in placed.taken_from and day not in placed.days:
+            # Its ticks went to a backdated log, so the start alone shows nothing.
+            continue
+        row = day_row(day)
+        if is_status:
+            row.moves.append(saved["move"])
         else:
             # A start: choosing Watching, a tick that put it in Watching, or a rewatch.
-            reading.touch(saved_day(change, zone), change, started=True)
-    title.take(reading)
+            row.started = True
+        row.last_at = max(filter(None, (row.last_at, change.created_at)))
+        row.progress_id = min(filter(None, (row.progress_id, change.pk)))
+    for row in progress.values():
+        row.moves = net_moves(row.moves)
+        if row.told or row.started or row.moves:
+            result.rows.append(row)
+    result.rows.extend(log_rows)
+    for watch_id, day in placed.moved.items():
+        result.moved[bucket, watch_id] = day
+    if piles and placed.pile:
+        pile = Pile(actor_id, bucket, titles={title_id})
+        for watch in placed.pile:
+            _tell(pile, watch)
+        if not pile.unknown_told:
+            pile.known = {title_id}
+        result.piles.append(pile)
+
+
+def _positive(path):
+    """Return a length that is unknown when missing or zero."""
+    return NullIf(F(path), Value(0), output_field=IntegerField())
+
+
+def _start_and_status_rows(owners, media_type, only):
+    """Return each title's start and status rows, by (person, Item)."""
+    changes = defaultdict(list)
+    for pk, actor_id, item_id, created_at, saved_on, current in (
+        ProgressChange.objects.filter(actor__in=owners, item__media_type=media_type, **only)
+        # A start row names its kind in its unit too, as the old readers read it.
+        .filter(
+            Q(current_progress__kind__in=(ProgressChange.START, ProgressChange.STATUS))
+            | Q(current_progress__unit=ProgressChange.START),
+        )
+        .order_by("id")
+        .values_list("pk", "actor_id", "item_id", "created_at", "saved_on", "current_progress")
+    ):
+        changes[actor_id, item_id].append(_Save(pk, created_at, saved_on, {}, current))
+    return changes
+
+
+# TV: each row covers the whole show (plan 5.8), so its title is the show's Item.
+
+TV_LEVELS = {
+    MediaTypes.TV.value: SHOW_LEVEL,
+    MediaTypes.SEASON.value: SEASON_LEVEL,
+    MediaTypes.EPISODE.value: EPISODE_LEVEL,
+}
+TV_LOG_FIELDS = (
+    "id",
+    "user_id",
+    "item_id",
+    "item__media_type",
+    "item__season_number",
+    "item__episode_number",
+    "item__source",
+    "item__media_id",
+    "consumed_at",
+    "created_at",
+    "is_rewatch",
+    "visibility",
+    "progress_snapshot",
+)
+
+
+def _tv_covers(level, season, episode, snapshot):
+    """Return what a TV log covers: its episode, or the episodes its snapshot names."""
+    if level == EPISODE_LEVEL:
+        return frozenset({(season, episode)})
+    raw = ((snapshot or {}).get("tv") or {}).get("covers") or {}
+    covers = set()
+    for number, episodes in raw.items():
+        try:
+            covers.update((int(number), int(value)) for value in episodes)
+        except (TypeError, ValueError):
+            continue
+    return frozenset(covers)
+
+
+def _tv_rows(result, owners, viewer, titles, piles):
+    """Add TV's rows: its viewings, logs, starts and status moves, per show."""
+    viewing_only = {} if titles is None else {"related_season__related_tv__item__in": titles}
+    zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
+    every = defaultdict(list)
+    for (
+        pk,
+        kind,
+        entry_id,
+        watched_on,
+        end_date,
+        created_at,
+        season,
+        episode,
+        show_id,
+        actor_id,
+        own,
+        season_minutes,
+        show_minutes,
+    ) in (
+        Episode.objects.filter(related_season__user__in=owners, **viewing_only)
+        .annotate(
+            own_minutes=_positive("item__runtime_minutes"),
+            season_minutes=_positive("related_season__item__runtime_minutes"),
+            show_minutes=_positive("related_season__related_tv__item__runtime_minutes"),
+        )
+        .order_by("created_at", "id")
+        .values_list(
+            "id",
+            "kind",
+            "diary_entry_id",
+            "watched_on",
+            "end_date",
+            "created_at",
+            "item__season_number",
+            "item__episode_number",
+            "related_season__related_tv__item_id",
+            "related_season__user_id",
+            "own_minutes",
+            "season_minutes",
+            "show_minutes",
+        )
+    ):
+        minutes = own or season_minutes or show_minutes
+        day = watched_on
+        if day is None and kind != FILL and end_date is not None:
+            day = end_date.astimezone(zones[actor_id]).date()
+        every[actor_id, show_id].append(
+            _Watch(
+                pk,
+                kind,
+                entry_id,
+                kind == FILL and entry_id is None,
+                day,
+                created_at,
+                (season, episode),
+                Decimal(minutes) if minutes else None,
+                stood_in=bool(minutes) and not own,
+            ),
+        )
+    log_rows = DiaryEntry.objects.filter(user__in=owners, item__media_type__in=tuple(TV_LEVELS))
+    if titles is not None:
+        families = Item.objects.filter(id__in=titles, media_type=MediaTypes.TV.value).values_list("source", "media_id")
+        log_rows = log_rows.filter(
+            reduce(or_, (Q(item__source=source, item__media_id=media_id) for source, media_id in families), Q(pk__in=())),
+        )
+    entries = list(log_rows.order_by("id").values(*TV_LOG_FIELDS))
+    show_ids = {
+        (source, media_id): pk
+        for pk, source, media_id in Item.objects.filter(
+            media_type=MediaTypes.TV.value,
+            media_id__in={entry["item__media_id"] for entry in entries},
+        ).values_list("id", "source", "media_id")
+    }
+    logs = defaultdict(list)
+    for entry in entries:
+        level = TV_LEVELS[entry["item__media_type"]]
+        show_id = show_ids.get((entry["item__source"], entry["item__media_id"]), entry["item_id"])
+        zone = zones[entry["user_id"]]
+        snapshot = entry["progress_snapshot"] or {}
+        logs[entry["user_id"], show_id].append(
+            _WatchLog(
+                SimpleNamespace(user_id=entry["user_id"], visibility=entry["visibility"]),
+                entry["id"],
+                level,
+                _tv_covers(level, entry["item__season_number"], entry["item__episode_number"], snapshot),
+                log_day(entry["consumed_at"], zone),
+                entry["created_at"],
+                entry["is_rewatch"],
+                label_only=bool((snapshot.get("tv") or {}).get("label_only")),
+            ),
+        )
+    changes = _start_and_status_rows(owners, MediaTypes.TV.value, {} if titles is None else {"item__in": titles})
+    # A start with nothing watched yet is a row too: choosing Watching is activity.
+    keys = {*every, *logs, *changes}
+    keyed = Item.objects.in_bulk({show_id for _actor_id, show_id in keys})
+    sees = _who_sees(owners, viewer)
+    viewer_id = viewer.pk if viewer is not None and viewer.is_authenticated else None
+    for key in keys:
+        actor_id, show_id = key
+        show = keyed.get(show_id)
+        title_key = f"tv:{show.source}:{show.media_id}" if show else f"item:{show_id}"
+        placed = _place_watches(every[key], logs[key], sees, own=actor_id == viewer_id)
+        _watch_rows(
+            result,
+            (actor_id, show_id, title_key, MediaTypes.TV.value),
+            placed,
+            changes.get(key, ()),
+            zones[actor_id],
+            piles=piles,
+        )
+
+
+
+
+# Anime: docs/anime-tracking-contract.md, AN-704, with TV's rules (decision 62). Each
+# anime is one season with one log level.
+
+# What the calculation reads of a viewing.
+VIEWING_FIELDS = (
+    "id",
+    "anime_id",
+    "kind",
+    "episode_number",
+    "mark_id",
+    "watched_on",
+    "watched_at",
+    "diary_entry_id",
+    "created_at",
+)
+
+
+def _anime_covers(snapshot, pk, viewings):
+    """Return what an anime log covers: its stamped ranges, else its own fills."""
+    spans = ((snapshot or {}).get("anime") or {}).get("covers")
+    covers = set()
+    for span in spans or ():
+        try:
+            first, last = (int(span[0]), int(span[-1])) if isinstance(span, (list, tuple)) else (int(span), int(span))
+        except (TypeError, ValueError, IndexError):
+            continue
+        covers.update((1, number) for number in range(first, last + 1))
+    if spans is None:
+        covers.update((1, viewing.episode_number) for viewing in viewings if viewing.diary_entry_id == pk)
+    return frozenset(covers)
+
+
+def _anime_title(actor_id, item, tracking_rows, viewings, logs, changes, zone, sees, result, *, own, piles):
+    """Fold one person's anime title into rows (AN-704, decision 62)."""
+    length = Decimal(item.runtime_minutes) if item.runtime_minutes else None
+    every = [
+        _Watch(
+            viewing.id,
+            viewing.kind,
+            viewing.diary_entry_id,
+            viewing.mark_id is not None,
+            viewing.watched_on,
+            viewing.created_at,
+            (1, viewing.episode_number),
+            length,
+        )
+        for viewing in sorted(viewings, key=lambda value: (value.created_at, value.id))
+    ]
+    all_logs = [
+        _WatchLog(
+            entry,
+            entry.pk,
+            SEASON_LEVEL,
+            _anime_covers(entry.progress_snapshot, entry.pk, viewings),
+            log_day(entry.consumed_at, zone),
+            entry.created_at,
+            entry.is_rewatch,
+        )
+        for entry in logs
+    ]
+    placed = _place_watches(every, all_logs, sees, own=own)
     with_viewings = {viewing.anime_id for viewing in viewings}
     for row in tracking_rows:
         if row.progress and row.pk not in with_viewings:
             # A stored number with no viewings counts in All Time, as it always has.
-            title.add_told_to_pile(Decimal(row.progress))
-    if not title.in_pile and not with_viewings and any(row.status == Status.COMPLETED.value for row in tracking_rows):
+            stored = _Watch(0, FILL, None, marked=True, day=None, created_at=row.created_at, pos=(1, 0), minutes=length)
+            placed.pile.extend([stored] * row.progress)
+    key = (actor_id, item.pk, f"item:{item.pk}", MediaTypes.ANIME.value)
+    _watch_rows(result, key, placed, changes, zone, piles=piles, logs_known=bool(tracking_rows and length))
+    completed = any(row.status == Status.COMPLETED.value for row in tracking_rows)
+    if piles and completed and not placed.pile and not with_viewings:
         # Completed with nothing watched: a title in All Time with no length to know.
-        title.in_pile = True
-        title.pile_known = False
-    return title
+        result.piles.append(Pile(actor_id, MediaTypes.ANIME.value, titles={item.pk}))
 
 
 def _anime_rows(result, owners, viewer, titles, piles):
@@ -1104,18 +1633,7 @@ def _anime_rows(result, owners, viewer, titles, piles):
         # A viewing with no row is never read (AN-901).
         if viewing.anime_id in owner_of:
             viewings[owner_of[viewing.anime_id]].append(viewing)
-    changes = defaultdict(list)
-    for pk, actor_id, item_id, created_at, saved_on, current in (
-        ProgressChange.objects.filter(actor__in=owners, item__media_type=MediaTypes.ANIME.value, **only)
-        # A start row names its kind in its unit too, as the old readers read it.
-        .filter(
-            Q(current_progress__kind__in=(ProgressChange.START, ProgressChange.STATUS))
-            | Q(current_progress__unit=ProgressChange.START),
-        )
-        .order_by("id")
-        .values_list("pk", "actor_id", "item_id", "created_at", "saved_on", "current_progress")
-    ):
-        changes[actor_id, item_id].append(_Save(pk, created_at, saved_on, {}, current))
+    changes = _start_and_status_rows(owners, MediaTypes.ANIME.value, only)
     logs = _logs_by_title(owners, MediaTypes.ANIME.value, only)
     for (_, item_id), entries in logs.items():
         items[item_id] = entries[0].item
@@ -1124,18 +1642,65 @@ def _anime_rows(result, owners, viewer, titles, piles):
     viewer_id = viewer.pk if viewer is not None and viewer.is_authenticated else None
     for key in {*tracking, *logs}:
         actor_id, item_id = key
-        title = _anime_title(
+        _anime_title(
             actor_id,
             items[item_id],
             tracking[key],
             viewings[key],
             logs[key],
-            changes[key] if key in tracking else [],
+            changes.get(key, ()) if key in tracking else (),
             zones[actor_id],
             sees,
+            result,
             own=actor_id == viewer_id,
+            piles=piles,
         )
-        _collect(result, title, piles=piles)
+
+
+# Movies and music: docs/single-weight-tracking-contract.md. Each log is its own watch
+# or listen, its full length on its date. The marker is one more with no date, unless
+# the first log over it, by log day then id, has Rewatch off: that log dates the same
+# watch (decision 38). The marker has no date, so it counts before or after the log.
+# Every film and album log shows to every viewer (AC-5), so all read alike.
+
+WATCH = "watch"
+LISTEN = "listen"
+
+
+def _single_weight_rows(model, unit, result, owners, _viewer, titles, piles):
+    """Add one type's log rows and its marks with no date."""
+    media_type = model._meta.model_name
+    only = {} if titles is None else {"item__in": titles}
+    zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
+    logs = defaultdict(list)
+    lengths = {}
+    for pk, actor_id, item_id, consumed_at, created_at, is_rewatch, runtime in (
+        DiaryEntry.objects.filter(user__in=owners, item__media_type=media_type, **only)
+        .annotate(stats_runtime=_positive("item__runtime_minutes"))
+        .order_by("id")
+        .values_list("id", "user_id", "item_id", "consumed_at", "created_at", "is_rewatch", "stats_runtime")
+    ):
+        day = log_day(consumed_at, zones[actor_id])
+        logs[actor_id, item_id].append((day, pk, created_at, is_rewatch))
+        lengths[item_id] = runtime
+    marked = set(model.objects.filter(user__in=owners, direct_consumption=True, **only).values_list("user_id", "item_id"))
+    missing = {item_id for _actor_id, item_id in marked if item_id not in lengths}
+    if missing:
+        lengths.update(Item.objects.filter(id__in=missing).annotate(stats_runtime=_positive("runtime_minutes")).values_list("id", "stats_runtime"))
+    for key in {*logs, *marked}:
+        actor_id, item_id = key
+        runtime = lengths.get(item_id)
+        title_logs = sorted(logs.get(key, ()))
+        for day, pk, created_at, _is_rewatch in title_logs:
+            row = Row(LOG, actor_id, day, f"item:{item_id}", item_id, item_id, media_type, told_unit=unit)
+            _tell(row, SimpleNamespace(minutes=Decimal(runtime) if runtime else None, stood_in=False), unit)
+            row.last_at = created_at
+            row.log_id = pk
+            result.rows.append(row)
+        if piles and key in marked and (not title_logs or title_logs[0][3]):
+            pile = Pile(actor_id, media_type, titles={item_id}, known={item_id} if runtime else set())
+            _tell(pile, SimpleNamespace(minutes=Decimal(runtime) if runtime else None, stood_in=False))
+            result.piles.append(pile)
 
 
 ADAPTERS = {
@@ -1144,6 +1709,9 @@ ADAPTERS = {
     MediaTypes.ANIME.value: _anime_rows,
     MediaTypes.MANGA.value: partial(_series_rows, Manga, MangaAttempt, "chapter"),
     MediaTypes.COMIC.value: partial(_series_rows, Comic, ComicAttempt, "issue"),
+    MediaTypes.TV.value: _tv_rows,
+    MediaTypes.MOVIE.value: partial(_single_weight_rows, Movie, WATCH),
+    MediaTypes.MUSIC.value: partial(_single_weight_rows, Music, LISTEN),
 }
 
 
@@ -1185,7 +1753,26 @@ def piled(piles, media_type=None):
             total.titles |= pile.titles
             total.known |= pile.known
             total.no_amount |= pile.no_amount
+            total.unknown_told += pile.unknown_told
+            total.approximate = total.approximate or pile.approximate
     return total
+
+
+# The types whose note counts what's told, not titles (plan 5.5): TV's episodes, films'
+# watches, albums' listens. The rest count titles.
+TOLD_COUNTED = frozenset({MediaTypes.TV.value, MediaTypes.MOVIE.value, MediaTypes.MUSIC.value})
+
+
+def known_and_total(rows, pile, media_type):
+    """Return a type's (known, total) for its note: things with a length, out of all."""
+    if media_type in TOLD_COUNTED:
+        told = sum((row.told for row in rows), pile.told)
+        unknown = sum((row.unknown_told for row in rows), pile.unknown_told)
+        return int(told - unknown), int(told)
+    in_rows = {row.title_id for row in rows if row.counts_title}
+    titles = in_rows | (pile.titles - pile.no_amount)
+    unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known - pile.no_amount)
+    return len(titles - unknown), len(titles)
 
 
 def _newest_per_title(rows):

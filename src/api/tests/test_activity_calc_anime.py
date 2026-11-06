@@ -139,12 +139,24 @@ class LogTests(AnimeCalcBase):
         self.assertEqual((int(log.amount), log.told_unit, log.known), (12 * RUNTIME, "episode", True))
         self.assert_counter_agrees()
 
-    def test_a_backdated_log_leaves_ticks_on_their_days(self):
+    def test_a_backdated_log_takes_the_ticks_of_its_pass(self):
+        """Decision 43 for anime (decision 62): the old counter left them there."""
         item = self.title()
         self.on(date(2026, 3, 1))
         self.tick(item, 1, 2, 3)
-        self.log(item, day=date(2025, 12, 20))
-        self.assert_episodes(9, 3, 12)
+        entry = self.log(item, day=date(2025, 12, 20)).entry
+        self.assert_episodes(12, 0, 12)
+        anime_tracking.delete_log(self.user, entry)
+        self.assert_episodes(0, 3, 3)
+        self.assert_counter_agrees()
+
+    def test_a_log_dated_after_the_ticks_leaves_them(self):
+        item = self.title()
+        self.on(date(2026, 3, 1))
+        self.tick(item, 1, 2, 3)
+        self.on(date(2026, 3, 5))
+        self.log(item, day=date(2026, 3, 4))
+        self.assert_episodes(0, 12, 12)
         self.assert_counter_agrees()
 
     def test_a_log_that_fills_nothing_still_counts_its_day_and_title(self):
@@ -189,11 +201,44 @@ class MarkTests(AnimeCalcBase):
         self.assertEqual((pile.titles, pile.known, int(pile.told)), ({item.pk}, {item.pk}, 12))
         self.assert_counter_agrees()
 
-    def test_a_marked_title_then_logged_dates_the_singles_fill_only_once(self):
+    def test_a_marked_title_logged_as_the_screen_opens_is_a_second_watch(self):
+        """Decision 38 for anime: the log opens on after a mark, so 2 watches."""
         item = self.title()
+        self.on(date(2026, 1, 15))
         anime_tracking.mark_watched(self.user, item)
-        self.log(item, day=date(2026, 2, 1))
+        self.on(date(2026, 2, 1))
+        entry = self.log(item, day=date(2026, 2, 1)).entry
+        self.assertTrue(entry.is_rewatch)
+        self.assert_episodes(0, 12, 24)
+        anime_tracking.update_log(entry, {"is_rewatch": False})
+        self.assert_episodes(0, 12, 12)
+        anime_tracking.delete_log(self.user, entry)
+        self.assert_episodes(0, 0, 12)
         self.assert_counter_agrees()
+
+    def test_a_marked_title_logged_off_then_on_is_two_watches_not_three(self):
+        item = self.title()
+        self.on(date(2026, 1, 15))
+        anime_tracking.mark_watched(self.user, item)
+        self.on(date(2026, 2, 1))
+        self.log(item, is_rewatch=False)
+        self.assert_episodes(0, 12, 12)
+        self.on(date(2026, 2, 2))
+        self.log(item, is_rewatch=True)
+        self.assert_episodes(0, 24, 24)
+
+    def test_a_marked_single_logged_on_is_two_watches(self):
+        item = self.title(total=1)
+        self.on(date(2026, 1, 15))
+        anime_tracking.mark_watched(self.user, item)
+        self.on(date(2026, 2, 1))
+        entry = self.log(item, day=date(2026, 2, 1)).entry
+        self.assertTrue(entry.is_rewatch)
+        self.assert_episodes(0, 1, 2)
+        anime_tracking.update_log(entry, {"is_rewatch": False})
+        self.assert_episodes(0, 1, 1)
+        self.assert_counter_agrees()
+
 
     def test_a_stored_number_with_no_viewings_sits_in_the_pile(self):
         item = self.title()
@@ -207,6 +252,43 @@ class MarkTests(AnimeCalcBase):
         self.assert_episodes(0, 0, 5)
         self.assertEqual(self.lines(), [])
         self.assert_counter_agrees()
+
+
+class RewatchSwitchTests(AnimeCalcBase):
+    """Decision 62: anime's Rewatch switch works as a TV season log's (decision 48)."""
+
+    def test_logged_again_with_rewatch_on_adds_the_title_again(self):
+        item = self.title()
+        self.log(item, day=date(2026, 2, 1))
+        self.on(date(2026, 3, 1))
+        entry = self.log(item).entry
+        self.assertTrue(entry.is_rewatch, "A log exists, so the switch opens on")
+        self.assert_episodes(0, 24, 24)
+        anime_tracking.update_log(entry, {"is_rewatch": False})
+        self.assert_episodes(0, 12, 12)
+        anime_tracking.update_log(entry, {"is_rewatch": True})
+        anime_tracking.delete_log(self.user, entry)
+        self.assert_episodes(0, 12, 12)
+
+    def test_a_rewatch_by_ticks_then_its_finish_log_adds_nothing_more(self):
+        """Decision 42: the ticks already counted the rewatch."""
+        item = self.title()
+        self.on(date(2025, 6, 1))
+        self.log(item, day=date(2025, 6, 1))
+        self.on(date(2026, 2, 1))
+        anime_tracking.start_rewatch(self.user, item)
+        self.tick(item, *range(1, 13))
+        self.on(date(2026, 2, 2))
+        self.log(item, is_rewatch=True)
+        self.assert_episodes(12, 12, 24)
+
+    def test_a_private_rewatch_log_adds_nothing_for_a_stranger(self):
+        item = self.title()
+        self.log(item, day=date(2026, 2, 1))
+        self.on(date(2026, 3, 1))
+        self.log(item, is_rewatch=True, visibility="private")
+        self.assert_episodes(0, 24, 24)
+        self.assert_episodes(0, 12, 12, viewer=self.stranger)
 
 
 class MarkMatrixTests(AnimeCalcBase):

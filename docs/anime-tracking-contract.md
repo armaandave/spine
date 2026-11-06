@@ -92,6 +92,7 @@ Watching, Pause and Drop are refused with a reason, and a webhook's play does no
 - The eye and direct stars or a heart mark it watched, undated, and it moves to Completed.
 - It has no partway: once marked or logged, stars and the heart just save.
 - Watching it again is another log with Rewatch on (SW-010). There's no Rewatch action.
+- A log over the mark decides as a film's does (decision 38): its switch opens on, and on, the year gains the watch and All Time holds both; off, the log dates that same watch (AN-704).
 - It has no badge or bar, and it never appears in In progress.
 
 A single imported as In progress, Paused or Dropped stays on that shelf until the user marks or logs it.
@@ -235,7 +236,7 @@ Saving one from any page or build does all of these together:
 - leaves the title Completed, or Watching as caught up when more is coming. It never pretends unaired episodes were watched.
 
 The date defaults to today. Stars and the heart prefill from the title's own, and a rated log becomes their source (TV-501).
-The Rewatch default follows TV-404's rule for a season log. Outside a rewatch, the saved toggle controls only the badge.
+The Rewatch default follows TV-404's rule for a season log. The saved toggle never changes what the log fills; it decides what the log counts, as a TV season log's does (TV-404, STAT-104, decision 62).
 
 Editing a log's date moves no viewing (TV-405).
 Deleting a log removes only its fills, and asks first when it will unmark anything: "Delete this log? 7 episodes it marked watched will be unmarked." (TV-406)
@@ -312,12 +313,18 @@ An anime counts as a show does (STAT-201's TV row, STAT-104):
 
 - A tick counts on its day. Unticking takes it off.
 - A log's fills count on the log's date. Deleting the log takes them off.
-- A mark's fills count only in All Time, never in a year.
+- A mark's fills count only in All Time, never in a year, unless the first log over them has Rewatch off: that log dates them (decision 38).
 - A rewatch counts again, because its viewings are new.
 - A stored progress number with no viewings counts as it does today, in All Time only.
 
+From Phase 3 an anime takes TV's rules for the Rewatch switch, logging something marked and backdated logs, as one season with no show (decision 62, STAT-104):
+
+- A log with Rewatch on counts every episode it covers again, unless it holds its own fill there or ticks of a rewatch it describes sit there. So logging a finished title again with Rewatch on adds it again, and the finish log after a rewatch by ticks adds nothing more.
+- A log over a mark with Rewatch on leaves the mark in All Time and counts too: 2 watches. Off, it dates the mark. Mark, a log off, a log on is 2 watches, not 3. A single's first log takes the mark's fill as its own; on, the mark still stands.
+- A log dated before the first tick of its pass counts those ticks on its date. Deleting it puts them back on their days.
+
 Each viewing's length is the title's runtime.
-Stats read these viewings through the activity calculation (`api.services.activity_rows`, the activity contract's AC-2), so each number is the same, and `known` and `total` count titles (STAT-201).
+Stats read these viewings through the activity calculation (`api.services.activity_rows`, the activity contract's AC-2), worked out when read with nothing written, and `known` and `total` count titles (STAT-201).
 
 ### AN-705: An anime goes by its English title
 

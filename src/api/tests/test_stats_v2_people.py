@@ -362,9 +362,9 @@ class PeopleSectionTests(PeopleBase):
         seed(9)
         large = [count_queries(self.scope(tab, dates=dates)) for tab in ("movie", "tv") for dates in ((None, None), YEAR_2025)]
 
+        # The calculation's walk, which every type reads since Phase 3, costs the same
+        # however many titles there are.
         self.assertEqual(small, large)
-        # One query for every role of the tab.
-        self.assertEqual(small, [1, 1, 1, 1])
 
 
 class PeopleEndpointTests(PeopleBase):

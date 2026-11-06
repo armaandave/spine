@@ -195,6 +195,12 @@ The repeat value saved on a diary entry is a historical assertion. Editing or
 deleting another diary entry does not recalculate it. The default is calculated
 only when a new composer opens, and the user may later edit that entry's value.
 
+The first log's saved value, by log date then id, also decides whether the marker
+stands for an earlier consumption when Stats count time (STAT-201, decision 38). On, it
+does: All Time holds the marker and the log. Off, the log dates that same
+consumption, and the marker adds nothing while that log exists. When that log goes,
+the next first log decides, and with none left the marker counts once again (SW-009).
+
 ### SW-011: The eye and heart actions survive rating-picker dismissal
 
 Activating an empty media-page eye or heart may present an optional rating

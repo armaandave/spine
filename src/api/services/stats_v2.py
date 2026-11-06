@@ -82,7 +82,7 @@ def first_year(scope):
     """Return the year of the earliest log day or dated viewing the viewer can count."""
     everything = scope.global_scope().all_time()
     days = [everything.all_entries.aggregate(first=Min(everything.log_day()))["first"]]
-    if everything.counts_tv:
+    if everything.tv_reads_viewings:
         days.append(everything.dated_viewings.aggregate(first=Min(everything.viewing_day()))["first"])
     if everything.anime_reads_viewings:
         days.append(everything.dated_anime_viewings.aggregate(first=Min(everything.anime_viewing_day()))["first"])

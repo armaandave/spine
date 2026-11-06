@@ -146,15 +146,14 @@ class Command(BaseCommand):
         pile = activity_rows.piled(calculation.piles if scope.is_all_time else [], media_type)
         titles = listed(activity_rows.TITLES)
         title_ids = {row.title_id for row in titles} | pile.titles
-        counted = {row.title_id for row in titles} | (pile.titles - pile.no_amount)
-        unknown = {row.title_id for row in listed() if row.counts_title and not row.known} | (pile.titles - pile.known - pile.no_amount)
+        known, total = activity_rows.known_and_total(listed(), pile, media_type)
         days = sorted({row.day for row in listed(activity_rows.DAYS)})
         today_days = sorted({day for day, _title, _bucket in scope.events})
         week_start = scope.week_starts_on
         pairs = {
             "value": (today.value, int(sum((row.amount for row in listed()), pile.amount))),
-            "known": (today.known, len(counted - unknown)),
-            "total": (today.total, len(counted)),
+            "known": (today.known, known),
+            "total": (today.total, total),
             "titles": (scope.titles.count(), len(title_ids)),
             "active_days": (len(today_days), len(days)),
             "longest_streak": (

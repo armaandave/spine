@@ -834,7 +834,9 @@ class ActivityChartTests(ActivityBase):
         self.viewing(season, self.item(MediaTypes.EPISODE.value, "show", season=1, episode=1), kind="fill")
         self.tracking(Movie, self.item(MediaTypes.MOVIE.value, "marked"), direct_consumption=True)
         data = self.summary(ALL_TIME)
-        self.assertEqual(data["header"]["titles"], 1)
+        # A mark's fill makes its show an All Time title, as the film's mark does (plan
+        # 5.5), but neither is ever an event.
+        self.assertEqual(data["header"]["titles"], 2)
         self.assertEqual(data["header"]["active_days"], 0)
         self.assertIsNone(data["activity"]["busiest_day"])
         self.assertEqual(data["activity"]["months"], [])

@@ -52,6 +52,13 @@ hearts, follows, or adding to a list.
   as Stats did (AN-704): a tick on its day, a log's fills on the log's calendar date, a
   mark's fills and a stored number with no viewings in the undated pile. Each log is its
   own row, so a log that fills nothing still counts its day.
+- From Phase 3 the calculation reads TV, movies and music too. A TV row covers the whole
+  show: a tick on its day, a log's fills and an episode log's own viewing on the log's
+  date, a mark's fills in the pile. A film or album log is its own row, its full length
+  on its date, and a marked one is in the pile once. TV and anime follow STAT-104's
+  switch rules, worked out when read: a Rewatch-off first log over a mark dates it, a
+  Rewatch-on season or show log counts what it covers again, and a backdated log takes
+  the ticks it describes. A mark still never makes a row; the log that dates it does.
 
 ## AC-3: Newest date first
 
