@@ -374,6 +374,17 @@ class GameWritesTests(GameCalcBase):
         self.assertEqual([row.current_progress["value"] for row in linked], [h(7)])
         self.assertEqual(self.lines(item)[0], "2026-02-03 log +120")
 
+    def test_a_percent_after_a_log_that_raised_it_is_measured_from_the_log(self):
+        """40%, a log at 100%, then 95%: the last save adds nothing (decision 5)."""
+        item = self.game()
+        self.begin(item, d(2026, 2, 1))
+        self.percent(item, 40, d(2026, 2, 2))
+        self.finish(item, d(2026, 2, 3), percentage=100)
+        with self.on(d(2026, 2, 4)):
+            game_tracking.update_progress(self.owner, item, playthrough_id=self.session(item).pk, percentage=95)
+        told = [row for row in self.calc().rows if row.day == d(2026, 2, 4) and row.told]
+        self.assertEqual(told, [])
+
     def test_the_old_feed_leaves_out_a_logs_own_rise(self):
         from api.services import activity
 

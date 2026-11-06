@@ -748,17 +748,16 @@ def _walk_playthrough(title, session, saves, zone):  # noqa: C901
             reading.touch(day, change, move=saved["move"])
         elif kind == ProgressChange.TOUCH:
             reading.touch(day, change)
-        elif kind == "minutes" and entry and saved.get("log_id") == entry.pk:
-            before = len(reading.counted.amounts)
-            reading.counted.move_to(Decimal(str(saved["value"])), day_of_log, change.created_at)
-            for amount in reading.counted.amounts[before:]:
-                amount.log_id = entry.pk
-        elif kind == "minutes":
-            reading.touch(day, change)
-            reading.counted.move_to(Decimal(str(saved["value"])), day, change.created_at)
-        elif kind == "percentage" and not (entry and saved.get("log_id") == entry.pk):
-            reading.touch(day, change)
-            reading.percents.move_to(Decimal(str(saved["value"])), day, change.created_at)
+        elif kind in ("minutes", "percentage"):
+            position = reading.counted if kind == "minutes" else reading.percents
+            if entry and saved.get("log_id") == entry.pk:
+                before = len(position.amounts)
+                position.move_to(Decimal(str(saved["value"])), day_of_log, change.created_at)
+                for amount in position.amounts[before:]:
+                    amount.log_id = entry.pk
+            else:
+                reading.touch(day, change)
+                position.move_to(Decimal(str(saved["value"])), day, change.created_at)
     if not logged:
         reading.finish(entry.pk, day_of_log, entry.created_at, None)
     if session.total_minutes is not None and Decimal(session.total_minutes) != reading.counted.value:
