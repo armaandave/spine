@@ -179,8 +179,14 @@ class CheckpointBase(TestCase):
                 self.assertEqual(len({row.day for row in multi}), details["days_with_two_plus_titles"])
 
     def step(self, request, *args, **kwargs):
-        """Run one phone or Mac step today, through commit."""
-        with seed.on(TODAY), self.captureOnCommitCallbacks(execute=True):
+        """Run one phone or Mac step today, through commit, a minute after the last.
+
+        Each request is its own moment, as on the phone: a log saved after an eye
+        is after it (decision 38).
+        """
+        self.steps = getattr(self, "steps", 0) + 1
+        hour, minute = divmod(self.steps, 60)
+        with seed.on(TODAY, at=f"{12 + hour}:{minute:02d}"), self.captureOnCommitCallbacks(execute=True):
             return request(*args, **kwargs)
 
     def book_url(self, name, suffix=""):
@@ -353,7 +359,10 @@ class DirtySeedTests(CheckpointBase):
         Episode.objects.bulk_create([Episode(related_season=season, item=episode, watched_on=date(2026, 8, 1))])
         with self.captureOnCommitCallbacks(execute=True):
             seed.seed()
-        self.assertFalse(Episode.objects.filter(related_season__user=self.dev).exists())
+        self.assertFalse(Episode.objects.filter(related_season__user=self.dev, item=episode).exists())
+        # Only Phase 3's opening is left: T1's season, logged May 1 2025.
+        left = Episode.objects.filter(related_season__user=self.dev).values_list("item__media_id", flat=True)
+        self.assertEqual(set(left), {seed.media_id("T1")})
         self.assert_sheet(830, 360, 1540)
 
 

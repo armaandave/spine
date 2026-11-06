@@ -37,6 +37,7 @@ from app import (
     user_calendar,
 )
 from app.models import (
+    AnimeViewing,
     Book,
     DiaryEntry,
     Episode,
@@ -192,8 +193,10 @@ def _settle_users():
 
 def _clear_person(user):
     """Clear what a person has, so a sheet opens the same however it was left."""
-    DiaryEntry.objects.filter(user=user).delete()
+    # Viewings first: a log can't go while a viewing names it (TV-406, AN-901).
     Episode.objects.filter(related_season__user=user).delete()
+    AnimeViewing.objects.filter(anime__user=user).delete()
+    DiaryEntry.objects.filter(user=user).delete()
     for model in apps.get_models():
         if issubclass(model, Media):
             model.objects.filter(user=user).delete()

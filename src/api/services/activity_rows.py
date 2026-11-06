@@ -1165,9 +1165,8 @@ def _marks_dated(seen, logs, own_by_log, at_position, all_logs):
     homes = {}
     marks = [watch for watch in seen if watch.kind == FILL and watch.entry_id is None and watch.marked]
     for watch in sorted(marks, key=lambda value: (value.created_at, value.id), reverse=True):
-        # A mark made after the log stays in the pile; one saved in the same moment came
-        # first, since a log covers only what was there when it was saved.
-        candidates = [log for log in covering[watch.pos] if watch.created_at <= log.created_at]
+        # A mark made after the log stays in the pile.
+        candidates = [log for log in covering[watch.pos] if watch.created_at < log.created_at]
         if not candidates:
             continue
         first = min(candidates, key=lambda log: (log.day, log.id))
