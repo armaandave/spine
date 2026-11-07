@@ -153,54 +153,18 @@ struct ProgressPostDetailView: View {
                 }
             }
 
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .bold))
-                            .frame(width: 38, height: 38)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(.circle)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Back")
-
-                    Spacer()
-
-                    // Your own book, manga, comic or game row: the server says what the page offers (AC-9).
-                    if viewModel.controls.showsEdit {
-                        Button {
-                            isEditing = true
-                        } label: {
-                            Text("Edit")
-                                .font(.system(size: 14, weight: .heavy))
-                                .padding(.horizontal, 13)
-                                .frame(height: 38)
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(.capsule)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                        .disabled(viewModel.editor?.isDeleting == true)
-                    }
-
-                    if viewModel.controls.showsDelete {
-                        Button(role: .destructive) {
-                            isDeleteConfirmationPresented = true
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 16, weight: .bold))
-                                .frame(width: 38, height: 38)
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(.circle)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .accessibilityLabel("Delete")
-                        .disabled(viewModel.editor?.isDeleting == true)
-                    }
-                }
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(width: 38, height: 38)
             }
+            .buttonStyle(.plain)
+            .contentShape(.circle)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .accessibilityLabel("Back")
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
@@ -218,6 +182,23 @@ struct ProgressPostDetailView: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeAreaInset = $0 }
         .navigationBarBackButtonHidden()
+        .toolbar {
+            // Your own book, manga, comic or game row: the server says what the page offers (AC-9).
+            if viewModel.controls.showsEdit {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Edit") { isEditing = true }
+                        .disabled(viewModel.editor?.isDeleting == true)
+                }
+            }
+            if viewModel.controls.showsDelete {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        isDeleteConfirmationPresented = true
+                    }
+                    .disabled(viewModel.editor?.isDeleting == true)
+                }
+            }
+        }
         .toolbar(.hidden, for: .tabBar)
         .dismissExplorationOnReturnHome()
         .offset(x: edgeDragOffset)
