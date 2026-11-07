@@ -60,7 +60,11 @@ hearts, follows, or adding to a list.
   can't change where it began. A pick-up with nothing before it to carry on from, a
   deleted attempt or an imported place, still isn't a start.
 - The day is the phone's date when the progress was saved, stored as `saved_on`, and it
-  never moves with the time zone of whoever reads it. A row from before that column
+  never moves with the time zone of whoever reads it. A save sent with a date (the date
+  picker, on books, manga, comics and games) is on that day, under BK-306's rules: a day
+  before the start is refused, a day after today too, and the fold reads saves in the
+  order they were made, so a save dated earlier than an earlier-made one adds its rise
+  on its own day. A row from before that column
   reads its moment on the server's zone.
 - Anime keeps its own rules (docs/anime-tracking-contract.md, AN-703): only ticks move
   its progress steps, and choosing Watching, a tick that puts it in Watching or starting
