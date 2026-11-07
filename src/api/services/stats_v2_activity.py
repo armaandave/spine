@@ -119,11 +119,11 @@ def build_header(scope):
     )
     details.extend(_type_details(scope))
     # A streak names its days for every viewer, as the Activity list opens on them: the
-    # drill is the owner's only, and this isn't (5.6).
+    # drill is the owner's only, and this isn't (5.6). Other rows have no range.
     for detail in details:
-        if detail["key"] in STREAK_KEYS:
+        if detail["key"] in STREAK_KEYS and detail["drill"]:
             drill = detail["drill"]
-            detail["range"] = {"start": drill["watched_from"], "end": drill["watched_to"]} if drill else None
+            detail["range"] = {"start": drill["watched_from"], "end": drill["watched_to"]}
     if not scope.is_owner:
         for detail in details:
             detail["drill"] = None
@@ -141,7 +141,15 @@ def build_header(scope):
 
 
 def _detail(key, label, value, unit=None, *, approximate=False, drill=None):
-    return {"key": key, "label": label, "value": value, "unit": unit, "approximate": approximate, "drill": drill}
+    return {
+        "key": key,
+        "label": label,
+        "value": value,
+        "unit": unit,
+        "approximate": approximate,
+        "drill": drill,
+        "range": None,
+    }
 
 
 def _days_drill(streak):

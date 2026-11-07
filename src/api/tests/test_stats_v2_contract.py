@@ -88,6 +88,7 @@ TYPE_DETAILS = {
     "game": ["completions", "abandoned"],
 }
 # The extra diary filters each detail's drill sends (STAT-200); other details have none.
+STREAK_KEYS = ("current_daily_streak", "longest_weekly_streak", "current_weekly_streak")
 DRILL_KEYS = {
     "current_daily_streak": {"watched_from", "watched_to"},
     "longest_weekly_streak": {"watched_from", "watched_to"},
@@ -538,7 +539,8 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         # Both ranges tested here are All Time (includes today) and 2025 (doesn't).
         self.assertEqual(keys, expected, "details present")
         for detail in header["details"]:
-            self.check_keys(detail, {"key", "label", "value", "unit", "approximate", "drill"}, "details[]")
+            self.check_keys(detail, {"key", "label", "value", "unit", "approximate", "drill", "range"}, "details[]")
+            self.assertEqual(detail["range"] is not None, detail["key"] in STREAK_KEYS and detail["value"] > 0, detail["key"])
             self.assertIsInstance(detail["label"], str)
             self.assertTrue(_is_int(detail["value"]), detail["key"])
             self.assertIn(detail["unit"], ("day", "week", None))

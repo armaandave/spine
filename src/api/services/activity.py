@@ -77,9 +77,6 @@ SHOW_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value)
 # The statuses with progress worth telling: finishing a title says it all.
 UNFINISHED = (Status.IN_PROGRESS.value, Status.PAUSED.value, Status.DROPPED.value)
 
-# Within one date and write time, logs sort before progress.
-PROGRESS, LOG = 0, 1
-
 
 def profile_sources(viewer, target_user):
     """Return the logs and progress a viewer may see on a profile, or None."""
@@ -234,11 +231,6 @@ def _row_moved_at(row):
     if isinstance(row, (TV, Season)):
         return getattr(row, "last_activity_at", None) or row.created_at
     return row.progressed_at or row.created_at
-
-
-def media_type_family(media_type):
-    """Return a media type's item types: a show with its seasons and episodes."""
-    return list(TV_TYPES) if media_type == MediaTypes.TV.value else [media_type]
 
 
 def followed_users(user):

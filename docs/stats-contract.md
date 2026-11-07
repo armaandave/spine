@@ -259,6 +259,8 @@ The app opens the diary with the scope's usual parameters (STAT-401) and applies
 When two streaks are equally long, the longest daily and weekly streaks are the later ones, as the busiest day is (STAT-203).
 Drill-downs are the owner's only (STAT-401): every other viewer gets `drill` null on every row, with the same values.
 
+Each detail row also has `range`, `{"start", "end"}` or null. The three streak rows (`current_daily_streak`, `longest_weekly_streak`, `current_weekly_streak`) send the days of their streak, clipped as their `drill` is, to every viewer, because the Activity list opens on them (`counts=days` or `weeks`) and a friend's rows have no drill. It is null on every other row and when a streak is 0.
+
 `longest_daily_streak_range` holds the days of the longest daily streak, `{"start", "end"}`, or null when it is 0; the app's "Longest streak" number opens the diary on those days.
 It is a fact like the streak itself, so every viewer gets it.
 
