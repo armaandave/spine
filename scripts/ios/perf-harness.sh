@@ -79,6 +79,7 @@ case "$cmd" in
     fi
     export TEST_RUNNER_SPINE_API_BASE_URL="http://127.0.0.1:$API_PORT"
     export TEST_RUNNER_PERF_PROBE_FILE="$dir/probe.txt"
+    export TEST_RUNNER_PERF_SHOT_DIR="$dir"
     [ -z "${PERF_ITERATIONS:-}" ] || export TEST_RUNNER_PERF_ITERATIONS="$PERF_ITERATIONS"
     [ "${PERF_COLD_IMAGES:-}" != 1 ] || export TEST_RUNNER_PERF_COLD_IMAGES=1
     : > "$dir/probe.txt"

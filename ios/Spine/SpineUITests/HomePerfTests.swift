@@ -4,14 +4,19 @@
 //
 //  Performance harness for the Home tab and feed. Run through scripts/ios/perf-harness.sh,
 //  which serves the repeatable data set (scripts/ios/perf/seed_perf.py) from a private local
-//  backend. The tests read nothing from the app but accessibility labels, so they run
-//  unchanged before and after the Home redesign. What they rely on:
+//  backend. The tests read nothing from the app but accessibility labels, so the same file runs on the frozen
+//  baseline (the app before the Home redesign) and on the redesigned Home. What they rely on:
 //    - a feed card is a button whose label names a seeded title ("Perf ...") and its comment count
-//      (today: "Perf Show 5, Watched 1 episode, 0 likes, 0 comments"); the author button beside it is not the card;
-//    - the In progress "Update" control has the accessibility identifier "in-progress.update";
+//      (before: "Perf Show 5, Watched 1 episode, 0 likes, 0 comments"; now: "perf-dee, Perf Long Anime, +24 episodes,
+//      1 like, 0 comments"); the author button beside it is not the card;
+//    - the In progress "Update" control has the accessibility identifier "in-progress.update". Before the redesign
+//      it sat on Home; now it sits in the open In progress tile (button "home.tile.in-progress", closed by the glass
+//      button "home.tile.close", posters in the carousel "home.tile.carousel"). The scenarios open the tile only
+//      when the app has one, so the frozen baseline runs the same code;
 //    - an open post page has the like button "post.like" and a "Back" button;
 //    - the progress sheet has a "Close" button.
-//  If the redesign renames any of those, change the constants below, not the scenarios.
+//  If the app renames any of those, change the constants below, not the scenarios. Scenarios f, f2, g and g2 exist
+//  only for the redesign (the baseline has no tiles), so perf-ab.sh runs them with PERF_AB_ONLY=B.
 //
 
 import XCTest
@@ -21,6 +26,9 @@ final class HomePerfTests: XCTestCase {
 
     private let cardLabel = NSPredicate(format: "label CONTAINS 'Perf ' AND label CONTAINS 'comment'")
     private let updateIdentifier = "in-progress.update"
+    private let tileIdentifier = "home.tile.in-progress"
+    private let tileCloseIdentifier = "home.tile.close"
+    private let carouselIdentifier = "home.tile.carousel"
     private let likeIdentifier = "post.like"
     private let backLabel = "Back"
     private let sheetCloseLabel = "Close"
@@ -93,6 +101,73 @@ final class HomePerfTests: XCTestCase {
 
     private func settle(_ seconds: TimeInterval = 0.7) {
         Thread.sleep(forTimeInterval: seconds)
+    }
+
+    // MARK: - The In progress tile (the redesigned Home only)
+
+    /// The closed In progress tile: one button, present from the first loaded frame of the rail.
+    private func tileButton(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(identifier: tileIdentifier).firstMatch
+    }
+
+    /// The glass button that exists only while a tile is open.
+    private func tileClose(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(identifier: tileCloseIdentifier).firstMatch
+    }
+
+    private func openTile(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let tile = tileButton(app)
+        XCTAssertTrue(tile.waitForExistence(timeout: 20), "No In progress tile (\(tileIdentifier)).", file: file, line: line)
+        tile.tap()
+        XCTAssertTrue(tileClose(app).waitForExistence(timeout: 10), "The tile never opened (\(tileCloseIdentifier)).", file: file, line: line)
+    }
+
+    /// Taps the glass Close button, first scrolling the page up if a scroll left the tile off screen.
+    private func collapseTile(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let close = tileClose(app)
+        var tries = 0
+        while !close.isHittable, tries < 6 {
+            app.swipeDown(velocity: .fast)
+            tries += 1
+        }
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 10), "The tile never closed.", file: file, line: line)
+    }
+
+    /// Three horizontal drags across the open tile's posters, in the direction that has room. The carousel element is
+    /// as wide as its scroll content (wider than the screen), so the drags run between points on the screen, at the
+    /// height of the carousel. Its accessibility value reads "Poster 2 of 8, Title".
+    private func swipeCarousel(_ app: XCUIApplication, times: Int = 3) {
+        let carousel = app.buttons.matching(identifier: carouselIdentifier).firstMatch
+        let position = Self.posterPosition(carousel.value as? String)
+        let forward = position.map { $0.index + times <= $0.count } ?? true
+        let screen = app.frame
+        let y = min(max(carousel.frame.midY, screen.height * 0.15), screen.height * 0.8) / screen.height
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: forward ? 0.8 : 0.2, dy: y))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: forward ? 0.2 : 0.8, dy: y))
+        for _ in 0..<times {
+            start.press(forDuration: 0.02, thenDragTo: end, withVelocity: .default, thenHoldForDuration: 0.1)
+        }
+    }
+
+    /// (place, count) from "Poster 2 of 8, Title".
+    private static func posterPosition(_ value: String?) -> (index: Int, count: Int)? {
+        guard let value, value.hasPrefix("Poster ") else { return nil }
+        let words = value.dropFirst("Poster ".count).split(whereSeparator: { $0 == " " || $0 == "," })
+        guard words.count >= 3, let index = Int(words[0]), let count = Int(words[2]) else { return nil }
+        return (index, count)
+    }
+
+    /// The expand-then-fast-scroll sequence of scenario f2 (also the warm-up of g): tap the tile and at once fling the
+    /// page up twice and back down twice, then close the tile.
+    private func expandFlingCollapse(_ app: XCUIApplication) {
+        let tile = tileButton(app)
+        tile.tap()
+        app.swipeUp(velocity: .fast)
+        app.swipeUp(velocity: .fast)
+        app.swipeDown(velocity: .fast)
+        app.swipeDown(velocity: .fast)
+        collapseTile(app)
     }
 
     private func options(manual: Bool = true) -> XCTMeasureOptions {
@@ -208,16 +283,26 @@ final class HomePerfTests: XCTestCase {
         }
     }
 
-    // MARK: - d) Open the In progress update sheet from Home
+    // MARK: - d) Open the In progress update sheet
 
+    /// From the Update tap to the sheet's Close button. The redesigned Home keeps Update inside the open In progress
+    /// tile, so each iteration opens the tile first (not measured) and collapses it at the end; the frozen baseline has
+    /// Update on Home and no tile.
     @MainActor
     func testD_OpenUpdateSheet() throws {
         let app = launchToHome()
-        let update = app.buttons.matching(identifier: updateIdentifier).firstMatch
-        XCTAssertTrue(update.waitForExistence(timeout: 20), "No In progress update control (\(updateIdentifier)).")
-        measure(metrics: animationMetrics(app), options: options()) {
+        let hasTile = tileButton(app).waitForExistence(timeout: 5)
+        if !hasTile {
             let update = app.buttons.matching(identifier: updateIdentifier).firstMatch
-            XCTAssertTrue(update.waitForExistence(timeout: 10))
+            XCTAssertTrue(update.waitForExistence(timeout: 20), "No In progress update control (\(updateIdentifier)).")
+        }
+        measure(metrics: animationMetrics(app), options: options()) {
+            if hasTile {
+                openTile(app)
+                settle(1.0)
+            }
+            let update = app.buttons.matching(identifier: updateIdentifier).firstMatch
+            XCTAssertTrue(update.waitForExistence(timeout: 10), "No In progress update control (\(updateIdentifier)).")
             begin()
             update.tap()
             XCTAssertTrue(app.buttons[sheetCloseLabel].firstMatch.waitForExistence(timeout: 20), "The update sheet never opened.")
@@ -226,6 +311,10 @@ final class HomePerfTests: XCTestCase {
             app.buttons[sheetCloseLabel].firstMatch.tap()
             XCTAssertTrue(app.buttons[sheetCloseLabel].firstMatch.waitForNonExistence(timeout: 10))
             settle()
+            if hasTile {
+                collapseTile(app)
+                settle()
+            }
         }
     }
 
@@ -250,16 +339,115 @@ final class HomePerfTests: XCTestCase {
         }
     }
 
+    // MARK: - f) Tile: expand, swipe the carousel, collapse (redesign only)
+
+    @MainActor
+    func testF_TileExpandSwipeCollapse() throws {
+        let app = launchToHome()
+        XCTAssertTrue(tileButton(app).waitForExistence(timeout: 20), "No In progress tile (\(tileIdentifier)).")
+        var run = 0
+        measure(metrics: [XCTClockMetric()], options: options()) {
+            run += 1
+            scrollToTop(app)
+            begin()
+            tileButton(app).tap()
+            XCTAssertTrue(tileClose(app).waitForExistence(timeout: 10), "The tile never opened (\(tileCloseIdentifier)).")
+            // The warm-up run (its window is dropped by report.py) proves the drags really move the carousel.
+            let carousel = app.buttons.matching(identifier: carouselIdentifier).firstMatch
+            let before = run == 1 ? carousel.value as? String : nil
+            swipeCarousel(app)
+            if run == 1 {
+                XCTAssertNotEqual(carousel.value as? String, before, "Three drags did not move the carousel off \(before ?? "nil").")
+            }
+            tileClose(app).tap()
+            XCTAssertTrue(tileClose(app).waitForNonExistence(timeout: 10), "The tile never closed.")
+            end()
+            settle()
+        }
+    }
+
+    // MARK: - f2) Tile: expand, then immediately fast-scroll the page (redesign only)
+
+    @MainActor
+    func testF2_ExpandThenFastScroll() throws {
+        let app = launchToHome()
+        XCTAssertTrue(tileButton(app).waitForExistence(timeout: 20), "No In progress tile (\(tileIdentifier)).")
+        measure(metrics: [XCTClockMetric()], options: options()) {
+            scrollToTop(app)
+            begin()
+            expandFlingCollapse(app)
+            end()
+            settle()
+        }
+    }
+
+    // MARK: - g) Idle for 10 s after tiles and fast scrolls (redesign only)
+
+    @MainActor
+    func testG_IdleAfterTiles() throws {
+        let app = launchToHome()
+        XCTAssertTrue(tileButton(app).waitForExistence(timeout: 20), "No In progress tile (\(tileIdentifier)).")
+        measure(metrics: [XCTClockMetric()], options: options()) {
+            scrollToTop(app)
+            expandFlingCollapse(app)
+            app.swipeUp(velocity: .fast)
+            app.swipeDown(velocity: .fast)
+            settle(1.5)
+            begin()
+            settle(10)
+            end()
+        }
+    }
+
+    // MARK: - g2) Idle for 10 s with a tile left open (redesign only)
+
+    @MainActor
+    func testG2_IdleWithOpenTile() throws {
+        let app = launchToHome()
+        XCTAssertTrue(tileButton(app).waitForExistence(timeout: 20), "No In progress tile (\(tileIdentifier)).")
+        measure(metrics: [XCTClockMetric()], options: options()) {
+            scrollToTop(app)
+            openTile(app)
+            app.swipeUp(velocity: .fast)
+            app.swipeDown(velocity: .fast)
+            scrollToTop(app)
+            settle(1.0)
+            begin()
+            settle(10)
+            end()
+            collapseTile(app)
+            settle()
+        }
+    }
+
     // MARK: - Not a scenario: dump the accessibility tree where the scenarios look
 
     /// Run it by name when a redesign breaks a scenario's lookups: it prints the tree of Home and of an opened post, so
-    /// the constants at the top can be pointed at the new labels.
+    /// the constants at the top can be pointed at the new labels. With a tile it also prints the open tile's tree, and
+    /// it saves screenshots of the settled Home, the open tile and the post into PERF_SHOT_DIR (the result directory).
     @MainActor
     func testZ_DumpAccessibilityTrees() throws {
         let app = launchToHome()
+        settle(2.0)
+        saveScreenshot(app, "home")
         print("DUMP-HOME\n" + app.debugDescription)
+        if tileButton(app).exists {
+            openTile(app)
+            settle(1.5)
+            saveScreenshot(app, "tile-open")
+            print("DUMP-TILE\n" + app.debugDescription)
+            collapseTile(app)
+            settle(1.0)
+        }
         firstCard(in: app).tap()
         Thread.sleep(forTimeInterval: 3)
+        saveScreenshot(app, "post")
         print("DUMP-POST\n" + app.debugDescription)
+    }
+
+    private func saveScreenshot(_ app: XCUIApplication, _ name: String) {
+        guard let directory = ProcessInfo.processInfo.environment["PERF_SHOT_DIR"] else { return }
+        let url = URL(fileURLWithPath: directory).appendingPathComponent("\(name).png")
+        try? app.screenshot().pngRepresentation.write(to: url)
     }
 }

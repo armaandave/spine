@@ -23,6 +23,10 @@ the B median, delta = B - A, the tolerance and a verdict:
   info   a metric with no tolerance (counters, hitch count): listed only
   n/a    no A or no B leg has the scenario (a scenario the baseline does not have)
 Lower is better for every metric, so only an increase fails.
+
+CAPS are absolute sanity limits from the plan's perf guardrails: B's median must not exceed them, whatever A did. A
+metric with a cap and no A leg (a scenario the baseline does not have) is judged by the cap alone. WORST_FRAME caps the
+single longest frame of any B iteration. COUNTER_RULES are the deterministic counter assertions, listed after the table.
 """
 import json
 import math
@@ -68,6 +72,23 @@ TOLERANCES = {
     "end": {"default": 20},  # MB
 }
 DURATION_PERCENT = {"default": 10, "a": 15}  # of A's median
+
+# Absolute caps on B's median (metric ids as in METRICS), from the plan's perf guardrails.
+CAPS = {
+    "a": {"duration": 5500, "end": 88},  # ms; MB of footprint at the first card
+    "b": {"hitch_time": 26, "hitches": 18, "longest": 80, "cpu": 18, "peak": 112},
+    "b2": {"longest": 120},
+    "c1": {"duration": 2000, "hitch_time": 110, "longest": 80},
+    "c2": {"duration": 3800, "hitch_time": 75, "longest": 160},
+    "d": {"duration": 2900, "hitch_time": 215, "longest": 215},
+    "e": {"hitch_time": 26, "peak": 115, "end": 110},
+    "f": {"hitch_time": 100, "longest": 100, "cpu": 35},
+    "f2": {"longest": 150},
+    "g": {"cpu": 3},
+    "g2": {"cpu": 3},
+}
+# No single frame of any B iteration may be longer than this (ms).
+WORST_FRAME = {"b2": 150, "f": 150}
 
 # id, label, unit, digits
 METRICS = [
@@ -266,6 +287,52 @@ def verdict_for(tolerance, a_median, a_spread, b_median):
     return "PASS"
 
 
+def combine_verdict(ab_verdict, cap, b_median):
+    """The A/B verdict plus the absolute cap: over the cap fails, and a cap alone judges a scenario with no A leg."""
+    over = cap is not None and isnum(b_median) and b_median > cap
+    if over:
+        return "FAIL"
+    if cap is not None and isnum(b_median) and ab_verdict in ("n/a", "info"):
+        return "PASS"
+    return ab_verdict
+
+
+def windows_of(result, name):
+    """One counter's delta per measured window of one leg's scenario (0 for a window where it never changed)."""
+    return result["counters"].get(name, [0] * len(result["metrics"]["hitch_time"]))
+
+
+def counter_checks(key, b_results):
+    """The plan's counter assertions for scenario `key` over every B window: [(assertion, observed, "PASS"|"FAIL"|"n/a")]."""
+    if not b_results or not any(r["metrics"]["hitch_time"] for r in b_results):
+        return []
+
+    def values(name):
+        return [v for r in b_results for v in windows_of(r, name)]
+
+    def zero(name):
+        vals = values(name)
+        return (f"{name} delta is 0", f"max {max(vals)} over {len(vals)} windows", "PASS" if max(vals) == 0 else "FAIL")
+
+    checks = []
+    if key in ("b", "b2"):
+        checks += [zero("homeBody"), zero("tilesBody")]
+        body, appear = values("feedCardBody"), values("feedCardAppear")
+        ratios = [f"{b}/{a}" for a, b in zip(appear, body)]
+        ok = all(b <= 1.5 * a for a, b in zip(appear, body))
+        checks.append(("feedCardBody <= 1.5 x feedCardAppear", "per window: " + " ".join(ratios), "PASS" if ok else "FAIL"))
+    elif key == "f":
+        checks += [zero("homeBody"), zero("feedCardBody")]
+    elif key == "f2":
+        checks += [zero("homeBody")]
+    elif key in ("g", "g2"):
+        for name in ("homeBody", "feedCardBody", "feedCardAppear", "tilesBody", "glowBody"):
+            vals = values(name)
+            checks.append((f"{name} changes by at most 2", f"max {max(vals)} over {len(vals)} windows",
+                           "PASS" if max(vals) <= 2 else "FAIL"))
+    return checks
+
+
 def compare(session):
     """The A/B comparison as plain data (the table and --json both print it)."""
     legs = find_legs(session)
@@ -296,17 +363,31 @@ def compare(session):
             b_median = median(b_legs) if b_legs else float("nan")
             a_spread = (max(a_legs) - min(a_legs)) if a_legs else float("nan")
             tol = None if is_counter else tolerance_for(metric, key, a_median)
-            verdict = "info" if is_counter and a_legs and b_legs else verdict_for(
+            cap = None if is_counter else CAPS.get(key, {}).get(metric)
+            ab_verdict = "info" if is_counter and a_legs and b_legs else verdict_for(
                 tol, a_median, a_spread if isnum(a_spread) else 0.0, b_median)
+            verdict = combine_verdict(ab_verdict, cap, b_median)
             entries.append({
                 "metric": metric, "label": label, "unit": unit, "digits": digits,
                 "a_legs": a_legs, "b_legs": b_legs, "a_median": a_median, "a_spread": a_spread,
                 "b_median": b_median,
                 "delta": b_median - a_median if isnum(a_median) and isnum(b_median) else float("nan"),
-                "tolerance": tol, "verdict": verdict,
+                "tolerance": tol, "cap": cap, "ab_verdict": ab_verdict, "verdict": verdict,
             })
-        scenarios.append({"test": test, "key": key, "title": title, "metrics": entries})
-    verdicts = [e["verdict"] for s in scenarios for e in s["metrics"]]
+        b_results = [r for _, r in sides["B"]]
+        worst_cap = WORST_FRAME.get(key)
+        if worst_cap is not None and b_results:
+            worst = max((x for r in b_results for x in r["metrics"]["longest"]), default=float("nan"))
+            if isnum(worst):
+                entries.append({
+                    "metric": "longest_worst", "label": "longest frame, worst iteration", "unit": "ms", "digits": 0,
+                    "a_legs": [], "b_legs": [], "a_median": float("nan"), "a_spread": float("nan"), "b_median": worst,
+                    "delta": float("nan"), "tolerance": None, "cap": worst_cap, "ab_verdict": "n/a",
+                    "verdict": "PASS" if worst <= worst_cap else "FAIL",
+                })
+        checks = [{"assertion": a, "observed": o, "verdict": v} for a, o, v in counter_checks(key, b_results)]
+        scenarios.append({"test": test, "key": key, "title": title, "metrics": entries, "counter_checks": checks})
+    verdicts = [e["verdict"] for s in scenarios for e in s["metrics"]] + [c["verdict"] for s in scenarios for c in s["counter_checks"]]
     overall = "FAIL" if "FAIL" in verdicts else "NOISY" if "NOISY" in verdicts else "PASS" if "PASS" in verdicts else "n/a"
     return {
         "session": str(session),
@@ -341,21 +422,34 @@ def ab(session, as_json):
     out.append("A = frozen baseline app, B = this branch's app, measured in alternating legs in one session.")
     out.append("A legs: " + (", ".join(result["legs"]["A"]) or "none"))
     out.append("B legs: " + (", ".join(result["legs"]["B"]) or "none"))
-    out.append("Lower is better. FAIL: delta (B - A) > max(tolerance, A spread). NOISY: A's spread alone exceeds the tolerance.")
+    out.append("Lower is better. FAIL: delta (B - A) > max(tolerance, A spread), or B's median over the cap. NOISY: A's spread")
+    out.append("alone exceeds the tolerance. A scenario with no A legs is judged by its cap alone. * = A's median is over the cap too.")
     out.append("")
-    out.append("| Scenario / metric | A legs | A median | A spread | B legs | B median | delta | tolerance | verdict |")
-    out.append("|---|---|---|---|---|---|---|---|---|")
+    out.append("| Scenario / metric | A legs | A median | A spread | B legs | B median | delta | tolerance | cap | verdict |")
+    out.append("|---|---|---|---|---|---|---|---|---|---|")
     for s in result["scenarios"]:
-        out.append(f"| **{s['title']}** | | | | | | | | |")
+        out.append(f"| **{s['title']}** | | | | | | | | | |")
         for e in s["metrics"]:
             d = e["digits"]
             a_legs = " / ".join(cell(x, d) for x in e["a_legs"]) or "n/a"
             b_legs = " / ".join(cell(x, d) for x in e["b_legs"]) or "n/a"
             tol = "-" if e["tolerance"] is None else cell(e["tolerance"], max(d, 0))
+            cap = "-" if e["cap"] is None else cell(e["cap"], max(d, 0))
+            if e["cap"] is not None and isnum(e["a_median"]) and e["a_median"] > e["cap"]:
+                cap += " *"
             out.append(
                 f"| {e['label']} ({e['unit']}) | {a_legs} | {cell(e['a_median'], d)} | {cell(e['a_spread'], d)} | "
-                f"{b_legs} | {cell(e['b_median'], d)} | {cell(e['delta'], d)} | {tol} | {e['verdict']} |"
+                f"{b_legs} | {cell(e['b_median'], d)} | {cell(e['delta'], d)} | {tol} | {cap} | {e['verdict']} |"
             )
+    if any(s["counter_checks"] for s in result["scenarios"]):
+        out.append("")
+        out.append("Counter assertions (B windows, deterministic):")
+        out.append("")
+        out.append("| Scenario | Assertion | Observed | Verdict |")
+        out.append("|---|---|---|---|")
+        for s in result["scenarios"]:
+            for chk in s["counter_checks"]:
+                out.append(f"| {s['title']} | {chk['assertion']} | {chk['observed']} | {chk['verdict']} |")
     c = result["counts"]
     out.append("")
     out.append(f"Overall: **{result['overall']}** ({c['PASS']} pass, {c['FAIL']} fail, {c['NOISY']} noisy, "
