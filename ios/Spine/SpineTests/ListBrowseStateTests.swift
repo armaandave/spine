@@ -59,6 +59,16 @@ final class ListBrowseStateTests: XCTestCase {
         XCTAssertEqual(state.activeCount(includesVisibility: true), 1)
     }
 
+    func testPickingPeopleClearsTheMediaTypeSoItDoesNotComeBack() {
+        var state = ListBrowseState()
+        state.mediaType = "movie"
+        state.listType = .people
+        state.listType = nil
+
+        XCTAssertNil(state.mediaType)
+        XCTAssertEqual(state.activeCount(includesVisibility: true), 0)
+    }
+
     func testATypeTurnedOffIsDropped() {
         var state = ListBrowseState()
         state.mediaType = "music"

@@ -56,7 +56,10 @@ struct ListBrowseState: Codable, Equatable {
     /// Nil for the sort's own direction.
     var direction: MediaFilterDirection?
     /// Nil for media and people lists alike.
-    var listType: CustomListType?
+    var listType: CustomListType? {
+        // People lists hold no media, so a media type picked before can't come back later unseen.
+        didSet { if listType == .people { mediaType = nil } }
+    }
     /// Lists holding only this media type. Nil for any.
     var mediaType: String?
     /// Only on your own lists: theirs are all public to you anyway.

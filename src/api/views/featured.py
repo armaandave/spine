@@ -35,7 +35,7 @@ from app import exposure
 from app.models import MediaTypes
 from app.providers import tmdb
 from lists.featured import health, order, registry
-from lists.models import CustomList, CustomListItem, PersonListItem, list_media_type
+from lists.models import CustomList, CustomListItem, PersonListItem, held_media_types
 from social.models import ContentLike
 
 CARD_PREVIEW_LIMIT = 5
@@ -243,7 +243,7 @@ def list_payloads(lists, request):
     previews = preview_items(media_ids, LIST_PREVIEW_ITEM_LIMIT)
     people = _preview_people(people_ids, LIST_PREVIEW_ITEM_LIMIT)
     first_images = _first_images(media_ids)
-    held_types = _held_media_types(media_ids)
+    held_types = held_media_types(media_ids)
     prime_collection_items(
         [row.item for rows in previews.values() for row in rows],
         request.user,
@@ -285,24 +285,6 @@ def list_payloads(lists, request):
             "preview_people": _person_list_payloads(list_people, request) if is_people else [],
         })
     return payloads
-
-
-def _held_media_types(list_ids):
-    """Return ``CustomList.media_types()`` for each list, in one query."""
-    rows = (
-        CustomListItem.objects.filter(custom_list_id__in=list_ids)
-        .order_by()
-        .values_list("custom_list_id", "item__media_type")
-        .distinct()
-    )
-    held = {}
-    for list_id, media_type in rows:
-        held.setdefault(list_id, set()).add(list_media_type(media_type))
-    order = exposure.primary_media_types()
-    return {
-        list_id: [value for value in order if value in values]
-        for list_id, values in held.items()
-    }
 
 
 def _manual_media_types(lists):

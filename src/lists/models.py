@@ -188,19 +188,12 @@ class CustomList(models.Model):
 
     def media_types(self):
         """Return the media types the list holds, in display order."""
+        primed = getattr(self, "_media_types", None)
+        if primed is not None:
+            return primed
         if self.list_type != self.ListType.MEDIA:
             return []
-        held = {
-            list_media_type(media_type)
-            for media_type in self.items.order_by()
-            .values_list("media_type", flat=True)
-            .distinct()
-        }
-        return [
-            media_type
-            for media_type in exposure.primary_media_types()
-            if media_type in held
-        ]
+        return held_media_types([self.id]).get(self.id, [])
 
     def user_can_view(self, user):
         """Check if the user can view the list."""
@@ -268,6 +261,37 @@ class CustomListItem(models.Model):
     def __str__(self):
         """Return the name of the list item."""
         return self.item.title
+
+
+def held_media_types(list_ids):
+    """Return the media types each list holds, in display order, in one query."""
+    rows = (
+        CustomListItem.objects.filter(custom_list_id__in=list_ids)
+        .order_by()
+        .values_list("custom_list_id", "item__media_type")
+        .distinct()
+    )
+    held = {}
+    for list_id, media_type in rows:
+        held.setdefault(list_id, set()).add(list_media_type(media_type))
+    order = exposure.primary_media_types()
+    return {
+        list_id: [value for value in order if value in values]
+        for list_id, values in held.items()
+    }
+
+
+def prime_media_types(lists):
+    """Return ``lists`` as a list, each storing its media types so they need no query."""
+    lists = list(lists)
+    held = held_media_types([custom_list.id for custom_list in lists])
+    for custom_list in lists:
+        custom_list._media_types = (  # noqa: SLF001
+            held.get(custom_list.id, [])
+            if custom_list.list_type == CustomList.ListType.MEDIA
+            else []
+        )
+    return lists
 
 
 class PersonListItem(models.Model):

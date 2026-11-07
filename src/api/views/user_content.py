@@ -24,6 +24,7 @@ from api.views.tracking import TrackingListView
 from app import exposure
 from app.curation import prime_curated_artwork
 from app.models import DiaryEntry, MediaLike, MediaTypes
+from lists.models import prime_media_types
 
 # What a manga's or comic's tracking row says about its logs.
 SERIES_LOG_FACTS = (
@@ -113,7 +114,7 @@ class UserListsView(APIView):
                 "previous": None,
                 "results": [
                     list_payload(custom_list, request=request, include_preview_items=True)
-                    for custom_list in lists[:100]
+                    for custom_list in prime_media_types(lists[:100])
                 ],
             },
         )

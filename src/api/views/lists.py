@@ -46,7 +46,13 @@ from app.curation import prime_curated_artwork
 from app.db_threads import DatabaseThreadPoolExecutor
 from app.models import MediaTypes
 from app.providers import services as provider_services
-from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
+from lists.models import (
+    CustomList,
+    CustomListItem,
+    FeaturedListSync,
+    PersonListItem,
+    prime_media_types,
+)
 from social.models import Activity, ContentLike, SocialAuditLog
 from streaming import filters as streaming_filters
 
@@ -518,7 +524,7 @@ class ListsView(APIView):
                             else {}
                         ),
                     }
-                    for custom_list in lists[:100]
+                    for custom_list in prime_media_types(lists[:100])
                 ],
             },
         )

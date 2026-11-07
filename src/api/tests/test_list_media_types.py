@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from app.models import Item, MediaTypes, Sources
-from lists.models import CustomList, CustomListItem
+from lists.models import CustomList, CustomListItem, prime_media_types
 
 
 class ListMediaTypesAPITests(TestCase):
@@ -82,3 +82,20 @@ class ListMediaTypesAPITests(TestCase):
         response = self.client.get(f"/api/v1/lists/{self.media_list.id}/")
 
         self.assertEqual(response.data["media_types"], ["movie"])
+
+    def test_primed_lists_need_no_query_for_their_media_types(self):
+        self.add(MediaTypes.TV.value, "1399")
+        self.add(MediaTypes.MOVIE.value, "550")
+        people = CustomList.objects.create(
+            owner=self.owner,
+            name="People",
+            list_type=CustomList.ListType.PEOPLE,
+        )
+        empty = CustomList.objects.create(owner=self.owner, name="Empty")
+
+        with self.assertNumQueries(1):
+            lists = prime_media_types([self.media_list, people, empty])
+        with self.assertNumQueries(0):
+            held = [custom_list.media_types() for custom_list in lists]
+
+        self.assertEqual(held, [["movie", "tv"], [], []])
