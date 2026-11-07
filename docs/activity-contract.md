@@ -59,6 +59,9 @@ hearts, follows, or adding to a list.
   row, and so does a reread, which opens over a finished read: deleting that log later
   can't change where it began. A pick-up with nothing before it to carry on from, a
   deleted attempt or an imported place, still isn't a start.
+- A title added to Planning is recorded the same way (AC-1), as a step of kind `planning`
+  with value 0 in previous and current, written by `ProgressChange.record_planning` from
+  the request that adds it. It is never a title's latest progress and no number reads it.
 - The day is the phone's date when the progress was saved, stored as `saved_on`, and it
   never moves with the time zone of whoever reads it. A save sent with a date (the date
   picker, on books, manga, comics and games) is on that day, under BK-306's rules: a day
