@@ -898,8 +898,9 @@ def delete_completion(user, entry):
             session.percentage_linked = False
             session.save()
         else:
-            _delete_progress_history(user, entry.item, session.pk)
+            playthrough_id = session.pk
             session.delete()
+            _delete_progress_history(user, entry.item, playthrough_id)
     result = _sync_state(game) if game else None
     single_weight._queue_statistics(user.pk, old_date)
     return result
@@ -915,8 +916,11 @@ def delete_playthrough(user, item, playthrough_id):
         return game
     if session.completion_diary_entry_id:
         raise HistoryExists("Delete this completion log first.")
-    _delete_progress_history(user, item, session.pk)
+    # The playthrough goes first: a day's row reads its stored total, so a post it holds
+    # is only empty once the playthrough is gone (AC-7).
+    playthrough_id = session.pk
     session.delete()
+    _delete_progress_history(user, item, playthrough_id)
     return _sync_state(game)
 
 

@@ -47,14 +47,6 @@ def _title_key(item):
     return title_key(item)
 
 
-def _progress_days(changes):
-    from api.services.activity import (
-        _progress_days as progress_days,
-    )
-
-    return progress_days(changes)
-
-
 def _delete_posts(posts):
     """Delete these posts with their likes and comments, and say so in the audit log."""
     posts = list(posts)
@@ -78,6 +70,40 @@ def _delete_posts(posts):
     )
 
 
+def standing_days(actor_id, title_key):
+    """Return the days a title has a progress row on, whoever looks (plan 5.8).
+
+    Read from the calculation's viewer-independent view, never as the owner sees it: a
+    private backdated log moves a row for those who can see the log, and a post that
+    row holds mustn't look dead for that.
+    """
+    from api.services import activity_rows
+
+    item = _title_item(title_key)
+    if item is None:
+        return set()
+    bucket = MediaTypes.TV.value if item.media_type in SHOW_TYPES else item.media_type
+    if bucket not in activity_rows.ADAPTERS:
+        return set()
+    rows = activity_rows.standing_rows([actor_id], titles=[item.pk], types=[bucket])
+    return {row.day for row in rows if row.title_key == title_key}
+
+
+def _title_item(title_key):
+    """Return the Item a post's title key names, or None."""
+    kind, _, rest = title_key.partition(":")
+    if kind == "item":
+        return Item.objects.filter(pk=int(rest)).first()
+    source, _, media_id = rest.partition(":")
+    return Item.objects.filter(
+        media_type=MediaTypes.TV.value,
+        source=source,
+        media_id=media_id,
+        season_number=None,
+        episode_number=None,
+    ).first()
+
+
 def drop_empty_posts(actor_id, title_key, days):
     """Delete this title's posts on these days, when no row is left on the day."""
     if not days:
@@ -85,8 +111,7 @@ def drop_empty_posts(actor_id, title_key, days):
     posts = ProgressPost.objects.filter(actor_id=actor_id, title_key=title_key, day__in=days)
     if not posts.exists():
         return
-    rows = _progress_days(ProgressChange.objects.filter(actor_id=actor_id)).filter(title_key=title_key, day__in=days)
-    _delete_posts(posts.exclude(day__in={row["day"] for row in rows}))
+    _delete_posts(posts.exclude(day__in=standing_days(actor_id, title_key)))
 
 
 def delete_changes(actor_id, changes):
