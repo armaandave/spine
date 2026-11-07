@@ -18,7 +18,6 @@ from django.db import connection
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 
-from api.services import activity as activity_service
 from api.services import activity_rows, stats_time
 from api.services.stats_scope import StatsScope
 from api.tests.test_activity_calc_books import BookCalcBase, d
@@ -332,15 +331,17 @@ class BadRowTests(BookCalcBase):
         self.save(item, 70, d(2026, 3, 20))
         self.blank(self.change(item, 70), "previous_progress")
         days = _qualifying_days({self.owner.pk})[self.owner.pk, f"item:{item.pk}"]
-        self.assertEqual(sorted(days), [d(2026, 3, 1), d(2026, 3, 5)])
+        # The calculation reads each save's own number, so a blank previous side still
+        # leaves 70 a rise on the 40 before it.
+        self.assertEqual(sorted(days), [d(2026, 3, 1), d(2026, 3, 5), d(2026, 3, 20)])
         self.post(item, d(2026, 3, 5))
         self.post(item, d(2026, 3, 20))
+        self.post(item, d(2026, 3, 10))
         lines = self.compare()
-        self.assertIn("posts=1", self.line(lines, "count 2 class a:"))
+        self.assertIn("posts=2", self.line(lines, "count 2 class a:"))
         self.assertIn("posts=1", self.line(lines, "count 2 class d:"))
 
-    def test_its_days_are_the_feeds(self):
-        """SQLite casts a null previous value to 0, so that side is a missing key."""
+    def test_its_days_are_the_owners_rows(self):
         item = self.book("feed")
         self.begin(item, d(2026, 3, 1))
         self.save(item, 40, d(2026, 3, 5))
@@ -348,10 +349,10 @@ class BadRowTests(BookCalcBase):
         self.blank(self.change(item, 60), "current_progress")
         self.save(item, 70, d(2026, 3, 7))
         self.blank(self.change(item, 70), "previous_progress", "missing")
-        changes = ProgressChange.objects.filter(actor=self.owner)
-        feed = {(row["title_key"], row["day"]) for row in activity_service._progress_days(changes)}
+        rows = activity_rows.rows_for([self.owner], self.owner).rows
+        listed = {(row.title_key, row.day) for row in rows if row.kind == activity_rows.PROGRESS}
         days = _qualifying_days({self.owner.pk})
-        self.assertEqual({(key[1], day) for key, by_day in days.items() for day in by_day}, feed)
+        self.assertEqual({(key[1], day) for key, by_day in days.items() for day in by_day}, listed)
 
     def test_a_value_that_is_no_number_moves_nothing(self):
         item = self.book("words")
@@ -399,10 +400,15 @@ class BadRowTests(BookCalcBase):
 
     def test_a_database_error_leaves_later_queries_working(self):
         """Postgres refuses every later query until a savepoint is rolled back to."""
+        real = activity_rows.rows_for
 
-        def rows_for(owners, *args, **kwargs):
+        def rows_for(owners, viewer, *args, **kwargs):
+            # Count 2 reads the standing view, which this step's failure leaves be.
+            if viewer is activity_rows.STANDING:
+                return real(owners, viewer, *args, **kwargs)
             with connection.cursor() as cursor:
                 cursor.execute("SELECT no_such_column FROM no_such_table")
+            return None
 
         self.book("after")
         with patch("api.services.activity_rows.rows_for", side_effect=rows_for):

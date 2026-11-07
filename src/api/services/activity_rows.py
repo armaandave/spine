@@ -23,6 +23,7 @@ from functools import partial, reduce
 from operator import or_
 from types import SimpleNamespace
 
+from django.contrib.auth import get_user_model
 from django.db.models import F, IntegerField, Q, Value
 from django.db.models.functions import NullIf
 
@@ -710,8 +711,24 @@ def _collect(result, title, *, piles):
         )
 
 
+class _Standing:
+    """A stand-in viewer who sees no log, so no log moves what they read."""
+
+    pk = None
+    is_authenticated = False
+
+
+STANDING = _Standing()
+
+
+def _sees_no_log(_entry):
+    return False
+
+
 def _who_sees(owners, viewer):
     """Return a test of which logs this viewer sees (AC-5), where visibility counts."""
+    if viewer is STANDING:
+        return _sees_no_log
     viewer_id = viewer.pk if viewer is not None and viewer.is_authenticated else None
     followed = (
         set(
@@ -1247,11 +1264,13 @@ def _place_watches(every, all_logs, sees, *, own):  # noqa: C901, PLR0912
     at_position = defaultdict(list)
     own_by_log = defaultdict(set)
     seen = []
+    # The standing view moves nothing a log would, so every viewing stays where it was.
+    standing = sees is _sees_no_log
     for watch in every:
         at_position[watch.pos].append(watch)
         if watch.entry_id is not None:
             own_by_log[watch.entry_id].add(watch.pos)
-        if watch.entry_id is None or watch.entry_id in logs or (own and watch.entry_id not in log_ids):
+        if standing or watch.entry_id is None or watch.entry_id in logs or (own and watch.entry_id not in log_ids):
             seen.append(watch)
     absorbed, homes = _marks_dated(seen, logs, own_by_log, at_position, all_logs)
     taken = _ticks_taken(logs, seen)
@@ -1719,6 +1738,20 @@ ADAPTERS = {
     MediaTypes.MOVIE.value: partial(_single_weight_rows, Movie, WATCH),
     MediaTypes.MUSIC.value: partial(_single_weight_rows, Music, LISTEN),
 }
+
+
+def standing_rows(owner_ids, titles=None, types=None):
+    """Return the progress rows these people's saves stand on, whoever is looking.
+
+    The viewer-independent view (plan 5.8): no log is visible, so none moves a row (not
+    decision 10 for a manga or comic, nor decisions 38 and 43 for TV and anime). A post
+    a private backdated log hid for one viewer still has a row here, so it isn't dead.
+    Books and games show every log to every viewer (AC-5), so they move here as they do
+    for anyone. Only the progress rows come back: a log is never what keeps a post.
+    """
+    owners = list(get_user_model().objects.filter(pk__in=owner_ids))
+    result = rows_for(owners, STANDING, titles=titles, types=types, piles=False)
+    return [row for row in result.rows if row.kind == PROGRESS]
 
 
 def rows_for(owners, viewer, titles=None, types=None, *, piles=True):

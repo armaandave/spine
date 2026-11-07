@@ -14,7 +14,7 @@ that line says it failed, the rest still report, and the command exits non-zero 
 
 import time
 import traceback
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -261,37 +261,19 @@ def _per_type(rows):
     return dict(sorted(counts))
 
 
-def _moved(change):
-    """Return how far a change moved. With no number on either side it's 0, as the feed sums it."""
-    current = activity_rows.saved_number(change.current_progress.get("value"))
-    previous = activity_rows.saved_number(change.previous_progress.get("value"))
-    return 0 if current is None or previous is None else current - previous
-
-
 def _qualifying_days(actor_ids):
-    """Return, per person and title, each day with a row, and when its rows were saved.
+    """Return, per person and title, each day with a progress row, and when it was written.
 
-    A day qualifies as the feed's does: some counted unit moved forward on net. A title
-    with change rows and no qualifying day holds an empty dict.
+    A day qualifies as the post page does: the standing view (plan 5.8) has a row there,
+    whichever viewer looks and whatever a private backdated log moved. A title with saves
+    and no row holds an empty dict.
     """
-    actors = {user.pk: user for user in get_user_model().objects.filter(pk__in=actor_ids)}
-    nets = defaultdict(lambda: defaultdict(Counter))
-    moments = defaultdict(lambda: defaultdict(list))
-    changes = ProgressChange.objects.filter(actor__in=actor_ids).select_related("item")
-    for change in changes.order_by("id"):
-        key = (change.actor_id, activity_service._title_key(change.item))
-        day = activity_rows.saved_day(change, user_calendar.calendar_tz(actors[change.actor_id]))
-        unit = change.current_progress.get("unit")
-        nets[key][day][unit] += _moved(change)
-        moments[key][day].append(change.created_at)
-    return {
-        key: {
-            day: moments[key][day]
-            for day, units in by_day.items()
-            if any(units[unit] > 0 for unit in activity_service.UNITS)
-        }
-        for key, by_day in nets.items()
-    }
+    days = {}
+    for change in ProgressChange.objects.filter(actor__in=actor_ids).select_related("item").order_by("id"):
+        days.setdefault((change.actor_id, activity_service._title_key(change.item)), {})
+    for row in activity_rows.standing_rows(actor_ids):
+        days.setdefault((row.actor_id, row.title_key), {}).setdefault(row.day, []).append(row.last_at)
+    return days
 
 
 def _post_class(post, days):
