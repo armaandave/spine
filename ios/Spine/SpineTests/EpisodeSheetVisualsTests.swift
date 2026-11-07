@@ -211,12 +211,40 @@ final class EpisodeSheetVisualsTests: XCTestCase {
         XCTAssertTrue(tracking.actions.isEmpty)
     }
 
+    func testTicksMadeInAFinishedSeasonStayInTodayWhenTheSheetMovesOn() async throws {
+        let (_, sheet) = try await loadedSheet(watched: 9, todayCount: 1)
+        media.details[TVTrackingSurfacesTests.seasonRef(3).id] = TVTrackingSurfacesTests.crownSeason(3, watched: 0)
+        tracking.actionResponses = [TVTrackingSurfacesTests.tickResponse(upNext: (3, 1), watched: 10, ticked: (2, 10), viewingId: 510)]
+        sheet.headerPrimary()
+        let settled = await sheet.season.settled()
+        XCTAssertTrue(settled)
+        XCTAssertEqual(try XCTUnwrap(sheet.tickModel).todayCount, 2)
+
+        sheet.composerClosed()
+        XCTAssertEqual(sheet.seasonNumber, 3)
+        await sheet.season.load()
+        sheet.captureBaseline()
+        XCTAssertEqual(try XCTUnwrap(sheet.tickModel).todayCount, 2, "The one from the screen and the one made here")
+    }
+
     // MARK: Detent
 
     func testTheCompactDetentHugsTheMeasuredHeader() {
         XCTAssertEqual(EpisodeSheetDetent.compact(header: 300), .height(300 + EpisodeSheetDetent.chrome))
         XCTAssertEqual(EpisodeSheetDetent.compact(header: 0), .height(EpisodeSheetDetent.estimatedHeader + EpisodeSheetDetent.chrome),
                        "Before the header is measured, the height of a strip of ticks")
+    }
+
+    func testAWindowTitleOpensAtATallerEstimateThanAStrip() {
+        let strip = EpisodeSheetDetent.estimate(episodeCount: EpisodeTickModel.stripLimit)
+        let window = EpisodeSheetDetent.estimate(episodeCount: EpisodeTickModel.stripLimit + 1)
+        XCTAssertGreaterThan(window, strip)
+        XCTAssertEqual(window, EpisodeSheetDetent.estimatedWindowHeader)
+        XCTAssertEqual(EpisodeSheetDetent.estimate(episodeCount: nil), strip, "An unknown count opens as a strip")
+        XCTAssertEqual(EpisodeSheetDetent.compact(header: 0, episodeCount: 1150),
+                       .height(EpisodeSheetDetent.estimatedWindowHeader + EpisodeSheetDetent.chrome))
+        XCTAssertEqual(EpisodeSheetDetent.compact(header: 300, episodeCount: 1150), .height(300 + EpisodeSheetDetent.chrome),
+                       "A measured header always wins over the estimate")
     }
 
     // MARK: Anime

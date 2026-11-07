@@ -126,6 +126,27 @@ final class QuickTickTests: XCTestCase {
         XCTAssertEqual(ticks.closedEpisodes?.season.tvFollowUp.question?.question, "Also mark everything before it watched?")
     }
 
+    func testAnotherCardWaitsWhileAQuestionIsPending() async throws {
+        let ticks = ticks()
+        let question = TVEarlierUnwatched(
+            from: TVEpisodeCoordinate(seasonNumber: 1, episodeNumber: 1),
+            to: TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 4),
+            count: 14,
+            question: "Also mark everything before it watched?"
+        )
+        tracking.actionResponses = [tickResponse(earlier: question), tickResponse()]
+        ticks.quickTick(for: TVTrackingSurfacesTests.crown())
+        await ticks.quickTickSettling?.value
+        let first = try XCTUnwrap(ticks.closedEpisodes)
+        XCTAssertTrue(first.season.tvFollowUp.isActive)
+
+        ticks.quickTick(for: TVTrackingSurfacesTests.crown(watched: 5, upNext: (2, 6)))
+        await ticks.quickTickSettling?.value
+        XCTAssertEqual(tracking.actions.count, 1, "The second card did not write")
+        XCTAssertTrue(ticks.closedEpisodes === first, "The first card's question is still there")
+        XCTAssertEqual(first.season.tvFollowUp.question?.question, "Also mark everything before it watched?")
+    }
+
     func testAFailedTickLeavesTheCardAndShowsTheExistingAlert() async throws {
         let ticks = ticks()
         var patched = 0

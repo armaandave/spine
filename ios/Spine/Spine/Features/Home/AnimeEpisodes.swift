@@ -58,6 +58,9 @@ final class AnimeEpisodes: Identifiable {
 
     var id: String { cardID ?? ref.id }
     var title: String { page.detail?.displayTitle ?? "" }
+
+    /// How many episodes the title has, when the card knows, for the sheet's height before its header is measured.
+    var estimatedEpisodeCount: Int? { rows?.count ?? page.viewer?.anime?.airedCount }
     var offersOpenPage: Bool { cardID != nil }
 
     /// The title's rows once they have loaded.
@@ -190,7 +193,8 @@ final class AnimeEpisodes: Identifiable {
         upNext = nil
         startEpisode = nil
         hasWritten = false
-        todayBase = nil
+        // Ticks made on the title being left stay in today's count.
+        todayBase = tickModel?.todayCount ?? todayBase
         watchedBaseline = nil
         failureTitle = ContinueWatchingEpisodes.tickFailureTitle
         page = makePage(next.ref)
@@ -453,8 +457,8 @@ private struct AnimeEpisodeList: View {
 }
 
 /// The episode sheet (AN-701): the tick header over its rows, opening at the header's height and pulling up to the
-/// list, titled with the title, ✕ to close, and a ··· menu with Log… and Open Anime. It behaves as TV's sheet does (TV-701), and a row's body does nothing, because episodes have no pages
-/// (AN-101).
+/// list, titled with the title, ✕ to close, and a ··· menu with Log… and Open Anime. It behaves as TV's sheet does
+/// (TV-701), and a row's body does nothing, because episodes have no pages (AN-101).
 struct AnimeEpisodesSheet: View {
     let episodes: AnimeEpisodes
     let trackingRepository: TrackingRepository
@@ -483,43 +487,44 @@ struct AnimeEpisodesSheet: View {
                         onPrimary: { episodes.headerPrimary() },
                         onType: { episodes.headerType($0) }
                     )
-                    // The header is never squeezed by the list below it.
+                    // The header is never squeezed by the list below it, and the list starts a little under it.
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 12)
                 }
                 AnimeEpisodeList(episodes: episodes, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
                     // The next title is a new list: its rows don't animate from the last title's ticks.
                     .id(episodes.ref.id)
                     .episodeSheetListReveal(hasHeader: hasHeader, height: $listHeight)
             }
-                .navigationTitle(episodes.title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(role: .close) {
-                            dismiss()
-                        } label: {
-                            Label("Close", systemImage: "xmark")
-                        }
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            Button("Log…", systemImage: "square.and.pencil") {
-                                openLog()
-                            }
-                            .disabled(!episodes.canLog)
-                            if episodes.offersOpenPage {
-                                Button("Open Anime", systemImage: "play.rectangle") {
-                                    episodes.openPage()
-                                }
-                            }
-                        } label: {
-                            Label("More", systemImage: "ellipsis")
-                        }
-                        .accessibilityIdentifier("anime.episodes.more")
+            .navigationTitle(episodes.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Log…", systemImage: "square.and.pencil") {
+                            openLog()
+                        }
+                        .disabled(!episodes.canLog)
+                        if episodes.offersOpenPage {
+                            Button("Open Anime", systemImage: "play.rectangle") {
+                                episodes.openPage()
+                            }
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis")
+                    }
+                    .accessibilityIdentifier("anime.episodes.more")
+                }
+            }
         }
-        .presentationDetents([EpisodeSheetDetent.compact(header: headerHeight), .large])
+        .episodeSheetDetents(headerHeight: headerHeight, episodeCount: episodes.estimatedEpisodeCount)
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
         .task(id: episodes.ref.id) {

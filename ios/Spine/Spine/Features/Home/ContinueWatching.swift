@@ -169,7 +169,10 @@ final class ContinueWatchingTicks {
     /// screen from `closedEpisodes` or `closedAnimeEpisodes`. A second call before the first write has settled is
     /// ignored.
     func quickTick(for item: LibraryItem) {
-        guard !isQuickTicking else { return }
+        // A tick whose write asked a question or opened Log Season on a card waits for that to be answered.
+        guard !isQuickTicking,
+              closedEpisodes?.season.tvFollowUp.isActive != true,
+              closedAnimeEpisodes?.page.tvFollowUp.isActive != true else { return }
         let settled: () async -> Bool
         if item.media.ref.isAnime {
             guard let upNext = item.tracking.anime?.upNext?.tvPointer else { return }
@@ -277,7 +280,7 @@ final class ContinueWatchingEpisodes: Identifiable {
 
     @ObservationIgnored private let makeSeason: (MediaRef) -> MediaDetailViewModel
     /// Episodes watched today before the sheet opened, when the screen knows; nil counts only this sheet's ticks.
-    @ObservationIgnored private let todayBase: Int?
+    @ObservationIgnored private var todayBase: Int?
     /// How many of the season's episodes were watched when it loaded: the header lights the ticks made since.
     @ObservationIgnored private var watchedBaseline: Int?
 
@@ -298,6 +301,9 @@ final class ContinueWatchingEpisodes: Identifiable {
 
     var id: String { item.id }
     var seasonNumber: Int { upNext.seasonNumber }
+
+    /// How many episodes the season has, when the card knows, for the sheet's height before its header is measured.
+    var estimatedEpisodeCount: Int? { show?.season?.episodeCount ?? show?.season?.airedCount }
     var seasonRef: MediaRef { Self.seasonRef(show: item.media.ref, seasonNumber: seasonNumber) }
 
     /// "The Crown · Season 2", or the season's own name once its page names it (`season_title`, which the season
@@ -473,6 +479,8 @@ final class ContinueWatchingEpisodes: Identifiable {
     /// finished has no up next, so the sheet stays on the season it finished, every tick filled.
     func composerClosed() {
         guard !season.tvFollowUp.isActive, let next = show?.upNext, next.seasonNumber > upNext.seasonNumber else { return }
+        // Ticks made in the season being left stay in today's count.
+        if let count = tickModel?.todayCount { todayBase = count }
         upNext = next
         season = makeSeason(Self.seasonRef(show: item.media.ref, seasonNumber: next.seasonNumber))
         attach(season)
@@ -552,16 +560,31 @@ nonisolated enum EpisodeSheetDetent {
     /// The sheet's top edge and navigation bar, and the home indicator's room under the button.
     static let chrome: CGFloat = 49 + 34
     static let estimatedHeader: CGFloat = 244
+    /// The window header (more than `EpisodeTickModel.stripLimit` episodes) before it has been measured.
+    static let estimatedWindowHeader: CGFloat = 390
     /// The list below the header stays hidden until the sheet has pulled up this far past the header, so a row
     /// never peeks out under the home indicator at the compact height.
     static let listRevealHeight: CGFloat = 60
 
-    static func compact(header: CGFloat) -> PresentationDetent {
-        .height((header > 0 ? header : estimatedHeader) + chrome)
+    /// The header's height before it has been measured: a strip of ticks, or the taller window when the title is
+    /// known to have more episodes than a strip holds.
+    static func estimate(episodeCount: Int?) -> CGFloat {
+        (episodeCount ?? 0) > EpisodeTickModel.stripLimit ? estimatedWindowHeader : estimatedHeader
+    }
+
+    static func compact(header: CGFloat, episodeCount: Int? = nil) -> PresentationDetent {
+        .height((header > 0 ? header : estimate(episodeCount: episodeCount)) + chrome)
     }
 }
 
 extension View {
+    /// An update sheet's detents: compact hugging the header, and large. SwiftUI leaves a resting sheet where it is
+    /// when a detent's value changes, so the selection is driven here: once the header has been measured, a sheet
+    /// resting at its compact detent moves to the measured height.
+    func episodeSheetDetents(headerHeight: CGFloat, episodeCount: Int?) -> some View {
+        modifier(EpisodeSheetDetents(headerHeight: headerHeight, episodeCount: episodeCount))
+    }
+
     /// Hides an update sheet's list while the sheet is compact (`height` is the list's own height).
     func episodeSheetListReveal(hasHeader: Bool, height: Binding<CGFloat>) -> some View {
         let shown = !hasHeader || height.wrappedValue > EpisodeSheetDetent.listRevealHeight
@@ -571,6 +594,30 @@ extension View {
             .allowsHitTesting(shown)
             .accessibilityHidden(!shown)
             .animation(.easeOut(duration: 0.15), value: shown)
+    }
+}
+
+private struct EpisodeSheetDetents: ViewModifier {
+    let headerHeight: CGFloat
+    let episodeCount: Int?
+    @State private var detent: PresentationDetent
+
+    init(headerHeight: CGFloat, episodeCount: Int?) {
+        self.headerHeight = headerHeight
+        self.episodeCount = episodeCount
+        _detent = State(initialValue: EpisodeSheetDetent.compact(header: headerHeight, episodeCount: episodeCount))
+    }
+
+    func body(content: Content) -> some View {
+        let compact = EpisodeSheetDetent.compact(header: headerHeight, episodeCount: episodeCount)
+        content
+            .presentationDetents([compact, .large], selection: $detent)
+            .onChange(of: headerHeight) { _, height in
+                guard detent != .large else { return }
+                withAnimation {
+                    detent = EpisodeSheetDetent.compact(header: height, episodeCount: episodeCount)
+                }
+            }
     }
 }
 
@@ -712,42 +759,43 @@ private struct ContinueWatchingEpisodesSheet: View {
                         onPrimary: { episodes.headerPrimary() },
                         onType: { episodes.headerType($0) }
                     )
-                    // The header is never squeezed by the list below it.
+                    // The header is never squeezed by the list below it, and the list starts a little under it.
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 12)
                 }
                 ContinueWatchingEpisodeList(episodes: episodes)
                     // A new season is a new list: its rows don't animate from the last season's ticks.
                     .id(episodes.seasonNumber)
                     .episodeSheetListReveal(hasHeader: hasHeader, height: $listHeight)
             }
-                .navigationTitle(episodes.title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(role: .close) {
-                            dismiss()
-                        } label: {
-                            Label("Close", systemImage: "xmark")
-                        }
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            Button("Log \(TVTrackingPresentation.seasonTitle(episodes.seasonNumber))…",
-                                   systemImage: "square.and.pencil") {
-                                openLog()
-                            }
-                            .disabled(!episodes.canLogSeason)
-                            Button("Open Show", systemImage: "tv") {
-                                episodes.openShow()
-                            }
-                        } label: {
-                            Label("More", systemImage: "ellipsis")
-                        }
-                        .accessibilityIdentifier("continue-watching.episodes.more")
+            .navigationTitle(episodes.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Log \(TVTrackingPresentation.seasonTitle(episodes.seasonNumber))…",
+                               systemImage: "square.and.pencil") {
+                            openLog()
+                        }
+                        .disabled(!episodes.canLogSeason)
+                        Button("Open Show", systemImage: "tv") {
+                            episodes.openShow()
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis")
+                    }
+                    .accessibilityIdentifier("continue-watching.episodes.more")
+                }
+            }
         }
-        .presentationDetents([EpisodeSheetDetent.compact(header: headerHeight), .large])
+        .episodeSheetDetents(headerHeight: headerHeight, episodeCount: episodes.estimatedEpisodeCount)
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
         .task(id: episodes.seasonNumber) {
