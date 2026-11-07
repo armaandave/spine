@@ -13,46 +13,186 @@ struct ProgressUpdateSaveRequest: Equatable {
     var progressedOn: String? = nil
 }
 
-/// The before/today bar a progress sheet draws under its number: earlier progress dim, this save's part lit in the
-/// accent, and "+20 pages" beside it. A sheet turns it on through the environment, so `ProgressSheetForm`'s own
-/// parameters stay as they are; a sheet that sets nothing draws nothing.
+/// Today's part of a title's progress as a progress sheet counts it: everything done on the title today, not only
+/// what this save adds. Pure, so the lit part of the bar, the words beside it and the drag can be tested without a
+/// screen.
+nonisolated enum ProgressSheetToday {
+    static let movedBack = "moved back"
+
+    /// What the title already had today before this save, in the sheet's `unit`: `part` is what Home's tile counts for
+    /// today (the server's rows plus what moved on this phone since Home loaded), in the tile's own unit. Pages and
+    /// percent convert through the title's page count (`total`); a game's minutes never become percent. It never
+    /// exceeds `last`, the place the title stands at: today's part is the end of what was read or played.
+    static func before(part: TodayPart?, unit: MeterUnit, total: Int?, last: Decimal?) -> Decimal {
+        guard let part, part.amount.isFinite, part.amount > 0 else { return 0 }
+        let amount: Double
+        if unit == .minutes {
+            guard part.unit == .minutes else { return 0 }
+            amount = part.amount
+        } else {
+            guard let converted = TileTodayMath.convert(part, to: todayUnit(unit), total: total.map(Double.init)) else {
+                return 0
+            }
+            amount = converted
+        }
+        return min(ProgressPercent.rounded(Decimal(amount)), max(last ?? 0, 0))
+    }
+
+    /// All of today's progress once the typed number is saved, and whether that number is below where the title stands.
+    /// A number above `last` adds its distance to `before`; one at or below it adds nothing.
+    static func lit(before: Decimal, last: Decimal?, typed: Decimal?) -> (amount: Decimal, movedBack: Bool) {
+        let from = max(last ?? 0, 0)
+        guard let typed else { return (before, false) }
+        if typed > from { return (before + typed - from, false) }
+        return (before, typed < from)
+    }
+
+    /// "+20 pages", "+3h" or "moved back" for the lit amount; nil when nothing was done today.
+    static func amountText(unit: MeterUnit, lit: Decimal, movedBack: Bool) -> String? {
+        if movedBack { return Self.movedBack }
+        guard lit > 0 else { return nil }
+        return "+\(ProgressSheetBar.amount(lit, unit: unit))"
+    }
+
+    /// The caption's words: "+20 pages today", or "moved back" as it is.
+    static func line(forAmountText text: String?) -> String? {
+        text.map { $0 == movedBack ? $0 : "\($0) today" }
+    }
+
+    static func todayUnit(_ unit: MeterUnit) -> TodayUnit {
+        switch unit {
+        case .episodes: .episodes
+        case .chapters: .chapters
+        case .issues: .issues
+        case .pages: .pages
+        case .percent: .percent
+        case .minutes: .minutes
+        }
+    }
+}
+
+/// The before/today bar a progress sheet draws in its number's section: earlier progress dim, all of today's part lit
+/// in the accent, and a thumb to drag along it. A sheet turns it on through the environment, so `ProgressSheetForm`'s
+/// own parameters stay as they are; a sheet that sets nothing draws nothing. The words about today sit in the section's
+/// caption (`ProgressSheetTodayLine`), where hours, which have no bar, put them too.
 nonisolated struct ProgressSheetBar: Equatable {
     static let height: CGFloat = 14
     static let radius: CGFloat = 7
+    /// The thumb's width. The bar stops half a thumb short of each end of its row, so the thumb's center reaches both
+    /// ends.
+    static let thumb: CGFloat = 26
+    static let touchHeight: CGFloat = 44
+    /// How many places along the bar a drag ticks at, at most.
+    static let maxDetents = 20
 
     let model: ProgressMeterModel
     let accent: Color
-    /// "+20 pages", "+2.5%" or "moved back"; nil when nothing changed or no number is typed.
+    /// "+20 pages", "+2.5%" or "moved back", counting all of today; nil when nothing was done today.
     let text: String?
-    /// The widest text this bar's unit shows, so the row's width does not move as the text comes and goes.
-    let sizingText: String
+    let unit: MeterUnit
+    /// The end of the bar: the total, or 100 for percent.
+    let end: Decimal
+    /// What one step of a drag is: a whole page, chapter or issue, or half a percent.
+    let step: Decimal
+    /// The number the thumb is at: the typed one, or the last saved one while nothing is typed.
+    let value: Decimal
+    /// Exact shares of the bar, 0...1: done before today, today's part (which ends at the thumb) and the thumb's place.
+    let beforeFraction: Double
+    let todayFraction: Double
+    let thumbFraction: Double
 
     var palette: MeterPalette {
         MeterPalette(before: Color(white: 1, opacity: 0.55), rest: Color(white: 1, opacity: 0.14), accent: accent)
     }
 
-    /// The bar for `typed` against `last` out of `total` (percent runs to 100). Nil when the total is unknown. No
-    /// number typed lights nothing, a number above the total stops at it, and one below `last` lights nothing and
-    /// says it moved back.
-    static func make(unit: MeterUnit, last: Decimal?, typed: Decimal?, total: Int?, accent: Color) -> ProgressSheetBar? {
+    /// The caption's words: "+20 pages today", or "moved back".
+    var todayLine: String? { ProgressSheetToday.line(forAmountText: text) }
+
+    /// The bar for `typed` against `last` out of `total` (percent runs to 100), with `todayBefore` already done today.
+    /// Nil when the total is unknown. No number typed lights only what was done before this save, a number above the
+    /// total stops at it, and one below `last` takes the thumb back with it, says it moved back, and leaves nothing
+    /// lit past it.
+    static func make(
+        unit: MeterUnit,
+        last: Decimal?,
+        typed: Decimal?,
+        total: Int?,
+        accent: Color,
+        todayBefore: Decimal = 0
+    ) -> ProgressSheetBar? {
         let end = unit == .percent ? 100 : total
         guard let end, end > 0 else { return nil }
         let limit = Decimal(end)
         let from = min(max(last ?? 0, 0), limit)
         let to = min(max(typed ?? from, 0), limit)
-        guard let model = ProgressMeterModel.make(unit: unit, from: round(from), to: round(to), total: end) else {
+        let before = min(max(todayBefore, 0), from)
+        // Today began where the title stood less what was already done today; going back past that lights nothing.
+        let litFrom = min(to, from - before)
+        guard let model = ProgressMeterModel.make(unit: unit, from: round(litFrom), to: round(to), total: end) else {
             return nil
         }
-        let text: String? = to > from ? "+\(amount(to - from, unit: unit))" : to < from ? "moved back" : nil
-        let widest: Decimal = unit == .percent ? Decimal(string: "99.99") ?? 99 : 999
-        return ProgressSheetBar(model: model, accent: accent, text: text, sizingText: "+\(amount(widest, unit: unit))")
+        let lit = ProgressSheetToday.lit(before: before, last: from, typed: to)
+        let whole = Double(end)
+        return ProgressSheetBar(
+            model: model,
+            accent: accent,
+            text: ProgressSheetToday.amountText(unit: unit, lit: lit.amount, movedBack: lit.movedBack),
+            unit: unit,
+            end: limit,
+            step: unit == .percent ? Decimal(string: "0.5") ?? 1 : 1,
+            value: to,
+            beforeFraction: NSDecimalNumber(decimal: litFrom).doubleValue / whole,
+            todayFraction: NSDecimalNumber(decimal: to - litFrom).doubleValue / whole,
+            thumbFraction: NSDecimalNumber(decimal: to).doubleValue / whole
+        )
+    }
+
+    /// The number a drag at `fraction` of the bar's length (0...1) asks for, in whole steps and never off either end.
+    func value(atFraction fraction: Double) -> Decimal {
+        let stepSize = NSDecimalNumber(decimal: step).doubleValue
+        let share = fraction.isNaN ? 0 : fraction
+        let units = min(max(share, 0), 1) * NSDecimalNumber(decimal: end).doubleValue
+        let stepped = (units / stepSize).rounded() * stepSize
+        return min(max(ProgressPercent.rounded(Decimal(stepped)), 0), end)
+    }
+
+    /// How many ticks a drag along the whole bar makes: one per step, at most `maxDetents`, so a long book ticks every
+    /// few percent instead of buzzing.
+    var detentCount: Int {
+        min(max(NSDecimalNumber(decimal: end / step).intValue, 1), Self.maxDetents)
+    }
+
+    /// Which tick `number` is on, 0...`detentCount`.
+    func detent(of number: Decimal) -> Int {
+        let share = NSDecimalNumber(decimal: min(max(number, 0), end) / end).doubleValue
+        return Int((share * Double(detentCount)).rounded())
+    }
+
+    /// The number one VoiceOver swipe up (+1) or down (-1) asks for: a twentieth of the bar, at least one step.
+    func adjusted(by direction: Int) -> Decimal {
+        let jump = max(value(atFraction: 1 / Double(Self.maxDetents)), step)
+        return min(max(value + jump * Decimal(direction), 0), end)
+    }
+
+    /// What VoiceOver reads for the bar: "232 of 400 pages", "47.5 percent".
+    var spokenValue: String {
+        let number = ProgressPercent.text(value)
+        let total = ProgressPercent.text(end)
+        switch unit {
+        case .percent: return "\(number) percent"
+        case .pages: return "\(number) of \(total) pages"
+        case .chapters: return "\(number) of \(total) chapters"
+        case .issues: return "\(number) of \(total) issues"
+        case .episodes: return "\(number) of \(total) episodes"
+        case .minutes: return number
+        }
     }
 
     private static func round(_ value: Decimal) -> Int {
         Int(NSDecimalNumber(decimal: value).doubleValue.rounded())
     }
 
-    private static func amount(_ delta: Decimal, unit: MeterUnit) -> String {
+    static func amount(_ delta: Decimal, unit: MeterUnit) -> String {
         let number = ProgressPercent.text(delta)
         switch unit {
         case .percent: return "\(number)%"
@@ -60,40 +200,93 @@ nonisolated struct ProgressSheetBar: Equatable {
         case .chapters: return "\(number) chapter\(delta == 1 ? "" : "s")"
         case .issues: return "\(number) issue\(delta == 1 ? "" : "s")"
         case .episodes: return "\(number) episode\(delta == 1 ? "" : "s")"
-        case .minutes: return number
+        case .minutes: return GameProgressValues.timeLabel(NSDecimalNumber(decimal: delta).intValue)
         }
     }
 }
 
-extension EnvironmentValues {
-    @Entry var progressSheetBar: ProgressSheetBar? = nil
+/// The accent-colored words about today ("+20 pages today", "+3h today") at the trailing end of a progress sheet's
+/// caption. Hidden while the sheet shows a warning.
+nonisolated struct ProgressSheetTodayLine: Equatable {
+    let text: String
+    let accent: Color
 }
 
+extension EnvironmentValues {
+    @Entry var progressSheetBar: ProgressSheetBar? = nil
+    @Entry var progressSheetTodayLine: ProgressSheetTodayLine? = nil
+    /// Moves the sheet's number: a drag along the bar asks for a value, and the sheet writes it where it keeps what the
+    /// person typed.
+    @Entry var progressSheetSetNumber: (Decimal) -> Void = { _ in }
+    /// What Home's tile counts as today's part of a title, in the tile's unit: its server rows plus what moved on this
+    /// phone since Home loaded. Home supplies it; a sheet opened from a title's page has none and counts only its own save.
+    @Entry var progressSheetTodayPart: ((MediaRef) -> TodayPart?)? = nil
+}
+
+/// The bar in its own row, inside the number's section: as wide as the section's text, a thumb on it, and a drag
+/// anywhere along the row sets the number. Typing stays the main way in; this is the quick way to a place.
 private struct ProgressSheetBarRow: View {
     let bar: ProgressSheetBar
+    @Environment(\.progressSheetSetNumber) private var setNumber
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var width: CGFloat = 0
+    /// True while a finger is down on the bar, and false again however the touch ends.
+    @GestureState private var isDragging = false
+    /// The tick the drag is on, for the selection haptic.
+    @State private var detent = 0
+
+    private var travel: CGFloat { max(width - ProgressSheetBar.thumb, 0) }
 
     var body: some View {
-        HStack(spacing: 10) {
-            ProgressMeterView.bar(
-                model: bar.model,
-                palette: bar.palette,
-                height: ProgressSheetBar.height,
-                radius: ProgressSheetBar.radius
-            )
-            ZStack(alignment: .trailing) {
-                Text(bar.sizingText).hidden()
-                Text("moved back").hidden()
-                if let text = bar.text {
-                    Text(text).foregroundStyle(bar.accent)
-                }
+        ZStack(alignment: .leading) {
+            MeterSegmentsLayout(before: bar.beforeFraction, today: bar.todayFraction) {
+                Rectangle().fill(bar.palette.before)
+                Rectangle().fill(bar.palette.accent)
             }
-            .font(.footnote.weight(.bold))
-            .monospacedDigit()
-            .lineLimit(1)
-            .fixedSize()
-            .dynamicTypeSize(...HomeDesign.Text.maxCategory)
+            .frame(height: ProgressSheetBar.height)
+            .background(bar.palette.rest)
+            .clipShape(RoundedRectangle(cornerRadius: ProgressSheetBar.radius, style: .continuous))
+            .padding(.horizontal, ProgressSheetBar.thumb / 2)
+
+            Circle()
+                .fill(Color.white)
+                .frame(width: ProgressSheetBar.thumb, height: ProgressSheetBar.thumb)
+                .shadow(color: .black.opacity(0.45), radius: 7, y: 2)
+                .offset(x: travel * bar.thumbFraction)
+                .opacity(width > 0 ? 1 : 0)
         }
-        .padding(.top, 2)
+        .frame(maxWidth: .infinity)
+        .frame(height: ProgressSheetBar.touchHeight)
+        // Typed numbers glide; a drag follows the finger with no lag.
+        .animation(
+            isDragging || reduceMotion ? nil : .easeInOut(duration: 0.25),
+            value: [bar.beforeFraction, bar.todayFraction, bar.thumbFraction]
+        )
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($isDragging) { _, state, _ in state = true }
+                .onChanged { drag in
+                    guard travel > 0 else { return }
+                    let share = Double((drag.location.x - ProgressSheetBar.thumb / 2) / travel)
+                    let value = bar.value(atFraction: share)
+                    if value != bar.value { setNumber(value) }
+                    let next = bar.detent(of: value)
+                    if next != detent { detent = next }
+                }
+        )
+        .sensoryFeedback(.selection, trigger: detent)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Progress")
+        .accessibilityValue(bar.spokenValue)
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: setNumber(bar.adjusted(by: 1))
+            case .decrement: setNumber(bar.adjusted(by: -1))
+            @unknown default: break
+            }
+        }
     }
 }
 
@@ -295,6 +488,12 @@ final class ProgressUpdateViewModel {
         hasEditedInput = true
     }
 
+    /// A drag along the bar sets the number as if it had been typed.
+    func setNumber(_ value: Decimal) {
+        input = ProgressPercent.text(value)
+        hasEditedInput = true
+    }
+
     private func converted(_ value: Decimal, from: ProgressUpdateMode, to: ProgressUpdateMode) -> Decimal? {
         guard from != to else { return value }
         guard let totalPages, totalPages > 0 else { return nil }
@@ -342,6 +541,10 @@ struct ProgressUpdateSheet: View {
     @State private var isClosing = false
     /// The day this save is on, today until the date row says otherwise.
     @State private var date = Date()
+    /// What the title had today before the save that is on its way. Home's tile moves with the write, so the bar
+    /// keeps this until the sheet has gone, and counts the saved number once.
+    @State private var todayBeforeSave: Decimal?
+    @Environment(\.progressSheetTodayPart) private var todayPart
 
     let title: ProgressSheetTitle
     let isSaving: Bool
@@ -389,22 +592,50 @@ struct ProgressUpdateSheet: View {
         return viewModel.mode == .pages ? "Page" : "Progress"
     }
 
+    private var meterUnit: MeterUnit {
+        if title.ref.isSeries { return title.ref.mediaType == "comic" ? .issues : .chapters }
+        return viewModel.mode == .pages ? .pages : .percent
+    }
+
+    private var accent: Color {
+        ArtAccent.pastel(fromHexOrNil: title.posterAccentHex) ?? HomeDesign.Palette.starGold
+    }
+
+    /// What the title already had today, in this sheet's unit, before the number typed here.
+    private var todayBefore: Decimal {
+        todayBeforeSave ?? ProgressSheetToday.before(
+            part: todayPart?(title.ref),
+            unit: meterUnit,
+            total: viewModel.totalPages,
+            last: viewModel.lastValue
+        )
+    }
+
     /// The before/today bar: pages or percent for a book, chapters or issues for a manga or comic. Nil when the total is
-    /// unknown.
+    /// unknown. Its lit part is all of today's progress on the title, as Home's tile shows it, and follows what is typed.
     private var progressBar: ProgressSheetBar? {
-        let unit: MeterUnit
-        if title.ref.isSeries {
-            unit = title.ref.mediaType == "comic" ? .issues : .chapters
-        } else {
-            unit = viewModel.mode == .pages ? .pages : .percent
-        }
-        return ProgressSheetBar.make(
-            unit: unit,
+        ProgressSheetBar.make(
+            unit: meterUnit,
             last: viewModel.lastValue,
             typed: viewModel.currentValue,
             total: viewModel.totalPages,
-            accent: ArtAccent.pastel(fromHexOrNil: title.posterAccentHex) ?? HomeDesign.Palette.starGold
+            accent: accent,
+            todayBefore: todayBefore
         )
+    }
+
+    /// Today's words for the caption. Without a total there is no bar, but a number typed or already done today still
+    /// has its line.
+    private func todayLine(bar: ProgressSheetBar?) -> ProgressSheetTodayLine? {
+        if let bar { return bar.todayLine.map { ProgressSheetTodayLine(text: $0, accent: accent) } }
+        let lit = ProgressSheetToday.lit(
+            before: todayBefore,
+            last: viewModel.lastValue,
+            typed: viewModel.currentValue
+        )
+        return ProgressSheetToday.line(
+            forAmountText: ProgressSheetToday.amountText(unit: meterUnit, lit: lit.amount, movedBack: lit.movedBack)
+        ).map { ProgressSheetTodayLine(text: $0, accent: accent) }
     }
 
     /// What ⋯ and its dialogs call the title and this read: "book" and "journey", or the type's noun and "attempt".
@@ -416,6 +647,7 @@ struct ProgressUpdateSheet: View {
 
     var body: some View {
         let warning = viewModel.warning(serverMessage: errorMessage)
+        let bar = progressBar
         ProgressSheetForm(
             title: title.title,
             subtitle: journeyStatus == "Paused" ? "Paused" : nil,
@@ -446,7 +678,9 @@ struct ProgressUpdateSheet: View {
             menuButton(.restart)
             menuButton(.delete)
         }
-        .environment(\.progressSheetBar, progressBar)
+        .environment(\.progressSheetBar, bar)
+        .environment(\.progressSheetTodayLine, todayLine(bar: bar))
+        .environment(\.progressSheetSetNumber, { viewModel.setNumber($0) })
         // The page's copy, once it has loaded behind a sheet opened from Home, knows the book's page count.
         .onChange(of: title) { _, title in viewModel.title = title }
         .confirmationDialog(
@@ -483,10 +717,12 @@ struct ProgressUpdateSheet: View {
         let request = undated.dated(date)
         let finishes = viewModel.isFullProgress
         isSubmitting = true
+        todayBeforeSave = todayBefore
         Task {
             let saved = await onSave(request)
             isSubmitting = false
             guard saved else {
+                todayBeforeSave = nil
                 viewModel.refusedValue = request.value
                 return
             }
@@ -531,6 +767,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     /// The date row's calendar is open. The number pad is down then, which must not close the sheet.
     @State private var isPickingDate = false
     @Environment(\.progressSheetBar) private var progressBar
+    @Environment(\.progressSheetTodayLine) private var todayLine
 
     let title: String
     let subtitle: String?
@@ -624,6 +861,15 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
                             isPickingDate = false
                             focusRequest += 1
                         }
+                        .listRowSeparator(progressBar == nil ? .automatic : .hidden, edges: .bottom)
+
+                        // The bar belongs to the number above it: as wide as the section's text, with its thumb's
+                        // overhang taking the row's own padding.
+                        if let progressBar {
+                            ProgressSheetBarRow(bar: progressBar)
+                                .listRowInsets(EdgeInsets(top: 0, leading: 3, bottom: 0, trailing: 3))
+                                .listRowSeparator(.hidden, edges: .top)
+                        }
 
                         countOptions
 
@@ -631,15 +877,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
                             dateRow(date)
                         }
                     } footer: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let progressBar {
-                                ProgressSheetBarRow(bar: progressBar)
-                            }
-                            if let footer {
-                                Text(footer)
-                                    .foregroundStyle(footerIsWarning ? Color.red : Color.secondary)
-                            }
-                        }
+                        caption
                     }
                     .logRowBackground()
                 }
@@ -707,6 +945,31 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             guard !isSaving, !isPickingDate, UIApplication.shared.applicationState == .active else { return }
             dismiss()
+        }
+    }
+
+    /// Under the section: the last save or what's wrong with this one, and, at the trailing end in the accent, today's
+    /// part ("+20 pages today"). A warning leaves today's words out, since the number they count is not one that saves.
+    @ViewBuilder
+    private var caption: some View {
+        let today = footerIsWarning ? nil : todayLine
+        if footer != nil || today != nil {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                if let footer {
+                    Text(footer)
+                        .foregroundStyle(footerIsWarning ? Color.red : Color.secondary)
+                }
+                Spacer(minLength: 0)
+                if let today {
+                    Text(today.text)
+                        .font(.footnote.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(today.accent)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .accessibilityLabel(today.text)
+                }
+            }
         }
     }
 

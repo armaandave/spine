@@ -302,6 +302,21 @@ final class HomeViewModel {
         return Int(amount.rounded())
     }
 
+    /// All of today's progress on a title as its tile counts it (the server's rows plus what moved on this phone since
+    /// Home loaded), in the tile's unit: what a book's or a game's progress sheet lights beside its number.
+    func todayPart(for ref: MediaRef) -> TodayPart? {
+        guard let item = tiles.inProgress.first(where: { $0.media.ref.id == ref.id }),
+              let position = InProgressTilePresenter.position(for: item) else { return nil }
+        let amount = TileTodayMath.today(
+            server: tiles.todayParts[HomeTodayStore.titleKey(for: ref)],
+            baseline: tiles.baselines[item.id],
+            current: position.current,
+            unit: position.unit,
+            total: position.pagesTotal ?? position.total
+        )
+        return TodayPart(unit: position.unit, amount: amount)
+    }
+
     // MARK: Trending and the glow
 
     /// The first page of the feed is in: friends' standings start loading, and Trending reads what it can now and
@@ -595,6 +610,8 @@ struct HomeView: View {
             ) { ref in
                 selectedRef = ref
             }
+            // The book's and the game's progress sheets light all of today's part, as the tile does.
+            .environment(\.progressSheetTodayPart, { [viewModel] ref in viewModel.todayPart(for: ref) })
             .fullScreenCover(item: $selectedPlanning, onDismiss: { selectedPlanning = nil }) { activity in
                 if let planning = activity.planning {
                     NavigationStack {

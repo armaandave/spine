@@ -62,11 +62,12 @@ final class ProgressSheetBarTests: XCTestCase {
         XCTAssertNil(bar(.minutes, last: 14, typed: 20, total: 100))
     }
 
-    func testMovedBackLightsNothingAndSaysSo() throws {
+    func testMovedBackTakesTheThumbBackLightsNothingAndSaysSo() throws {
         let bar = try XCTUnwrap(bar(.pages, last: 212, typed: 150, total: 400))
-        XCTAssertEqual(bar.model.from, 212)
-        XCTAssertEqual(bar.model.to, 212)
+        XCTAssertEqual(bar.model.from, 150)
+        XCTAssertEqual(bar.model.to, 150)
         XCTAssertEqual(bar.model.todayFraction, 0)
+        XCTAssertEqual(bar.thumbFraction, 0.375, accuracy: 0.0001)
         XCTAssertEqual(bar.text, "moved back")
     }
 
@@ -104,12 +105,6 @@ final class ProgressSheetBarTests: XCTestCase {
         XCTAssertEqual(bar.model.from, 400)
         XCTAssertEqual(bar.model.to, 400)
         XCTAssertNil(bar.text)
-    }
-
-    func testSizingTextIsTheUnitsWidestLabel() throws {
-        XCTAssertEqual(try XCTUnwrap(bar(.pages, last: 0, typed: 1, total: 10)).sizingText, "+999 pages")
-        XCTAssertEqual(try XCTUnwrap(bar(.percent, last: 0, typed: 1, total: nil)).sizingText, "+99.99%")
-        XCTAssertEqual(try XCTUnwrap(bar(.chapters, last: 0, typed: 1, total: 10)).sizingText, "+999 chapters")
     }
 
     func testTheSheetsViewModelFeedsTheBook() throws {
