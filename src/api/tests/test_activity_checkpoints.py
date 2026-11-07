@@ -1398,7 +1398,7 @@ class Phase5Base(CheckpointBase):
         return page.json()["results"]
 
     def my_list(self, *, planning=True):
-        """Return the profile's Activity list, the whole of it, as the new build asks."""
+        """Return the profile's Activity list, whole, as the new build asks."""
         query = {"view": "list", "page_size": 100, **({"include": "planning"} if planning else {})}
         client = self.phone()
         body = client.get(f"/api/v1/users/{seed.DEV_USERNAME}/activity/", query).json()
@@ -1468,8 +1468,11 @@ class Phase5SeedTests(Phase5Base):
         self.assertEqual(
             sorted(item.title for item in items),
             sorted(
-                ["Show PS1", "Show PS2", "Show PS3", "Show PS4", "Book PB", "Game PG", "Manga PM", "Book P", "Manga M3"]
-                + ["Movie W1", "Movie W2"],
+                [
+                    *("Show PS1", "Show PS2", "Show PS3", "Show PS4"),
+                    *("Book PB", "Game PG", "Manga PM", "Book P", "Manga M3"),
+                    *("Movie W1", "Movie W2"),
+                ],
             ),
         )
         for item in Item.objects.filter(media_type="movie", source="manual", media_id__startswith=seed.PREFIX):
@@ -1496,7 +1499,7 @@ class Phase5SeedTests(Phase5Base):
 class Phase5PlanningSheetTests(Phase5Base):
     """Phase 5's first sheet: a day of planning reads as one line."""
 
-    def test_the_sheet(self):  # noqa: PLR0915
+    def test_the_sheet(self):
         before = self.everything()
         # Must: add 3 shows. One row on the list, and tapping shows those 3.
         for name in ("PS1", "PS2", "PS3"):
@@ -1521,7 +1524,7 @@ class Phase5PlanningSheetTests(Phase5Base):
         self.step(seed.add_two_movies)
         self.assertEqual(self.planning(self.my_list())[0]["object"]["summary"], "added 7 titles to Planning")
         self.assertEqual(self.everything(), before)
-        # A Letterboxd watchlist file: Planning in the Library rises, the row doesn't change.
+        # A Letterboxd watchlist file: Planning in the Library rises, the row stays.
         planned = Movie.objects.filter(user=self.dev, status="Planning").count()
         added = self.step(seed.letterboxd_watchlist)
         self.assertGreater(added, 0)
@@ -1566,14 +1569,14 @@ class Phase5PlanningSheetTests(Phase5Base):
 class Phase5RowsSheetTests(Phase5Base):
     """Phase 5's second sheet: a save on the right day, and a row fixed from the row."""
 
-    def test_the_sheet(self):  # noqa: PLR0915
+    def test_the_sheet(self):
         dec_20, dec_27 = date(2025, 12, 20), date(2025, 12, 27)
         # Must: P to 120, dated Dec 20 2025. This year's column doesn't move.
         self.save_p(120, dec_20)
         self.assert_sheet(120, 0, 120)
         row = self.row_on("Book P", "2025-12-20")
         self.assertEqual(row["object"]["summary"], "read 20 pages")
-        # Must: open that row, tap Edit, change 120 to 110: the normal sheet, saved again.
+        # Must: open that row, tap Edit, change 120 to 110 on the normal sheet.
         edit = self.post_page(row)["viewer"]["edit"]
         self.assertEqual((edit["mode"], edit["value"], edit["date"], edit["unit"]), ("save", 120, "2025-12-20", "page"))
         self.save_p(110, dec_20)
