@@ -29,6 +29,8 @@ final class PostEngagementModel {
     private var hasLoadedComments = false
     /// Comments sent from this page: always in plain view, and kept if an older load lands after them.
     private var sentCommentIds = Set<Int>()
+    /// The "@name " that replying to a reply put in front of the draft.
+    private var insertedMention: String?
 
     init(post: ActivityPostRef, repository: ActivityRepository, onUnauthorized: @escaping () -> Void) {
         self.post = post
@@ -61,19 +63,29 @@ final class PostEngagementModel {
 
     /// Replies go under the comment's thread; replying to a reply names its author, so it's clear who it answers.
     func reply(to comment: PostComment) {
+        removeMention()
         replyingTo = comment
-        let mention = "@\(comment.user.username) "
-        if comment.parentId != nil, !draft.hasPrefix(mention) {
-            draft = mention + draft
+        if comment.parentId != nil {
+            let mention = "@\(comment.user.username) "
+            if !draft.hasPrefix(mention) {
+                draft = mention + draft
+            }
+            insertedMention = mention
         }
         replyRequestCount += 1
     }
 
     func cancelReply() {
-        if let replyingTo, draft.trimmingCharacters(in: .whitespaces) == "@\(replyingTo.user.username)" {
-            draft = ""
-        }
+        removeMention()
         replyingTo = nil
+    }
+
+    /// Takes out the name `reply(to:)` put in front of the draft, when the draft still starts with it.
+    private func removeMention() {
+        if let insertedMention, draft.hasPrefix(insertedMention) {
+            draft.removeFirst(insertedMention.count)
+        }
+        insertedMention = nil
     }
 
     func expand(_ thread: PostCommentThread) {
@@ -128,8 +140,10 @@ final class PostEngagementModel {
         // The box clears now, so anything typed while this sends is the next comment.
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let parent = replyingTo
+        let mention = insertedMention
         draft = ""
         replyingTo = nil
+        insertedMention = nil
 
         do {
             let comment = try await repository.addComment(post: post, body: body, parentId: parent?.id)
@@ -146,6 +160,7 @@ final class PostEngagementModel {
             if draft.isEmpty {
                 draft = body
                 replyingTo = parent
+                insertedMention = mention
             }
             actionErrorMessage = error.localizedDescription
             handleUnauthorized(error)

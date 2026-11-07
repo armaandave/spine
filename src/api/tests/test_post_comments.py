@@ -347,6 +347,17 @@ class ReplyTests(PostTestCase):
         self.assertEqual(self.client.delete(f"/api/v1/comments/{comment.id}/").status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(self.reply(self.friend, entry, comment).status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_a_reply_to_a_reply_under_a_deleted_comment_still_joins_the_thread(self):
+        entry = self.log()
+        comment = Comment.objects.create(user=self.friend, diary_entry=entry, body="Take")
+        reply = Comment.objects.create(user=self.owner, diary_entry=entry, parent=comment, body="Reply")
+        self.as_user(self.friend).delete(f"/api/v1/comments/{comment.id}/")
+
+        response = self.reply(self.friend, entry, reply, "@owner fair")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["parent_id"], comment.id)
+
     def test_the_last_reply_going_takes_the_placeholder_with_it(self):
         entry = self.log()
         comment = Comment.objects.create(user=self.friend, diary_entry=entry, body="Take")

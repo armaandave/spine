@@ -404,6 +404,31 @@ final class ActivityPostTests: XCTestCase {
     }
 
     @MainActor
+    func testReplyingToSomeoneElseSwapsTheName() {
+        let model = model(FakePostRepository())
+        model.reply(to: comment(2, by: "sam", replyingTo: 1))
+        model.draft += "agreed"
+
+        model.reply(to: comment(3, by: "joe", replyingTo: 1))
+        XCTAssertEqual(model.draft, "@joe agreed")
+
+        model.reply(to: comment(1, by: "maya"))
+        XCTAssertEqual(model.draft, "agreed", "a top-level comment needs no name")
+        XCTAssertEqual(model.replyingTo?.id, 1)
+    }
+
+    @MainActor
+    func testCancellingAReplyKeepsWhatWasTyped() {
+        let model = model(FakePostRepository())
+        model.reply(to: comment(2, by: "sam", replyingTo: 1))
+        model.draft += "agreed"
+
+        model.cancelReply()
+
+        XCTAssertEqual(model.draft, "agreed")
+    }
+
+    @MainActor
     func testAFailedReplyStaysAReply() async {
         let repository = FakePostRepository()
         let model = model(repository)

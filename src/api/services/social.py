@@ -194,19 +194,9 @@ def add_comment(user, body, *, entry=None, post=None, parent_id=None):
 
     A reply to a reply joins its thread, so replies stay one level deep.
     """
-    parent = None
-    if parent_id is not None:
-        parent = (
-            Comment.objects.visible_to(user)
-            .filter(diary_entry=entry, progress_post=post, is_deleted=False)
-            .select_related("parent")
-            .filter(id=parent_id)
-            .first()
-        )
-        if parent is None:
-            raise ValidationError({"parent_id": "That comment isn't here anymore."})
-        parent = parent.parent or parent
-    comment = Comment.objects.create(user=user, body=body, diary_entry=entry, progress_post=post, parent=parent)
+    with transaction.atomic():
+        parent = _locked_thread(user, parent_id, entry=entry, post=post) if parent_id is not None else None
+        comment = Comment.objects.create(user=user, body=body, diary_entry=entry, progress_post=post, parent=parent)
     SocialAuditLog.objects.create(
         actor=user,
         action="comment",
@@ -214,6 +204,24 @@ def add_comment(user, body, *, entry=None, post=None, parent_id=None):
         target_id=entry.id if entry else post.id,
     )
     return comment
+
+
+def _locked_thread(user, comment_id, *, entry, post):
+    """Return the thread a reply to ``comment_id`` joins, locked until it's saved.
+
+    A delete takes the same lock, so it can't remove the thread from under a new reply.
+    """
+    target = (
+        Comment.objects.visible_to(user)
+        .filter(diary_entry=entry, progress_post=post, id=comment_id)
+        .values("parent_id", "is_deleted")
+        .first()
+    )
+    if target and not target["is_deleted"]:
+        thread = Comment.objects.select_for_update().filter(id=target["parent_id"] or comment_id).first()
+        if thread and not (thread.id == comment_id and thread.is_deleted):
+            return thread
+    raise ValidationError({"parent_id": "That comment isn't here anymore."})
 
 
 def can_delete_comment(user, comment):
@@ -224,6 +232,14 @@ def can_delete_comment(user, comment):
 
 def delete_comment(user, comment_id):
     """Delete a comment the user can see and is allowed to remove."""
+    with transaction.atomic():
+        # Lock the thread's top comment, as a reply does: no reply lands mid-delete.
+        thread_id = Comment.objects.filter(id=comment_id).values_list("parent_id", flat=True).first()
+        list(Comment.objects.select_for_update().filter(id=thread_id or comment_id))
+        _delete_comment(user, comment_id)
+
+
+def _delete_comment(user, comment_id):
     comment = get_object_or_404(
         Comment.objects.visible_to(user).select_related("diary_entry", "progress_post"),
         id=comment_id,
