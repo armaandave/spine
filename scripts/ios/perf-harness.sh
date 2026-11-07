@@ -13,18 +13,26 @@
 #             --sim-runtime com.apple.CoreSimulator.SimRuntime.iOS-26-5 \
 #             --sim-device-type com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
 #             -- scripts/ios/perf-harness.sh test
-#   report <result dir>   print every measured metric (median, p90, min, max, samples) as a table
+#   report <result dir>   print every measured metric (median, p90, min, max, samples, counter deltas) as a table
+#   report --ab <session dir> [--json]   the A/B verdict table for a session written by scripts/ios/perf-ab.sh
 #
 # Environment: PERF_ITERATIONS (default 8), PERF_LABEL (result directory prefix, e.g. before / after),
+#              PERF_RESULTS_DIR (where result directories go, default ~/Library/Caches/spine-perf-results),
+#              PERF_TOP (the tree whose ios/Spine/Spine.xcodeproj is built; default this checkout. perf-ab.sh points
+#              it at the frozen baseline tree, which is not a git repo; this script and report.py always come from
+#              the checkout that runs them),
+#              PERF_COLD_IMAGES=1 (every scenario launches with empty image caches; testB2 always does),
+#              PERF_POSTER_LOG (serve: the poster server's request log, default
+#              ~/Library/Caches/spine-perf-results/poster-requests.log),
 #              PERF_XCODEBUILD_ARGS (extra xcodebuild arguments, e.g. build settings).
-# Results land in ~/Library/Caches/spine-perf-results/<label>-<timestamp>/ (xcodebuild.log, probe.txt,
-# result.xcresult, summary.md).
+# Results land in <PERF_RESULTS_DIR>/<label>-<timestamp>/ (xcodebuild.log, probe.txt, result.xcresult, load.txt,
+# leg.txt, summary.md; a FAILED file when xcodebuild failed).
 set -euo pipefail
 
 API_PORT=${PERF_API_PORT:-8021}
 POSTER_PORT=${PERF_POSTER_PORT:-8093}
 POSTER_DIR=${PERF_POSTER_DIR:-$HOME/Library/Caches/spine-perf-posters}
-top=$(git rev-parse --show-toplevel)
+top=${PERF_TOP:-$(git rev-parse --show-toplevel)}
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cmd=${1:-}
 shift || true
@@ -37,7 +45,10 @@ case "$cmd" in
   serve)
     [ -f "$POSTER_DIR/p39.jpg" ] || python3 "$here/perf/make_posters.py" "$POSTER_DIR" 40
     mkdir -p "$top/src/db"
-    python3 -m http.server "$POSTER_PORT" --bind 127.0.0.1 --directory "$POSTER_DIR" >/dev/null 2>&1 &
+    poster_log=${PERF_POSTER_LOG:-$HOME/Library/Caches/spine-perf-results/poster-requests.log}
+    mkdir -p "$(dirname "$poster_log")"
+    # http.server writes one stderr line per request; keep them to check what a cold-image run fetched.
+    python3 -m http.server "$POSTER_PORT" --bind 127.0.0.1 --directory "$POSTER_DIR" >/dev/null 2>>"$poster_log" &
     poster_pid=$!
     trap 'kill $poster_pid 2>/dev/null || true' EXIT
     echo "POSTERS: http://127.0.0.1:$POSTER_PORT"
@@ -69,10 +80,20 @@ case "$cmd" in
     export TEST_RUNNER_SPINE_API_BASE_URL="http://127.0.0.1:$API_PORT"
     export TEST_RUNNER_PERF_PROBE_FILE="$dir/probe.txt"
     [ -z "${PERF_ITERATIONS:-}" ] || export TEST_RUNNER_PERF_ITERATIONS="$PERF_ITERATIONS"
+    [ "${PERF_COLD_IMAGES:-}" != 1 ] || export TEST_RUNNER_PERF_COLD_IMAGES=1
     : > "$dir/probe.txt"
     echo "RESULT_DIR: $dir"
     # A quiet machine matters: close other simulators and builds before a run.
     uptime > "$dir/load.txt"
+    {
+      echo "label: ${PERF_LABEL:-run}"
+      echo "tree: $top"
+      echo "commit: $(git -C "$top" rev-parse --short HEAD 2>/dev/null || echo 'not a git repo')"
+      echo "iterations: ${PERF_ITERATIONS:-8}"
+      echo "cold images: ${PERF_COLD_IMAGES:-0}"
+      echo "tests: ${*:-all}"
+      echo "uptime: $(uptime)"
+    } > "$dir/leg.txt"
     set +e
     # shellcheck disable=SC2086
     xcodebuild test -project "$top/ios/Spine/Spine.xcodeproj" -scheme Spine \
@@ -82,6 +103,7 @@ case "$cmd" in
     status=$?
     set -e
     uptime >> "$dir/load.txt"
+    [ $status -eq 0 ] || touch "$dir/FAILED"
     grep -E "^Test Case .*(passed|failed)|error:|\*\* TEST" "$dir/xcodebuild.log" | tail -30 || true
     python3 "$here/perf/report.py" "$dir" | tee "$dir/summary.md" || true
     exit $status

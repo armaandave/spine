@@ -38,7 +38,9 @@ final class HomePerfTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeApp() -> XCUIApplication {
+    /// `coldImages` empties the app's memory and disk image caches at launch (SPINE_PERF_COLD_IMAGES, Debug builds);
+    /// PERF_COLD_IMAGES=1 in the run's environment (perf-harness.sh) does the same for any scenario.
+    private func makeApp(coldImages: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         let base = ProcessInfo.processInfo.environment["SPINE_API_BASE_URL"] ?? "http://127.0.0.1:8021"
         app.launchEnvironment["SPINE_API_BASE_URL"] = base
@@ -46,6 +48,9 @@ final class HomePerfTests: XCTestCase {
         // The app's frame/memory/CPU sampler (Core/Environment/PerfProbe.swift) writes here.
         if let probe = ProcessInfo.processInfo.environment["PERF_PROBE_FILE"] {
             app.launchEnvironment["SPINE_PERF_PROBE_FILE"] = probe
+        }
+        if coldImages || ProcessInfo.processInfo.environment["PERF_COLD_IMAGES"] == "1" {
+            app.launchEnvironment["SPINE_PERF_COLD_IMAGES"] = "1"
         }
         return app
     }
@@ -143,6 +148,25 @@ final class HomePerfTests: XCTestCase {
             begin()
             for velocity in scrollSwipes { app.swipeUp(velocity: velocity) }
             end()
+        }
+    }
+
+    // MARK: - b2) Feed scroll with empty image caches
+
+    /// A fresh process per iteration with both image caches emptied at launch, so every poster, backdrop and avatar the
+    /// scroll shows is fetched and decoded during the window. Same swipes as testB_FeedScroll. Works on any build that
+    /// has the Debug hook (the frozen baseline gets it with the shared PerfProbe and SpineApp files).
+    @MainActor
+    func testB2_FeedScrollColdImages() throws {
+        let app = makeApp(coldImages: true)
+        measure(metrics: [XCTClockMetric()], options: options()) {
+            app.launch()
+            waitForFirstCard(app)
+            begin()
+            for velocity in scrollSwipes { app.swipeUp(velocity: velocity) }
+            end()
+            app.terminate()
+            settle(1.0)
         }
     }
 
