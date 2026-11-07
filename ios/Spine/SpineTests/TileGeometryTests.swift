@@ -180,6 +180,18 @@ final class TileGeometryTests: XCTestCase {
         )
     }
 
+    func testAClosedTileShowsItsFirstTitleInFrontWhateverTheFocusWas() {
+        // The fan is by position: after an open, a swipe and a close the front poster is the first title again.
+        for focus in 0 ..< 10 {
+            let front = TileGeometry.pose(index: 0, focus: focus, isOpen: false, contentWidth: width)
+            XCTAssertEqual(front, TileGeometry.fanPose(index: 0, contentWidth: width), "focus \(focus)")
+            for index in 1 ..< 10 {
+                let other = TileGeometry.pose(index: index, focus: focus, isOpen: false, contentWidth: width)
+                XCTAssertGreaterThan(front.z, other.z, "index \(index) at focus \(focus)")
+            }
+        }
+    }
+
     // MARK: Focus
 
     func testFocusIndexRoundsToTheNearestPoster() {

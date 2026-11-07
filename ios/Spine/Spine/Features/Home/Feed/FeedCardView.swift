@@ -281,7 +281,12 @@ struct FeedCardView: View, Equatable {
 
     // MARK: Counts
 
-    /// Read-only likes and comments. A zero shows just its icon. A Planning card has none.
+    /// A count's words: always the number, so a card nobody has reacted to reads "0" beside each icon.
+    static func countText(_ count: Int) -> String {
+        count.formatted()
+    }
+
+    /// Read-only likes and comments, each with its number (a zero reads "0", as in the mock). A Planning card has none.
     @ViewBuilder
     private func counts(ink: ArtInk) -> some View {
         if let engagement = model.engagement {
@@ -290,17 +295,13 @@ struct FeedCardView: View, Equatable {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 13))
                         .foregroundStyle(engagement.hasLiked ? ink.heart : ink.muted)
-                    if engagement.likeCount > 0 {
-                        Text(engagement.likeCount.formatted())
-                    }
+                    Text(Self.countText(engagement.likeCount))
                 }
                 HStack(spacing: 3) {
                     CommentBubbleShape()
                         .fill(ink.muted)
                         .frame(width: 13, height: 13)
-                    if engagement.commentCount > 0 {
-                        Text(engagement.commentCount.formatted())
-                    }
+                    Text(Self.countText(engagement.commentCount))
                 }
             }
             .font(HomeDesign.Text.counts)

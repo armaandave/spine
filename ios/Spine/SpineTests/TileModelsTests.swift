@@ -216,7 +216,7 @@ final class TileModelsTests: XCTestCase {
         XCTAssertEqual(model.meter?.kind, .ticks(count: 10))
         XCTAssertEqual(model.meter?.from, 4)
         XCTAssertEqual(model.primary, .tickUpNext(season: 1, episode: 5))
-        XCTAssertEqual(model.primary?.label, "Watched S1 E5")
+        XCTAssertEqual(model.primary?.label, "Watched E5", "Season 1 reads like the sheet's button: no season code")
 
         let lit = detail(show("show", watched: 4, aired: 10, upNext: (1, 5)), today: TodayPart(unit: .episodes, amount: 2), baseline: 4)
         XCTAssertEqual(lit.todayText, "+2 ep")
@@ -332,6 +332,9 @@ final class TileModelsTests: XCTestCase {
 
     func testEveryPlanSaysWhatItDoes() throws {
         XCTAssertEqual(QuickActionPlan.tickUpNext(season: 2, episode: 8).label, "Watched S2 E8")
+        XCTAssertEqual(QuickActionPlan.tickUpNext(season: 1, episode: 8).label, "Watched E8")
+        XCTAssertEqual(QuickActionPlan.tickUpNext(season: 0, episode: 3).label, "Watched S0 E3")
+        XCTAssertEqual(QuickActionPlan.tickUpNext(season: nil, episode: 1090).label, "Watched E1,090")
         XCTAssertEqual(QuickActionPlan.tickUpNext(season: nil, episode: 8).label, "Watched E8")
         XCTAssertEqual(QuickActionPlan.addPages(20).label, "+20 pages")
         XCTAssertEqual(QuickActionPlan.addPercent(5).label, "+5%")

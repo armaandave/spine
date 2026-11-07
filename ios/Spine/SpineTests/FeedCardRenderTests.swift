@@ -204,7 +204,7 @@ final class FeedCardRenderTests: XCTestCase {
         ))
 
         // Counts.
-        add("25-zero-counts", "ZERO LIKES, ZERO COMMENTS · ICONS ONLY", card(try FeedTestItems.item(
+        add("25-zero-counts", "ZERO LIKES, ZERO COMMENTS · BOTH SHOW A 0", card(try FeedTestItems.item(
             id: 25, objectID: 250, objectFields: "\"rating\": \"3\", \"liked\": false, \"is_rewatch\": false",
             username: "ava", title: "Past Lives", mediaFields: art("pl", "7A3A3A"),
             likes: 0, comments: 0
@@ -330,6 +330,15 @@ final class FeedCardRenderTests: XCTestCase {
         }
         let label = FeedCardView.accessibilityText(for: try fixtures()[11].model)
         XCTAssertTrue(label.contains("Episode 1089 of 1150"), "The meter's place is in the label: \(label)")
+    }
+
+    func testAZeroCountShowsItsNumberNextToItsIcon() throws {
+        // The mock draws "0" beside the heart and the bubble; the card never shows a bare icon.
+        XCTAssertEqual(FeedCardView.countText(0), "0")
+        XCTAssertEqual(FeedCardView.countText(38), "38")
+        let zero = try XCTUnwrap(try fixtures().first { $0.name == "25-zero-counts" }?.model.engagement)
+        XCTAssertEqual(zero.likeCount, 0)
+        XCTAssertEqual(zero.commentCount, 0)
     }
 
     func testDayHeadersAndSkeletonsHaveTheirFixedSizes() throws {

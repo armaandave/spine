@@ -21,14 +21,19 @@ enum QuickActionPlan: Equatable {
     static let bookPercent = 5
     static let gamePercent = 2
 
-    /// The button's words: "Watched S2 E8", "+20 pages", "+5%", "+1 chapter", "+1h", "Update".
+    /// The button's words: "Watched E8", "Watched S2 E8", "+20 pages", "+5%", "+1 chapter", "+1h", "Update".
+    ///
+    /// A show's season is named only once the show is known to have more than one. The list row carries no season
+    /// count, so up next in season 2 or later (or Specials) is the proof; season 1 reads "Watched E8", as the update
+    /// sheet's button does. An anime has no season at all.
     var label: String {
         switch self {
         case let .tickUpNext(season, episode):
-            if let season {
-                return "Watched \(TVTrackingPresentation.episodeCode(season: season, episode: episode))"
+            let number = EpisodeTickModel.grouped(episode)
+            if let season, season != 1 {
+                return "Watched S\(season) E\(number)"
             }
-            return "Watched \(AnimeTrackingPresentation.episodeCode(episode))"
+            return "Watched E\(number)"
         case let .addPages(count):
             return "+\(count) \(count == 1 ? "page" : "pages")"
         case let .addPercent(count):
