@@ -21,7 +21,7 @@ from pathlib import Path
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -32,6 +32,7 @@ from api.services import stats_v2_activity as activity
 from api.services.stats_scope import StatsScope
 from api.services.stats_v2 import build_stats_v2
 from app import user_calendar
+from app.models import Item
 from social.models import Comment, ContentLike, FollowStatus, ProgressChange, ProgressPost
 
 # The furthest any zone is from UTC, in hours: a viewer's day on a save's moment.
@@ -74,6 +75,7 @@ class Command(BaseCommand):
         for user in users:
             self._guarded(f"user {user.pk}", self._account, user)
         self._guarded("count 2", self._count_2)
+        self._guarded("count 3", self._count_3)
         self._guarded("count 14", self._count_14, since)
 
     def _say(self, *parts):
@@ -218,6 +220,19 @@ class Command(BaseCommand):
             self._say(
                 f"count 2 class {name}: posts={total['posts']} likes={total['likes']} comments={total['comments']}",
             )
+
+    def _count_3(self):
+        """Count 3: the biggest Item and User ids against what a day's address can name.
+
+        A TV or anime day is addressed by (person << 44) | (Item << 20) | day (plan 5.8),
+        which names an Item below 2**24 and a person below 2**19.
+        """
+        item = Item.objects.aggregate(top=Max("id"))["top"] or 0
+        person = get_user_model().objects.aggregate(top=Max("id"))["top"] or 0
+        self._say(
+            f"count 3: max_item_id={item} item_limit={activity_service.ITEM_LIMIT} "
+            f"max_user_id={person} user_limit={activity_service.USER_LIMIT}",
+        )
 
     def _count_14(self, since):
         """Count 14: a missed writer fails silently, so count rows with no stored day."""

@@ -246,6 +246,15 @@ class CountTwoTests(CompareTests):
         self.assertIn("posts=1", self.counts()["d"])
 
 
+class CountThreeTests(CompareTests):
+    """Count 3: the ids a day's address has to name."""
+
+    def test_it_prints_the_biggest_ids_beside_the_limits(self):
+        self.book("three")
+        line = self.line(self.compare(), "count 3:")
+        self.assertRegex(line, r"^count 3: max_item_id=\d+ item_limit=16777215 max_user_id=\d+ user_limit=524287$")
+
+
 @override_settings(TIME_ZONE="America/New_York")
 class CountFourteenTests(CompareTests):
     """Count 14: rows with no stored day, status rows per type, and Restart's flag."""

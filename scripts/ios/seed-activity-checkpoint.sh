@@ -5,7 +5,17 @@
 #   scripts/ios/seed-activity-checkpoint.sh [seed|add-k-l|add-s|add-u|add-r|
 #                                            like-from-tokyo|friend-starts-over|print-rows|
 #                                            new-issue-c2|add-g6|add-g8|add-m4|add-q|
-#                                            add-game-2023|add-t4|add-t6]
+#                                            add-game-2023|add-t4|add-t6|
+#                                            seed-phase-4|add-n|friend-day-order|friend-typo|
+#                                            friend-typo-fixed|friend-save-and-finish|
+#                                            friend-pause-stop-pick-up|
+#                                            friend-game-stops-then-plays|friend-ticks|
+#                                            friend-late-tick|friend-import-last-week|
+#                                            friend-marks|friend-earlier-question|
+#                                            friend-private-season|comment-on-my-row]
+#
+# Phase 4's sheet opens with seed-phase-4 (not seed), and its Mac steps are the friend-*
+# steps and comment-on-my-row, each named after the row of the sheet it runs.
 #
 # Run it from the feature worktree the test backend is serving ("use"). It clears the dev
 # user's tracking, logs, saves, likes, comments, lists and follows, so it refuses to run

@@ -415,6 +415,9 @@ def progress_post(viewer, progress_id):
 # at or above 2**44, where the change ids never reach, and fits a signed 64-bit id.
 ADDRESS_BASE = 1 << 44
 ITEM_BITS, DAY_BITS = 24, 20
+# What an address can name: an Item below one and a person below the other.
+ITEM_LIMIT = (1 << ITEM_BITS) - 1
+USER_LIMIT = (1 << (63 - ITEM_BITS - DAY_BITS)) - 1
 CHANGE_ADDRESSED = (
     MediaTypes.BOOK.value,
     MediaTypes.GAME.value,

@@ -1,4 +1,4 @@
-"""Phases 1 to 3's phone sheets: Spine Dev's user, set up through real tracking writes.
+"""Phases 1 to 4's phone sheets: Spine Dev's user, set up through real tracking writes.
 
 scripts/ios/seed-activity-checkpoint.sh runs this on the test backend's throwaway copy,
 and test_activity_checkpoints.py runs the same steps in CI. It clears the dev user
@@ -20,6 +20,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import connection, transaction
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 # Show Z's choice queues its calendar on commit through events.tasks, which the served
 # backend has loaded and `manage.py shell` hasn't.
@@ -33,6 +34,7 @@ from app import (
     book_tracking,
     game_tracking,
     series_tracking,
+    single_weight,
     tv_tracking,
     user_calendar,
 )
@@ -88,12 +90,17 @@ BOOKS = {
     "U": None,
     "R": 285,
     "X": 300,
+    "N": 300,
     "Friend": 400,
 }
+# What the seeded friend reads on Phase 4's sheet. None are on the dev user's list.
+FRIEND_BOOKS = {"FB1": 400, "FB2": 400, "FB3": 400, "FB4": 400, "FB5": 400}
+# The friend's shows (each episode 60 minutes), game, films and a heart's book.
+FRIEND_SHOWS = {"FS": 8, "FS2": 5, "FS3": 3, "FS4": 6, "FS5": 5, "FS6": 5}
 # On the list: J and V are untouched until their rows, so they aren't in the Library.
 # They share a length and tiles with no title on them, so the list's order tells them
 # apart: J, V, X, first.
-LISTED_BOOKS = ("J", "V", "X")
+LISTED_BOOKS = ("J", "V", "X", "N")
 # What the sheet's last row has the phone save on, and what print-rows reads.
 STORED_TITLES = ("X", "Y", "Z", "W")
 OTHER_TITLES = {
@@ -119,13 +126,20 @@ PHASE_2 = {
 }
 # Phase 3's shows, each episode 60 minutes, or every number prints ≈. Manual shows keep
 # season logs (TV-408).
-PHASE_3_SHOWS = {"T1": 10, "T2": 2, "T3": 4, "T4": 5, "T5": 2, "T6": 3, "T7": 4, "T8": 4}
+PHASE_3_SHOWS = {"T1": 10, "T2": 2, "T3": 4, "T4": 5, "T5": 2, "T6": 3, "T7": 4, "T8": 4, "T9": 3}
 SHOW_MINUTES = 60
 # Phase 3's films and album, and their runtimes.
 PHASE_3_TITLES = {
     "F": (MediaTypes.MOVIE.value, 120),
     "F2": (MediaTypes.MOVIE.value, 120),
     "P": (MediaTypes.MUSIC.value, 60),
+    "F3": (MediaTypes.MOVIE.value, 135),
+}
+# The friend's films and game, and their runtimes.
+FRIEND_TITLES = {
+    "FM": (MediaTypes.MOVIE.value, 120),
+    "FM2": (MediaTypes.MOVIE.value, 120),
+    "FG": (MediaTypes.GAME.value, None),
 }
 
 
@@ -264,6 +278,26 @@ def _make_titles(dev):
             ),
         )
     titles.extend(_make_show(name, episodes, SHOW_MINUTES) for name, episodes in PHASE_3_SHOWS.items())
+    for name, pages in FRIEND_BOOKS.items():
+        Item.objects.create(
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.BOOK.value,
+            media_id=media_id(name),
+            title=f"Book {name}",
+            image=IMAGE,
+            total_pages=pages,
+        )
+    for name, (media_type, minutes) in FRIEND_TITLES.items():
+        Item.objects.create(
+            source=Sources.MANUAL.value,
+            media_type=media_type,
+            media_id=media_id(name),
+            title=f"{media_type.title()} {name}",
+            image=IMAGE,
+            runtime_minutes=minutes,
+        )
+    for name, episodes in FRIEND_SHOWS.items():
+        _make_show(name, episodes, SHOW_MINUTES)
     listed = CustomList.objects.create(owner=dev, name=LIST_NAME)
     for position, item in enumerate(titles, start=1):
         CustomListItem.objects.create(custom_list=listed, item=item, position=position)
@@ -327,7 +361,17 @@ def _log(user, item, day):
 
 
 def seed():
-    """Write the sheet's opening state: 830, 360 and 1,540.
+    """Write the sheet's opening state: 830, 360 and 1,540, and Phase 3's T1."""
+    _seed(_phase_3)
+
+
+def seed_phase_4():
+    """Write Phase 4's opening: Phase 1 and 2's titles, and what it adds."""
+    _seed(_phase_4, friend_reads=False)
+
+
+def _seed(*openings, friend_reads=True):
+    """Write the sheet's opening state, and then each phase's own.
 
     It rewrites every account's timezone and makes users, so it refuses anywhere but the
     test backend's SQLite copy. The image holds this module, and CI's Database checks
@@ -362,9 +406,11 @@ def seed():
         with on(date(2026, 6, 15)):
             tv_tracking.choose(dev, show_z(), PLANNING, entry_point=tv_tracking.APP)
         Follow.objects.create(from_user=dev, to_user=friend_user(), status=FollowStatus.ACCEPTED)
-        _friend_reads(friend_user())
+        if friend_reads:
+            _friend_reads(friend_user())
         _phase_2(dev)
-        _phase_3(dev)
+        for opening in openings:
+            opening(dev)
         stats_cache.bump_user(dev)
 
 
@@ -376,6 +422,42 @@ def _phase_3(dev):
     """
     with on(date(2025, 5, 1)):
         tv_tracking.create_log(dev, season("T1"), consumed_at=date(2025, 5, 1), mutation_id=uuid4())
+
+
+def _phase_4(dev):
+    """Phase 4's opening, on Phase 1 and 2's titles: no T1 log, so TV starts at 3 hours.
+
+    Show T2 has 2 ticks at 60 minutes, T3 a season eye on 4 episodes, a 135-minute film
+    is logged on Mar 1 2026, G7 has the eye and M2 and C2 their marks (Phase 2's). T9, 3
+    episodes, has a season log and a review of S1 E2 in 2025.
+    """
+    with on(date(2026, 1, 15)):
+        game_tracking.mark_completed(dev, title(MediaTypes.GAME.value, "G7"))
+    with on(date(2026, 3, 2)):
+        for number in (1, 2):
+            tv_tracking.tick(dev, show("T2"), 1, number, mutation_id=uuid4())
+    with on(date(2026, 1, 15)):
+        tv_tracking.mark_watched(dev, show("T3"), season_number=1, mutation_id=uuid4())
+    with on(date(2026, 3, 1)):
+        single_weight.create_log(dev, title(MediaTypes.MOVIE.value, "F3"), consumed_at=date(2026, 3, 1))
+    with on(date(2025, 5, 1)):
+        tv_tracking.create_log(dev, season("T9"), consumed_at=date(2025, 5, 1), mutation_id=uuid4())
+    episode = Item.objects.get(
+        source=Sources.MANUAL.value,
+        media_type=MediaTypes.EPISODE.value,
+        media_id=media_id("T9"),
+        season_number=1,
+        episode_number=2,
+    )
+    with on(date(2025, 5, 2)):
+        tv_tracking.create_log(
+            dev,
+            episode,
+            consumed_at=date(2025, 5, 2),
+            review="Quiet and strange.",
+            is_rewatch=False,
+            mutation_id=uuid4(),
+        )
 
 
 def _series(user, name, start, *saves):
@@ -559,6 +641,192 @@ def friend_starts_over():
         book_tracking.update_progress(friend, item, progress_type="pages", value=10)
 
 
+# Phase 4's friend: what they do, run from the Mac. Each step names its days, and those
+# that say "the day before" read from today.
+
+
+def today():
+    """Return today in New York, from the clock as it is."""
+    return timezone.now().astimezone(ZoneInfo(NEW_YORK)).date()
+
+
+def friend_item(media_type, name):
+    """Return one of the friend's titles."""
+    return title(media_type, name)
+
+
+def add_n():
+    """Add book N: started Aug 1 2026, with no reading."""
+    with on(date(2026, 8, 1)):
+        book_tracking.start(dev_user(), book("N"))
+
+
+def friend_day_order():
+    """Book save 9 am, movie log 10 am, book save 10 pm, book save next morning."""
+    friend, item, film = friend_user(), book("FB1"), friend_item(MediaTypes.MOVIE.value, "FM")
+    before, after = today() - timedelta(days=2), today() - timedelta(days=1)
+    with on(before, at="09:00"):
+        book_tracking.start(friend, item)
+        book_tracking.update_progress(friend, item, progress_type="pages", value=60)
+    with on(before, at="10:00"):
+        single_weight.create_log(friend, film, consumed_at=before)
+    with on(before, at="22:00"):
+        book_tracking.update_progress(friend, item, progress_type="pages", value=100)
+    with on(after, at="08:00"):
+        book_tracking.update_progress(friend, item, progress_type="pages", value=130)
+
+
+def friend_typo():
+    """300 pages on Dec 28 2025, which the dev user likes from the Mac."""
+    friend, item = friend_user(), book("FB2")
+    with on(date(2025, 12, 28)):
+        book_tracking.start(friend, item)
+        book_tracking.update_progress(friend, item, progress_type="pages", value=300)
+    dev = dev_user()
+    change = ProgressChange.objects.filter(actor=friend, item=item, current_progress__kind="pages").latest("id")
+    post = activity_service.progress_post(dev, change.pk)
+    social_service.set_like(dev, target_type=ContentLike.PROGRESS_POST, target_id=post.pk, liked=True)
+
+
+def friend_typo_fixed():
+    """Fix that typo to 30 on Jan 2 2026."""
+    with on(date(2026, 1, 2)):
+        book_tracking.update_progress(friend_user(), book("FB2"), progress_type="pages", value=30)
+
+
+def friend_save_and_finish():
+    """100 pages and a finish of a 400-page book, on one day."""
+    friend, item = friend_user(), book("FB3")
+    day = today() - timedelta(days=1)
+    with on(day, at="09:00"):
+        book_tracking.start(friend, item)
+        book_tracking.update_progress(friend, item, progress_type="pages", value=100)
+    with on(day, at="10:00"):
+        book_tracking.complete(friend, item, completion_date=day, mutation_id=uuid4())
+
+
+def friend_pause_stop_pick_up():
+    """Save 40 and pause Monday, resume Tuesday, stop Wednesday, restart Thursday."""
+    friend, item = friend_user(), book("FB4")
+    monday = date(2026, 10, 12)
+    with on(monday):
+        book_tracking.start(friend, item)
+        book_tracking.update_progress(friend, item, progress_type="pages", value=40)
+        book_tracking.pause(friend, item)
+    with on(monday + timedelta(days=1)):
+        book_tracking.resume(friend, item)
+    with on(monday + timedelta(days=2)):
+        book_tracking.drop(friend, item)
+    with on(monday + timedelta(days=3)):
+        book_tracking.start(friend, item)
+
+
+def friend_game_stops_then_plays():
+    """Stop a game, then choose Playing the next day."""
+    friend, game = friend_user(), friend_item(MediaTypes.GAME.value, "FG")
+    day = date(2026, 10, 12)
+    with on(day):
+        game_tracking.start(friend, game)
+    with on(day + timedelta(days=1)):
+        game_tracking.drop(friend, game)
+    with on(day + timedelta(days=2)):
+        game_tracking.start(friend, game)
+
+
+def friend_ticks():
+    """Tick E1 and E2 Monday; tick E3 and untick E1 Tuesday."""
+    friend, shown = friend_user(), show("FS")
+    monday = date(2026, 10, 19)
+    with on(monday):
+        for number in (1, 2):
+            tv_tracking.tick(friend, shown, 1, number, mutation_id=uuid4())
+    with on(monday + timedelta(days=1)):
+        tv_tracking.tick(friend, shown, 1, 3, mutation_id=uuid4())
+        tv_tracking.untick(friend, shown, 1, 1, mutation_id=uuid4())
+
+
+def friend_late_tick():
+    """Tick E4, dated that Monday."""
+    friend = friend_user()
+    moment = datetime(2026, 10, 19, 20, 0, tzinfo=ZoneInfo(NEW_YORK))
+    with on(date(2026, 10, 21)):
+        tv_tracking.tick(
+            friend,
+            show("FS"),
+            1,
+            4,
+            at=moment,
+            entry_point=tv_tracking.WEBHOOK,
+            mutation_id=uuid4(),
+        )
+
+
+def friend_import_last_week():
+    """Import show plays dated last week, as a file does (decision 47)."""
+    friend, shown = friend_user(), show("FS3")
+    week_ago = today() - timedelta(days=7)
+    with on(today()):
+        for number in (1, 2):
+            tv_tracking.tick(
+                friend,
+                shown,
+                1,
+                number,
+                at=week_ago,
+                entry_point=tv_tracking.IMPORT,
+                mutation_id=uuid4(),
+            )
+
+
+def friend_marks():
+    """Tap an eye on a movie, a heart, a season eye and Mark watched up to here."""
+    friend = friend_user()
+    with on(today()):
+        single_weight.mark_consumed(friend, friend_item(MediaTypes.MOVIE.value, "FM2"))
+        MediaLike.objects.get_or_create(user=friend, item=book("FB5"))
+        tv_tracking.mark_watched(friend, show("FS5"), season_number=1, mutation_id=uuid4())
+        tv_tracking.mark_up_to(friend, show("FS6"), 1, 3, mutation_id=uuid4())
+
+
+def friend_earlier_question():
+    """Tick E3 of a new show, and say Yes to the earlier-episodes question."""
+    friend, shown = friend_user(), show("FS4")
+    with on(today() - timedelta(days=3)):
+        question = tv_tracking.tick(friend, shown, 1, 3, mutation_id=uuid4()).earlier_unwatched
+        tv_tracking.mark_earlier(friend, shown, from_ref=question["from"], to_ref=question["to"], mutation_id=uuid4())
+
+
+def friend_private_season():
+    """Two ticks, then a private log of the season adding the other three episodes."""
+    friend = friend_user()
+    day = date(2026, 4, 6)
+    with on(day):
+        for number in (1, 2):
+            tv_tracking.tick(friend, show("FS2"), 1, number, mutation_id=uuid4())
+    with on(day + timedelta(days=1)):
+        tv_tracking.create_log(
+            friend,
+            season("FS2"),
+            consumed_at=day + timedelta(days=1),
+            visibility="private",
+            mutation_id=uuid4(),
+        )
+
+
+def comment_on_my_row():
+    """Comment on the dev user's newest row, as the friend."""
+    dev = dev_user()
+    client = APIClient()
+    client.force_authenticate(friend_user())
+    newest = client.get(f"/api/v1/users/{DEV_USERNAME}/activity/", {"page_size": 1}).json()["results"][0]
+    if newest["type"] == "progress_updated":
+        post = activity_service.progress_post(friend_user(), newest["object"]["id"])
+        social_service.add_comment(friend_user(), "Nice one.", post=post)
+    else:
+        entry = DiaryEntry.objects.get(pk=newest["object"]["id"], user=dev)
+        social_service.add_comment(friend_user(), "Nice one.", entry=entry)
+
+
 def print_rows():
     """Print every row the sheet's last row stored, and flag any not saved today."""
     names = [media_id(name) for name in STORED_TITLES]
@@ -588,4 +856,19 @@ STEPS = {
     "add-game-2023": add_game_2023,
     "add-t4": add_t4,
     "add-t6": add_t6,
+    "seed-phase-4": seed_phase_4,
+    "add-n": add_n,
+    "friend-day-order": friend_day_order,
+    "friend-typo": friend_typo,
+    "friend-typo-fixed": friend_typo_fixed,
+    "friend-save-and-finish": friend_save_and_finish,
+    "friend-pause-stop-pick-up": friend_pause_stop_pick_up,
+    "friend-game-stops-then-plays": friend_game_stops_then_plays,
+    "friend-ticks": friend_ticks,
+    "friend-late-tick": friend_late_tick,
+    "friend-import-last-week": friend_import_last_week,
+    "friend-marks": friend_marks,
+    "friend-earlier-question": friend_earlier_question,
+    "friend-private-season": friend_private_season,
+    "comment-on-my-row": comment_on_my_row,
 }
