@@ -1,7 +1,8 @@
-"""compare_activity_numbers: today's number beside the calculation's, for every account.
+"""compare_activity_numbers: Stats' number beside the Activity list's, per account.
 
 It's the read-only count decision 29 approved. It prints counts and user ids, writes
-nothing and calls no provider. It holds counts 2 and 14, so they run in CI.
+nothing and calls no provider. It holds counts 2 and 14, so they run in CI. Every line
+reads "number->list", and the two agree by design (decision 2).
 """
 
 import contextlib
@@ -23,7 +24,7 @@ from api.services.stats_scope import StatsScope
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from app import book_tracking, game_tracking, single_weight, tv_tracking
 from app.management.commands.compare_activity_numbers import _qualifying_days
-from app.models import Anime, DiaryEntry, GameSession, Item, MediaTypes, Status
+from app.models import Anime, DiaryEntry, Item, MediaTypes, Status
 from app.tests.tv_fixtures import make_manual_show
 from social.models import (
     Comment,
@@ -54,7 +55,7 @@ class CompareTests(BookCalcBase):
         return found[0]
 
     def seed_a_known_difference(self):
-        """Read with no finish: today's Books count nothing, and the rows count 285."""
+        """Read with no finish: 285 pages in the year, on Stats and on the list."""
         self.reading = self.book("reading", pages=500)
         self.begin(self.reading, d(2026, 3, 1))
         self.save(self.reading, 285, d(2026, 3, 2))
@@ -63,14 +64,13 @@ class CompareTests(BookCalcBase):
         self.seed_a_known_difference()
         lines = self.compare()
         line = self.line(lines, f"user {self.owner.pk} book 2026:")
-        self.assertIn("value=0->285", line)
-        self.assertIn("known=0->1", line)
-        self.assertIn("total=0->1", line)
-        # Books are switched on, so today's titles and days read the rows already.
+        self.assertIn("value=285->285", line)
+        self.assertIn("known=1->1", line)
+        self.assertIn("total=1->1", line)
         self.assertIn("titles=1->1", line)
         self.assertIn("active_days=2->2", line)
         everything = self.line(lines, f"user {self.owner.pk} book all:")
-        self.assertIn("value=0->285", everything)
+        self.assertIn("value=285->285", everything)
         self.assertIn("pile=None->0", everything)
 
     def test_known_says_what_the_reader_says_when_an_older_row_is_unknown(self):
@@ -80,9 +80,9 @@ class CompareTests(BookCalcBase):
         self.save(item, 25, d(2026, 3, 2), kind="percentage")
         self.save(item, 60, d(2026, 3, 3))
         line = self.line(self.compare(), f"user {self.owner.pk} book 2026:")
-        self.assertIn("value=0->60", line)
+        self.assertIn("value=60->60", line)
         self.assertIn("known=0->0", line)
-        self.assertIn("total=0->1", line)
+        self.assertIn("total=1->1", line)
         scope = StatsScope(owner=self.owner, viewer=self.owner).with_media_type(MediaTypes.BOOK.value)
         ranged = scope._sibling(start_date=d(2026, 1, 1), end_date=d(2026, 12, 31))
         with patch.object(activity_rows, "CALCULATED_TYPES", frozenset({MediaTypes.BOOK.value})):
@@ -102,22 +102,7 @@ class CompareTests(BookCalcBase):
         with self.on(d(2026, 2, 4)):
             game_tracking.mark_completed(self.owner, marked)
         line = self.line(self.compare(), f"user {self.owner.pk} game all:")
-        self.assertRegex(line, r"known=\d+->0 total=\d+->1 titles=\d+->2 ")
-
-    def test_a_year_todays_code_counts_and_the_rows_leave_empty_gets_its_line(self):
-        """A save a later fix took back to nothing: its pill would go at the switch.
-
-        Books have switched, so their today reads the rows: this is them before it.
-        """
-        item = self.book("taken-back")
-        self.begin(item, d(2023, 3, 1))
-        self.save(item, 100, d(2024, 3, 1))
-        self.save(item, 0, d(2025, 3, 1))
-        with patch.object(activity_rows, "CALCULATED_TYPES", frozenset()):
-            lines = self.compare()
-        self.assertIn("active_days=1->0", self.line(lines, f"user {self.owner.pk} book 2024:"))
-        self.assertTrue(self.line(lines, f"user {self.owner.pk} book 2023:"))
-        self.assertIn("active_days=2->1", self.line(lines, f"user {self.owner.pk} book all:"))
+        self.assertIn("known=0->0 total=1->1 titles=2->2 ", line)
 
     def test_a_number_that_agrees_reads_the_same_on_both_sides(self):
         logged = self.book("logged")
@@ -162,11 +147,11 @@ class CompareTests(BookCalcBase):
 
 
 @override_settings(TIME_ZONE="America/New_York")
-class YearsOnlyTheOldCounterHasTests(CompareTests):
-    """A mark leaving a year moves its amount to the pile: All Time can't show that."""
+class YearsTests(CompareTests):
+    """A mark leaves every year and lands in the pile."""
 
     def test_an_anime_marked_in_2025_is_in_no_year_on_either_side(self):
-        """Anime's counter already leaves a mark's fills out of every year (AN-704)."""
+        """Anime's mark leaves its fills out of every year (AN-704)."""
         item = self.item(MediaTypes.ANIME.value, "marked", title="marked")
         self.set_item(item, runtime_minutes=24)
         row = self.tracking(Anime, item, status=Status.COMPLETED.value, progress=12)
@@ -177,32 +162,6 @@ class YearsOnlyTheOldCounterHasTests(CompareTests):
         self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} anime 2025:")])
         self.assertIn("value=288->288", self.line(lines, f"user {self.owner.pk} anime all:"))
 
-    def test_a_game_whose_hours_read_a_year_its_rows_left(self):
-        item = self.item(MediaTypes.GAME.value, "moved", title="moved")
-        with self.on(d(2026, 2, 10)):
-            game_tracking.start(self.owner, item)
-            game_tracking.update_progress(self.owner, item, total_minutes=3000)
-        GameSession.objects.filter(related_game__item=item).update(minutes_updated_on=d(2025, 12, 20))
-        line = self.line(self.compare(), f"user {self.owner.pk} game 2025:")
-        self.assertIn("value=3000->0", line)
-
-    def test_a_game_whose_hours_a_later_fix_took_back_keeps_their_year(self):
-        """Only today's events name 2024: the session's own date moved on to the fix.
-
-        Read as it was before games switched, when today's events were the old ones.
-        """
-        item = self.item(MediaTypes.GAME.value, "taken-back", title="taken-back")
-        with self.on(d(2023, 3, 1)):
-            game_tracking.start(self.owner, item)
-        with self.on(d(2024, 3, 1)):
-            game_tracking.update_progress(self.owner, item, total_minutes=100)
-        with self.on(d(2025, 3, 1)):
-            game_tracking.update_progress(self.owner, item, total_minutes=0)
-        with patch.object(activity_rows, "CALCULATED_TYPES", frozenset({MediaTypes.BOOK.value})):
-            lines = self.compare()
-        line = self.line(lines, f"user {self.owner.pk} game 2024:")
-        self.assertIn("active_days=1->0", line)
-
     def test_a_year_holding_nothing_either_way_prints_nothing(self):
         self.seed_a_known_difference()
         lines = self.compare()
@@ -211,7 +170,7 @@ class YearsOnlyTheOldCounterHasTests(CompareTests):
 
 
 class PhaseThreeTypesTests(CompareTests):
-    """TV, movies and music: the old counters beside the rows, for the closing look."""
+    """TV, movies and music: Stats beside the list."""
 
     def test_a_marked_film_logged_with_rewatch_on_rises_in_all_time_only(self):
         film = Item.objects.create(source="manual", media_type=MediaTypes.MOVIE.value, media_id="film", title="Film", runtime_minutes=120)
@@ -222,9 +181,9 @@ class PhaseThreeTypesTests(CompareTests):
         lines = self.compare()
         self.assertIn("value=120->120", self.line(lines, f"user {self.owner.pk} movie 2026:"))
         everything = self.line(lines, f"user {self.owner.pk} movie all:")
-        self.assertIn("value=120->240", everything)
-        self.assertIn("known=1->2", everything)
-        self.assertIn("total=1->2", everything)
+        self.assertIn("value=240->240", everything)
+        self.assertIn("known=2->2", everything)
+        self.assertIn("total=2->2", everything)
 
     def test_it_times_the_feed_for_an_account_that_follows_someone(self):
         friend = get_user_model().objects.create_user(username="friend", calendar_timezone="America/New_York")
@@ -242,8 +201,8 @@ class PhaseThreeTypesTests(CompareTests):
         with self.on(d(2026, 3, 2)):
             tv_tracking.create_log(self.owner, season, consumed_at=d(2025, 12, 20))
         lines = self.compare()
-        self.assertIn("value=45->90", self.line(lines, f"user {self.owner.pk} tv 2025:"))
-        self.assertIn("value=45->0", self.line(lines, f"user {self.owner.pk} tv 2026:"))
+        self.assertIn("value=90->90", self.line(lines, f"user {self.owner.pk} tv 2025:"))
+        self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} tv 2026:")])
         everything = self.line(lines, f"user {self.owner.pk} tv all:")
         self.assertIn("value=90->90", everything)
         self.assertIn("total=2->2", everything)
@@ -492,14 +451,14 @@ class BadRowTests(BookCalcBase):
         self.begin(item, d(2025, 3, 1))
         self.save(item, 40, d(2025, 3, 5))
         self.save(item, 80, d(2026, 3, 5))
-        real = stats_time._COUNTERS[MediaTypes.BOOK.value]
+        real = stats_time.type_time
 
-        def counter(scope, media_type):
+        def reader(scope, media_type):
             if not scope.is_all_time and scope.start_date.year == 2025:
                 raise ValueError("A bad row")
             return real(scope, media_type)
 
-        with patch.dict(stats_time._COUNTERS, {MediaTypes.BOOK.value: counter}):
+        with patch.object(stats_time, "type_time", reader):
             lines = self.compare_failing()
         self.assertIn("failed ValueError", self.line(lines, f"user {self.owner.pk} book 2025:"))
         self.assertIn("value=", self.line(lines, f"user {self.owner.pk} book 2026:"))

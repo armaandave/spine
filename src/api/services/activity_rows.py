@@ -49,8 +49,7 @@ from app.models import (
 )
 from social.models import Follow, FollowStatus, ProgressChange, Visibility
 
-# The types Stats reads through this calculation: every type, since Phase 3. The old
-# counters stay in api.services.stats_time for the comparison only.
+# The types Stats and the lists read through this calculation: every type.
 CALCULATED_TYPES = frozenset(
     {
         MediaTypes.BOOK.value,
@@ -433,8 +432,8 @@ def _book_target(snapshot, total):
     """Return (the pages a finished read comes to, whether that's its real length).
 
     A snapshot with a max holds the length at the finish, and it stays (STAT-201). With
-    no max it's only the last page typed, so the real length wins once it's known. As in
-    stats_time._book_pages, a value of null or 0, or one that's no number, says nothing.
+    no max it's only the last page typed, so the real length wins once it's known. A
+    value of null or 0, or one that's no number, says nothing.
     """
     pages = saved_number(snapshot.get("value")) if snapshot.get("kind") == "pages" else None
     if pages and saved_number(snapshot.get("max")):
