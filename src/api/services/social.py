@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import ValidationError
 
 from api.permissions import can_view_user_profile, user_blocks, users_blocked
 from app import single_weight
@@ -188,9 +189,14 @@ def viewable_diary_entry(viewer, entry_id):
     return entry
 
 
-def add_comment(user, body, *, entry=None, post=None):
-    """Comment on a log or on a day's progress the user can already see."""
-    comment = Comment.objects.create(user=user, body=body, diary_entry=entry, progress_post=post)
+def add_comment(user, body, *, entry=None, post=None, parent_id=None):
+    """Comment on a log or a day's progress the user can see, or reply to a comment.
+
+    A reply to a reply joins its thread, so replies stay one level deep.
+    """
+    with transaction.atomic():
+        parent = _locked_thread(user, parent_id, entry=entry, post=post) if parent_id is not None else None
+        comment = Comment.objects.create(user=user, body=body, diary_entry=entry, progress_post=post, parent=parent)
     SocialAuditLog.objects.create(
         actor=user,
         action="comment",
@@ -198,6 +204,24 @@ def add_comment(user, body, *, entry=None, post=None):
         target_id=entry.id if entry else post.id,
     )
     return comment
+
+
+def _locked_thread(user, comment_id, *, entry, post):
+    """Return the thread a reply to ``comment_id`` joins, locked until it's saved.
+
+    A delete takes the same lock, so it can't remove the thread from under a new reply.
+    """
+    target = (
+        Comment.objects.visible_to(user)
+        .filter(diary_entry=entry, progress_post=post, id=comment_id)
+        .values("parent_id", "is_deleted")
+        .first()
+    )
+    if target and not target["is_deleted"]:
+        thread = Comment.objects.select_for_update().filter(id=target["parent_id"] or comment_id).first()
+        if thread and not (thread.id == comment_id and thread.is_deleted):
+            return thread
+    raise ValidationError({"parent_id": "That comment isn't here anymore."})
 
 
 def can_delete_comment(user, comment):
@@ -208,9 +232,18 @@ def can_delete_comment(user, comment):
 
 def delete_comment(user, comment_id):
     """Delete a comment the user can see and is allowed to remove."""
+    with transaction.atomic():
+        # Lock the thread's top comment, as a reply does: no reply lands mid-delete.
+        thread_id = Comment.objects.filter(id=comment_id).values_list("parent_id", flat=True).first()
+        list(Comment.objects.select_for_update().filter(id=thread_id or comment_id))
+        _delete_comment(user, comment_id)
+
+
+def _delete_comment(user, comment_id):
     comment = get_object_or_404(
         Comment.objects.visible_to(user).select_related("diary_entry", "progress_post"),
         id=comment_id,
+        is_deleted=False,
     )
     if not can_delete_comment(user, comment):
         raise Http404
@@ -221,7 +254,16 @@ def delete_comment(user, comment_id):
         target_type=ContentLike.DIARY_ENTRY if comment.diary_entry_id else ContentLike.PROGRESS_POST,
         target_id=comment.diary_entry_id or comment.progress_post_id,
     )
+    if comment.replies.exists():
+        # Its replies still need something to answer: it stays as "Comment deleted".
+        comment.body = ""
+        comment.is_deleted = True
+        comment.save(update_fields=["body", "is_deleted"])
+        return
     comment.delete()
+    parent = comment.parent
+    if parent and parent.is_deleted and not parent.replies.exists():
+        parent.delete()
 
 
 def _can_view_diary_entry(viewer, entry):

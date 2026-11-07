@@ -264,6 +264,129 @@ class CommentTests(PostTestCase):
                 Comment.objects.create(user=self.friend, body="Nowhere", **targets)
 
 
+class ReplyTests(PostTestCase):
+    """Replies: one level deep, counted, and kept readable when a comment goes."""
+
+    def reply(self, user, entry, parent, body="Reply"):
+        return self.as_user(user).post(
+            f"/api/v1/diary/{entry.id}/comments/",
+            {"body": body, "parent_id": parent.id},
+        )
+
+    def listed(self, entry, user=None):
+        return self.as_user(user or self.friend).get(f"/api/v1/diary/{entry.id}/comments/").data["results"]
+
+    def test_a_reply_points_at_its_comment_and_counts(self):
+        entry = self.log()
+        comment = Comment.objects.create(user=self.owner, diary_entry=entry, body="Thoughts?")
+
+        response = self.reply(self.friend, entry, comment)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["parent_id"], comment.id)
+        self.assertFalse(response.data["is_deleted"])
+        self.assertEqual(self.feed()[0]["comment_count"], 2)
+        self.assertEqual(self.client.get(f"/api/v1/diary/{entry.id}/").data["comment_count"], 2)
+
+    def test_a_reply_to_a_reply_joins_the_same_thread(self):
+        entry = self.log()
+        comment = Comment.objects.create(user=self.owner, diary_entry=entry, body="Thoughts?")
+        first = Comment.objects.create(user=self.friend, diary_entry=entry, parent=comment, body="Loved it")
+
+        response = self.reply(self.owner, entry, first, "@friend same")
+
+        self.assertEqual(response.data["parent_id"], comment.id)
+
+    def test_replies_list_right_after_their_comment(self):
+        entry = self.log()
+        first = Comment.objects.create(user=self.owner, diary_entry=entry, body="One")
+        second = Comment.objects.create(user=self.friend, diary_entry=entry, body="Two")
+        reply = Comment.objects.create(user=self.friend, diary_entry=entry, parent=first, body="Re one")
+
+        ids = [comment["id"] for comment in self.listed(entry)]
+
+        self.assertEqual(ids, [first.id, reply.id, second.id])
+
+    def test_a_reply_must_be_to_a_comment_on_the_same_post(self):
+        entry = self.log()
+        elsewhere = Comment.objects.create(user=self.owner, diary_entry=self.log(), body="Other log")
+
+        response = self.reply(self.friend, entry, elsewhere)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Comment.objects.filter(diary_entry=entry).exists())
+
+    def test_a_reply_on_a_days_progress(self):
+        change = self.progress()
+        self.as_user(self.owner)
+        comment = self.client.post(f"/api/v1/progress/{change.id}/comments/", {"body": "Four!"}).data
+
+        response = self.as_user(self.friend).post(
+            f"/api/v1/progress/{change.id}/comments/",
+            {"body": "Nice", "parent_id": comment["id"]},
+        )
+
+        self.assertEqual(response.data["parent_id"], comment["id"])
+        self.assertEqual(self.feed()[0]["comment_count"], 2)
+
+    def test_deleting_a_comment_with_replies_leaves_a_placeholder(self):
+        entry = self.log()
+        comment = Comment.objects.create(user=self.friend, diary_entry=entry, body="Secret take")
+        Comment.objects.create(user=self.owner, diary_entry=entry, parent=comment, body="Reply")
+
+        response = self.as_user(self.friend).delete(f"/api/v1/comments/{comment.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        placeholder, reply = self.listed(entry)
+        self.assertTrue(placeholder["is_deleted"])
+        self.assertEqual(placeholder["body"], "")
+        self.assertFalse(placeholder["can_delete"])
+        self.assertEqual(reply["parent_id"], comment.id)
+        self.assertEqual(self.feed()[0]["comment_count"], 1)
+        # It's already gone, so it can't be deleted again or replied to.
+        self.assertEqual(self.client.delete(f"/api/v1/comments/{comment.id}/").status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.reply(self.friend, entry, comment).status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_a_reply_to_a_reply_under_a_deleted_comment_still_joins_the_thread(self):
+        entry = self.log()
+        comment = Comment.objects.create(user=self.friend, diary_entry=entry, body="Take")
+        reply = Comment.objects.create(user=self.owner, diary_entry=entry, parent=comment, body="Reply")
+        self.as_user(self.friend).delete(f"/api/v1/comments/{comment.id}/")
+
+        response = self.reply(self.friend, entry, reply, "@owner fair")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["parent_id"], comment.id)
+
+    def test_the_last_reply_going_takes_the_placeholder_with_it(self):
+        entry = self.log()
+        comment = Comment.objects.create(user=self.friend, diary_entry=entry, body="Take")
+        reply = Comment.objects.create(user=self.owner, diary_entry=entry, parent=comment, body="Reply")
+        self.as_user(self.friend).delete(f"/api/v1/comments/{comment.id}/")
+
+        self.as_user(self.owner).delete(f"/api/v1/comments/{reply.id}/")
+
+        self.assertFalse(Comment.objects.exists())
+
+    def test_deleting_a_reply_keeps_a_live_comment(self):
+        entry = self.log()
+        comment = Comment.objects.create(user=self.owner, diary_entry=entry, body="Stays")
+        reply = Comment.objects.create(user=self.friend, diary_entry=entry, parent=comment, body="Goes")
+
+        self.as_user(self.friend).delete(f"/api/v1/comments/{reply.id}/")
+
+        self.assertEqual(list(Comment.objects.values_list("body", flat=True)), ["Stays"])
+
+    def test_a_block_hides_replies_under_that_persons_comment(self):
+        entry = self.log()
+        hidden = Comment.objects.create(user=self.stranger, diary_entry=entry, body="Hidden")
+        Comment.objects.create(user=self.owner, diary_entry=entry, parent=hidden, body="Under hidden")
+        Block.objects.create(blocker=self.friend, blocked=self.stranger)
+
+        self.assertEqual(self.listed(entry), [])
+        self.assertEqual(self.feed()[0]["comment_count"], 0)
+
+
 class ProgressPostTests(PostTestCase):
     """A day's progress as a post: its page, likes, and comments."""
 

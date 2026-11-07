@@ -205,7 +205,8 @@ class Command(BaseCommand):
             .values_list("target_id", "count"),
         )
         comments = dict(
-            Comment.objects.filter(progress_post__isnull=False)
+            Comment.objects.counted()
+            .filter(progress_post__isnull=False)
             .order_by()
             .values("progress_post_id")
             .annotate(count=Count("id"))
