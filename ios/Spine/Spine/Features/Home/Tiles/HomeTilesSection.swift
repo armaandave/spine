@@ -164,7 +164,9 @@ private struct HomeTile: View {
             .animation(TileMotion.frame(reduceMotion: reduceMotion), value: frame.left)
             .zIndex(frame.z)
             .allowsHitTesting(frame.hitTestable)
-            .accessibilityHidden(!frame.hitTestable)
+            // The escape action goes on a container. On a plain view it stretches its child buttons' accessibility
+            // frames (the closed tile's button reads 620 x 294, so a UI test tapping its center taps the other tile).
+            .accessibilityElement(children: .contain)
             .accessibilityAction(.escape) {
                 if isOpen { onClose() }
             }
@@ -224,31 +226,32 @@ private struct HomeTile: View {
         switch face {
         case .items:
             Button(action: onOpen) {
-                shape.fill(Color.clear)
+                TileTapArea(shape: shape)
             }
             .buttonStyle(TileTapStyle())
-            .contentShape(shape)
             .allowsHitTesting(state.open == nil)
             .accessibilityHidden(state.open != nil)
             .accessibilityLabel(model.openLabel(for: tile))
             .accessibilityIdentifier(tile.identifier)
         case let .offer(words):
             Button(action: offerTapped) {
-                shape.fill(Color.clear)
+                TileTapArea(shape: shape)
             }
             .buttonStyle(TileTapStyle())
-            .contentShape(shape)
+            .accessibilityHidden(state.open != nil)
             .accessibilityLabel("\(tile.title), \(words)")
             .accessibilityIdentifier(tile.identifier)
         case .loading:
             Color.clear
                 .accessibilityElement(children: .ignore)
+                .accessibilityHidden(state.open != nil)
                 .accessibilityLabel("Loading \(tile.title)")
                 .accessibilityIdentifier(tile.identifier)
                 .allowsHitTesting(false)
         case let .message(words):
             Color.clear
                 .accessibilityElement(children: .ignore)
+                .accessibilityHidden(state.open != nil)
                 .accessibilityLabel("\(tile.title), \(words)")
                 .accessibilityIdentifier(tile.identifier)
                 .allowsHitTesting(false)
@@ -424,6 +427,16 @@ private struct TileCloseButton: View {
         .accessibilityLabel(label)
         .accessibilityIdentifier("home.tile.close")
         .sensoryFeedback(.impact(weight: .light), trigger: ticks)
+    }
+}
+
+/// What a tap on a closed tile lands on. The shape is the label's own content shape: a clear fill takes no touches,
+/// and a content shape put on the Button from outside does not reach through a custom button style.
+private struct TileTapArea: View {
+    let shape: RoundedRectangle
+
+    var body: some View {
+        Color.clear.contentShape(shape)
     }
 }
 

@@ -133,8 +133,10 @@ final class HomeTilesState {
         }
     }
 
+    /// The tile may have lost its mount in the lead (the flight home of an earlier close can end just then), and
+    /// `openTile` mounts it again, so only an open tile stops this.
     private func openAfterMount(_ tile: HomeTileID, animation: Animation) {
-        guard open == nil, mounted == tile else { return }
+        guard open == nil else { return }
         withAnimation(animation) { openTile(tile) }
     }
 

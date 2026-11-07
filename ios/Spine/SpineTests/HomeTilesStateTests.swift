@@ -150,6 +150,19 @@ final class HomeTilesStateTests: XCTestCase {
         XCTAssertEqual(state.open, .inProgress)
     }
 
+    func testAFlightHomeThatEndsInTheMountLeadDoesNotLoseTheOpen() async throws {
+        let state = state(["a", "b", "c", "d", "e"])
+        state.requestOpen(.inProgress, posterCount: 5, animation: .default)
+        XCTAssertEqual(state.mounted, .inProgress)
+        // The section's task for an earlier close ends the flight home just now.
+        state.finishClosing()
+        XCTAssertNil(state.mounted)
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(state.open, .inProgress, "the tapped tile still opens")
+        XCTAssertEqual(state.mounted, .inProgress)
+        XCTAssertEqual(state.focusID, id("a"))
+    }
+
     func testReduceMotionOpensAtOnceWhateverTheLength() {
         let state = state(["a", "b", "c", "d", "e"])
         state.requestOpen(.inProgress, posterCount: 5, animation: .default, defersMount: false)
@@ -404,6 +417,57 @@ final class HomeTilesStateTests: XCTestCase {
         // The tile's close control says Collapse, so the progress sheet's Close stays the only Close.
         XCTAssertTrue(section.contains("\"Collapse \\(tile.title)\""))
         XCTAssertFalse(section.contains("accessibilityLabel(\"Close\")"))
+    }
+
+    /// `func tapTarget` through the end of its switch: the closed tile's buttons and the placeholders.
+    private func tapTargetSource() throws -> String {
+        let section = try tileSource("HomeTilesSection.swift")
+        let start = try XCTUnwrap(section.range(of: "private func tapTarget(")).lowerBound
+        let end = try XCTUnwrap(section.range(of: "private func openTitle(", range: start ..< section.endIndex)).lowerBound
+        return String(section[start ..< end])
+    }
+
+    /// A tap on a closed tile did nothing when the Button's label was a clear shape fill with the content shape on
+    /// the Button from outside: SwiftUI hit-tests the label. So every tile Button's label must carry its own content
+    /// shape (`TileTapArea`), and nothing may put a clear fill back in its place.
+    func testEveryTileButtonLabelCarriesItsOwnContentShape() throws {
+        let tapTarget = try tapTargetSource()
+        let buttons = tapTarget.components(separatedBy: "Button(action:").count - 1
+        XCTAssertEqual(buttons, 2, "the open button and the offer button")
+        XCTAssertEqual(tapTarget.components(separatedBy: "TileTapArea(shape: shape)").count - 1, buttons)
+        XCTAssertFalse(tapTarget.contains("fill(Color.clear)"))
+        XCTAssertFalse(tapTarget.contains(".contentShape("), "a content shape outside the Button never reaches its label")
+
+        let section = try tileSource("HomeTilesSection.swift")
+        let areaStart = try XCTUnwrap(section.range(of: "private struct TileTapArea")).lowerBound
+        XCTAssertTrue(section[areaStart...].prefix(400).contains("Color.clear.contentShape(shape)"))
+    }
+
+    /// An explicit `accessibilityHidden(false)` above a part that hides itself un-hides it, so no tile-level modifier
+    /// may pass one: each part hides itself (the carousel and the label until the tile opens, the closed tile's
+    /// button while a tile is open, and the placeholders the same).
+    func testNoTileLevelAccessibilityHiddenOverridesItsParts() throws {
+        let section = try tileSource("HomeTilesSection.swift")
+        XCTAssertFalse(section.contains("accessibilityHidden(!frame.hitTestable)"))
+        XCTAssertFalse(section.contains("accessibilityHidden(false)"))
+        XCTAssertEqual(try tileSource("TileCarousel.swift").components(separatedBy: "accessibilityHidden(!isOpen)").count - 1, 1)
+        XCTAssertTrue(section.contains("accessibilityHidden(!isOpen)"), "the label hides itself until its tile opens")
+        let tapTarget = try tapTargetSource()
+        XCTAssertEqual(
+            tapTarget.components(separatedBy: "accessibilityHidden(state.open != nil)").count - 1, 4,
+            "the open button, the offer button and both placeholders hide while a tile is open"
+        )
+    }
+
+    /// `.accessibilityAction(.escape)` on a plain view stretched the accessibility frame of the Button inside it to
+    /// the tile's laid-out content (620 x 294 for a 179 pt tile), so an element tap on `home.tile.in-progress` landed
+    /// on the Trending tile. On a `.contain` container the frames stay the tile's own.
+    func testTheEscapeActionSitsOnAContainerSoTheTileButtonKeepsItsFrame() throws {
+        let section = try tileSource("HomeTilesSection.swift")
+        let escape = try XCTUnwrap(section.range(of: ".accessibilityAction(.escape)"))
+        XCTAssertEqual(section.components(separatedBy: ".accessibilityAction(.escape)").count - 1, 1)
+        let before = section[section.index(escape.lowerBound, offsetBy: -80, limitedBy: section.startIndex)! ..< escape.lowerBound]
+        XCTAssertTrue(before.contains(".accessibilityElement(children: .contain)"))
     }
 
     // MARK: Model
