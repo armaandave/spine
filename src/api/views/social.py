@@ -15,6 +15,7 @@ from api.serializers.social import (
     PushDeviceSerializer,
 )
 from api.services import activity as activity_service
+from api.services import activity_planning
 from api.services import social as social_service
 from app import exposure
 from social.models import Comment, ContentLike, Follow, FollowStatus, PushDevice
@@ -46,6 +47,15 @@ class ProgressPostView(APIView):
 
     def get(self, request, progress_id):
         return activity_service.progress_post_response(request, progress_id)
+
+
+class PlanningDayView(APIView):
+    """The titles a person added to Planning on a day: what a Planning row opens."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, planning_id):
+        return activity_planning.day_response(request, planning_id)
 
 
 class ProgressPostLikeView(APIView):

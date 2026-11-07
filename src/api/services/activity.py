@@ -36,7 +36,7 @@ from api.serializers.common import (
     tv_season_started,
     user_summary,
 )
-from api.services import activity_list, activity_rows
+from api.services import activity_list, activity_planning, activity_rows
 from api.services import diary as diary_service
 from app import exposure, single_weight, tv_tracking, user_calendar
 from app.curation import prime_curated_artwork
@@ -258,6 +258,8 @@ def feed_response(request):
         piles=False,
     )
     rows = activity_list.select(_exposed(calculation), filters)
+    if activity_planning.asked(request):
+        rows = _with_planning(rows, people, filters.media_type)
     return page_response(request, rows)
 
 
@@ -279,6 +281,9 @@ def profile_response(request, user):
     )
     calculation = _exposed(calculation)
     rows = activity_list.select(calculation, filters)
+    # Planning rows are no part of any number, so a list opened from one never has them.
+    if activity_planning.asked(request) and not filters.asked:
+        rows = _with_planning(rows, [user], None)
     # A list opened from a number, or asked to be a list, reads as the Diary does.
     list_view = filters.asked or request.query_params.get("view") == "list"
     response = page_response(request, rows, list_view=list_view)
@@ -295,6 +300,12 @@ def activity_count(user, viewer):
         return 0
     calculation = _exposed(activity_rows.rows_for([user], viewer, piles=False))
     return len(activity_list.select(calculation, activity_list.Filters()))
+
+
+def _with_planning(rows, people, media_type):
+    """Add these people's days of Planning adds to a page's rows (AC-8), in order."""
+    planning = activity_planning.rows_for(people, media_type=media_type)
+    return sorted([*rows, *planning], key=activity_list.row_order, reverse=True) if planning else rows
 
 
 def _exposed(calculation):
@@ -327,6 +338,12 @@ def page_response(request, rows, *, list_view=False):
 
 def _page_items(page, request, *, list_view):
     """Turn a page of rows into the items a client reads."""
+    whole = page
+    planning = [row for row in whole if isinstance(row, activity_planning.PlanningRow)]
+    planned = {
+        row.address: payload for row, payload in zip(planning, activity_planning.payloads(planning, request), strict=True)
+    }
+    page = [row for row in whole if not isinstance(row, activity_planning.PlanningRow)]
     entries = {
         entry.pk: entry
         for entry in DiaryEntry.objects.filter(pk__in=[row.log_id for row in page if row.log_id]).select_related(
@@ -349,8 +366,10 @@ def _page_items(page, request, *, list_view):
     diary_service.prime_diary_likes(entries.values(), request.user)
     engagement = _day_engagement([_post_key(row) for row in progress], request.user)
     results = []
-    for row in page:
-        if row.log_id:
+    for row in whole:
+        if isinstance(row, activity_planning.PlanningRow):
+            results.append(planned[row.address])
+        elif row.log_id:
             entry = entries.get(row.log_id)
             if entry is not None:
                 results.append(_log_payload(entry, request, row, list_view=list_view))

@@ -106,7 +106,7 @@ def get_tracking(user, *, source, media_type, media_id, season_number=None, epis
     ).first()
 
 
-def create_or_update_tracking(user, *, source, media_type, media_id, data, partial=True):  # noqa: C901, PLR0911
+def create_or_update_tracking(user, *, source, media_type, media_id, data, partial=True):
     """Create or update tracking using existing model behavior.
 
     TV shows and seasons go through tv_tracking.apply_written_state and return its

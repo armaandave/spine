@@ -105,7 +105,8 @@ import is a row on its real date, so an old play sits in the past, not on top.
 - You see all of your own activity.
 - Others see your public logs, and followers-only logs if they follow you. Movie,
   album, book, and game logs are always public.
-- Progress is visible to anyone who can see the profile. A log a viewer can't see adds
+- Progress, and a day of Planning adds (AC-8), are visible to anyone who can see the
+  profile. A log a viewer can't see adds
   nothing and moves nothing for them, on the list, on Home, on post pages and in the
   numbers beside them.
 - A private profile shows nothing to someone who doesn't follow it. A block in
@@ -128,6 +129,37 @@ Wanting to get to a title doesn't count.
 - From three people, the section opens a page listing them all, under a chart of
   the ratings they show.
 
+## AC-8: The Planning row
+
+A person's titles added to Planning in one day (AC-1) are one row: "Added 3 shows to
+Planning", or "Added 6 titles to Planning" across types. Books, manga and comics say
+Planning too, not "To Read".
+
+- **One row per person per day**, on the owner's calendar day. A title added twice that
+  day counts once; leaving Planning and coming back on a later day is a new add on that
+  day. Only titles the server exposes and the person still tracks count: removing a title
+  deletes its Planning rows (AC-2's receiver) and the read checks it again, so the row
+  says 5, then 4 when one is removed.
+- **Its face** is the day's earliest add: that title's poster and name, so the row
+  doesn't change as more are added. On Home with a `media_type`, only that type's titles
+  count.
+- **Visibility** is progress's (AC-5). It has no likes or comments, so `like_count` and
+  `comment_count` are 0, there is no post page (`/api/v1/progress/<id>/` is 404 for its
+  id), and no push (AC-7).
+- **It is no number.** It is not in the calculation (`activity_rows`): no Stats number,
+  no active day, no pile and no row on a list opened from a number sees it. Marks still
+  never make a row.
+- **Only builds that ask get it.** `include=planning` on `/api/v1/feed/` and on
+  `/api/v1/users/<username>/activity/`. Without it both return exactly what they did
+  before, cursors included, because installed builds print an unknown row as "shared
+  activity". On a profile it is also ignored when the request names a number (a type,
+  dates, `counts`): a list always adds up to its number. The profile rail and the profile
+  row's `counts.activity` don't ask.
+- **Opening it:** `GET /api/v1/planning/<object.id>/` returns the titles added that day,
+  oldest add first: `{"actor", "consumed_at", "summary", "count", "results"}`, `results`
+  being media summaries. `media_type` narrows it to the type the row counted. It needs a
+  signed-in viewer who can see the profile, else 404.
+
 ## Wire shape
 
 `/api/v1/users/<username>/activity/` and `/api/v1/feed/` return cursor pages in
@@ -149,6 +181,13 @@ the shape installed apps read. `consumed_at` is the item's calendar day
 - A log's `object` also has `amount`, `unit`, `time_label` and `label`, what the log
   added in the units it was told in with no plus sign ("200 pages", "3 episodes", "2h");
   movie and album logs send no `label`.
+- A day of Planning adds (AC-8), only when asked: `type` is `planning_added`, `id` is
+  negative like a progress day's, `media` is the day's earliest add, and `object` is
+  `{"type": "planning", "id", "summary", "label", "count", "media_type"}`: `summary`
+  "added 3 shows to Planning" (lower case, as the others), `label` null, `count` the
+  titles, `media_type` the one type they share or null. `id` is
+  `(person << 44) | day ordinal`, at or above 2^44, an address with no Item (no Item has
+  id 0), so it can't be a progress day's. `like_count` and `comment_count` are 0.
 - Both have `like_count`, `comment_count`, and `viewer.has_liked`. `object.liked` is
   the person's own heart on the title, which is not a like of the post.
 
@@ -178,6 +217,9 @@ log row carries no review text, and its `media` has `show_title` and `episode_ti
   rows (`weeks` lists the same rows as `days`). `episodes` keeps rows with episodes
   told. A plain measure gives every day's row.
 - `view=list` makes a plain request read as a list too.
+- `include=planning` adds the Planning row (AC-8) to a plain list only: it is ignored
+  when the request has a type, dates or `counts`, because a Planning row is no part of
+  any number.
 
 A signed-in viewer of a list with a type, dates or `counts` also gets, beside `results`:
 `top_line`, the number tapped in words ("360 pages", "5 books", "11 active days",
@@ -216,6 +258,9 @@ saved change keeps the lowest change id; any other day (TV, anime, or no change)
   day, and each post removed writes a `SocialAuditLog` row.
 
 ## Review status
+
+AC-8 and AC-1's Planning adds are provisional until the phone test of Activity's
+fifth phase accepts them.
 
 AC-2's status moves, `began_over` and `saved_on`, and AC-7's
 deletion of the likes and comments a removed journey, season or title leaves behind, are

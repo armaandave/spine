@@ -1,8 +1,7 @@
 """AC-1: a title added to Planning is recorded once, by the request that adds it.
 
-Only a person's own request is an add: the app, the website and the API. An import writes
-tracking rows directly and never records one (SW-500). A planning row adds nothing to any
-Stats number, is no active day, and no family's calculation reads it.
+Only a person's own request is an add: the app, the website and the API. An import
+writes tracking rows directly and never records one (SW-500).
 """
 
 from datetime import UTC, date, datetime
@@ -11,11 +10,10 @@ from unittest import mock
 from django.test import Client
 
 from api.tests.test_activity_status_rows import (
-    NOON,
     StatusRowBase,
 )
 from app import anime_tracking, book_tracking, tv_tracking
-from app.models import Item, MediaTypes, Sources, Status
+from app.models import Item, Sources, Status
 from app.tests.anime_fixtures import FakeAnimeProvider, make_item
 from app.tests.tv_fixtures import FakeTVProvider, make_show
 from integrations.imports.margins.importer import MarginsImporter
@@ -32,14 +30,14 @@ class PlanningWriteBase(StatusRowBase):
         rows = ProgressChange.objects.filter(actor=self.user, current_progress__kind=ProgressChange.PLANNING)
         return rows.filter(item=item) if item else rows
 
-    def put(self, item, status=PLANNING, **extra):
-        return self.write("put", item, status, **extra)
+    def put(self, item, status=PLANNING, *, user=None, **extra):
+        return self.write("put", item, status, user=user, **extra)
 
-    def write(self, method, item, status, **extra):
+    def write(self, method, item, status, *, user=None, **extra):
         from rest_framework.test import APIClient
 
         client = APIClient(HTTP_X_SPINE_TIMEZONE=NEW_YORK)
-        client.force_authenticate(self.user)
+        client.force_authenticate(user or self.user)
         path = f"/api/v1/tracking/{item.source}/{item.media_type}/{item.media_id}/"
         response = getattr(client, method)(path, {"status": status, **extra}, format="json")
         self.assertIn(response.status_code, (200, 201), response.content)
@@ -191,7 +189,11 @@ class ImportsAddNone(PlanningWriteBase):
 
     def test_a_letterboxd_watchlist_makes_planning_movies_and_no_row(self):
         from integrations.imports.letterboxd.importer import LetterboxdImporter
-        from integrations.tests.imports.test_letterboxd import FakeResolver, export_zip, tmdb_movie
+        from integrations.tests.imports.test_letterboxd import (
+            FakeResolver,
+            export_zip,
+            tmdb_movie,
+        )
 
         payload = export_zip(
             {
