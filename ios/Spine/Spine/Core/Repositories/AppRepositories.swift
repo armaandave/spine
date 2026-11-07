@@ -305,7 +305,8 @@ protocol ActivityRepository {
     func setLike(post: ActivityPostRef, liked: Bool) async throws -> LikeState
     /// All of a post's comments, oldest first.
     func comments(post: ActivityPostRef) async throws -> [PostComment]
-    func addComment(post: ActivityPostRef, body: String) async throws -> PostComment
+    /// Comments on the post, or replies to `parentId`, a comment on it.
+    func addComment(post: ActivityPostRef, body: String, parentId: Int?) async throws -> PostComment
     func deleteComment(id: Int) async throws
 }
 
@@ -322,7 +323,7 @@ extension ActivityRepository {
         []
     }
 
-    func addComment(post _: ActivityPostRef, body _: String) async throws -> PostComment {
+    func addComment(post _: ActivityPostRef, body _: String, parentId _: Int?) async throws -> PostComment {
         fatalError("Not implemented")
     }
 
@@ -1586,10 +1587,10 @@ struct APIActivityRepository: ActivityRepository {
         }
     }
 
-    func addComment(post: ActivityPostRef, body: String) async throws -> PostComment {
+    func addComment(post: ActivityPostRef, body: String, parentId: Int?) async throws -> PostComment {
         try await client.post(
             "\(Self.path(for: post))comments/",
-            body: PostCommentRequest(body: body),
+            body: PostCommentRequest(body: body, parentId: parentId),
             authenticated: true
         )
     }

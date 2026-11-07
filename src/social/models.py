@@ -275,16 +275,26 @@ class CommentQuerySet(models.QuerySet):
     """Comments as a given person sees them."""
 
     def visible_to(self, viewer):
-        """Leave out comments from anyone across a block from the viewer."""
+        """Leave out comments, and replies under them, from anyone across a block."""
         if not viewer or not viewer.is_authenticated:
             return self
-        return self.exclude(user__blocks_sent__blocked=viewer).exclude(
-            user__blocks_received__blocker=viewer,
+        return (
+            self.exclude(user__blocks_sent__blocked=viewer)
+            .exclude(user__blocks_received__blocker=viewer)
+            .exclude(parent__user__blocks_sent__blocked=viewer)
+            .exclude(parent__user__blocks_received__blocker=viewer)
         )
+
+    def counted(self):
+        """Leave out deleted comments that stay only to hold their replies."""
+        return self.filter(is_deleted=False)
 
 
 class Comment(models.Model):
-    """A comment on a log or on a day's progress."""
+    """A comment on a log or on a day's progress, or a reply to one.
+
+    Replies go one level deep: a reply's parent is always a top-level comment.
+    """
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -305,7 +315,16 @@ class Comment(models.Model):
         on_delete=models.CASCADE,
         related_name="comments",
     )
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="replies",
+    )
     body = models.TextField()
+    # A deleted comment with replies stays, emptied, as "Comment deleted" above them.
+    is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = CommentQuerySet.as_manager()

@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import ValidationError
 
 from api.permissions import can_view_user_profile, user_blocks, users_blocked
 from app import single_weight
@@ -188,9 +189,24 @@ def viewable_diary_entry(viewer, entry_id):
     return entry
 
 
-def add_comment(user, body, *, entry=None, post=None):
-    """Comment on a log or on a day's progress the user can already see."""
-    comment = Comment.objects.create(user=user, body=body, diary_entry=entry, progress_post=post)
+def add_comment(user, body, *, entry=None, post=None, parent_id=None):
+    """Comment on a log or a day's progress the user can see, or reply to a comment.
+
+    A reply to a reply joins its thread, so replies stay one level deep.
+    """
+    parent = None
+    if parent_id is not None:
+        parent = (
+            Comment.objects.visible_to(user)
+            .filter(diary_entry=entry, progress_post=post, is_deleted=False)
+            .select_related("parent")
+            .filter(id=parent_id)
+            .first()
+        )
+        if parent is None:
+            raise ValidationError({"parent_id": "That comment isn't here anymore."})
+        parent = parent.parent or parent
+    comment = Comment.objects.create(user=user, body=body, diary_entry=entry, progress_post=post, parent=parent)
     SocialAuditLog.objects.create(
         actor=user,
         action="comment",
@@ -211,6 +227,7 @@ def delete_comment(user, comment_id):
     comment = get_object_or_404(
         Comment.objects.visible_to(user).select_related("diary_entry", "progress_post"),
         id=comment_id,
+        is_deleted=False,
     )
     if not can_delete_comment(user, comment):
         raise Http404
@@ -221,7 +238,16 @@ def delete_comment(user, comment_id):
         target_type=ContentLike.DIARY_ENTRY if comment.diary_entry_id else ContentLike.PROGRESS_POST,
         target_id=comment.diary_entry_id or comment.progress_post_id,
     )
+    if comment.replies.exists():
+        # Its replies still need something to answer: it stays as "Comment deleted".
+        comment.body = ""
+        comment.is_deleted = True
+        comment.save(update_fields=["body", "is_deleted"])
+        return
     comment.delete()
+    parent = comment.parent
+    if parent and parent.is_deleted and not parent.replies.exists():
+        parent.delete()
 
 
 def _can_view_diary_entry(viewer, entry):

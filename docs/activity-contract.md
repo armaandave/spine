@@ -127,7 +127,7 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 
 ## AC-7: Likes and comments
 
-- Anyone who can see an item can like it and comment on it. Comments have no replies.
+- Anyone who can see an item can like it and comment on it, or reply to a comment. Replies go one level deep: a reply to a reply joins the same thread. Replies count in the item's comment count. A deleted comment with replies stays as "Comment deleted" above them, and doesn't count.
 - A comment's author, the item's owner, and admins can delete a comment. Nobody across
   a block from you shows up in the comments you see.
 - Likes and comments on a log belong to the log. Those on a day's progress belong to
