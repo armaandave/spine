@@ -12,7 +12,14 @@ from rest_framework.test import APIClient
 
 from api.serializers.common import latest_progress_change_for
 from api.services import tracking as tracking_service
-from app import book_tracking, game_tracking, single_weight
+from api.tests.feed_fixtures import show_with_episodes, tick
+from app import (
+    book_tracking,
+    game_tracking,
+    series_tracking,
+    single_weight,
+    tv_tracking,
+)
 from app.models import TV, Anime, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.tests.anime_fixtures import FakeAnimeProvider
 from social.models import Follow, FollowStatus, ProgressChange
@@ -24,29 +31,18 @@ def at(day, hour=12):
 
 
 class DailyProgressTests(TestCase):
-    """Progress rolls up per title and day; logs and progress share one order."""
+    """Progress rolls up per title and day; logs and progress share one order.
+
+    A TV day comes from its ticks and a book's from its saves, so these write through
+    the functions the phone's requests do (the Activity calculation reads nothing else).
+    """
 
     def setUp(self):
         User = get_user_model()
         self.owner = User.objects.create_user(username="watcher", password="strong-password-123")
         self.viewer = User.objects.create_user(username="friend", password="strong-password-123")
         self.client = APIClient()
-        self.show = Item.objects.create(
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.TV.value,
-            media_id="1396",
-            title="Severance",
-        )
-        self.seasons = {
-            number: Item.objects.create(
-                source=Sources.TMDB.value,
-                media_type=MediaTypes.SEASON.value,
-                media_id="1396",
-                season_number=number,
-                title="Severance",
-            )
-            for number in (1, 2)
-        }
+        self.show = show_with_episodes()
 
     def item(self, media_type, media_id="one", **fields):
         return Item.objects.create(
@@ -57,15 +53,13 @@ class DailyProgressTests(TestCase):
             **fields,
         )
 
-    def change(self, item, previous, current, when, *, unit="episode", user=None):
-        change = ProgressChange.objects.create(
-            actor=user or self.owner,
-            item=item,
-            previous_progress={"kind": "count", "value": previous, "max": None, "unit": unit},
-            current_progress={"kind": "count", "value": current, "max": None, "unit": unit},
-        )
-        ProgressChange.objects.filter(pk=change.pk).update(created_at=when)
-        return change
+    def tick(self, episodes, when, season=1, show=None):
+        tick(self.owner, show or self.show, episodes, when, season)
+
+    def save(self, function, item, when, *args, **kwargs):
+        """Save through a tracking function at this moment."""
+        with patch("django.utils.timezone.now", return_value=when):
+            return function(self.owner, item, *args, **kwargs)
 
     def log(self, item, consumed_at, **fields):
         return DiaryEntry.objects.create(user=self.owner, item=item, consumed_at=consumed_at, **fields)
@@ -83,26 +77,38 @@ class DailyProgressTests(TestCase):
         ]
 
     def test_a_days_episodes_are_one_item_for_the_show(self):
-        first = self.change(self.seasons[1], 2, 4, at(24, 9))
-        self.change(self.seasons[1], 4, 5, at(24, 10))
-        self.change(self.seasons[2], 0, 1, at(24, 21))
+        self.tick([1, 2], at(24, 9))
+        self.tick([3], at(24, 10))
+        self.tick([1], at(24, 21), season=2)
 
         [activity] = self.activity()
 
         self.assertEqual(activity["type"], "progress_updated")
-        self.assertEqual(activity["id"], -first.id)
+        # A show's day is addressed by its person, title and day (plan 5.8).
+        self.assertEqual(activity["id"], -activity["object"]["id"])
+        self.assertEqual(activity["object"]["id"] >> 44, self.owner.pk)
         self.assertEqual(activity["consumed_at"], "2026-10-24")
-        self.assertEqual(activity["created_at"], at(24, 21))
+        self.assertEqual(activity["created_at"].replace(microsecond=0), at(24, 21))
         self.assertEqual(activity["media"]["ref"]["media_type"], "tv")
         self.assertEqual(activity["media"]["title"], "Severance")
         self.assertEqual(
             activity["object"],
-            {"type": "progress_day", "id": first.id, "summary": "watched 4 episodes", "label": "4 episodes"},
+            {
+                "type": "progress_day",
+                "id": activity["object"]["id"],
+                "summary": "watched 4 episodes",
+                "label": "4 episodes",
+                "amount": 180,
+                "unit": "minutes",
+                "time_label": "3h",
+                "moves": [],
+                "percent": None,
+            },
         )
 
     def test_each_day_is_its_own_item_newest_day_first(self):
-        self.change(self.seasons[1], 0, 1, at(23))
-        self.change(self.seasons[1], 1, 3, at(24))
+        self.tick([1], at(23))
+        self.tick([2, 3], at(24))
 
         self.assertEqual(
             self.summaries(self.activity()),
@@ -115,7 +121,7 @@ class DailyProgressTests(TestCase):
     @override_settings(TIME_ZONE="America/New_York")
     def test_the_day_is_the_local_day(self):
         # 02:00 UTC on the 25th is still the evening of the 24th in New York.
-        self.change(self.seasons[1], 0, 1, datetime(2026, 10, 25, 2, tzinfo=UTC))
+        self.tick([1], datetime(2026, 10, 25, 2, tzinfo=UTC))
 
         [activity] = self.activity()
 
@@ -133,7 +139,7 @@ class DailyProgressTests(TestCase):
             title="Other Show",
         )
         self.log(episode, datetime(2026, 10, 26, 1, tzinfo=UTC))
-        self.change(self.seasons[1], 0, 1, datetime(2026, 10, 26, 16, tzinfo=UTC))
+        self.tick([1], datetime(2026, 10, 26, 16, tzinfo=UTC))
 
         self.assertEqual(
             self.summaries(self.activity()),
@@ -144,9 +150,10 @@ class DailyProgressTests(TestCase):
         )
 
     def test_a_log_the_viewer_cant_see_leaves_only_that_days_progress(self):
-        anime = self.item(MediaTypes.ANIME.value)
-        self.change(anime, 1, 3, at(24))
-        self.log(anime, at(24, 20), visibility="followers")
+        show = show_with_episodes("Two Episodes", seasons={1: 2})
+        self.tick([1, 2], at(24), show=show)
+        season = Item.objects.get(media_id=show.media_id, media_type=MediaTypes.SEASON.value)
+        self.save(tv_tracking.create_log, season, at(24, 20), consumed_at=date(2026, 10, 24), visibility="followers")
 
         self.assertEqual(
             [activity["object"].get("summary", "log") for activity in self.activity(viewer=self.viewer)],
@@ -158,44 +165,36 @@ class DailyProgressTests(TestCase):
         )
 
     def test_removing_a_title_removes_its_progress(self):
-        anime_item = Item.objects.create(
-            source=Sources.MAL.value,
-            media_type=MediaTypes.ANIME.value,
-            media_id="removed",
-            title="Removed",
-        )
-        # Planning, so creating them fetches nothing from providers.
-        Anime.objects.create(user=self.owner, item=anime_item, status=Status.PLANNING.value)
-        self.change(anime_item, 0, 2, at(24))
-        TV.objects.create(user=self.owner, item=self.show, status=Status.PLANNING.value)
-        ProgressChange.record_start(self.owner, self.show)
-        self.change(self.seasons[1], 0, 1, at(24))
+        self.tick([1], at(24))
+        self.assertEqual(len(self.activity()), 1)
 
-        tracking_service.delete_tracking(self.owner, source="mal", media_type="anime", media_id="removed")
-        tracking_service.delete_tracking(self.owner, source="tmdb", media_type="tv", media_id="1396")
+        tracking_service.delete_tracking(self.owner, source="manual", media_type="tv", media_id=self.show.media_id)
 
         self.assertEqual(self.activity(), [])
 
-    def test_going_backwards_shows_nothing(self):
-        self.change(self.seasons[1], 5, 4, at(24))
-        self.change(self.seasons[2], 3, 5, at(25, 9))
-        self.change(self.seasons[2], 5, 3, at(25, 10))
+    def test_a_fix_that_lowers_a_number_takes_it_off_the_newest_save(self):
+        book = self.item(MediaTypes.BOOK.value)
+        self.save(book_tracking.start, book, at(20))
+        self.save(book_tracking.update_progress, book, at(24), progress_type="pages", value=300)
+        self.save(book_tracking.update_progress, book, at(25), progress_type="pages", value=30)
 
-        self.assertEqual(self.activity(), [])
+        rows = [row for row in self.summaries(self.activity()) if row[2] != "started reading"]
+
+        # The fix took its pages off the 24th, and the 25th reads nothing.
+        self.assertEqual(rows, [("2026-10-24", "book one", "read 30 pages")])
 
     def test_logging_the_title_that_day_keeps_its_progress_as_its_own_item(self):
         book = self.item(MediaTypes.BOOK.value)
-        self.change(book, 10, 30, at(24), unit="percent")
+        self.save(book_tracking.start, book, at(24))
+        self.save(book_tracking.update_progress, book, at(24), progress_type="percentage", value=20)
         book_log = self.log(book, single_weight.calendar_datetime(date(2026, 10, 24)))
-        episode = Item.objects.create(
-            source=Sources.TMDB.value,
+        episode = Item.objects.get(
+            media_id=self.show.media_id,
             media_type=MediaTypes.EPISODE.value,
-            media_id="1396",
             season_number=1,
             episode_number=3,
-            title="Severance",
         )
-        self.change(self.seasons[1], 2, 3, at(24, 20))
+        self.tick([3], at(24, 20))
         episode_log = self.log(episode, at(24, 20))
 
         logs = {
@@ -213,34 +212,59 @@ class DailyProgressTests(TestCase):
         self.assertEqual(summaries, {"read 20%", "watched 1 episode"})
 
     def test_each_kind_of_progress_reads_naturally(self):
-        cases = [
-            (self.item(MediaTypes.ANIME.value), 3, 5, "episode", "watched 2 episodes"),
-            (self.item(MediaTypes.MANGA.value), 10, 22, "chapter", "read 12 chapters"),
-            (self.item(MediaTypes.COMIC.value), 4, 5, "issue", "read 1 issue"),
-            (self.item(MediaTypes.BOOK.value, "pages"), 10, 50, "page", "read 40 pages"),
-            (self.item(MediaTypes.BOOK.value, "percent"), 12.5, 27.5, "percent", "read 15%"),
-            (self.item(MediaTypes.GAME.value, "time"), 30, 180, "minute", "played 2h 30m"),
-            (self.item(MediaTypes.GAME.value, "percent"), 40, 55, "percent", "progressed 15%"),
-            (self.item(MediaTypes.GAME.value, "decimal"), 40, 42.25, "percent", "progressed 2.25%"),
-        ]
-        for hour, (item, previous, current, unit, _) in enumerate(cases):
-            self.change(item, previous, current, at(24, hour), unit=unit)
+        manga, comic = self.item(MediaTypes.MANGA.value), self.item(MediaTypes.COMIC.value)
+        pages, percent = self.item(MediaTypes.BOOK.value, "pages"), self.item(MediaTypes.BOOK.value, "percent")
+        time, percentage = self.item(MediaTypes.GAME.value, "time"), self.item(MediaTypes.GAME.value, "percent")
+        decimal = self.item(MediaTypes.GAME.value, "decimal")
+        for item, function in (
+            (manga, series_tracking.start),
+            (comic, series_tracking.start),
+            (pages, book_tracking.start),
+            (percent, book_tracking.start),
+            (time, game_tracking.start),
+            (percentage, game_tracking.start),
+            (decimal, game_tracking.start),
+        ):
+            self.save(function, item, at(23))
+        self.save(series_tracking.update_progress, manga, at(24, 1), value=12)
+        self.save(series_tracking.update_progress, comic, at(24, 2), value=1)
+        self.save(book_tracking.update_progress, pages, at(24, 3), progress_type="pages", value=40)
+        self.save(book_tracking.update_progress, percent, at(24, 4), progress_type="percentage", value=15)
+        self.save(game_tracking.update_progress, time, at(24, 5), total_minutes=150)
+        self.save(game_tracking.update_progress, percentage, at(24, 6), percentage=Decimal(15))
+        self.save(game_tracking.update_progress, decimal, at(24, 7), percentage=Decimal("2.25"))
 
-        summaries = {activity["media"]["title"]: activity["object"]["summary"] for activity in self.activity()}
+        summaries = {
+            activity["media"]["title"]: activity["object"]["summary"]
+            for activity in self.activity()
+            if activity["consumed_at"] == "2026-10-24"
+        }
 
-        self.assertEqual(summaries, {item.title: summary for item, *_, summary in cases})
+        self.assertEqual(
+            summaries,
+            {
+                "manga one": "read 12 chapters",
+                "comic one": "read 1 issue",
+                "book pages": "read 40 pages",
+                "book percent": "read 15%",
+                "game time": "played 2h 30m",
+                "game percent": "progressed 15%",
+                "game decimal": "progressed 2.25%",
+            },
+        )
 
     def test_a_game_played_and_moved_forward_reads_as_time_played(self):
         game = self.item(MediaTypes.GAME.value)
-        self.change(game, 0, 45, at(24, 9), unit="minute")
-        self.change(game, 10, 20, at(24, 10), unit="percent")
+        self.save(game_tracking.start, game, at(23))
+        self.save(game_tracking.update_progress, game, at(24, 9), total_minutes=45)
+        self.save(game_tracking.update_progress, game, at(24, 10), percentage=Decimal(20))
 
-        [activity] = self.activity()
+        [activity] = [activity for activity in self.activity() if activity["consumed_at"] == "2026-10-24"]
 
         self.assertEqual(activity["object"]["summary"], "played 45m")
 
     def test_logs_and_progress_share_one_date_order(self):
-        self.change(self.seasons[1], 0, 2, at(24, 18))
+        self.tick([1, 2], at(24, 18))
         older_log = self.log(self.item(MediaTypes.MOVIE.value), single_weight.calendar_datetime(date(2026, 10, 23)))
         # A log for the same date, written after the day's progress, comes first.
         same_day_log = self.log(self.item(MediaTypes.MUSIC.value), single_weight.calendar_datetime(date(2026, 10, 24)))
@@ -260,9 +284,11 @@ class DailyProgressTests(TestCase):
         day = single_weight.calendar_datetime(date(2026, 10, 24))
         expected = []
         for number in range(3):
-            show = Item.objects.create(source=Sources.TMDB.value, media_type=MediaTypes.SEASON.value, media_id=f"show-{number}", season_number=1, title=f"Show {number}")
-            Item.objects.create(source=Sources.TMDB.value, media_type=MediaTypes.TV.value, media_id=f"show-{number}", title=f"Show {number}")
-            expected.append(-self.change(show, 0, 1, at(24, 9)).id)
+            show = show_with_episodes(f"Show {number}", seasons={1: 3})
+            self.tick([1], at(24, 9), show=show)
+            expected.append(
+                -(self.owner.pk << 44 | show.pk << 20 | date(2026, 10, 24).toordinal()),
+            )
             entry = self.log(self.item(MediaTypes.MUSIC.value, f"album-{number}"), day)
             DiaryEntry.objects.filter(pk=entry.pk).update(created_at=at(24, 9))
             expected.append(entry.id)
@@ -279,9 +305,8 @@ class DailyProgressTests(TestCase):
 
         self.assertEqual(sorted(seen), sorted(expected))
         self.assertEqual(len(seen), len(set(seen)))
-        # Same date and write time: logs first, then newest id first within each kind.
-        logs, days = sorted([i for i in expected if i > 0], reverse=True), sorted([i for i in expected if i < 0])
-        self.assertEqual(seen, logs + days)
+        # Logs first on one date and write time, then each kind by its newest write.
+        self.assertEqual([i > 0 for i in seen], [True] * 3 + [False] * 3)
 
     def test_a_bad_cursor_is_not_found(self):
         self.client.force_authenticate(self.owner)
@@ -291,8 +316,10 @@ class DailyProgressTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_progress_follows_profile_privacy_and_reaches_followers_feeds(self):
-        self.change(self.seasons[1], 0, 2, at(24))
-        self.change(self.item(MediaTypes.MANGA.value), 1, 3, at(24), unit="chapter")
+        self.tick([1, 2], at(24))
+        manga = self.item(MediaTypes.MANGA.value)
+        self.save(series_tracking.start, manga, at(24))
+        self.save(series_tracking.update_progress, manga, at(24, 13), value=3)
         self.owner.profile_private = True
         self.owner.save(update_fields=["profile_private"])
 
@@ -441,16 +468,9 @@ class StartedActivityTests(TestCase):
             [("book progressed", "read 10%"), ("game logged", "log"), ("game logged", "started playing")],
         )
 
-    def test_a_shows_start_and_its_seasons_progress_are_one_item(self):
-        show = self.item(MediaTypes.TV.value, "77", source=Sources.TMDB.value)
-        season = Item.objects.create(source=Sources.TMDB.value, media_type=MediaTypes.SEASON.value, media_id="77", season_number=1, title="tv 77")
-        ProgressChange.record_start(self.user, show)
-        ProgressChange.objects.create(
-            actor=self.user,
-            item=season,
-            previous_progress={"kind": "episodes", "value": 0, "max": 8, "unit": "episode"},
-            current_progress={"kind": "episodes", "value": 2, "max": 8, "unit": "episode"},
-        )
+    def test_a_shows_start_and_its_progress_are_one_item(self):
+        show = show_with_episodes("tv 77", seasons={1: 8})
+        tick(self.user, show, [1, 2], datetime(2026, 10, 24, 12, tzinfo=UTC))
 
         self.assertEqual(self.activity(), [("tv 77", "watched 2 episodes")])
 

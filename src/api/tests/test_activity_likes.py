@@ -1,10 +1,12 @@
 """Likes stay on the day they were on, and go when the title goes (AC-7).
 
 Both bugs of the feed shipped on Nov 2: one like split across two viewers' days, and an
-old like coming back on a new save that day. The feed here is still the old reader.
+old like coming back on a new save that day. The feed reads the Activity calculation
+since Phase 4, so a fix that empties a row hides its likes until it has a row again.
 """
 
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -27,6 +29,7 @@ from app import book_tracking, game_tracking, series_tracking, tv_tracking
 from app.models import (
     TV,
     Anime,
+    AnimeViewing,
     Book,
     GameSession,
     Item,
@@ -61,14 +64,20 @@ MAL_EXPORT = (
 
 
 def _anime_save(owner, item):
-    """Write what a like reaches on an anime: its own saves have no change row here."""
-    return ProgressChange.objects.create(
-        actor=owner,
-        item=item,
-        previous_progress={"kind": "count", "value": 0, "max": 12, "unit": "episode"},
-        current_progress={"kind": "count", "value": 3, "max": 12, "unit": "episode"},
-        saved_on=d(2026, 3, 2),
-    )
+    """Write what a like reaches on an anime: three ticks on a day, addressed by title.
+
+    An anime day has no change row (plan 5.8): the calculation reads its viewings.
+    """
+    row = Anime.objects.get(user=owner, item=item)
+    for number in (1, 2, 3):
+        AnimeViewing.objects.create(
+            anime=row,
+            episode_number=number,
+            kind=AnimeViewing.Kind.TICK,
+            watched_on=d(2026, 3, 2),
+            watched_at=datetime(2026, 3, 2, 17, tzinfo=ZoneInfo("UTC")),
+        )
+    return SimpleNamespace(pk=(owner.pk << 44) | (item.pk << 20) | d(2026, 3, 2).toordinal())
 
 
 @override_settings(TIME_ZONE=NEW_YORK)
@@ -146,26 +155,39 @@ class OneDayForEveryViewerTests(LikesBase):
         self.assertEqual(self.feed_rows(), [("2026-02-27", "read 40 pages", 0, 0)])
 
 
-class TheFeedIsStillTheOldOneTests(LikesBase):
-    """What a fix does to a liked row: the rows change at Phase 4, not here."""
+class TheFeedReadsTheRowsTests(LikesBase):
+    """What a fix does to a liked row (plan 5.8, AC-7)."""
 
-    def test_a_typo_fixed_later_still_reads_its_old_number_with_its_like(self):
+    def test_a_typo_fixed_later_reads_its_new_number_with_its_like(self):
         item = self.book("typo")
         self.begin(item, d(2025, 12, 20))
         self.save(item, 300, d(2025, 12, 28))
-        self.like(self.change(item))
+        change = self.change(item)
+        self.like(change)
+        self.comment(change)
         self.save(item, 30, d(2026, 1, 2))
-        self.assertEqual(self.feed_rows()[0], ("2025-12-28", "read 300 pages", 1, 0))
+        self.assertEqual(self.feed_rows()[0], ("2025-12-28", "read 30 pages", 1, 1))
         self.assertNotIn("2026-01-02", [row[0] for row in self.feed_rows()])
 
-    def test_a_drop_in_february_leaves_januarys_row_and_its_like(self):
+    def test_a_drop_in_february_hides_januarys_row_and_its_like_until_it_has_a_row_again(self):
         item = self.book("across")
         self.begin(item, d(2025, 12, 1))
         self.save(item, 100, d(2025, 12, 15))
         self.save(item, 300, d(2026, 1, 15))
-        self.like(self.change(item))
+        january = self.change(item)
+        self.like(january)
+        self.comment(january)
         self.save(item, 30, d(2026, 2, 15))
-        self.assertIn(("2026-01-15", "read 200 pages", 1, 0), self.feed_rows())
+        client = self.client_for(self.follower)
+        self.assertNotIn("2026-01-15", [row[0] for row in self.feed_rows()])
+        # The page, its like and its comments are not found, and nothing is deleted.
+        self.assertEqual(client.get(f"/api/v1/progress/{january.pk}/").status_code, 404)
+        self.assertEqual(client.post(f"/api/v1/progress/{january.pk}/like/").status_code, 404)
+        self.assertEqual(client.get(f"/api/v1/progress/{january.pk}/comments/").status_code, 404)
+        self.assertEqual((ContentLike.objects.count(), Comment.objects.count()), (1, 1))
+        # A later save that fills the day again brings them back.
+        self.save(item, 330, d(2026, 1, 15))
+        self.assertIn(("2026-01-15", "read 300 pages", 1, 1), self.feed_rows())
 
 
 class AReadDeletedTests(LikesBase):

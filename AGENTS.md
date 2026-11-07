@@ -147,7 +147,7 @@ These defaults are now agent guidance:
 8. Rollout scope:
    - Social features should apply to all media types together (not phased by type).
 9. Feed scope/order:
-   - Activity is diary logs, each day's progress on a title, and starting a title, as defined in `docs/activity-contract.md` (not ratings without a log or list activity).
+   - Activity is diary logs, each day's progress on a title, starting a title and status moves (paused, stopped, picked back up), as defined in `docs/activity-contract.md` and read from the Activity calculation (not ratings without a log, marks, or list activity).
    - Newest date first (no algorithmic ranking yet).
 10. Social notifications:
     - Push only, no in-app list: a new follower, a follow request, and an accepted request push to the person concerned; a report pushes to the project owner (`src/social/push.py`).

@@ -40,11 +40,15 @@
           "user_state": null
         },
         "object": {
+          "amount": 2,
           "id": 1,
           "is_rewatch": false,
+          "label": null,
           "liked": true,
           "rating": "4.5",
-          "type": "diary"
+          "time_label": "2m",
+          "type": "diary",
+          "unit": "minutes"
         },
         "person": null,
         "type": "diary_created",

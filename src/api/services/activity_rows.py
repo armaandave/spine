@@ -79,6 +79,13 @@ MULTI_TITLE_DAYS = "multi_title_days"
 EPISODES = "episodes"
 HOURS = "hours"
 STOPPING_MOVES = (ProgressChange.PAUSED, ProgressChange.STOPPED)
+PICKED_BACK_UP = ProgressChange.PICKED_BACK_UP
+# The moves as the API names them; the words use the stored ones ("picked back up").
+MOVE_KEYS = {
+    ProgressChange.PAUSED: "paused",
+    ProgressChange.STOPPED: "stopped",
+    ProgressChange.PICKED_BACK_UP: "picked_back_up",
+}
 # What the calculation reads of a Book.
 BOOK_FIELDS = (
     "id",

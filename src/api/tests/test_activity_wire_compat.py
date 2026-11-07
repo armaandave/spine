@@ -42,8 +42,32 @@ ROW_KEYS = {
     "comment_count": int,
 }
 LOG_ONLY_KEYS = {"review_title": str, "review": str, "contains_spoilers": bool}
-PROGRESS_OBJECT = {"type": str, "id": int, "summary": str, "label": str}
-LOG_OBJECT = {"type": str, "id": int, "rating": (str, type(None)), "liked": bool, "is_rewatch": bool}
+NUMBER = (int, float)
+NONE = type(None)
+# Phase 4 adds fields beside the ones installed builds read; none of those changed type,
+# except that a status-only day has no label (or the app would print "+Paused").
+PROGRESS_OBJECT = {
+    "type": str,
+    "id": int,
+    "summary": str,
+    "label": (str, NONE),
+    "amount": NUMBER,
+    "unit": (str, NONE),
+    "time_label": (str, NONE),
+    "moves": list,
+    "percent": (*NUMBER, NONE),
+}
+LOG_OBJECT = {
+    "type": str,
+    "id": int,
+    "rating": (str, NONE),
+    "liked": bool,
+    "is_rewatch": bool,
+    "amount": NUMBER,
+    "unit": (str, NONE),
+    "time_label": (str, NONE),
+    "label": (str, NONE),
+}
 VIEWER = {"can_view": bool, "has_liked": bool}
 LATEST_KEYS = {"id": int, "previous": dict, "current": dict, "created_at": str}
 SNAPSHOT_KEYS = {"kind", "value", "max", "unit", "journey_id"}
