@@ -4,6 +4,8 @@ import SwiftUI
 @Observable
 final class TaggedListsViewModel {
     var lists: [CustomListSummary] = []
+    /// The sort and filters, shared with every page of lists. Visibility doesn't apply here.
+    var browse = ListBrowseStore.load()
     var totalCount = 0
     var isLoading = true
     var isLoadingNextPage = false
@@ -40,7 +42,7 @@ final class TaggedListsViewModel {
         }
 
         do {
-            let response = try await listRepository.tagged(tag, owner: owner, page: nil)
+            let response = try await listRepository.tagged(tag, owner: owner, page: nil, browse: browse)
             guard generation == requestGeneration else { return }
             lists = response.results
             totalCount = response.count
@@ -54,6 +56,25 @@ final class TaggedListsViewModel {
                 onUnauthorized()
             }
         }
+    }
+
+    /// Remembers the new sort and filters and loads the lists they pick.
+    func browseChanged() {
+        ListBrowseStore.save(browse)
+        Task { await load() }
+    }
+
+    /// Picks up a choice made on another page of lists while this one was covered.
+    func syncBrowse() {
+        let saved = ListBrowseStore.load()
+        guard saved != browse else { return }
+        browse = saved
+        Task { await load() }
+    }
+
+    /// Whether a filter, not just the sort, narrows the lists.
+    var isFiltered: Bool {
+        browse.listType != nil || browse.effectiveMediaType != nil
     }
 
     func loadNextPageIfNeeded(currentList: CustomListSummary) async {
@@ -77,7 +98,7 @@ final class TaggedListsViewModel {
         }
 
         do {
-            let response = try await listRepository.tagged(tag, owner: owner, page: page)
+            let response = try await listRepository.tagged(tag, owner: owner, page: page, browse: browse)
             guard generation == requestGeneration else { return }
             let existingIDs = Set(lists.map(\.id))
             lists += response.results.filter { !existingIDs.contains($0.id) }
@@ -187,6 +208,12 @@ struct TaggedListsView: View {
                                 .frame(maxWidth: .infinity, minHeight: 320)
                         } else if let error = viewModel.errorMessage, viewModel.lists.isEmpty {
                             DiaryStateCard(title: "Could not load lists", systemImage: "exclamationmark.triangle", message: error)
+                        } else if viewModel.lists.isEmpty, viewModel.isFiltered {
+                            DiaryStateCard(
+                                title: "No matching lists",
+                                systemImage: "line.3.horizontal.decrease.circle",
+                                message: "No lists tagged \(tag) match these filters."
+                            )
                         } else if viewModel.lists.isEmpty {
                             DiaryStateCard(
                                 title: "No lists tagged \(tag)",
@@ -211,6 +238,16 @@ struct TaggedListsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ListFilterButton(state: $viewModel.browse, profileRepository: profileRepository) {
+                    viewModel.browseChanged()
+                }
+            }
+        }
+        .onAppear {
+            viewModel.syncBrowse()
+        }
         .task {
             if viewModel.lists.isEmpty {
                 await viewModel.load()

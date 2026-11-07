@@ -9,48 +9,13 @@ Enforcement: Advisory (not mandatory gate).
 
 ## 1) Project Intent
 
-`spine` (formerly YamTrack) is a Django-based multi-media tracker with:
-- Tracking for TV, seasons/episodes, movies, anime, manga, games, books, comics
-- Diary logging
-- Calendar/release events
-- Notifications
-- Import/export and webhook integrations
-- User profiles, preferences, Hall of Fame, and custom lists
+`spine` (formerly YamTrack) is a Django-based multi-media tracker.
 
 Current product direction from maintainer:
 - Evolve from local/private tracker into a social platform (Letterboxd-style social behaviors) for all media types.
 
 Source product intent reference:
 - `spine-prd.md` (early PRD; directionally useful even if some implementation details have advanced).
-
----
-
-## 2) Tech Stack (Current)
-
-- Backend: Django 5.x (`src/`)
-- Async/background: Celery + Redis
-- DB: SQLite by default, PostgreSQL supported
-- Templates/UI: Django templates + HTMX + Alpine + Tailwind build pipeline
-- Auth: Django allauth
-- History/auditing: `django-simple-history`
-- API/data providers: TMDB, MAL, MangaUpdates, IGDB, OpenLibrary, Hardcover, ComicVine
-
----
-
-## 3) Repository Map
-
-- `src/app/`: Core tracking domain (models, forms, views, providers, statistics, template tags)
-- `src/users/`: Custom user model, profile/settings/preferences
-- `src/events/`: Calendar events, release processing, notifications, ICS export
-- `src/lists/`: Custom collections and collaborators
-- `src/integrations/`: Imports/exports + webhook handlers
-- `src/templates/`: Shared and app-specific templates/components
-- `src/config/`: Django settings, URLs, Celery/Gunicorn config
-- `src/static/`: CSS/JS/static assets
-
-Supporting docs/scripts:
-- `LOCAL_SETUP.md`, `FRONTEND.md`, `start-dev.sh`
-- `docker-compose*.yml`, `Dockerfile`, `entrypoint.sh`, `supervisord.conf`
 
 ---
 
@@ -104,13 +69,7 @@ Primary checks before handing off non-trivial changes:
    - No broken CSRF/HTMX headers
 4. For Celery-triggering logic, verify task enqueue paths still execute.
 
-Canonical test command (from repo docs): Django test runner via `python manage.py test`.
-`pytest` config exists and can be used as supplemental tooling.
-
-Lint/format policy (current):
-- Required lint check: `ruff check src` (part of `scripts/check.sh` and CI's Fast checks in `.github/workflows/ci.yml`).
-- Template formatting: `djlint` is available/configured but not currently a CI-required gate.
-- Do not introduce new formatter/linter requirements unless explicitly requested.
+Do not introduce new formatter/linter requirements unless explicitly requested.
 
 ---
 
@@ -221,7 +180,7 @@ Implementation preference:
    - If breaking changes are unavoidable, include explicit migration/redirect notes.
 4. Deployment guidance:
    - Docker is supported but optional for contributors.
-   - Local dev commands from `LOCAL_SETUP.md` and `FRONTEND.md` are primary references.
+   - Local dev commands from `LOCAL_SETUP.md` are the primary reference.
 5. Documentation precedence:
    - If setup instructions conflict across docs, treat `LOCAL_SETUP.md` as the source of truth.
 
