@@ -889,12 +889,12 @@ class InstalledBuildTests(AnimeTestCase):
         self.write(item, status="Planning", progress=0)
         # Choosing Planning is an add (AC-1); there is no progress or start to record.
         self.assertEqual(
-            [change.current_progress["kind"] for change in ProgressChange.objects.filter(actor=self.user, item=item)],
+            [change.current_progress["kind"] for change in ProgressChange.objects.filter(actor=self.user, item=item).order_by("id")],
             ["planning"],
         )
         self.write(item, status="In progress")
         self.assertEqual(
-            [change.current_progress["kind"] for change in ProgressChange.objects.filter(actor=self.user, item=item)],
+            [change.current_progress["kind"] for change in ProgressChange.objects.filter(actor=self.user, item=item).order_by("id")],
             ["planning", "start"],
         )
 

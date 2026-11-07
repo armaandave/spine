@@ -35,7 +35,7 @@ RELATED = "progress_changes"
 NAMING = {
     "api/serializers/common.py",
     "api/services/activity.py",
-    # Reads the planning rows; they are written by social.ProgressChange.record_planning.
+    # Reads the planning rows, which ProgressChange.record_planning writes.
     "api/services/activity_planning.py",
     "api/services/progress_posts.py",
     # Fixes an older save's number in place and takes back the newest: it rewrites and
