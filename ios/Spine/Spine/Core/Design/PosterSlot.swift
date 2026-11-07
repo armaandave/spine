@@ -23,6 +23,12 @@ enum PosterSlot {
     case statsTopGrid
     /// A post in the activity feed; its text is as tall as this.
     case activityPost
+    /// A card in the Home feed; square art takes 132x132.
+    case feedCard
+    /// A poster in an open Home tile's carousel.
+    case homeCarousel
+    /// The poster on a post page's header.
+    case postHero
 
     var size: CGSize {
         switch self {
@@ -58,6 +64,10 @@ enum PosterSlot {
             CGSize(width: 62, height: 93)
         case .activityPost:
             CGSize(width: 74, height: 111)
+        case .feedCard:
+            CGSize(width: 88, height: 132)
+        case .homeCarousel, .postHero:
+            CGSize(width: 120, height: 180)
         }
     }
 
@@ -67,8 +77,10 @@ enum PosterSlot {
             4
         case .diaryEntry:
             6
-        case .hero, .logSheet:
+        case .hero, .logSheet, .postHero:
             10
+        case .homeCarousel:
+            12
         default:
             8
         }
@@ -78,7 +90,11 @@ enum PosterSlot {
         let usesSquareArtwork = orientation == .square
             || ((orientation == nil || orientation == .unknown)
                 && MediaTypeTheme.theme(for: mediaType ?? "unknown").artworkOrientation == .square)
-        return usesSquareArtwork ? CGSize(width: size.width, height: size.width) : size
+        guard usesSquareArtwork else { return size }
+        if self == .feedCard {
+            return CGSize(width: 132, height: 132)
+        }
+        return CGSize(width: size.width, height: size.width)
     }
 }
 

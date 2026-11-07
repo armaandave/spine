@@ -1,0 +1,404 @@
+import CoreGraphics
+import Nuke
+import SwiftUI
+import UIKit
+import XCTest
+@testable import Spine
+
+@MainActor
+final class BlurredArtTests: XCTestCase {
+    // MARK: ArtInk
+
+    func testGuessTable() {
+        let dark = ["3D2416", "6F8FFF", "#3D2416", "garbage", "", "zzzzzz", "FFF", "12345", "1234567", nil]
+        for hex in dark {
+            XCTAssertEqual(ArtInk.guess(accentHex: hex), .dark, "\(hex ?? "nil") should be dark")
+        }
+        for hex in ["C9D6DE", "9CC7CF", "D8C27A", "#D8C27A", "d8c27a"] {
+            XCTAssertEqual(ArtInk.guess(accentHex: hex), .light, "\(hex) should be light")
+        }
+    }
+
+    func testResolveKeepsTheGuessInsideTheDeadBand() {
+        for guess in [ArtInk.light, .dark] {
+            for luma in [0.461, 0.47, 0.50, 0.53, 0.539] {
+                XCTAssertEqual(ArtInk.resolve(luma: luma, guess: guess), guess)
+            }
+            XCTAssertEqual(ArtInk.resolve(luma: nil, guess: guess), guess)
+        }
+    }
+
+    func testResolveFlipsOutsideTheDeadBand() {
+        XCTAssertEqual(ArtInk.resolve(luma: 0.54, guess: .dark), .light)
+        XCTAssertEqual(ArtInk.resolve(luma: 0.9, guess: .dark), .light)
+        XCTAssertEqual(ArtInk.resolve(luma: 0.46, guess: .light), .dark)
+        XCTAssertEqual(ArtInk.resolve(luma: 0.1, guess: .light), .dark)
+        XCTAssertEqual(ArtInk.resolve(luma: 0.9, guess: .light), .light)
+        XCTAssertEqual(ArtInk.resolve(luma: 0.1, guess: .dark), .dark)
+    }
+
+    func testInkTokens() {
+        XCTAssertEqual(rgba(ArtInk.dark.text), [1, 1, 1, 1])
+        XCTAssertEqual(rgba(ArtInk.dark.muted)[3], 0.80, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.dark.before)[3], 0.45, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.dark.rest)[3], 0.16, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.light.muted)[3], 0.72, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.light.before)[3], 0.36, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.light.rest)[3], 0.12, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.dark.chipFill)[3], 0.26, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.light.chipFill)[3], 0.45, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.dark.chipLine)[3], 0.22, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.light.chipLine)[3], 0.60, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.dark.star), rgba(HomeDesign.Palette.starGold))
+        XCTAssertEqual(rgba(ArtInk.light.star), rgba(HomeDesign.Palette.lightInk))
+        XCTAssertEqual(rgba(ArtInk.dark.heart), rgba(ArtInk.light.heart))
+        XCTAssertEqual(rgba(ArtInk.light.rewatch), rgba(ArtInk.light.text))
+    }
+
+    func testAccentColor() {
+        XCTAssertEqual(rgba(ArtInk.dark.accent(posterAccentHex: nil)), [1, 1, 1, 1])
+        XCTAssertEqual(rgba(ArtInk.dark.accent(posterAccentHex: "junk")), [1, 1, 1, 1])
+        XCTAssertEqual(
+            rgba(ArtInk.dark.accent(posterAccentHex: "6F8FFF")),
+            rgba(ArtAccent.pastel(fromHex: "6F8FFF"))
+        )
+        XCTAssertEqual(
+            rgba(ArtInk.light.accent(posterAccentHex: "D8C27A")),
+            rgba(HomeDesign.Palette.lightInk)
+        )
+    }
+
+    // MARK: ArtLuma
+
+    func testMeasureSolidBitmaps() throws {
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(bitmap(width: 60, height: 36) { _, _ in (0, 0, 0) })), 0, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(bitmap(width: 60, height: 36) { _, _ in (255, 255, 255) })), 1, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(bitmap(width: 60, height: 36) { _, _ in (128, 128, 128) })), 0.5, accuracy: 0.01)
+        // Rec.601 weights green most.
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(bitmap(width: 60, height: 36) { _, _ in (0, 255, 0) })), 0.587, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(bitmap(width: 60, height: 36) { _, _ in (255, 0, 0) })), 0.299, accuracy: 0.01)
+    }
+
+    func testMeasureLooksOnlyAtTheRightTwoThirds() throws {
+        // Left third black, the rest white: the text area is all white.
+        let leftThirdBlack = bitmap(width: 60, height: 36) { x, _ in x < 20 ? (0, 0, 0) : (255, 255, 255) }
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(leftThirdBlack)), 1, accuracy: 0.02)
+        // Left half black, right half white: a quarter of the sampled area is black.
+        let halves = bitmap(width: 60, height: 36) { x, _ in x < 30 ? (0, 0, 0) : (255, 255, 255) }
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(halves)), 0.75, accuracy: 0.06)
+        // Top half black, bottom white: half and half.
+        let stacked = bitmap(width: 60, height: 36) { _, y in y < 18 ? (0, 0, 0) : (255, 255, 255) }
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(stacked)), 0.5, accuracy: 0.06)
+    }
+
+    func testMeasureMemoIsByKeyAndCapped() throws {
+        ArtLuma.forgetAll()
+        let white = bitmap(width: 30, height: 18) { _, _ in (255, 255, 255) }
+        let black = bitmap(width: 30, height: 18) { _, _ in (0, 0, 0) }
+
+        XCTAssertNil(ArtLuma.remembered(key: "https://example.com/a.jpg"))
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(white, key: "https://example.com/a.jpg")), 1, accuracy: 0.01)
+        // The memo wins over a different bitmap for the same URL: a URL is measured once.
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.measure(black, key: "https://example.com/a.jpg")), 1, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(ArtLuma.remembered(key: "https://example.com/a.jpg")), 1, accuracy: 0.01)
+
+        for index in 0 ..< (ArtLuma.memoLimit + 40) {
+            _ = ArtLuma.measure(black, key: "https://example.com/many-\(index).jpg")
+        }
+        XCTAssertEqual(ArtLuma.memoCount, ArtLuma.memoLimit)
+        XCTAssertNil(ArtLuma.remembered(key: "https://example.com/many-0.jpg"))
+        XCTAssertNotNil(ArtLuma.remembered(key: "https://example.com/many-\(ArtLuma.memoLimit + 39).jpg"))
+        ArtLuma.forgetAll()
+    }
+
+    // MARK: ArtTone
+
+    func testToneStaysInsideItsBounds() {
+        for step in 0 ... 100 {
+            let luma = Double(step) / 100
+            let dark = ArtTone.overlayAlpha(ink: .dark, luma: luma)
+            XCTAssertGreaterThanOrEqual(dark, 0.06)
+            XCTAssertLessThanOrEqual(dark, 0.34)
+            let light = ArtTone.overlayAlpha(ink: .light, luma: luma)
+            XCTAssertGreaterThanOrEqual(light, 0)
+            XCTAssertLessThanOrEqual(light, 0.22)
+        }
+        XCTAssertEqual(ArtTone.overlayAlpha(ink: .dark, luma: nil), 0.20)
+        XCTAssertEqual(ArtTone.overlayAlpha(ink: .light, luma: nil), 0.04)
+    }
+
+    func testToneNudgesMidToneArtGently() {
+        XCTAssertLessThanOrEqual(ArtTone.overlayAlpha(ink: .dark, luma: 0.5), 0.34)
+        XCTAssertLessThanOrEqual(ArtTone.overlayAlpha(ink: .light, luma: 0.5), 0.22)
+        // Dark art already dark enough gets the floor; bright art under white text gets the most.
+        XCTAssertEqual(ArtTone.overlayAlpha(ink: .dark, luma: 0.1), 0.06)
+        XCTAssertEqual(ArtTone.overlayAlpha(ink: .dark, luma: 0.9), 0.34)
+        XCTAssertEqual(ArtTone.overlayAlpha(ink: .light, luma: 0.9), 0)
+        XCTAssertEqual(ArtTone.overlayAlpha(ink: .light, luma: 0.0), 0.22)
+        XCTAssertEqual(rgba(ArtTone.overlayColor(ink: .dark)), [0, 0, 0, 1])
+        XCTAssertEqual(rgba(ArtTone.overlayColor(ink: .light)), [1, 1, 1, 1])
+    }
+
+    // MARK: ArtAccent
+
+    func testPastelKeepsHueAndSetsBrightness() {
+        for hex in ["6F8FFF", "3D2416", "D8C27A", "E5484D", "30A46C", "8E4EC6", "#F5CB84"] {
+            let original = hsb(hex)
+            let pastel = hsb(of: ArtAccent.pastel(fromHex: hex))
+            XCTAssertEqual(pastel.brightness, 0.97, accuracy: 0.01, hex)
+            XCTAssertGreaterThanOrEqual(pastel.saturation, 0.12 - 0.01, hex)
+            XCTAssertLessThanOrEqual(pastel.saturation, 0.46 + 0.01, hex)
+            XCTAssertLessThanOrEqual(hueDistanceDegrees(original.hue, pastel.hue), 2, hex)
+        }
+        // 0.6 of 0.56 saturation is 0.336, inside the clamp.
+        XCTAssertEqual(ArtAccent.pastelHSB(fromHex: "6F8FFF").saturation, hsb("6F8FFF").saturation * 0.6, accuracy: 0.001)
+        // Very saturated colors cap at 0.46; barely tinted ones rise to 0.12.
+        XCTAssertEqual(ArtAccent.pastelHSB(fromHex: "FF0000").saturation, 0.46, accuracy: 0.0001)
+        XCTAssertEqual(ArtAccent.pastelHSB(fromHex: "F0E8E8").saturation, 0.12, accuracy: 0.0001)
+    }
+
+    func testGreyAndMissingAccentBecomeNearWhite() {
+        for hex in [nil, "808080", "FFFFFF", "000000", "junk"] as [String?] {
+            let pastel = hsb(of: ArtAccent.pastel(fromHex: hex))
+            XCTAssertEqual(pastel.brightness, 0.97, accuracy: 0.01, "\(hex ?? "nil")")
+            XCTAssertLessThan(pastel.saturation, 0.03, "\(hex ?? "nil")")
+        }
+    }
+
+    // MARK: Processors
+
+    func testProcessorsKeepSizeAndOpaqueEdges() throws {
+        for style in BlurredArt.Style.allCases {
+            let source = UIImage(cgImage: bitmap(width: 8, height: 8) { _, _ in (200, 120, 60) }, scale: 3, orientation: .up)
+            let output = try XCTUnwrap(style.processor.process(source), "\(style)")
+            XCTAssertEqual(output.size, source.size, "\(style)")
+            XCTAssertEqual(output.scale, source.scale, "\(style)")
+            let cg = try XCTUnwrap(output.cgImage)
+            XCTAssertEqual(cg.width, 8)
+            XCTAssertEqual(cg.height, 8)
+            let pixels = rgbaPixels(cg)
+            for (x, y) in [(0, 0), (7, 0), (0, 7), (7, 7), (3, 0), (0, 4)] {
+                XCTAssertEqual(pixels.alpha(x, y), 255, "\(style) edge \(x),\(y)")
+            }
+        }
+    }
+
+    func testProcessorsBakeTheBrightnessAndSaturation() throws {
+        let source = UIImage(cgImage: bitmap(width: 8, height: 8) { _, _ in (128, 128, 128) }, scale: 3, orientation: .up)
+        let card = try XCTUnwrap(BlurredArt.Style.card.processor.process(source)?.cgImage)
+        let tile = try XCTUnwrap(BlurredArt.Style.tile.processor.process(source)?.cgImage)
+        let page = try XCTUnwrap(BlurredArt.Style.page.processor.process(source)?.cgImage)
+        let glow = try XCTUnwrap(BlurredArt.Style.glow.processor.process(source)?.cgImage)
+        // Grey stays grey under saturation; brightness multiplies: card x1, tile x0.6, glow x0.82, page x0.6.
+        XCTAssertEqual(Double(rgbaPixels(card).red(4, 4)), 128, accuracy: 3)
+        XCTAssertEqual(Double(rgbaPixels(tile).red(4, 4)), 128 * 0.6, accuracy: 3)
+        XCTAssertEqual(Double(rgbaPixels(glow).red(4, 4)), 128 * 0.82, accuracy: 3)
+        XCTAssertEqual(Double(rgbaPixels(page).red(4, 4)), 128 * 0.6, accuracy: 3)
+    }
+
+    func testBlurSpreadsAnEdgeButKeepsTheBorderSolid() throws {
+        // A bright left half and dark right half at the size the card thumbnail decodes to (120x72 at 3x).
+        let source = UIImage(
+            cgImage: bitmap(width: 120, height: 72) { x, _ in x < 60 ? (255, 255, 255) : (0, 0, 0) },
+            scale: 3,
+            orientation: .up
+        )
+        let output = try XCTUnwrap(BlurredArt.Style.card.processor.process(source)?.cgImage)
+        let pixels = rgbaPixels(output)
+        XCTAssertGreaterThan(pixels.red(66, 36), 10, "the dark side picks up light across the edge")
+        XCTAssertLessThan(pixels.red(54, 36), 245, "the bright side picks up dark across the edge")
+        XCTAssertEqual(pixels.alpha(0, 0), 255)
+        XCTAssertEqual(pixels.alpha(119, 71), 255)
+        XCTAssertGreaterThan(pixels.red(0, 36), 240, "clamped edges do not fade toward transparent black")
+        XCTAssertLessThan(pixels.red(119, 36), 15)
+    }
+
+    func testProcessorsShareOneContext() throws {
+        XCTAssertTrue(BlurredArt.context === BlurredArt.context)
+        let art = try source(of: "BlurredArt.swift")
+        XCTAssertEqual(art.components(separatedBy: "CIContext(").count - 1, 1)
+        for file in ["ArtInk.swift", "BlurredArtBackground.swift", "BakedShadow.swift"] {
+            XCTAssertFalse(try source(of: file).contains("CIContext("), file)
+        }
+    }
+
+    func testArtFolderHasNoLiveBlurOrMaterial() throws {
+        for file in ["ArtInk.swift", "BlurredArt.swift", "BlurredArtBackground.swift", "BakedShadow.swift"] {
+            let text = try source(of: file)
+            XCTAssertFalse(text.contains(".blur("), file)
+            XCTAssertFalse(text.contains("Material"), file)
+            XCTAssertFalse(text.contains("GeometryReader"), file)
+            XCTAssertFalse(text.contains("AsyncImage("), file)
+        }
+    }
+
+    // MARK: Requests
+
+    func testRequestHasTheStylesThumbnailAndProcessor() throws {
+        let url = URL(string: "https://image.tmdb.org/t/p/w500/poster.jpg")
+        for style in BlurredArt.Style.allCases {
+            let request = try XCTUnwrap(BlurredArt.request(url: url, style: style))
+            XCTAssertEqual(
+                request.thumbnail,
+                ImageRequest.ThumbnailOptions(size: style.thumbnailSize, unit: .points, contentMode: .aspectFill),
+                "\(style)"
+            )
+            XCTAssertEqual(request.processors.map(\.identifier), [style.processor.identifier], "\(style)")
+        }
+        XCTAssertEqual(BlurredArt.Style.card.thumbnailSize, CGSize(width: 40, height: 24))
+        XCTAssertEqual(BlurredArt.Style.tile.thumbnailSize, CGSize(width: 40, height: 40))
+        XCTAssertEqual(BlurredArt.Style.glow.thumbnailSize, CGSize(width: 64, height: 77))
+        XCTAssertEqual(BlurredArt.Style.page.thumbnailSize, CGSize(width: 54, height: 93))
+        XCTAssertNil(BlurredArt.request(url: nil, style: .card))
+    }
+
+    func testProcessorIdentifiersDifferPerStyle() {
+        let identifiers = BlurredArt.Style.allCases.map(\.processor.identifier)
+        XCTAssertEqual(Set(identifiers).count, BlurredArt.Style.allCases.count)
+    }
+
+    func testTwoCallsBuildTheSameCacheEntry() throws {
+        let url = URL(string: "https://image.tmdb.org/t/p/w500/poster.jpg")
+        let cache = ImagePipeline.shared.cache
+        for style in BlurredArt.Style.allCases {
+            let view = try XCTUnwrap(BlurredArt.request(url: url, style: style))
+            let prefetch = try XCTUnwrap(BlurredArt.request(url: url, style: style))
+            XCTAssertEqual(cache.makeImageCacheKey(for: view), cache.makeImageCacheKey(for: prefetch), "\(style)")
+        }
+        let card = try XCTUnwrap(BlurredArt.request(url: url, style: .card))
+        let tile = try XCTUnwrap(BlurredArt.request(url: url, style: .tile))
+        XCTAssertNotEqual(cache.makeImageCacheKey(for: card), cache.makeImageCacheKey(for: tile))
+    }
+
+    func testBaseColorIsDarkenedOrLightened() {
+        XCTAssertEqual(rgba(BlurredArtBackground.baseColor(accentHex: nil)), [0.16, 0.16, 0.16, 1])
+        let dark = rgba(BlurredArtBackground.baseColor(accentHex: "6F8FFF"))
+        XCTAssertLessThan(dark[2], 0.5)
+        let light = rgba(BlurredArtBackground.baseColor(accentHex: "C9D6DE"))
+        XCTAssertGreaterThan(light[0], 0.7)
+    }
+
+    // MARK: BakedShadow
+
+    func testBakedShadowIsLargerThanTheRectangleAndFadesOut() throws {
+        let size = CGSize(width: 66, height: 99)
+        let image = BakedShadow.image(size: size, cornerRadius: 12, blur: 28, opacity: 0.5, offsetY: 14, scale: 2)
+        XCTAssertEqual(image.size, BakedShadow.imageSize(size: size, blur: 28))
+        XCTAssertEqual(image.size.width, size.width + 4 * 28)
+        XCTAssertEqual(image.size.height, size.height + 4 * 28)
+        XCTAssertEqual(image.scale, 2)
+
+        let cg = try XCTUnwrap(image.cgImage)
+        let pixels = rgbaPixels(cg)
+        let pad = Int(BakedShadow.padding(blur: 28) * 2)
+        let centerX = cg.width / 2
+        let rectTop = pad
+        let rectBottom = cg.height - pad
+
+        XCTAssertGreaterThan(Double(pixels.alpha(centerX, cg.height / 2)) / 255, 0.4, "under the poster")
+        XCTAssertEqual(pixels.alpha(0, 0), 0, "the corner of the bitmap is clear")
+        XCTAssertEqual(pixels.alpha(cg.width - 1, cg.height - 1), 0)
+        XCTAssertEqual(pixels.alpha(0, cg.height / 2), 0)
+        // Outside the rectangle the shadow is still there, and the offset puts more of it below than above.
+        let above = pixels.alpha(centerX, rectTop - 16)
+        let below = pixels.alpha(centerX, rectBottom + 16)
+        XCTAssertGreaterThan(below, 0)
+        XCTAssertGreaterThan(below, above)
+        // No shape is drawn: the shadow's own rectangle is not a hard-edged opaque block.
+        XCTAssertLessThan(Double(pixels.alpha(centerX, cg.height / 2)) / 255, 0.55)
+    }
+
+    func testBakedShadowIsCachedByItsParameters() {
+        let size = CGSize(width: 56, height: 84)
+        let first = BakedShadow.image(size: size, cornerRadius: 12, blur: 28, opacity: 0.5, offsetY: 14, scale: 2)
+        let again = BakedShadow.image(size: size, cornerRadius: 12, blur: 28, opacity: 0.5, offsetY: 14, scale: 2)
+        let other = BakedShadow.image(size: size, cornerRadius: 12, blur: 28, opacity: 0.4, offsetY: 14, scale: 2)
+        XCTAssertTrue(first === again)
+        XCTAssertFalse(first === other)
+    }
+
+    // MARK: Helpers
+
+    private func source(of file: String) throws -> String {
+        let folder = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Spine/Core/Design/Art")
+        return try String(contentsOf: folder.appendingPathComponent(file), encoding: .utf8)
+    }
+
+    private func rgba(_ color: Color) -> [Double] {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return [Double(red), Double(green), Double(blue), Double(alpha)].map { ($0 * 1000).rounded() / 1000 }
+    }
+
+    private func hsb(_ hex: String) -> (hue: Double, saturation: Double, brightness: Double) {
+        let rgb = ArtHex.rgb(hex)!
+        return ArtHex.hsb(rgb)
+    }
+
+    private func hsb(of color: Color) -> (hue: Double, saturation: Double, brightness: Double) {
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+        UIColor(color).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        return (Double(hue), Double(saturation), Double(brightness))
+    }
+
+    private func hueDistanceDegrees(_ a: Double, _ b: Double) -> Double {
+        let difference = abs(a - b)
+        return min(difference, 1 - difference) * 360
+    }
+
+    private func bitmap(width: Int, height: Int, pixel: (Int, Int) -> (UInt8, UInt8, UInt8)) -> CGImage {
+        var data = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let (r, g, b) = pixel(x, y)
+                let offset = (y * width + x) * 4
+                data[offset] = r
+                data[offset + 1] = g
+                data[offset + 2] = b
+            }
+        }
+        let provider = CGDataProvider(data: Data(data) as CFData)!
+        return CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )!
+    }
+
+    private struct Pixels {
+        let width: Int
+        let data: [UInt8]
+
+        func red(_ x: Int, _ y: Int) -> UInt8 { data[(y * width + x) * 4] }
+        func alpha(_ x: Int, _ y: Int) -> UInt8 { data[(y * width + x) * 4 + 3] }
+    }
+
+    /// Straight (unpremultiplied would lose precision at low alpha) RGBA read of an image: row 0 is the top.
+    private func rgbaPixels(_ image: CGImage) -> Pixels {
+        var data = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        data.withUnsafeMutableBytes { buffer in
+            let context = CGContext(
+                data: buffer.baseAddress,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: image.width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        return Pixels(width: image.width, data: data)
+    }
+}
