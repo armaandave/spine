@@ -1,0 +1,435 @@
+import SwiftUI
+
+/// Home's two square tiles, In progress and Trending. Tap one and it springs open to the full width and 410 pt: the
+/// other slides away, the tile's posters fly out of their fan into a row you swipe through, the glow behind the page
+/// follows the poster you are on, and a panel at the bottom says where that title stands and offers its buttons.
+///
+/// Give it the page's content width (the screen less the 16 pt margins). It reads the model and the state only
+/// inside its own views, so a swipe, a quick action or a reload redraws the tiles and never the page that holds them.
+struct HomeTilesSection: View {
+    let model: HomeTilesModel
+    let state: HomeTilesState
+    let glow: HomeGlowModel
+    let actions: HomeTilesActions
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var contentWidth = TileGeometry.referenceContentWidth
+    @State private var openTicks = 0
+
+    var body: some View {
+        let _ = PerfCounters.bump(.tilesBody)
+        let height = TileGeometry.containerHeight(contentWidth: contentWidth, isOpen: state.open != nil)
+        ZStack(alignment: .topLeading) {
+            ForEach(HomeTileID.allCases, id: \.self) { tile in
+                HomeTile(
+                    tile: tile,
+                    contentWidth: contentWidth,
+                    model: model,
+                    state: state,
+                    actions: actions,
+                    onOpen: { openTile(tile) },
+                    onClose: closeTile
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(height: height, alignment: .top)
+        .animation(TileMotion.frame(reduceMotion: reduceMotion), value: height)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            if width > 0 { contentWidth = width }
+        }
+        .background {
+            TilesSync(model: model, state: state, glow: glow)
+        }
+        // The tiles are dark art whatever the phone is set to.
+        .environment(\.colorScheme, .dark)
+        .sensoryFeedback(.impact(weight: .light), trigger: openTicks)
+        .task(id: state.open) {
+            // A tile that has closed keeps all its posters mounted until they have flown home.
+            guard state.open == nil else { return }
+            try? await Task.sleep(for: TileMotion.unmountDelay)
+            if !Task.isCancelled { state.finishClosing() }
+        }
+    }
+
+    // MARK: Open and close
+
+    private func openTile(_ tile: HomeTileID) {
+        guard state.open == nil, model.face(for: tile) == .items else { return }
+        openTicks += 1
+        let posters = model.posters(for: tile)
+        HomeGlow.prefetch(HomeGlow.neighbors(of: 0, in: posters.map(\.media)))
+        if posters.count > TileGeometry.fanMountedCount {
+            TilePosterArt.prefetch(posters, at: TileGeometry.openPrefetchIndexes(count: posters.count))
+        }
+        state.requestOpen(
+            tile,
+            posterCount: posters.count,
+            animation: TileMotion.frame(reduceMotion: reduceMotion),
+            defersMount: !reduceMotion
+        )
+    }
+
+    private func closeTile() {
+        state.requestClose(animation: TileMotion.frame(reduceMotion: reduceMotion))
+    }
+}
+
+/// Keeps `HomeTilesState` and Home's glow in step with the model, from a view of its own so that the section's body
+/// does not depend on any of it.
+private struct TilesSync: View {
+    let model: HomeTilesModel
+    let state: HomeTilesState
+    let glow: HomeGlowModel
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let inProgressIDs = model.ids(for: .inProgress)
+        let trendingIDs = model.ids(for: .trending)
+        let focused = state.focusedMedia(model: model)
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: inProgressIDs, initial: true) { _, ids in
+                sync(ids, for: .inProgress)
+            }
+            .onChange(of: trendingIDs, initial: true) { _, ids in
+                sync(ids, for: .trending)
+            }
+            .onChange(of: focused, initial: true) { _, _ in
+                state.syncGlow(glow, model: model)
+            }
+            .accessibilityHidden(true)
+    }
+
+    /// A list that empties under an open tile collapses it, which moves the page, so that runs animated too.
+    private func sync(_ ids: [String], for tile: HomeTileID) {
+        if ids.isEmpty, state.open == tile {
+            withAnimation(TileMotion.frame(reduceMotion: reduceMotion)) { state.sync(ids, for: tile) }
+        } else {
+            state.sync(ids, for: tile)
+        }
+    }
+}
+
+// MARK: - One tile
+
+private struct HomeTile: View {
+    let tile: HomeTileID
+    let contentWidth: CGFloat
+    let model: HomeTilesModel
+    let state: HomeTilesState
+    let actions: HomeTilesActions
+    let onOpen: () -> Void
+    let onClose: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let isOpen = state.open == tile
+        let frame = TileGeometry.frame(tile: tile.index, open: state.open?.index, contentWidth: contentWidth)
+        let face = model.face(for: tile)
+        let posters = model.posters(for: tile)
+        let shape = RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous)
+
+        // The content is laid out once, at the open size, and clipped by a container whose frame animates; so the
+        // posters, the label and the panel are never re-laid-out as the tile grows.
+        content(isOpen: isOpen, face: face, posters: posters)
+            .frame(width: contentWidth, height: HomeDesign.Metric.tileOpenHeight, alignment: .topLeading)
+            .overlay(alignment: .topTrailing) {
+                if isOpen {
+                    TileCloseButton(label: "Collapse \(tile.title)", action: onClose)
+                        .padding(TileGeometry.closeInset)
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.5).combined(with: .opacity)
+                                .animation(TileMotion.closePop(reduceMotion: reduceMotion)),
+                            removal: .opacity.animation(.easeOut(duration: 0.12))
+                        ))
+                }
+            }
+            .frame(width: frame.width, height: frame.height, alignment: .topLeading)
+            .background(TileStyle.veil)
+            .clipShape(shape)
+            .overlay { TileOutline(shape: shape) }
+            .overlay { tapTarget(face: face, shape: shape) }
+            .animation(TileMotion.frame(reduceMotion: reduceMotion), value: [frame.width, frame.height])
+            .scaleEffect(frame.scale)
+            .offset(x: frame.slide)
+            .animation(TileMotion.slide(reduceMotion: reduceMotion), value: frame.scale)
+            .opacity(frame.opacity)
+            .animation(TileMotion.fade(reduceMotion: reduceMotion), value: frame.opacity)
+            .offset(x: frame.left)
+            .animation(TileMotion.frame(reduceMotion: reduceMotion), value: frame.left)
+            .zIndex(frame.z)
+            .allowsHitTesting(frame.hitTestable)
+            .accessibilityHidden(!frame.hitTestable)
+            .accessibilityAction(.escape) {
+                if isOpen { onClose() }
+            }
+    }
+
+    // MARK: Layers
+
+    @ViewBuilder
+    private func content(isOpen: Bool, face: TileFace, posters: [TilePoster]) -> some View {
+        let side = TileGeometry.tileSide(contentWidth: contentWidth)
+        ZStack(alignment: .topLeading) {
+            switch face {
+            case .items:
+                TileArt(
+                    url: posters.first.flatMap { TileURL.make($0.media.displayPosterURL) },
+                    side: side,
+                    contentWidth: contentWidth,
+                    isOpen: isOpen
+                )
+                TileCarousel(
+                    tile: tile,
+                    posters: posters,
+                    state: state,
+                    contentWidth: contentWidth,
+                    onOpenTitle: openTitle
+                )
+            case .loading:
+                TileSkeletonFace(contentWidth: contentWidth)
+            case .offer:
+                TileOfferGlyph(symbol: tile == .inProgress ? "plus" : "person.badge.plus", side: side)
+            case .message:
+                EmptyView()
+            }
+            TileLabel(
+                title: tile.title,
+                subtitle: isOpen && face == .items ? "Swipe to browse" : model.subtitle(for: tile),
+                isOpen: isOpen,
+                closedWidth: side - 2 * TileGeometry.labelLeading
+            )
+            if isOpen {
+                TileDetailPanel(tile: tile, model: model, state: state, actions: actions)
+                    .frame(width: contentWidth - 2 * TileGeometry.panelInset)
+                    .padding(.leading, TileGeometry.panelInset)
+                    .padding(.top, TileGeometry.panelTop)
+                    .transition(.asymmetric(
+                        insertion: .offset(y: 12).combined(with: .opacity)
+                            .animation(TileMotion.panelRise(reduceMotion: reduceMotion)),
+                        removal: .opacity.animation(.easeOut(duration: 0.12))
+                    ))
+            }
+        }
+    }
+
+    /// The whole closed tile is one button: it opens, or (for an empty tile) offers what to do about it.
+    @ViewBuilder
+    private func tapTarget(face: TileFace, shape: RoundedRectangle) -> some View {
+        switch face {
+        case .items:
+            Button(action: onOpen) {
+                shape.fill(Color.clear)
+            }
+            .buttonStyle(TileTapStyle())
+            .contentShape(shape)
+            .allowsHitTesting(state.open == nil)
+            .accessibilityHidden(state.open != nil)
+            .accessibilityLabel(model.openLabel(for: tile))
+            .accessibilityIdentifier(tile.identifier)
+        case let .offer(words):
+            Button(action: offerTapped) {
+                shape.fill(Color.clear)
+            }
+            .buttonStyle(TileTapStyle())
+            .contentShape(shape)
+            .accessibilityLabel("\(tile.title), \(words)")
+            .accessibilityIdentifier(tile.identifier)
+        case .loading:
+            Color.clear
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading \(tile.title)")
+                .accessibilityIdentifier(tile.identifier)
+                .allowsHitTesting(false)
+        case let .message(words):
+            Color.clear
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(tile.title), \(words)")
+                .accessibilityIdentifier(tile.identifier)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func openTitle(_ poster: TilePoster) {
+        switch tile {
+        case .inProgress:
+            actions.onOpenTitle(poster.media.ref)
+        case .trending:
+            if let title = model.trendingTitle(id: poster.id) { actions.onOpenTrending(title) }
+        }
+    }
+
+    private func offerTapped() {
+        switch tile {
+        case .inProgress: actions.onFindSomething()
+        case .trending: actions.onFindPeople()
+        }
+    }
+}
+
+// MARK: - Pieces
+
+/// A URL for a string that may be missing or blank.
+private enum TileURL {
+    static func make(_ string: String?) -> URL? {
+        guard let string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return URL(string: string)
+    }
+}
+
+/// The 0.5 pt inner stroke and the 1 pt highlight along the top edge that make the tile read as glass.
+private struct TileOutline: View {
+    let shape: RoundedRectangle
+
+    var body: some View {
+        ZStack {
+            shape.strokeBorder(TileStyle.stroke, lineWidth: TileStyle.strokeWidth)
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [TileStyle.highlight, .clear],
+                    startPoint: .top,
+                    endPoint: UnitPoint(x: 0.5, y: 0.14)
+                ),
+                lineWidth: TileStyle.highlightWidth
+            )
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The first title's art, already blurred, saturated and darkened in the image cache, filling the closed tile. Opening
+/// stretches it with the tile and fades it out, so the glow behind shows through: it is only ever scaled and faded.
+private struct TileArt: View {
+    let url: URL?
+    let side: CGFloat
+    let contentWidth: CGFloat
+    let isOpen: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let style = BlurredArt.Style.tile
+        ZStack {
+            TileStyle.artBase
+            SpineAsyncImage(
+                url: url,
+                thumbnailSize: style.thumbnailSize,
+                processors: [style.processor]
+            ) { phase in
+                if case let .success(image) = phase {
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                } else {
+                    Color.clear
+                }
+            }
+        }
+        .frame(width: side, height: side)
+        .clipped()
+        .scaleEffect(
+            x: isOpen ? contentWidth / side : 1,
+            y: isOpen ? HomeDesign.Metric.tileOpenHeight / side : 1,
+            anchor: .topLeading
+        )
+        .animation(TileMotion.frame(reduceMotion: reduceMotion), value: isOpen)
+        .opacity(isOpen ? 0 : 1)
+        .animation(TileMotion.art(reduceMotion: reduceMotion), value: isOpen)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The title and the line under it. The title is drawn at 16 and scaled to 24 about its top-leading corner as the tile
+/// opens; both only move.
+private struct TileLabel: View {
+    let title: String
+    let subtitle: String
+    let isOpen: Bool
+    let closedWidth: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Text(title)
+                .font(HomeDesign.Text.tileTitle)
+                .tracking(-0.3)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .frame(maxWidth: closedWidth, alignment: .leading)
+                .scaleEffect(isOpen ? TileGeometry.titleOpenScale : 1, anchor: .topLeading)
+                .offset(x: TileGeometry.labelLeading, y: TileGeometry.titleTop(isOpen: isOpen))
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle)
+                .font(HomeDesign.Text.tileSubtitle)
+                .foregroundStyle(TileStyle.subtitle)
+                .lineLimit(1)
+                .contentTransition(.identity)
+                .frame(maxWidth: closedWidth, alignment: .leading)
+                .offset(x: TileGeometry.labelLeading, y: TileGeometry.subtitleTop(isOpen: isOpen))
+        }
+        .animation(TileMotion.frame(reduceMotion: reduceMotion), value: isOpen)
+        .dynamicTypeSize(...HomeDesign.Text.maxCategory)
+        .allowsHitTesting(false)
+        .accessibilityHidden(!isOpen)
+    }
+}
+
+/// The empty tile's glyph, where the fan would be.
+private struct TileOfferGlyph: View {
+    let symbol: String
+    let side: CGFloat
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 22, weight: .bold))
+            .foregroundStyle(.primary)
+            .frame(width: 56, height: 56)
+            .background(Circle().fill(Color.white.opacity(0.12)))
+            .offset(x: (side - 56) / 2, y: 36)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+/// The glass Close button. The glass is on the button itself, with a circle to tap, and the label says Collapse so
+/// the progress sheet's own Close stays the only Close.
+private struct TileCloseButton: View {
+    let label: String
+    let action: () -> Void
+
+    @State private var ticks = 0
+
+    var body: some View {
+        Button {
+            ticks += 1
+            action()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: TileGeometry.closeSize, height: TileGeometry.closeSize)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("home.tile.close")
+        .sensoryFeedback(.impact(weight: .light), trigger: ticks)
+    }
+}
+
+/// A closed tile's tap target adds no highlight; the tile itself is the feedback, by springing open.
+private struct TileTapStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+    }
+}
