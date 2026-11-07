@@ -481,10 +481,24 @@ struct ActivityObject: Codable {
     /// A day's progress, whole ("watched 4 episodes") and short ("4 episodes").
     var summary: String? = nil
     var label: String? = nil
+    /// Phase 4 (activity contract, wire shape). A number in the tab's unit (minutes on TV, anime, games, movies and
+    /// albums, else pages, chapters or issues), its unit, the status moves of a day ("paused", "stopped",
+    /// "picked_back_up"), a percent told with no length, and the time beside the words ("2h 15m"). Older servers
+    /// send none of them.
+    var amount: Double? = nil
+    var unit: String? = nil
+    var moves: [String]? = nil
+    var percent: Double? = nil
+    var timeLabel: String? = nil
 }
 
 struct ActivityCursorResponse: Codable {
     let nextCursor: String?
     let previousCursor: String?
     let results: [ActivityItem]
+    /// A list opened from a number: the number in words, the type's total and what the number includes with no
+    /// date. Older servers, logged-out callers and plain lists send none of them.
+    var topLine: String? = nil
+    var total: ActivityListTotal? = nil
+    var undated: ActivityUndated? = nil
 }
