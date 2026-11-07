@@ -422,3 +422,30 @@ class NoNumberMovesTests(PlanningRowBase):
         for title in titles:
             ProgressChange.record_planning(self.user, title)
         self.assertEqual(before, calculation())
+
+
+class QueryCostTests(PlanningRowBase):
+    """Planning rows are a handful of queries however many titles a day holds."""
+
+    def count(self, params):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        client = APIClient(HTTP_X_SPINE_TIMEZONE=NEW_YORK)
+        client.force_authenticate(self.friend)
+        with CaptureQueriesContext(connection) as queries:
+            response = client.get("/api/v1/feed/", params)
+        self.assertEqual(response.status_code, 200)
+        return len(queries)
+
+    def test_the_extra_queries_do_not_grow_with_the_titles(self):
+        self.add(2, "movie")
+        small = self.count(ASK) - self.count({})
+        self.add(8, "movie")
+        self.add(5, "book")
+        self.add(5, "game")
+        large = self.count(ASK) - self.count({})
+        # One for the day's rows, one per type to check they're still tracked, and the
+        # row's own people and artwork: not one per title.
+        self.assertLessEqual(small, 6)
+        self.assertLessEqual(large - small, 3)

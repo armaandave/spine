@@ -1379,6 +1379,276 @@ class Phase4FriendTests(Phase4Base):
 RANGE_2026 = {"start_date": "2026-01-01", "end_date": "2026-12-31"}
 
 
+@override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase5Base(CheckpointBase):
+    """Phase 5's opening: no books, logs or saves but P and M3, from last year."""
+
+    measure = Phase2SheetTests.measure
+    value = Phase2SheetTests.value
+    url = Phase2SheetTests.url
+    send = Phase2SheetTests.send
+
+    def open_the_sheet(self):
+        seed.seed_phase_5()
+
+    def home(self, viewer=None, params=None):
+        """Return Home's rows as the new build asks for them."""
+        page = self.phone(viewer or self.dev).get("/api/v1/feed/", {"include": "planning", "page_size": 100, **(params or {})})
+        self.assertEqual(page.status_code, 200, page.content)
+        return page.json()["results"]
+
+    def my_list(self, *, planning=True):
+        """Return the profile's Activity list, the whole of it, as the new build asks."""
+        query = {"view": "list", "page_size": 100, **({"include": "planning"} if planning else {})}
+        client = self.phone()
+        body = client.get(f"/api/v1/users/{seed.DEV_USERNAME}/activity/", query).json()
+        return body["results"]
+
+    def planning(self, rows):
+        return [row for row in rows if row["type"] == "planning_added"]
+
+    def summaries(self, rows=None):
+        return [(row["consumed_at"], row["object"]["summary"]) for row in (rows if rows is not None else self.my_list())]
+
+    def everything(self):
+        """Return every Stats payload that could move: the year, all time, each tab."""
+        payloads = {}
+        for name, params in (("2025", YEAR_2025), ("2026", YEAR_2026), ("all", ALL_TIME)):
+            for tab in (None, BOOK, "tv", "movie", "game", "manga", "music"):
+                payloads[name, tab] = self.stats(params, tab=tab)
+        return payloads
+
+    def tracking(self, media_type, name, suffix=""):
+        return self.url(media_type, name, suffix)
+
+    def to_planning(self, media_type, name):
+        """Send the app's Add to Planning: a show's action, anything else's status."""
+        if media_type == MediaTypes.TV.value:
+            body = {"mutation_id": str(uuid4())}
+            return self.step(self.send, "post", self.tracking(media_type, name, "actions/planning/"), body)
+        return self.step(self.send, "put", self.tracking(media_type, name), {"status": "Planning"})
+
+    def save_p(self, value, day):
+        body = {"progress_type": "pages", "value": value, "progressed_on": day.isoformat()}
+        self.step(self.send, "post", self.tracking(BOOK, "P", "progress/"), body)
+
+    def row_on(self, title, day):
+        rows = [
+            row
+            for row in self.my_list()
+            if row["type"] == "progress_updated" and row["media"]["title"] == title and row["consumed_at"] == day
+        ]
+        return rows[0] if rows else None
+
+    def post_page(self, row):
+        response = self.phone().get(f"/api/v1/progress/{row['object']['id']}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+
+@override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase5SeedTests(Phase5Base):
+    """What Phase 5's seed promises."""
+
+    def test_the_opening(self):
+        self.assertEqual(self.pages(YEAR_2025), 100)
+        self.assertEqual(self.pages(ALL_TIME), 100)
+        self.assertEqual(self.pages(YEAR_2026), 0)
+        self.assertEqual(self.value(YEAR_2025, "manga"), 10)
+        self.assertEqual(self.planning(self.my_list()), [])
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(
+            {name: getattr(self.dev, f"{name}_enabled") for name in ("book", "manga", "movie", "tv", "game")},
+            dict.fromkeys(("book", "manga", "movie", "tv", "game"), True),
+        )
+
+    def test_the_list_holds_what_the_phone_opens(self):
+        listed = CustomList.objects.get(owner=self.dev, name=seed.LIST_NAME)
+        items = [row.item for row in CustomListItem.objects.filter(custom_list=listed).select_related("item")]
+        self.assertEqual(
+            sorted(item.title for item in items),
+            sorted(
+                ["Show PS1", "Show PS2", "Show PS3", "Show PS4", "Book PB", "Game PG", "Manga PM", "Book P", "Manga M3"]
+                + ["Movie W1", "Movie W2"],
+            ),
+        )
+        for item in Item.objects.filter(media_type="movie", source="manual", media_id__startswith=seed.PREFIX):
+            self.assertEqual(item.runtime_minutes, 120)
+
+    def test_it_runs_again_over_whatever_was_left(self):
+        self.to_planning(MediaTypes.MOVIE.value, "W1")
+        self.save_p(150, date(2025, 12, 20))
+        with self.captureOnCommitCallbacks(execute=True):
+            seed.seed_phase_5()
+        self.test_the_opening()
+        self.assertFalse(ProgressChange.objects.filter(current_progress__kind="planning").exists())
+
+    def test_it_refuses_a_database_that_isnt_sqlite(self):
+        with (
+            patch.object(seed, "connection", SimpleNamespace(vendor="postgresql")),
+            override_settings(TESTING=False),
+            self.assertRaises(RuntimeError),
+        ):
+            seed.seed_phase_5()
+
+
+@override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase5PlanningSheetTests(Phase5Base):
+    """Phase 5's first sheet: a day of planning reads as one line."""
+
+    def test_the_sheet(self):  # noqa: PLR0915
+        before = self.everything()
+        # Must: add 3 shows. One row on the list, and tapping shows those 3.
+        for name in ("PS1", "PS2", "PS3"):
+            self.to_planning(MediaTypes.TV.value, name)
+        rows = self.planning(self.my_list())
+        self.assertEqual([row["object"]["summary"] for row in rows], ["added 3 shows to Planning"])
+        self.assertEqual(rows[0]["consumed_at"], TODAY.isoformat())
+        opened = self.phone().get(f"/api/v1/planning/{rows[0]['object']['id']}/")
+        self.assertEqual([title["title"] for title in opened.json()["results"]], ["Show PS1", "Show PS2", "Show PS3"])
+        # Without the opt-in, an installed build sees none.
+        self.assertEqual(self.planning(self.my_list(planning=False)), [])
+        self.assertEqual(self.everything(), before)
+        # The book, the game and the manga (To Read) too. Remove the book.
+        self.to_planning(BOOK, "PB")
+        self.to_planning(MediaTypes.GAME.value, "PG")
+        self.to_planning(MediaTypes.MANGA.value, "PM")
+        self.assertEqual(self.planning(self.my_list())[0]["object"]["summary"], "added 6 titles to Planning")
+        self.step(self.send, "delete", self.tracking(BOOK, "PB"), expected=204)
+        self.assertEqual(self.planning(self.my_list())[0]["object"]["summary"], "added 5 titles to Planning")
+        self.assertEqual(self.everything(), before)
+        # The Mac adds 2 movies, as the website does.
+        self.step(seed.add_two_movies)
+        self.assertEqual(self.planning(self.my_list())[0]["object"]["summary"], "added 7 titles to Planning")
+        self.assertEqual(self.everything(), before)
+        # A Letterboxd watchlist file: Planning in the Library rises, the row doesn't change.
+        planned = Movie.objects.filter(user=self.dev, status="Planning").count()
+        added = self.step(seed.letterboxd_watchlist)
+        self.assertGreater(added, 0)
+        self.assertEqual(Movie.objects.filter(user=self.dev, status="Planning").count(), planned + added)
+        self.assertEqual(self.planning(self.my_list())[0]["object"]["summary"], "added 7 titles to Planning")
+        self.assertEqual(self.everything(), before)
+        # Log one of the 2 movies: the row stays, plus the log. Movies: 2 hours.
+        film = {"source": "manual", "media_type": "movie", "media_id": seed.media_id("W1")}
+        body = {"ref": film, "consumed_at": TODAY.isoformat(), "is_rewatch": False}
+        self.step(self.send, "post", "/api/v1/diary/", body, 201)
+        kinds = sorted(row["type"] for row in self.my_list() if row["media"]["ref"]["media_type"] != "book" and row["type"] != "progress_updated")
+        self.assertEqual(kinds, ["diary_created", "planning_added"])
+        self.assertEqual(self.planning(self.my_list())[0]["object"]["summary"], "added 7 titles to Planning")
+        self.assertEqual(self.value(YEAR_2026, "movie"), 120)
+
+    def test_a_friend_adds_three_movies_and_home_shows_one_row(self):
+        self.step(seed.friend_adds_three_movies)
+        rows = self.planning(self.home())
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["actor"]["username"], seed.FRIEND_USERNAME)
+        self.assertEqual(row["media"]["title"], "Movie FP1")
+        self.assertEqual(row["object"]["summary"], "added 3 movies to Planning")
+        self.assertEqual((row["like_count"], row["comment_count"]), (0, 0))
+        opened = self.phone().get(f"/api/v1/planning/{row['object']['id']}/").json()
+        self.assertEqual([title["title"] for title in opened["results"]], ["Movie FP1", "Movie FP2", "Movie FP3"])
+        # An installed build's Home has none of it.
+        plain = self.phone().get("/api/v1/feed/", {"page_size": 100}).json()["results"]
+        self.assertEqual(self.planning(plain), [])
+        # And the friend's own list carries it, for a viewer who follows them.
+        theirs = self.phone().get(f"/api/v1/users/{seed.FRIEND_USERNAME}/activity/", {"include": "planning"}).json()["results"]
+        self.assertEqual(len(self.planning(theirs)), 1)
+
+    def test_a_follower_sees_my_row_too_and_a_stranger_the_public_profile(self):
+        self.to_planning(MediaTypes.TV.value, "PS1")
+        for viewer in (self.follower, self.other):
+            page = self.phone(viewer).get(f"/api/v1/users/{seed.DEV_USERNAME}/activity/", {"include": "planning"}).json()
+            self.assertEqual(len(self.planning(page["results"])), 1)
+
+
+@override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase5RowsSheetTests(Phase5Base):
+    """Phase 5's second sheet: a save on the right day, and a row fixed from the row."""
+
+    def test_the_sheet(self):  # noqa: PLR0915
+        dec_20, dec_27 = date(2025, 12, 20), date(2025, 12, 27)
+        # Must: P to 120, dated Dec 20 2025. This year's column doesn't move.
+        self.save_p(120, dec_20)
+        self.assert_sheet(120, 0, 120)
+        row = self.row_on("Book P", "2025-12-20")
+        self.assertEqual(row["object"]["summary"], "read 20 pages")
+        # Must: open that row, tap Edit, change 120 to 110: the normal sheet, saved again.
+        edit = self.post_page(row)["viewer"]["edit"]
+        self.assertEqual((edit["mode"], edit["value"], edit["date"], edit["unit"]), ("save", 120, "2025-12-20", "page"))
+        self.save_p(110, dec_20)
+        self.assert_sheet(110, 0, 110)
+        self.assertEqual(self.row_on("Book P", "2025-12-20")["object"]["summary"], "read 10 pages")
+        # Must: a like from the Mac, then the trash (it's the newest on this title).
+        self.step(seed.like_p_row)
+        row = self.row_on("Book P", "2025-12-20")
+        self.assertEqual(row["like_count"], 1)
+        viewer = self.post_page(row)["viewer"]
+        self.assertEqual((viewer["can_edit"], viewer["can_delete"]), (True, True))
+        self.step(self.send, "delete", f"/api/v1/progress/{row['object']['id']}/", expected=204)
+        self.assert_sheet(100, 0, 100)
+        self.assertIsNone(self.row_on("Book P", "2025-12-20"))
+        self.assertEqual(self.opens_at_p(), 100)
+        self.assertFalse(ContentLike.objects.filter(target_type=ContentLike.PROGRESS_POST).exists())
+        # The row is back with 0 likes, because it was deleted on purpose.
+        self.save_p(120, dec_20)
+        self.assert_sheet(120, 0, 120)
+        self.assertEqual(self.row_on("Book P", "2025-12-20")["like_count"], 0)
+        # P to 200 on Dec 27; fix the Dec 20 row from 120 to 110. It has no trash.
+        self.save_p(200, dec_27)
+        older = self.row_on("Book P", "2025-12-20")
+        page = self.post_page(older)["viewer"]
+        self.assertEqual((page["can_delete"], page["edit"]["mode"], page["edit"]["min"], page["edit"]["max"]), (False, "number", 100, 200))
+        self.step(self.send, "patch", f"/api/v1/progress/{older['object']['id']}/", {"value": 110})
+        self.assertEqual(self.row_on("Book P", "2025-12-20")["object"]["summary"], "read 10 pages")
+        self.assertEqual(self.row_on("Book P", "2025-12-27")["object"]["summary"], "read 90 pages")
+        self.assert_sheet(200, 0, 200)
+        self.assertEqual(self.opens_at_p(), 200)
+        self.step(self.send, "delete", f"/api/v1/progress/{older['object']['id']}/", expected=409)
+        # M3 to 12, dated Dec 20 2025.
+        body = {"value": 12, "progressed_on": "2025-12-20", "mutation_id": str(uuid4())}
+        self.step(self.send, "post", self.tracking(MediaTypes.MANGA.value, "M3", "progress/"), body)
+        self.assertEqual(self.row_on("Manga M3", "2025-12-20")["object"]["summary"], "read 2 chapters")
+        self.assertEqual(self.value(YEAR_2025, "manga"), 12)
+        # A show's tick has neither control.
+        self.step(
+            self.send,
+            "post",
+            self.tracking(MediaTypes.TV.value, "PS4", "actions/tick/"),
+            {"season_number": 1, "episode_number": 1, "mutation_id": str(uuid4())},
+        )
+        tick = next(row for row in self.my_list() if row["media"]["title"] == "Show PS4")
+        viewer = self.post_page(tick)["viewer"]
+        self.assertEqual((viewer["can_edit"], viewer["can_delete"], viewer["edit"]), (False, False, None))
+        self.assertEqual(self.phone().delete(f"/api/v1/progress/{tick['object']['id']}/").status_code, 400)
+
+    def assert_sheet(self, in_2025, in_2026, all_time):
+        self.assertEqual((self.pages(YEAR_2025), self.pages(YEAR_2026), self.pages(ALL_TIME)), (in_2025, in_2026, all_time))
+        self.assert_adds_up()
+
+    def opens_at_p(self):
+        """Return where the sheet for P opens: its place."""
+        return self.opens_at("P")["value"]
+
+    def test_a_friend_cannot_fix_or_delete_my_row(self):
+        self.save_p(120, date(2025, 12, 20))
+        row = self.row_on("Book P", "2025-12-20")
+        friend = self.phone(self.follower)
+        self.assertEqual(friend.delete(f"/api/v1/progress/{row['object']['id']}/").status_code, 403)
+        self.assertEqual(friend.patch(f"/api/v1/progress/{row['object']['id']}/", {"value": 110}, format="json").status_code, 403)
+        self.assertEqual(set(self.phone(self.follower).get(f"/api/v1/progress/{row['object']['id']}/").json()["viewer"]), {"can_view", "has_liked"})
+
+
+@override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase5PlanningSheetOnUTCTests(Phase5PlanningSheetTests):
+    """The test backend's settings resolve to UTC, so the phone test runs there."""
+
+
+@override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase5RowsSheetOnUTCTests(Phase5RowsSheetTests):
+    """The test backend's settings resolve to UTC, so the phone test runs there."""
+
+
 @override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
 class Phase4SheetOnUTCTests(Phase4SheetTests):
     """The test backend's settings resolve to UTC, so the phone test runs there."""

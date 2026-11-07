@@ -1,4 +1,4 @@
-"""Phases 1 to 4's phone sheets: Spine Dev's user, set up through real tracking writes.
+"""Phases 1 to 5's phone sheets: Spine Dev's user, set up through real tracking writes.
 
 scripts/ios/seed-activity-checkpoint.sh runs this on the test backend's throwaway copy,
 and test_activity_checkpoints.py runs the same steps in CI. It clears the dev user
@@ -9,6 +9,8 @@ book untouched until its row is on that list. Anything dated in the past, and an
 another person does, is a step here: the sheet says when, and the phone does the rest.
 """
 
+import io
+import zipfile
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
@@ -19,6 +21,8 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import connection, transaction
+from django.test import Client
+from django.test.utils import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -52,6 +56,7 @@ from app.models import (
     Sources,
     Status,
 )
+from integrations.imports.letterboxd.importer import LetterboxdImporter
 from lists.models import CustomList, CustomListItem
 from social.models import (
     Comment,
@@ -141,6 +146,25 @@ FRIEND_TITLES = {
     "FM2": (MediaTypes.MOVIE.value, 120),
     "FG": (MediaTypes.GAME.value, None),
 }
+
+
+# Phase 5's titles. Three shows to add to Planning and a fourth with episodes to tick,
+# a book, a game and a manga to add as To Read, two films the Mac adds as the website
+# does, and the friend's three. Book P and manga M3 are being read, from last year.
+PHASE_5_SHOWS = {"PS1": 3, "PS2": 3, "PS3": 3, "PS4": 4}
+PHASE_5_PLANNING = {
+    "PB": (MediaTypes.BOOK.value, {"total_pages": 300}),
+    "PG": (MediaTypes.GAME.value, {}),
+    "PM": (MediaTypes.MANGA.value, {"series_total": 100}),
+}
+PHASE_5_READS = {
+    "P": (MediaTypes.BOOK.value, {"total_pages": 400}),
+    "M3": (MediaTypes.MANGA.value, {"series_total": 100}),
+}
+PHASE_5_FILMS = ("W1", "W2")
+PHASE_5_FRIEND_FILMS = ("FP1", "FP2", "FP3")
+FILM_MINUTES = 120
+WATCHLIST_FILMS = 3
 
 
 def hours(number):
@@ -370,6 +394,54 @@ def seed_phase_4():
     _seed(_phase_4, friend_reads=False)
 
 
+def seed_phase_5():
+    """Write Phase 5's opening: no books, logs or saves but P and M3, from last year.
+
+    Everything else is untracked and on the list: 3 shows, a fourth with episodes, a
+    book, a game, a manga and films of 120 minutes. The dates are last year's on
+    purpose, so the sheet works on any day.
+    """
+    _refuse_unless_sqlite()
+    with transaction.atomic():
+        dev = _settle_users()
+        for person in (dev, friend_user()):
+            _clear_person(person)
+        _make_phase_5_titles(dev)
+        Follow.objects.create(from_user=dev, to_user=friend_user(), status=FollowStatus.ACCEPTED)
+        _read(dev, "P", date(2025, 11, 1), (100, date(2025, 11, 2)))
+        manga = title(MediaTypes.MANGA.value, "M3")
+        with on(date(2025, 11, 1)):
+            series_tracking.start(dev, manga)
+        with on(date(2025, 11, 2)):
+            series_tracking.update_progress(dev, manga, value=10)
+        stats_cache.bump_user(dev)
+
+
+def _make_phase_5_titles(dev):
+    """Reset the Items Phase 5 owns, and put the ones the phone opens on one list."""
+    Item.objects.filter(source=Sources.MANUAL.value, media_id__startswith=PREFIX).delete()
+
+    def make(media_type, name, **fields):
+        return Item.objects.create(
+            source=Sources.MANUAL.value,
+            media_type=media_type,
+            media_id=media_id(name),
+            title=f"{media_type.title()} {name}",
+            image=IMAGE,
+            **fields,
+        )
+
+    titles = [_make_show(name, episodes, SHOW_MINUTES) for name, episodes in PHASE_5_SHOWS.items()]
+    titles.extend(make(media_type, name, **fields) for name, (media_type, fields) in PHASE_5_PLANNING.items())
+    titles.extend(make(media_type, name, **fields) for name, (media_type, fields) in PHASE_5_READS.items())
+    titles.extend(make(MediaTypes.MOVIE.value, name, runtime_minutes=FILM_MINUTES) for name in PHASE_5_FILMS)
+    for name in PHASE_5_FRIEND_FILMS:
+        make(MediaTypes.MOVIE.value, name, runtime_minutes=FILM_MINUTES)
+    listed = CustomList.objects.create(owner=dev, name=LIST_NAME)
+    for position, item in enumerate(titles, start=1):
+        CustomListItem.objects.create(custom_list=listed, item=item, position=position)
+
+
 def _seed(*openings, friend_reads=True):
     """Write the sheet's opening state, and then each phase's own.
 
@@ -377,9 +449,7 @@ def _seed(*openings, friend_reads=True):
     test backend's SQLite copy. The image holds this module, and CI's Database checks
     run this suite on Postgres.
     """
-    if connection.vendor != "sqlite" and not settings.TESTING:
-        msg = f"The checkpoint seed runs only on the test backend's SQLite copy, not {connection.vendor}."
-        raise RuntimeError(msg)
+    _refuse_unless_sqlite()
     with transaction.atomic():
         dev = _settle_users()
         for person in (dev, friend_user()):
@@ -412,6 +482,12 @@ def _seed(*openings, friend_reads=True):
         for opening in openings:
             opening(dev)
         stats_cache.bump_user(dev)
+
+
+def _refuse_unless_sqlite():
+    if connection.vendor != "sqlite" and not settings.TESTING:
+        msg = f"The checkpoint seed runs only on the test backend's SQLite copy, not {connection.vendor}."
+        raise RuntimeError(msg)
 
 
 def _phase_3(dev):
@@ -827,6 +903,94 @@ def comment_on_my_row():
         social_service.add_comment(friend_user(), "Nice one.", entry=entry)
 
 
+# Phase 5's Mac steps: the website's Planning add, a watchlist import, and the friend's
+# adds. Each prints what it did.
+
+
+def add_two_movies():
+    """Add W1 and W2 to Planning as the website's Save button does, for the dev user."""
+    dev = dev_user()
+    browser = Client()
+    browser.force_login(dev)
+    with override_settings(ALLOWED_HOSTS=["*"]):
+        for name in PHASE_5_FILMS:
+            film = title(MediaTypes.MOVIE.value, name)
+            response = browser.post(
+                "/media_save",
+                {
+                    "media_id": film.media_id,
+                    "source": film.source,
+                    "media_type": film.media_type,
+                    "status": PLANNING,
+                    "notes": "",
+                },
+            )
+            if response.status_code >= 400:
+                msg = f"The website refused {film.title}: {response.status_code}"
+                raise RuntimeError(msg)
+    print(f"Added {', '.join(PHASE_5_FILMS)} to {DEV_USERNAME}'s Planning.")  # noqa: T201
+
+
+def letterboxd_watchlist():
+    """Import a Letterboxd file of only a watchlist, and print how many it added."""
+    films = {
+        f"https://boxd.it/checkpoint-watch-{number}": (str(990000 + number), f"Watchlist Film {number}")
+        for number in range(1, WATCHLIST_FILMS + 1)
+    }
+    rows = "".join(f"2026-01-0{number},{name},2001,{uri}\n" for number, (uri, (_, name)) in enumerate(films.items(), 1))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("watchlist.csv", f"Date,Name,Year,Letterboxd URI\n{rows}")
+
+    class Resolver:
+        def resolve_rows(self, _rows):
+            return {uri: {"tmdb_id": tmdb_id, "confidence": "scrape"} for uri, (tmdb_id, _) in films.items()}
+
+    def movie(tmdb_id):
+        name = next(name for found, name in films.values() if found == str(tmdb_id))
+        return {"title": name, "image": IMAGE}
+
+    with (
+        patch("integrations.imports.letterboxd.importer.tmdb.movie", side_effect=movie),
+        patch("app.models.providers.services.get_media_metadata", return_value={"max_progress": 1}),
+        patch("app.services.update_daily_statistics.delay"),
+        patch("app.signals.update_daily_statistics.delay"),
+    ):
+        counts, _ = LetterboxdImporter(buffer.getvalue(), dev_user(), "new", resolver=Resolver()).import_data()
+    print(f"The watchlist import added {counts['watchlist']} (Planning in your Library should rise by that).")  # noqa: T201
+    return counts["watchlist"]
+
+
+def friend_adds_three_movies():
+    """Add three films to the friend's Planning, the way the app's request does."""
+    friend = friend_user()
+    client = APIClient()
+    client.force_authenticate(friend)
+    for name in PHASE_5_FRIEND_FILMS:
+        film = title(MediaTypes.MOVIE.value, name)
+        response = client.put(f"/api/v1/tracking/{film.source}/movie/{film.media_id}/", {"status": PLANNING}, format="json")
+        if response.status_code >= 400:
+            msg = f"The friend's add of {film.title} failed: {response.status_code}"
+            raise RuntimeError(msg)
+
+
+def like_p_row():
+    """Like the dev user's book P row of Dec 20 2025, as the friend."""
+    friend = friend_user()
+    client = APIClient()
+    client.force_authenticate(friend)
+    page = client.get(f"/api/v1/users/{DEV_USERNAME}/activity/", {"page_size": 100}).json()
+    row = next(
+        row
+        for row in page["results"]
+        if row["type"] == "progress_updated"
+        and row["media"]["title"] == "Book P"
+        and row["consumed_at"] == "2025-12-20"
+    )
+    post = activity_service.progress_post(friend, row["object"]["id"])
+    social_service.set_like(friend, target_type=ContentLike.PROGRESS_POST, target_id=post.pk, liked=True)
+
+
 def print_rows():
     """Print every row the sheet's last row stored, and flag any not saved today."""
     names = [media_id(name) for name in STORED_TITLES]
@@ -871,4 +1035,9 @@ STEPS = {
     "friend-earlier-question": friend_earlier_question,
     "friend-private-season": friend_private_season,
     "comment-on-my-row": comment_on_my_row,
+    "seed-phase-5": seed_phase_5,
+    "add-two-movies": add_two_movies,
+    "letterboxd-watchlist": letterboxd_watchlist,
+    "friend-adds-three-movies": friend_adds_three_movies,
+    "like-p-row": like_p_row,
 }
