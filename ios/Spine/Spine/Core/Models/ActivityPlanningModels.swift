@@ -57,6 +57,13 @@ enum PlanningWords {
         return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
+    /// The posters a Planning row fans out: two or three. A single add, or an older server that sent none, keeps
+    /// the one poster the row already has.
+    static func fanPosters(for activity: ActivityItem) -> [String?]? {
+        guard activity.planning != nil, let posters = activity.object.posters, posters.count > 1 else { return nil }
+        return posters.prefix(3).map(Optional.some)
+    }
+
     private static func noun(for mediaType: String?, count: Int) -> String {
         let plural = count != 1
         switch mediaType {

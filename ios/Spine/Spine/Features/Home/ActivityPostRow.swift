@@ -110,7 +110,23 @@ struct ActivityPostRow: View {
             .lineLimit(1)
     }
 
+    @ViewBuilder
     private var artwork: some View {
+        if let posters = PlanningWords.fanPosters(for: activity) {
+            // A day of several Planning adds fans out its titles, as a series card does.
+            PosterFan(
+                urls: posters,
+                title: PlanningWords.headline(for: activity),
+                slot: Self.artwork,
+                mediaType: activity.media?.ref.mediaType
+            )
+            .frame(width: Self.artwork.size.width, height: Self.artwork.size.height, alignment: .top)
+        } else {
+            singleArtwork
+        }
+    }
+
+    private var singleArtwork: some View {
         MediaArtwork(
             url: activity.media?.displayPosterURL,
             title: activity.media?.title ?? "",

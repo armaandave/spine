@@ -249,15 +249,22 @@ struct ActivityListRow: View {
             DiaryDateBadge(rawValue: activity.consumedAt ?? activity.createdAt, mediaType: mediaType)
 
             // Laid out at its real size: a larger poster shrunk with scaleEffect overflowed the row's layout.
-            MediaArtwork(
-                url: activity.media?.displayPosterURL,
-                title: activity.media?.title ?? "",
-                slot: .diaryEntry,
-                mediaType: mediaType,
-                orientation: activity.media?.posterOrientation
-            )
+            Group {
+                if let posters = PlanningWords.fanPosters(for: activity) {
+                    // A day of several Planning adds fans out its titles, as a series card does.
+                    PosterFan(urls: posters, title: PlanningWords.headline(for: activity), slot: .diaryEntry, mediaType: mediaType)
+                } else {
+                    MediaArtwork(
+                        url: activity.media?.displayPosterURL,
+                        title: activity.media?.title ?? "",
+                        slot: .diaryEntry,
+                        mediaType: mediaType,
+                        orientation: activity.media?.posterOrientation
+                    )
+                    .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+                }
+            }
             .frame(width: 42, height: 63)
-            .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
 
             VStack(alignment: .leading, spacing: 5) {
                 Group {
