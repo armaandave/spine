@@ -70,8 +70,8 @@ final class EpisodeSheetVisualsTests: XCTestCase {
         XCTAssertEqual(model.episodes.map(\.number), Array(1...10))
         XCTAssertEqual(model.upTo, 4)
         XCTAssertEqual(model.upNext, 5)
-        XCTAssertEqual(model.primaryLabel, "Watched E5")
-        XCTAssertEqual(model.summaryLine, "Up to E4", "A title the provider only numbers is left off")
+        XCTAssertEqual(model.primaryLabel, "Watched S2 E5", "Up next is in season 2, so the show has more than one")
+        XCTAssertEqual(model.summaryLine, "Up to E4 · Episode 4", "A title the provider only numbers reads Episode 4")
         XCTAssertFalse(model.usesWindow)
     }
 
@@ -193,7 +193,7 @@ final class EpisodeSheetVisualsTests: XCTestCase {
         _ = await sheet.season.settled()
         XCTAssertEqual(tracking.actions.map(\.action), [.tick])
         XCTAssertEqual(tracking.actions.first?.request.episodeNumber, 5)
-        XCTAssertEqual(try XCTUnwrap(sheet.tickModel).primaryLabel, "Watched E6")
+        XCTAssertEqual(try XCTUnwrap(sheet.tickModel).primaryLabel, "Watched S2 E6")
     }
 
     func testATypedEpisodeBeyondWhereYouAreAsksTheSameQuestion() async throws {
@@ -242,9 +242,19 @@ final class EpisodeSheetVisualsTests: XCTestCase {
         XCTAssertEqual(window, EpisodeSheetDetent.estimatedWindowHeader)
         XCTAssertEqual(EpisodeSheetDetent.estimate(episodeCount: nil), strip, "An unknown count opens as a strip")
         XCTAssertEqual(EpisodeSheetDetent.compact(header: 0, episodeCount: 1150),
-                       .height(EpisodeSheetDetent.estimatedWindowHeader + EpisodeSheetDetent.chrome))
-        XCTAssertEqual(EpisodeSheetDetent.compact(header: 300, episodeCount: 1150), .height(300 + EpisodeSheetDetent.chrome),
+                       .height(EpisodeSheetDetent.estimatedWindowHeader + EpisodeSheetDetent.windowChrome))
+        XCTAssertEqual(EpisodeSheetDetent.compact(header: 300, episodeCount: 1150), .height(300 + EpisodeSheetDetent.windowChrome),
                        "A measured header always wins over the estimate")
+    }
+
+    func testAWindowHeaderHasItsOwnBarsAroundItAndAStripKeepsTheStrips() {
+        XCTAssertGreaterThan(EpisodeSheetDetent.windowChrome, EpisodeSheetDetent.chrome)
+        XCTAssertEqual(EpisodeSheetDetent.compact(header: 228, episodeCount: EpisodeTickModel.stripLimit),
+                       .height(228 + EpisodeSheetDetent.chrome))
+        XCTAssertEqual(EpisodeSheetDetent.compact(header: 381, episodeCount: EpisodeTickModel.stripLimit + 1),
+                       .height(381 + EpisodeSheetDetent.windowChrome))
+        XCTAssertEqual(EpisodeSheetDetent.compact(header: 228, episodeCount: nil), .height(228 + EpisodeSheetDetent.chrome),
+                       "An unknown count is a strip")
     }
 
     // MARK: Anime

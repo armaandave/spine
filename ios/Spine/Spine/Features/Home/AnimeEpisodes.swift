@@ -496,6 +496,7 @@ struct AnimeEpisodesSheet: View {
                     .id(episodes.ref.id)
                     .episodeSheetListReveal(hasHeader: hasHeader, height: $listHeight)
             }
+            .pinnedToEpisodeSheetTop()
             .navigationTitle(episodes.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

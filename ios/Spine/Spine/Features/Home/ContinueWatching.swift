@@ -411,7 +411,12 @@ final class ContinueWatchingEpisodes: Identifiable {
             }
             return .init(number: row.episodeNumber, state: state, title: title)
         }
-        return Self.tickModel(episodes: episodes, todayBase: todayBase, baseline: watchedBaseline)
+        return Self.tickModel(
+            episodes: episodes,
+            todayBase: todayBase,
+            baseline: watchedBaseline,
+            seasonNumber: seasonNumber
+        )
     }
 
     /// The header's accent: the show's poster color as a pastel.
@@ -456,7 +461,8 @@ final class ContinueWatchingEpisodes: Identifiable {
         episodes: [EpisodeTickModel.Episode],
         todayBase: Int?,
         baseline: Int?,
-        seriesTotal: Int? = nil
+        seriesTotal: Int? = nil,
+        seasonNumber: Int? = nil
     ) -> EpisodeTickModel {
         let watched = episodes.filter { $0.state == .watched }.count
         let sinceLoad = watched - (baseline ?? watched)
@@ -464,7 +470,8 @@ final class ContinueWatchingEpisodes: Identifiable {
             episodes: episodes,
             upNext: episodes.filter { $0.state == .unwatched }.map(\.number).min(),
             todayCount: max(0, (todayBase ?? 0) + sinceLoad),
-            seriesTotal: seriesTotal
+            seriesTotal: seriesTotal,
+            seasonNumber: seasonNumber
         )
     }
 
@@ -557,8 +564,12 @@ extension EpisodeTickModel {
 /// The compact height of an update sheet: the header block plus the bars around it. Before the header has been
 /// measured, the height a strip of ticks takes.
 nonisolated enum EpisodeSheetDetent {
-    /// The sheet's top edge and navigation bar, and the home indicator's room under the button.
-    static let chrome: CGFloat = 49 + 34
+    /// The sheet's top edge and navigation bar, and the home indicator's room under the button, for a strip's header.
+    /// Measured on the simulator (iOS 26.5) against R3SheetTV: it leaves the white button 34 pt above the sheet's
+    /// edge, as in the mock, and the list a few points, which it hides.
+    static let chrome: CGFloat = 71
+    /// The same for a long series' window header (same simulator, against R3SheetLong), which wants about 12 pt more.
+    static let windowChrome: CGFloat = 83
     static let estimatedHeader: CGFloat = 244
     /// The window header (more than `EpisodeTickModel.stripLimit` episodes) before it has been measured.
     static let estimatedWindowHeader: CGFloat = 390
@@ -572,12 +583,23 @@ nonisolated enum EpisodeSheetDetent {
         (episodeCount ?? 0) > EpisodeTickModel.stripLimit ? estimatedWindowHeader : estimatedHeader
     }
 
+    /// The compact height for `header`: the header, or its estimate before it is measured, and the bars around it.
     static func compact(header: CGFloat, episodeCount: Int? = nil) -> PresentationDetent {
-        .height((header > 0 ? header : estimate(episodeCount: episodeCount)) + chrome)
+        let isWindow = (episodeCount ?? 0) > EpisodeTickModel.stripLimit
+        return .height((header > 0 ? header : estimate(episodeCount: episodeCount)) + (isWindow ? windowChrome : chrome))
     }
 }
 
 extension View {
+    /// On an update sheet's content: gives it exactly the room the sheet has under its navigation bar, pinned to the
+    /// top. A compact sheet is shorter than its header and list want, and they would otherwise spill out of both ends
+    /// and move the header up under the bar; pinned, they spill out of the bottom, where the list is hidden.
+    func pinnedToEpisodeSheetTop() -> some View {
+        GeometryReader { room in
+            frame(height: room.size.height, alignment: .top)
+        }
+    }
+
     /// An update sheet's detents: compact hugging the header, and large. SwiftUI leaves a resting sheet where it is
     /// when a detent's value changes, so the selection is driven here: once the header has been measured, a sheet
     /// resting at its compact detent moves to the measured height.
@@ -768,6 +790,7 @@ private struct ContinueWatchingEpisodesSheet: View {
                     .id(episodes.seasonNumber)
                     .episodeSheetListReveal(hasHeader: hasHeader, height: $listHeight)
             }
+            .pinnedToEpisodeSheetTop()
             .navigationTitle(episodes.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

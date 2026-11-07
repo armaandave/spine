@@ -101,7 +101,7 @@ final class EpisodeTickModelTests: XCTestCase {
     }
 
     func testSummaryLineWithoutATitleOrAnyProgress() {
-        XCTAssertEqual(season(count: 10, watched: 7, titles: false).summaryLine, "Up to E7")
+        XCTAssertEqual(season(count: 10, watched: 7, titles: false).summaryLine, "Up to E7 · Episode 7")
         XCTAssertEqual(season(count: 10, watched: 0).summaryLine, "Nothing watched yet")
         XCTAssertEqual(season(count: 10, watched: 7).todayLine, "")
     }

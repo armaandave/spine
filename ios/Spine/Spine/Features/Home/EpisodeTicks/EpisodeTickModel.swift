@@ -138,6 +138,9 @@ nonisolated struct EpisodeTickModel: Equatable, Sendable {
     let total: Int
     /// How far the person has paged the window from where it opens.
     let pagingOffset: Int
+    /// The season the episodes belong to; nil for an anime, which has none. It decides how the white button names up
+    /// next (`upNextCode`).
+    let seasonNumber: Int?
 
     /// The highest watched number, 0 when none.
     let upTo: Int
@@ -150,7 +153,8 @@ nonisolated struct EpisodeTickModel: Equatable, Sendable {
         upNext: Int?,
         todayCount: Int = 0,
         seriesTotal: Int? = nil,
-        pagingOffset: Int = 0
+        pagingOffset: Int = 0,
+        seasonNumber: Int? = nil
     ) {
         var seen = Set<Int>()
         let sorted = episodes
@@ -161,6 +165,7 @@ nonisolated struct EpisodeTickModel: Equatable, Sendable {
         self.todayCount = max(todayCount, 0)
         self.total = max(seriesTotal ?? 0, sorted.last?.number ?? 0)
         self.pagingOffset = pagingOffset
+        self.seasonNumber = seasonNumber
 
         let watched = sorted.filter { $0.state == .watched }
         self.upTo = watched.last?.number ?? 0
@@ -176,7 +181,8 @@ nonisolated struct EpisodeTickModel: Equatable, Sendable {
             upNext: upNext,
             todayCount: todayCount,
             seriesTotal: total,
-            pagingOffset: offset
+            pagingOffset: offset,
+            seasonNumber: seasonNumber
         )
     }
 
@@ -242,11 +248,11 @@ nonisolated struct EpisodeTickModel: Equatable, Sendable {
 
     // MARK: Words
 
-    /// "Up to E7 · Title", or the title left off when the caller has none, or "Nothing watched yet".
+    /// "Up to E7 · Title", with "Episode 7" for the title when the data has none, or "Nothing watched yet".
     var summaryLine: String {
         guard upTo > 0 else { return "Nothing watched yet" }
         let place = "Up to E\(Self.grouped(upTo))"
-        guard let title = episode(upTo)?.title, !title.isEmpty else { return place }
+        guard let title = episode(upTo)?.title, !title.isEmpty else { return "\(place) · Episode \(Self.grouped(upTo))" }
         return "\(place) · \(title)"
     }
 
@@ -255,16 +261,28 @@ nonisolated struct EpisodeTickModel: Equatable, Sendable {
         Self.todayText(count: todayCount)
     }
 
+    /// "Watched E8", or "Watched S2 E8" once the show is known to have a second season. The tile's button reads the same.
     var primaryLabel: String {
-        if let upNext { return "Watched E\(Self.grouped(upNext))" }
+        if let upNext { return "Watched \(Self.upNextCode(season: seasonNumber, episode: upNext))" }
         return usesWindow || hasUnaired ? "All caught up" : "Season finished"
     }
 
     var primaryEnabled: Bool { upNext != nil }
 
     var primaryAccessibilityLabel: String {
-        if let upNext { return "Mark episode \(Self.grouped(upNext)) watched" }
-        return primaryLabel
+        guard let upNext else { return primaryLabel }
+        if let seasonNumber, seasonNumber != 1 {
+            return "Mark season \(seasonNumber) episode \(Self.grouped(upNext)) watched"
+        }
+        return "Mark episode \(Self.grouped(upNext)) watched"
+    }
+
+    /// How a button names an episode: "E8", or "S2 E8" for a show whose up next is in season 2 or later (or Specials),
+    /// which is the proof it has more than one season: the list row carries no season count. An anime has no season.
+    /// The In progress tile's button uses the same rule (`QuickActionPlan.label`).
+    static func upNextCode(season: Int?, episode: Int) -> String {
+        if let season, season != 1 { return "S\(season) E\(grouped(episode))" }
+        return "E\(grouped(episode))"
     }
 
     static func todayText(count: Int) -> String {
