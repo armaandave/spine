@@ -1,0 +1,292 @@
+import Nuke
+import SwiftUI
+
+// MARK: Requests
+
+/// Everything a feed card asks the image pipeline for, in one place, so the card's views, the prefetcher and the
+/// tests all ask for the same URL, thumbnail size and processors, and a prefetched row finds its images already in
+/// Nuke's memory cache.
+enum FeedCardArt {
+    /// How many cards past the one that just appeared are prefetched.
+    static let lookahead = 8
+    /// Avatars are drawn at 20 pt and decoded at that size, never at full size.
+    static let avatarSize = CGSize(width: 20, height: 20)
+    /// The baked art is laid over the card enlarged to the mock's 478 x 290 box on a 358 pt card, so the blurred
+    /// poster fills the card's middle rather than the whole poster.
+    static let artZoom: CGFloat = 478.0 / 358.0
+
+    /// The URL an image view loads: a missing or blank string has none.
+    static func url(from string: String?) -> URL? {
+        guard let string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return URL(string: string)
+    }
+
+    static func orientation(isSquare: Bool) -> PosterOrientation {
+        isSquare ? .square : .portrait
+    }
+
+    /// The decoded size of a card poster: 88 x 132, or 132 x 132 for square art.
+    static func posterSize(isSquare: Bool) -> CGSize {
+        PosterSlot.feedCard.artworkSize(mediaType: nil, orientation: orientation(isSquare: isSquare))
+    }
+
+    /// The poster, or an episode's still aspect-filled into the same slot.
+    static func posterRequest(urlString: String?, isSquare: Bool) -> ImageRequest? {
+        MediaArtwork.imageRequest(
+            url: urlString,
+            slot: .feedCard,
+            mediaType: nil,
+            orientation: orientation(isSquare: isSquare)
+        )
+    }
+
+    static func posterRequest(for art: FeedCardArtSpec) -> ImageRequest? {
+        posterRequest(urlString: art.posterURL, isSquare: art.isSquare)
+    }
+
+    /// The baked blurred art behind the card.
+    static func backgroundRequest(for art: FeedCardArtSpec) -> ImageRequest? {
+        BlurredArt.request(url: url(from: art.backgroundURL), style: .card)
+    }
+
+    static func avatarRequest(urlString: String?) -> ImageRequest? {
+        SpineImagePipeline.request(url: url(from: urlString), thumbnailSize: avatarSize)
+    }
+
+    /// Every image the card shows: its poster (or a Planning card's fan), the baked art and the avatar.
+    static func prefetchRequests(for model: FeedCardModel) -> [ImageRequest] {
+        let posters: [ImageRequest?]
+        if model.art.planningPosterURLs.isEmpty {
+            posters = [posterRequest(for: model.art)]
+        } else {
+            posters = model.art.planningPosterURLs.prefix(FeedCardStack.maxPosters).map {
+                posterRequest(urlString: $0, isSquare: model.art.isSquare)
+            }
+        }
+        return (posters + [backgroundRequest(for: model.art), avatarRequest(urlString: model.avatarURL)])
+            .compactMap { $0 }
+    }
+
+    /// What the card's art is made of. A card whose key is unchanged needs no new prefetch.
+    static func prefetchKey(for model: FeedCardModel) -> String {
+        let art = model.art
+        return [
+            art.posterURL ?? "",
+            art.backgroundURL ?? "",
+            art.isSquare ? "square" : "portrait",
+            model.avatarURL ?? "",
+            art.planningPosterURLs.joined(separator: ","),
+        ].joined(separator: "|")
+    }
+}
+
+// MARK: Prefetching
+
+/// Looks ahead of the card that just appeared: it prefetches the next `lookahead` cards that nothing has asked for
+/// yet, so a fast fling keeps extending the window and no card is requested twice. Day headers are skipped, not
+/// counted. A card whose art changed (a Planning day's posters arriving) is asked for again.
+@MainActor
+final class FeedCardPrefetcher {
+    static let shared = FeedCardPrefetcher { ArtworkPrefetch.prefetch($0) }
+
+    /// Bookkeeping is dropped past this many cards; Nuke dedupes whatever is asked for again.
+    private static let rememberedLimit = 600
+
+    private let lookahead: Int
+    private let sink: ([ImageRequest]) -> Void
+    /// Card id to the art key last prefetched for it.
+    private var prefetched: [Int: String] = [:]
+
+    init(lookahead: Int = FeedCardArt.lookahead, sink: @escaping ([ImageRequest]) -> Void) {
+        self.lookahead = lookahead
+        self.sink = sink
+    }
+
+    /// The cards a card appearing at `index` would prefetch, nearest first, without prefetching them.
+    func cardsToPrefetch(appearing index: Int, in entries: [FeedListEntry]) -> [FeedCardModel] {
+        guard index >= 0 else { return [] }
+        var cards: [FeedCardModel] = []
+        var seen = 0
+        var next = index + 1
+        while next < entries.count, seen < lookahead {
+            if case let .card(model) = entries[next] {
+                // A card already asked for still uses one of the window's slots.
+                seen += 1
+                if prefetched[model.id] != FeedCardArt.prefetchKey(for: model) { cards.append(model) }
+            }
+            next += 1
+        }
+        return cards
+    }
+
+    /// A card (or a header) at `index` came on screen.
+    func entryAppeared(at index: Int, in entries: [FeedListEntry]) {
+        let cards = cardsToPrefetch(appearing: index, in: entries)
+        guard !cards.isEmpty else { return }
+        if prefetched.count > Self.rememberedLimit { prefetched.removeAll() }
+        var requests: [ImageRequest] = []
+        for card in cards {
+            prefetched[card.id] = FeedCardArt.prefetchKey(for: card)
+            requests.append(contentsOf: FeedCardArt.prefetchRequests(for: card))
+        }
+        if !requests.isEmpty { sink(requests) }
+    }
+}
+
+extension View {
+    /// When this row appears, prefetches the art of the next 8 cards that have not been prefetched. Use it on every
+    /// row of the feed's flat list.
+    func prefetchingFeedCards(at index: Int, in entries: [FeedListEntry]) -> some View {
+        onAppear {
+            FeedCardPrefetcher.shared.entryAppeared(at: index, in: entries)
+        }
+    }
+}
+
+// MARK: Planning fan
+
+/// Where each poster of a Planning card's fan sits, from the mock: the i-th is 14 further right and 12 further down
+/// than the one before it, 8 narrower and 12 shorter, and dimmed by a quarter more.
+nonisolated struct FeedStackSlot: Equatable {
+    let x: CGFloat
+    let y: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    /// Black laid over the poster, 0 to 1: the mock's `brightness(1 - 0.25 i)`.
+    let dimming: Double
+}
+
+nonisolated enum FeedCardStack {
+    static let maxPosters = 3
+
+    static func slot(index: Int, isSquare: Bool) -> FeedStackSlot {
+        let step = CGFloat(index)
+        let inset = HomeDesign.Metric.cardInset
+        let top: CGFloat = 16
+        if isSquare {
+            // Square art is 132 wide and the text starts at 160, so the fan steps right by less.
+            return FeedStackSlot(
+                x: inset + 10 * step,
+                y: top + 12 * step,
+                width: HomeDesign.Metric.cardSquare.width - 12 * step,
+                height: HomeDesign.Metric.cardSquare.height - 12 * step,
+                dimming: 0.25 * Double(index)
+            )
+        }
+        return FeedStackSlot(
+            x: inset + 14 * step,
+            y: top + 12 * step,
+            width: HomeDesign.Metric.cardPoster.width - 8 * step,
+            height: HomeDesign.Metric.cardPoster.height - 12 * step,
+            dimming: 0.25 * Double(index)
+        )
+    }
+}
+
+// MARK: Views
+
+/// A card's poster at (14, 16): one poster, or up to three stacked posters for a Planning day once its titles
+/// have loaded. No shadow; a hairline keeps a dark cover's edge.
+struct FeedCardPoster: View {
+    let art: FeedCardArtSpec
+    let title: String
+
+    private static let radius = PosterSlot.feedCard.cornerRadius
+
+    var body: some View {
+        if art.planningPosterURLs.isEmpty {
+            MediaArtwork(
+                url: art.posterURL,
+                title: title,
+                slot: .feedCard,
+                mediaType: nil,
+                orientation: FeedCardArt.orientation(isSquare: art.isSquare)
+            )
+            .overlay { Self.hairline }
+            .padding(.leading, HomeDesign.Metric.cardInset)
+            .padding(.top, 16)
+        } else {
+            fan
+        }
+    }
+
+    /// Back to front: the last poster is drawn first, so the first is on top.
+    private var fan: some View {
+        let urls = Array(art.planningPosterURLs.prefix(FeedCardStack.maxPosters))
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(urls.enumerated()).reversed(), id: \.offset) { index, url in
+                let slot = FeedCardStack.slot(index: index, isSquare: art.isSquare)
+                SpineAsyncImage(
+                    url: FeedCardArt.url(from: url),
+                    thumbnailSize: FeedCardArt.posterSize(isSquare: art.isSquare)
+                ) { phase in
+                    if case let .success(image) = phase {
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Color.white.opacity(0.12)
+                    }
+                }
+                .frame(width: slot.width, height: slot.height)
+                .overlay { Color.black.opacity(slot.dimming) }
+                .clipShape(RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+                .overlay { Self.hairline }
+                .padding(.leading, slot.x)
+                .padding(.top, slot.y)
+            }
+        }
+    }
+
+    private static var hairline: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+    }
+}
+
+/// The card's background: baked blurred art over a solid base, a bounded tone overlay for the ink, and the glass
+/// edge, all clipped to the card's rounded shape. This is the only clipped layer of a card.
+struct FeedCardBackground: View {
+    let art: FeedCardArtSpec
+    let ink: ArtInk
+    let luma: Double?
+    let onMeasured: @MainActor (Double) -> Void
+
+    var body: some View {
+        BlurredArtBackground(
+            url: FeedCardArt.url(from: art.backgroundURL),
+            accentHex: art.accentHex,
+            style: .card,
+            onMeasured: onMeasured
+        )
+        .scaleEffect(FeedCardArt.artZoom)
+        .overlay {
+            ArtTone.overlayColor(ink: ink).opacity(ArtTone.overlayAlpha(ink: ink, luma: luma))
+        }
+        .overlay { FeedCardEdge() }
+        .clipShape(RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous))
+    }
+}
+
+/// The mock's `inset 0 0 0 0.5px rgba(255,255,255,0.22), inset 0 1px 0 rgba(255,255,255,0.16)`: a half-point line
+/// round the edge and a one-point highlight along the top, as two shapes.
+struct FeedCardEdge: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5)
+            FeedCardTopHighlight()
+                .fill(Color.white.opacity(0.16))
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// The part of the card's outline a copy of itself moved down by one point leaves uncovered: a crescent that is
+/// one point thick at the top and thins away round the corners.
+struct FeedCardTopHighlight: Shape {
+    func path(in rect: CGRect) -> Path {
+        let outline = RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous).path(in: rect)
+        return outline.subtracting(outline.offsetBy(dx: 0, dy: 1))
+    }
+}

@@ -1,0 +1,310 @@
+import SwiftUI
+
+/// One card of the Home feed, 164 pt tall: baked blurred art behind a straight poster on the left, a text column
+/// (author, title, headline, up to two detail rows), a meter near the bottom and the read-only like and comment
+/// counts at the bottom right.
+///
+/// Everything it draws is decided by `FeedCardModel`, so a card is cheap to re-evaluate and skips drawing when its
+/// model is equal (`.equatable()` at the call site). Positions are leading and top paddings from the design's
+/// numbers, never measured. Only the background layer is clipped to the card's rounded shape.
+struct FeedCardView: View, Equatable {
+    let model: FeedCardModel
+    /// Takes the item's id, so the tap resolves the current row at tap time and never opens stale data.
+    let onOpen: (Int) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The art's measured brightness. It starts as what was measured before, so a card scrolled back in has the
+    /// right ink on its first frame.
+    @State private var measuredLuma: Double?
+
+    init(model: FeedCardModel, onOpen: @escaping (Int) -> Void) {
+        self.model = model
+        self.onOpen = onOpen
+        _measuredLuma = State(initialValue: Self.rememberedLuma(for: model))
+    }
+
+    static func == (lhs: FeedCardView, rhs: FeedCardView) -> Bool {
+        lhs.model == rhs.model
+    }
+
+    var body: some View {
+        let _ = PerfCounters.bump(.feedCardBody)
+        let ink = ArtInk.resolve(luma: measuredLuma, guess: model.art.guessInk)
+        ZStack(alignment: .topLeading) {
+            FeedCardBackground(art: model.art, ink: ink, luma: measuredLuma) { luma in
+                measuredLuma = luma
+            }
+            content(ink: ink)
+            FeedAuthorLink(username: model.username, avatarURL: model.avatarURL, ink: ink)
+                .padding(.top, HomeDesign.Metric.cardTextTop)
+                .padding(.leading, textLeading)
+                .padding(.trailing, HomeDesign.Metric.cardTrailing)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: HomeDesign.Metric.cardHeight)
+        // The ink and the tone settle over 0.18 s when the art is measured, instead of jumping.
+        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: ink)
+        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: measuredLuma)
+        .dynamicTypeSize(...HomeDesign.Text.maxCategory)
+        .contentShape(RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous))
+        .onTapGesture { onOpen(model.id) }
+        .onChange(of: model.art.backgroundURL) { _, _ in
+            measuredLuma = Self.rememberedLuma(for: model)
+        }
+        .onAppear { PerfCounters.bump(.feedCardAppear) }
+    }
+
+    private static func rememberedLuma(for model: FeedCardModel) -> Double? {
+        guard let url = FeedCardArt.url(from: model.art.backgroundURL) else { return nil }
+        return ArtLuma.remembered(key: url.absoluteString)
+    }
+
+    // MARK: Geometry
+
+    /// Where the text starts: after the poster, or after square art.
+    private var textLeading: CGFloat {
+        model.art.isSquare ? HomeDesign.Metric.cardTextLeadingSquare : HomeDesign.Metric.cardTextLeading
+    }
+
+    static let titleRowHeight: CGFloat = 21
+    static let headlineHeight: CGFloat = 20
+    /// The meter's top edge: ticks end 40 pt above the bottom.
+    static let meterTop: CGFloat = HomeDesign.Metric.cardHeight - HomeDesign.Metric.meterBottom
+        - ProgressMeterMetrics.tickHeight
+
+    // MARK: Content
+
+    /// Everything but the background and the author link: one accessibility element that opens the post.
+    private func content(ink: ArtInk) -> some View {
+        ZStack(alignment: .topLeading) {
+            FeedCardPoster(art: model.art, title: model.title)
+            textColumn(ink: ink)
+            if let meter = model.meter {
+                ProgressMeterView(model: meter, palette: palette(ink: ink))
+                    .padding(.top, Self.meterTop)
+                    .padding(.leading, textLeading)
+                    .padding(.trailing, HomeDesign.Metric.cardTrailing)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay(alignment: .bottomTrailing) {
+            counts(ink: ink)
+                .padding(.trailing, HomeDesign.Metric.cardTrailing)
+                .padding(.bottom, HomeDesign.Metric.countsBottom)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.accessibilityText(for: model))
+        .accessibilityHint(model.accessibilityHint)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default) { onOpen(model.id) }
+    }
+
+    /// The presenter's words, then where the meter stands.
+    static func accessibilityText(for model: FeedCardModel) -> String {
+        [model.accessibilityLabel, model.meter?.accessibilityLabel]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+    }
+
+    private func palette(ink: ArtInk) -> MeterPalette {
+        MeterPalette(before: ink.before, rest: ink.rest, accent: ink.accent(posterAccentHex: model.art.accentHex))
+    }
+
+    // MARK: Text column
+
+    private func textColumn(ink: ArtInk) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // The author line is drawn above, as its own link; this keeps its place.
+            Color.clear.frame(height: FeedAuthorLink.height)
+            titleRow(ink: ink)
+                .padding(.top, 8)
+            if let headline = model.headline {
+                headlineRow(headline, ink: ink)
+                    .padding(.top, 4)
+            }
+            ForEach(Array(model.details.enumerated()), id: \.offset) { _, row in
+                detailRow(row, ink: ink)
+                    .padding(.top, row.topMargin)
+            }
+        }
+        .padding(.top, HomeDesign.Metric.cardTextTop)
+        .padding(.leading, textLeading)
+        .padding(.trailing, HomeDesign.Metric.cardTrailing)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    /// The title gives way to its tag's width and truncates; the tag never shrinks. They share a baseline.
+    private func titleRow(ink: ArtInk) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(model.title)
+                .font(HomeDesign.Text.title)
+                .foregroundStyle(ink.text)
+                .lineLimit(1)
+            if let tag = model.tag {
+                Text(tag)
+                    .font(HomeDesign.Text.tag)
+                    .foregroundStyle(ink.muted)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Self.titleRowHeight, alignment: .top)
+    }
+
+    // MARK: Headline
+
+    private func headlineRow(_ headline: FeedHeadline, ink: ArtInk) -> some View {
+        HStack(spacing: 6) {
+            switch headline {
+            case let .marks(starSymbols, liked, rewatch, _):
+                if !starSymbols.isEmpty {
+                    HStack(spacing: 1) {
+                        ForEach(Array(starSymbols.enumerated()), id: \.offset) { _, symbol in
+                            Image(systemName: symbol)
+                        }
+                    }
+                    .foregroundStyle(ink.star)
+                }
+                if liked {
+                    Image(systemName: "heart.fill")
+                        .foregroundStyle(ink.heart)
+                }
+                if rewatch {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundStyle(ink.rewatch)
+                }
+            case let .progress(amount, tail, pills):
+                Text(amount)
+                    .fontWeight(.heavy)
+                    .foregroundStyle(ink.accent(posterAccentHex: model.art.accentHex))
+                    .lineLimit(1)
+                    .layoutPriority(2)
+                if !pills.isEmpty {
+                    ForEach(pills, id: \.self) { pill($0, ink: ink) }
+                } else if let tail {
+                    Text(tail)
+                        .fontWeight(.medium)
+                        .foregroundStyle(ink.muted)
+                        .lineLimit(1)
+                }
+            case let .status(words, tail):
+                Text(words)
+                    .fontWeight(.bold)
+                    .foregroundStyle(ink.text)
+                    .lineLimit(1)
+                    .layoutPriority(2)
+                if let tail {
+                    Text(tail)
+                        .fontWeight(.medium)
+                        .foregroundStyle(ink.muted)
+                        .lineLimit(1)
+                }
+            case .started:
+                Text("Started")
+                    .fontWeight(.heavy)
+                    .foregroundStyle(ink.accent(posterAccentHex: model.art.accentHex))
+                    .lineLimit(1)
+            }
+        }
+        .font(HomeDesign.Text.headline)
+        .fontWeight(isMarks(headline) ? .bold : nil)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Self.headlineHeight)
+    }
+
+    private func isMarks(_ headline: FeedHeadline) -> Bool {
+        if case .marks = headline { return true }
+        return false
+    }
+
+    /// "Paused", "Stopped", "Picked back up": a small chip after the amount.
+    private func pill(_ word: String, ink: ArtInk) -> some View {
+        Text(word)
+            .font(HomeDesign.Text.pill)
+            .foregroundStyle(ink.text)
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .frame(height: 22)
+            .background(ink.chipFill, in: Capsule())
+            .overlay { Capsule().strokeBorder(ink.chipLine, lineWidth: 0.5) }
+    }
+
+    // MARK: Detail rows
+
+    @ViewBuilder
+    private func detailRow(_ row: FeedDetailRow, ink: ArtInk) -> some View {
+        switch row {
+        case .spoilers:
+            HStack(spacing: 5) {
+                Image(systemName: "eye.slash")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Contains spoilers")
+                    .font(HomeDesign.Text.pill)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(ink.text)
+            .padding(.horizontal, 10)
+            .frame(height: row.height)
+            .background(ink.chipFill, in: Capsule())
+            .overlay { Capsule().strokeBorder(ink.chipLine, lineWidth: 0.5) }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case let .review(text, lines):
+            Text(text)
+                .font(HomeDesign.Text.review)
+                .foregroundStyle(ink.text)
+                .lineLimit(lines)
+                .lineSpacing(2.3)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: row.height, alignment: .top)
+        case let .favorite(glyph, text):
+            HStack(spacing: 6) {
+                Text(glyph)
+                Text(text)
+                    .lineLimit(1)
+            }
+            .font(HomeDesign.Text.quiet)
+            .foregroundStyle(ink.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: row.height, alignment: .top)
+        case let .quiet(text, lines):
+            Text(text)
+                .font(HomeDesign.Text.quiet)
+                .foregroundStyle(ink.muted)
+                .lineLimit(lines)
+                .lineSpacing(1.9)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: row.height, alignment: .top)
+        }
+    }
+
+    // MARK: Counts
+
+    /// Read-only likes and comments. A zero shows just its icon. A Planning card has none.
+    @ViewBuilder
+    private func counts(ink: ArtInk) -> some View {
+        if let engagement = model.engagement {
+            HStack(spacing: 10) {
+                HStack(spacing: 3) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(engagement.hasLiked ? ink.heart : ink.muted)
+                    if engagement.likeCount > 0 {
+                        Text(engagement.likeCount.formatted())
+                    }
+                }
+                HStack(spacing: 3) {
+                    CommentBubbleShape()
+                        .fill(ink.muted)
+                        .frame(width: 13, height: 13)
+                    if engagement.commentCount > 0 {
+                        Text(engagement.commentCount.formatted())
+                    }
+                }
+            }
+            .font(HomeDesign.Text.counts)
+            .foregroundStyle(ink.muted)
+        }
+    }
+}
