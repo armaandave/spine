@@ -1,7 +1,78 @@
+import Foundation
+
+/// The counters the perf gates read. The raw names are written to the probe file and read by
+/// scripts/ios/perf/report.py and the tests, so they must not change.
+enum PerfCounter: String, CaseIterable {
+    case homeBody, feedCardBody, feedCardAppear, tilesBody, glowBody
+}
+
+/// Debug-only view counters for the Home performance gates, so a gate can prove that rows do not re-render
+/// while scrolling without depending on how loaded the machine is.
+///
+/// Call-site convention: the first statement of a View body is `let _ = PerfCounters.bump(.feedCardBody)`;
+/// `feedCardAppear` is bumped in `onAppear`. `bump` exists in Release as an empty function, so call sites need no
+/// `#if`. In Debug it counts only while the probe is active (SPINE_PERF_PROBE_FILE is set), so normal Debug runs
+/// pay one lock and a flag check.
+enum PerfCounters {
+    @inline(__always)
+    static func bump(_ counter: PerfCounter) {
+        #if DEBUG
+        PerfCounterStore.shared.bump(counter)
+        #endif
+    }
+}
+
 #if DEBUG
 import Darwin
-import Foundation
 import UIKit
+
+/// The counting and snapshot logic the probe and the tests share.
+nonisolated final class PerfCounterStore: @unchecked Sendable {
+    static let shared = PerfCounterStore()
+
+    private let lock = NSLock()
+    private var active = false
+    private var values: [PerfCounter: Int] = [:]
+    private var reported: [PerfCounter: Int] = [:]
+
+    var isActive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return active
+    }
+
+    func setActive(_ value: Bool) {
+        lock.lock()
+        active = value
+        lock.unlock()
+    }
+
+    /// Does nothing while inactive.
+    func bump(_ counter: PerfCounter) {
+        lock.lock()
+        if active { values[counter, default: 0] += 1 }
+        lock.unlock()
+    }
+
+    /// Cumulative values of the counters that changed since the previous snapshot, in `PerfCounter.allCases` order.
+    func snapshotChanged() -> [(counter: PerfCounter, value: Int)] {
+        lock.lock()
+        defer { lock.unlock() }
+        var changed: [(counter: PerfCounter, value: Int)] = []
+        for counter in PerfCounter.allCases {
+            let value = values[counter, default: 0]
+            guard value != reported[counter, default: 0] else { continue }
+            reported[counter] = value
+            changed.append((counter, value))
+        }
+        return changed
+    }
+
+    /// `C <pid> <epoch seconds> <name> <cumulative>`
+    static func line(pid: Int32, epoch: Double, counter: PerfCounter, value: Int) -> String {
+        String(format: "C %d %.3f %@ %d\n", pid, epoch, counter.rawValue, value)
+    }
+}
 
 /// Frame, CPU and memory sampler for the Home performance harness (scripts/ios/perf-harness.sh).
 ///
@@ -14,7 +85,10 @@ import UIKit
 ///
 ///     S <pid> <epoch seconds> <frames> <hitches> <hitch ms> <longest frame ms> <footprint KB> <cpu ms (cumulative)>
 ///
-/// scripts/ios/perf/report.py slices those lines by the tests' PERFMARK windows.
+/// scripts/ios/perf/report.py slices those lines by the tests' PERFMARK windows. Each flush also appends, for every
+/// `PerfCounter` that changed since the previous flush, one line
+///
+///     C <pid> <epoch seconds> <name> <cumulative count>
 enum PerfProbe {
     private static var sampler: Sampler?
 
@@ -23,6 +97,7 @@ enum PerfProbe {
               let path = ProcessInfo.processInfo.environment["SPINE_PERF_PROBE_FILE"], !path.isEmpty,
               let sampler = Sampler(path: path) else { return }
         self.sampler = sampler
+        PerfCounterStore.shared.setActive(true)
         sampler.start()
     }
 
@@ -73,11 +148,15 @@ enum PerfProbe {
         }
 
         private func flush() {
-            let line = String(
+            let epoch = Date().timeIntervalSince1970
+            var text = String(
                 format: "S %d %.3f %d %d %.1f %.1f %d %d\n",
-                pid, Date().timeIntervalSince1970, frames, hitches, hitchMs, longestMs, footprintKB(), cpuMs()
+                pid, epoch, frames, hitches, hitchMs, longestMs, footprintKB(), cpuMs()
             )
-            try? handle.write(contentsOf: Data(line.utf8))
+            for change in PerfCounterStore.shared.snapshotChanged() {
+                text += PerfCounterStore.line(pid: pid, epoch: epoch, counter: change.counter, value: change.value)
+            }
+            try? handle.write(contentsOf: Data(text.utf8))
             frames = 0
             hitches = 0
             hitchMs = 0

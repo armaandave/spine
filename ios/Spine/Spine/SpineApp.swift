@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 @main
@@ -8,6 +9,10 @@ struct SpineApp: App {
         SpineImagePipeline.install()
         #if DEBUG
         PerfProbe.startIfRequested()
+        // Cold-image perf runs: start with empty memory and disk image caches.
+        if ProcessInfo.processInfo.environment["SPINE_PERF_COLD_IMAGES"] == "1" {
+            ImagePipeline.shared.cache.removeAll()
+        }
         #endif
     }
 
