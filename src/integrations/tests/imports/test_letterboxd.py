@@ -325,6 +325,35 @@ class ImportLetterboxdTests(TestCase):
         self.assertEqual([entry.consumed_at.date().isoformat() for entry in entries], ["2024-01-02", "2025-02-06"])
         self.assertEqual(Movie.objects.get(item__media_id="101").end_date.date().isoformat(), "2025-02-06")
 
+    def test_a_blank_rewatch_is_a_no_even_over_a_mark(self):
+        """Decision 57: only a real Yes adds a watch, however the film was marked first."""
+        diary = (
+            "Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date\n"
+            "2024-01-02,Film One,1999,https://boxd.it/film-one-watched,4,,,2024-01-02\n"
+        )
+        watched = "Date,Name,Year,Letterboxd URI\n2024-01-02,Film One,1999,https://boxd.it/film-one-watched\n"
+        # An earlier file marked it, so the old derivation read the blank as a rewatch.
+        self._import_bytes(export_zip({"watched.csv": watched}))
+        self.assertTrue(Movie.objects.get(user=self.user).direct_consumption)
+        self._import_bytes(export_zip({"diary.csv": diary, "watched.csv": watched}))
+        self.assertEqual(list(DiaryEntry.objects.values_list("is_rewatch", flat=True)), [False])
+
+    def test_a_diary_yes_with_a_blank_review_row_stays_a_rewatch(self):
+        payload = export_zip(
+            {
+                "diary.csv": (
+                    "Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date\n"
+                    "2024-01-02,Film One,1999,https://boxd.it/film-one-watched,4,Yes,,2024-01-02\n"
+                ),
+                "reviews.csv": (
+                    "Date,Name,Year,Letterboxd URI,Rating,Rewatch,Review,Tags,Watched Date\n"
+                    "2024-01-02,Film One,1999,https://boxd.it/film-one-watched,4,,Great,,2024-01-02\n"
+                ),
+            },
+        )
+        self._import_bytes(payload)
+        self.assertEqual(list(DiaryEntry.objects.values_list("is_rewatch", "review")), [(True, "Great")])
+
     def test_liked_film_logs_keep_their_heart(self):
         payload = export_zip(
             {

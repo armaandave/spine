@@ -1,4 +1,4 @@
-"""Phases 1 and 2's phone sheets: Spine Dev's user, set up through real tracking writes.
+"""Phases 1 to 3's phone sheets: Spine Dev's user, set up through real tracking writes.
 
 scripts/ios/seed-activity-checkpoint.sh runs this on the test backend's throwaway copy,
 and test_activity_checkpoints.py runs the same steps in CI. It clears the dev user
@@ -37,6 +37,7 @@ from app import (
     user_calendar,
 )
 from app.models import (
+    AnimeViewing,
     Book,
     DiaryEntry,
     Episode,
@@ -116,6 +117,16 @@ PHASE_2 = {
     "G2023": (MediaTypes.GAME.value, {}),
     "Q": (MediaTypes.BOOK.value, {}),
 }
+# Phase 3's shows, each episode 60 minutes, or every number prints ≈. Manual shows keep
+# season logs (TV-408).
+PHASE_3_SHOWS = {"T1": 10, "T2": 2, "T3": 4, "T4": 5, "T5": 2, "T6": 3, "T7": 4, "T8": 4}
+SHOW_MINUTES = 60
+# Phase 3's films and album, and their runtimes.
+PHASE_3_TITLES = {
+    "F": (MediaTypes.MOVIE.value, 120),
+    "F2": (MediaTypes.MOVIE.value, 120),
+    "P": (MediaTypes.MUSIC.value, 60),
+}
 
 
 def hours(number):
@@ -182,8 +193,10 @@ def _settle_users():
 
 def _clear_person(user):
     """Clear what a person has, so a sheet opens the same however it was left."""
-    DiaryEntry.objects.filter(user=user).delete()
+    # Viewings first: a log can't go while a viewing names it (TV-406, AN-901).
     Episode.objects.filter(related_season__user=user).delete()
+    AnimeViewing.objects.filter(anime__user=user).delete()
+    DiaryEntry.objects.filter(user=user).delete()
     for model in apps.get_models():
         if issubclass(model, Media):
             model.objects.filter(user=user).delete()
@@ -239,32 +252,59 @@ def _make_titles(dev):
             ),
         )
     titles.append(_make_show())
+    for name, (media_type, minutes) in PHASE_3_TITLES.items():
+        titles.append(
+            Item.objects.create(
+                source=Sources.MANUAL.value,
+                media_type=media_type,
+                media_id=media_id(name),
+                title=f"{media_type.title()} {name}",
+                image=IMAGE,
+                runtime_minutes=minutes,
+            ),
+        )
+    titles.extend(_make_show(name, episodes, SHOW_MINUTES) for name, episodes in PHASE_3_SHOWS.items())
     listed = CustomList.objects.create(owner=dev, name=LIST_NAME)
     for position, item in enumerate(titles, start=1):
         CustomListItem.objects.create(custom_list=listed, item=item, position=position)
 
 
-def _make_show():
-    """Make show Z, with runtimes on each episode, or every number prints ≈."""
+def _make_show(name="Z", episodes=5, minutes=EPISODE_MINUTES):
+    """Make a one-season show, a runtime on each episode, or every number prints ≈."""
     show = Item.objects.create(
         source=Sources.MANUAL.value,
         media_type=MediaTypes.TV.value,
-        media_id=media_id("Z"),
-        title="Show Z",
+        media_id=media_id(name),
+        title=f"Show {name}",
         image=IMAGE,
     )
-    shared = {"source": Sources.MANUAL.value, "media_id": media_id("Z"), "image": IMAGE}
-    Item.objects.create(media_type=MediaTypes.SEASON.value, season_number=1, title="Show Z", **shared)
-    for number in range(1, 6):
+    shared = {"source": Sources.MANUAL.value, "media_id": media_id(name), "image": IMAGE}
+    Item.objects.create(media_type=MediaTypes.SEASON.value, season_number=1, title=f"Show {name}", **shared)
+    for number in range(1, episodes + 1):
         Item.objects.create(
             media_type=MediaTypes.EPISODE.value,
             season_number=1,
             episode_number=number,
-            title=f"Show Z E{number}",
-            runtime_minutes=EPISODE_MINUTES,
+            title=f"Show {name} E{number}",
+            runtime_minutes=minutes,
             **shared,
         )
     return show
+
+
+def show(name):
+    """Return one of the sheet's shows."""
+    return title(MediaTypes.TV.value, name)
+
+
+def season(name, number=1):
+    """Return one of the sheet's seasons."""
+    return Item.objects.get(
+        source=Sources.MANUAL.value,
+        media_type=MediaTypes.SEASON.value,
+        media_id=media_id(name),
+        season_number=number,
+    )
 
 
 def _read(user, name, start, *saves, stop_on=None):
@@ -324,7 +364,18 @@ def seed():
         Follow.objects.create(from_user=dev, to_user=friend_user(), status=FollowStatus.ACCEPTED)
         _friend_reads(friend_user())
         _phase_2(dev)
+        _phase_3(dev)
         stats_cache.bump_user(dev)
+
+
+def _phase_3(dev):
+    """Phase 3's opening: TV 10 hours in 2025, Nothing here yet in 2026, 10 in All Time.
+
+    T1's 10 episodes were logged as a season on May 1 2025. Everything else starts
+    untouched, on the list.
+    """
+    with on(date(2025, 5, 1)):
+        tv_tracking.create_log(dev, season("T1"), consumed_at=date(2025, 5, 1), mutation_id=uuid4())
 
 
 def _series(user, name, start, *saves):
@@ -451,6 +502,24 @@ def add_q():
         book_tracking.update_progress(dev_user(), item, progress_type="percentage", value=25)
 
 
+def add_t4():
+    """Add T4: 3 of its 5 episodes ticked on Mar 2 2026."""
+    with on(date(2026, 3, 2)):
+        for number in (1, 2, 3):
+            tv_tracking.tick(dev_user(), show("T4"), 1, number, mutation_id=uuid4())
+
+
+def add_t6():
+    """Add T6: its season logged May 1 2025, then rewatched by 3 ticks on Jun 1 2026."""
+    dev = dev_user()
+    with on(date(2025, 5, 1)):
+        tv_tracking.create_log(dev, season("T6"), consumed_at=date(2025, 5, 1), mutation_id=uuid4())
+    with on(date(2026, 6, 1)):
+        tv_tracking.start_rewatch(dev, show("T6"), season_number=1, mutation_id=uuid4())
+        for number in (1, 2, 3):
+            tv_tracking.tick(dev, show("T6"), 1, number, mutation_id=uuid4())
+
+
 def add_game_2023():
     """Add a game started Jul 1 2023 with no hours."""
     _play(dev_user(), "G2023", date(2023, 7, 1))
@@ -517,4 +586,6 @@ STEPS = {
     "add-m4": add_m4,
     "add-q": add_q,
     "add-game-2023": add_game_2023,
+    "add-t4": add_t4,
+    "add-t6": add_t6,
 }

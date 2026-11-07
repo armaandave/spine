@@ -26,7 +26,7 @@ The following rules apply without another approval step:
 | Area | Existing rules | Application to Stats |
 | --- | --- | --- |
 | Undated consumption | SW-001, SW-004, BK-405, the game contract's Completion counts row (GM-000), TV-301 | A mark without a log, an undated Mark as Read or completion, and a TV fill have no day. They count only in All Time, never in a year or any other dated range (STAT-105, STAT-107, STAT-201). |
-| Repeat history | SW-010, SW-503, BK-405, BK-406, GM-216, GM-217, TV-402, TV-404 | Rewatches are worked out from history under STAT-108. The book and game toggles are presentation only; a movie or album log's saved value counts only where STAT-108 says so. |
+| Repeat history | SW-010, SW-503, BK-405, BK-406, GM-216, GM-217, TV-402, TV-404 | Rewatches are worked out from history under STAT-108. The book and game toggles are presentation only. A movie, album, TV season or show, or anime log's saved value also decides time: whether a mark stands for an earlier watch (STAT-201), and on a season, show or anime log whether it counts what it covers again (STAT-104). |
 | Rating scale | SW-107, TV-504 | Every rating is stored on one 0–10 scale. Stats send stars, which are the stored value halved (STAT-109). |
 | Log visibility | SW-400, TV-000 (Privacy and activity row), `visible_diary_entries` | Movie, music, book and game logs follow the account's privacy. TV, anime, manga and comic logs keep per-log visibility. Stats never change either rule (STAT-003). |
 | Season labels | TV-004 | A season row reads "Show S2", and Season 0 reads "Show Specials", through `MediaRef.displayTitle` (`ios/Spine/Spine/Core/Models/MediaModels.swift`). |
@@ -52,7 +52,7 @@ The following rules apply without another approval step:
 | Title | What a row counts as. A TV season or episode counts as its show; everything else counts as itself (STAT-102). |
 | Target | The Item a log is about: an episode, season or show for TV, otherwise the title. |
 | Viewing | A TV `Episode` row: one watching of one episode (TV terms). |
-| Dated viewing | A viewing with a calendar day: its `watched_on`, or for a viewing that isn't a fill, its `end_date` on the owner's calendar (the same rule as `tv_tracking._viewing_day`). Fills have no day (TV-301). |
+| Dated viewing | A viewing with a day Stats read it on: its `watched_on`, or for a viewing that isn't a fill, its `end_date` on the owner's calendar (the same rule as `tv_tracking._viewing_day`); a log's fills on that log's day; a mark's fill on the day of the Rewatch-off log that dates it. A backdated log can count a tick on its own day instead (STAT-104). A fill nothing dates has no day (TV-301). |
 | Hidden viewing | A viewing that belongs to a log (`Episode.diary_entry`) the viewer can't see. |
 | Event | One title on one day (STAT-106). |
 | Undated completion | A title consumed with no log, counted only in All Time (STAT-105). |
@@ -140,16 +140,24 @@ A log counts once whatever its target.
 Dated viewings count in the range that holds their day.
 A fill a log made (TV-301) counts on that log's day (STAT-100): logging a season on 3 April puts its filled episodes, and their hours, on 3 April.
 A mark's fills have no day: they never count in a dated range, and count in All Time.
+An imported play with no date is read as a mark: only a log dates it, under the rules below for logging something marked, and an episode log that claims one counts it on the log's day. A backdated log never takes it.
 Viewings of specials count like any other viewing; TV-004 keeps specials out of progress, not out of Stats.
 Hidden viewings never count (STAT-003).
 Anime viewings count the same way (AN-704): a tick on its day, a log's fills on that log's day, and a mark's fills only in All Time.
+
+From Phase 3, TV reads `api.services.activity_rows`, as every other type does, and these rules are worked out when read, with nothing written (decisions 14, 38, 42, 43, 48, 59 and 61). Anime takes the same rules as one season with no show (decision 62).
+
+- **Logging something marked.** Per mark fill, the first log the viewer can see that covers the episode and was saved after the mark decides, by log day then id: a season, show or episode log, or an anime log. With Rewatch on, the mark stays in All Time's pile and the log counts too. With Rewatch off, the fill counts on that log's day instead, at most once per log and episode, and adds nothing when the log holds its own fill of that episode. A second time through that no earlier log of that level or wider described keeps the mark in the pile, because the log describes that time.
+- **Rewatch on.** A season, show or anime log counts each episode it covers once more on its date, at that episode's runtime, unless it holds its own fill there or a tick or episode log's own viewing from a second time through that no earlier log of that level or wider described sits there. So a season logged again with Rewatch on adds the season again, ticks through a rewatch then the finish log add nothing more (270, not 405), and a season, a Rewatch-on review of one episode, then the season again is one rewatch (270, not 315). A log an installed build saved with Rewatch on (`tv.label_only`, TV-900) only labels it. Viewings stay as they are, so Most watched still counts stored viewings.
+- **Backdated.** A season or show log dated before the first tick it covers in that pass, since the last log covering those episodes, counts those ticks on its date: a second time through's ticks when there are any, else, with Rewatch off, all of them. A start never counts as first activity here (decision 43). An episode log dated before its claimed tick counts that tick on its date. Deleting the log puts them back.
+- A log the viewer can't see moves nothing and adds nothing for them. Days moved this way are read through `moved` by every reader of viewings by day.
 
 ### STAT-105: Titles in a range include viewings and, in All Time, undated completions
 
 The `titles` of a scope are the distinct titles of:
 
 1. its visible logs;
-2. shows and anime with a dated viewing in the range that isn't hidden;
+2. shows and anime with a dated viewing in the range that isn't hidden, or, in All Time, a mark's fill: a season eye on an unfinished show is an All Time title;
 3. books read in the range: an amount, a percent or a log on a day in it, whether or not the read finished; and
 4. in All Time only, undated completions: titles consumed with no log at all, of any visibility:
    - movies and music: the direct-consumption marker;
@@ -163,10 +171,10 @@ A title counts once however many of these it has. A start with no reading is an 
 
 Events are the distinct (day, title) pairs from visible logs, from dated viewings that aren't hidden, and from each day's progress and starts, as the activity feed counts them (docs/activity-contract.md, AC-1, AC-2).
 A day's progress is the owner's recorded progress changes on a title in one local day, kept when it moved forward on net; starting a title counts the same way.
-TV and anime count only their starts this way: their ticks already are events, as dated viewings on the day watched.
+TV and anime count only their starts this way: their viewings already are events, on the day each is read for under STAT-104. So a tick a backdated log takes is an event on the log's day, not its own, and a start on a day whose ticks all went to that log is no event (decision 43).
 Three episodes of one show watched on one day are one event, and so are a manga's chapters read and logged on one day.
 Fills and undated completions are never events.
-A book's, game's, manga's, comic's or anime's events are its rows with an amount, a told number, a real start or a log, on the day each stored. A status move adds no event, and neither does a pick-up with no reading, a typo fixed to nothing, a retype, or a mark.
+Every type's events are its rows in `api.services.activity_rows` with an amount, a told number, a real start or a log, on the day each is read for: books, games, manga, comics and anime from Phases 1 and 2, and TV, movies and music from Phase 3. A log counts its day even when it adds nothing, such as a Rewatch-off season log over a season already watched. A status move adds no event, and neither does a pick-up with no reading, a typo fixed to nothing, a retype, or a mark.
 Events drive active days, streaks, "Days with 2+ titles", the activity charts and the busiest day and month.
 
 ### STAT-107: Reads and completions always add the undated fact in All Time
@@ -185,7 +193,7 @@ A log is a rewatch when one of these holds:
    - **Books and games:** `completed_manually` always counts, because an undated completion is earlier than every dated one (BK-406, GM-216). The saved reread or replay toggle is never read (BK-405, GM-217).
    - **Movies and music:** the direct-consumption marker counts only when the log was saved as a rewatch (`DiaryEntry.is_rewatch`, SW-010, SW-503). The saved value is the user's or the import's own statement; the marker alone can't say whether it came first, because imports set it after importing the diary.
    - **TV season and show logs:** a mark's fill under the target, created before the log, counts only when the log was saved as a rewatch.
-   - **TV episode logs:** the episode had a viewing created before the log's own viewing that the log didn't claim (TV-402). The saved toggle is never read.
+   - **TV episode logs:** the episode had a viewing created before the log's own viewing that the log didn't claim (TV-402). The saved toggle is never read. A review that adds no viewing, because it describes the watch already there (TV-402), has no own viewing, so this rule never makes it a rewatch.
    - **Anime:** a mark's fill of the title, created before the log, counts only when the log was saved as a rewatch, as for a TV season log (AN-400).
    - **Manga and comics:** only rule 1 applies.
 
@@ -258,20 +266,22 @@ It is a fact like the streak itself, so every viewer gets it.
 
 | Type | Unit | Dated range | All Time | Approximate |
 | --- | --- | --- | --- | --- |
-| Movie | minutes | Sum of `runtime_minutes` over visible logs in the range; each log counts, rewatches included. | The same over every visible log, plus each undated completed film once. | Never. |
-| TV | minutes | Sum over dated viewings in the range of the episode's runtime, falling back to its season's, then its show's. | Every viewing, fills included. | When a season or show runtime stood in for an episode's own. |
-| Anime | minutes | Sum over dated viewings in the range of the title's per-episode runtime: ticks on their day, and a log's fills on that log's day (AN-704), read through the calculation (below). A mark's fills never count. | Every viewing, fills included, plus a stored `progress` with no viewings, times the runtime. | Never. |
+| Movie | minutes | Sum of `runtime_minutes` over visible logs in the range; each log counts, rewatches included. | The same over every visible log, plus a marked film once, unless its first log by log day has Rewatch off: that log dates the same watch (decision 38). | Never. |
+| TV | minutes | Sum over dated viewings in the range of the episode's runtime, falling back to its season's, then its show's, with STAT-104's switch rules. | Every viewing, fills included, with the same rules. | When a season or show runtime stood in for an episode's own. |
+| Anime | minutes | Sum over dated viewings in the range of the title's per-episode runtime: ticks on their day, and a log's fills on that log's day (AN-704), with STAT-104's switch rules (decision 62), read through the calculation (below). A mark's fills count in a year only on the day a Rewatch-off log dates them. | Every viewing, fills included, plus a stored `progress` with no viewings, times the runtime. | Never. |
 | Manga | chapters | What each save and log added on a day in the range (below, and the manga and comics contract's MC-007). | Every year added up, plus each series' undated pile. | Never. |
 | Comic | issues | As manga. | As manga. | Never. |
 | Game | minutes | What each playtime save and log added on a day in the range (below). | Every year added up, plus each game's undated pile. | Never. |
 | Book | pages | What each save and log added on a day in the range (below). | Every year added up, plus each book's undated pile. | Never. |
-| Music | minutes | Sum of the album's runtime over visible logs in the range. | The same over every visible log, plus each undated completed album once. | Never. |
+| Music | minutes | Sum of the album's runtime over visible logs in the range. | The same over every visible log, plus a marked album once, unless its first log has Relisten off, as movies. | Never. |
 
 Manga and comics read the calculation as books do, in chapters or issues: each save by attempt, a drop off the newest amounts, a log adding what's left on its date, decision 10's backdated log. Keep Reading, a pick-up after Did Not Finish and a new issue continue at the place and add only the rise; a reread and Restart begin at zero. A read opening over a mark holds that number once. An imported place, each imported finished read with no log, and a mark (the series' total, less what the read before it counted) sit in the undated pile. A series is known when it has a counted amount or a total.
 
 Games read the calculation too, each playthrough its own total (GM-006, GM-102): a playtime save's rise on its day, a drop off the newest amounts, a retype adding nothing. A change a log wrote counts on the log's date while the log exists, else its own day (GM-219). Whatever the saves don't explain of `total_minutes` lands on the log's date, else `minutes_updated_on`, else `end_date`, else the pile. A stopped game picked back up is a new playthrough, so 5 hours then 8 reads 13. Hours with no playthrough sit in the pile, and a game marked finished with no hours is an All Time title outside `known` and `total`. A percent never adds hours. A day whose hours were told is known even with a percent beside it, since hours and percent are apart (GM-100); a percent on a day with no hours leaves the game unknown in that range.
 Steam's imported lifetime playtime is never added (GM-500).
-Each row reports `known` and `total`: how many of the things it counted (logs, viewings, tracking rows or sessions, plus undated completions) had a length, out of all of them. On books, anime, manga, comics and games they count titles: how many in the range have a known length, out of all of them. An anime with no runtime is the unknown one, and a marked or logged manga or comic with neither a counted amount nor a total. When `known` is below `total`, the app writes a small note under the number: "Based on 4 of 5 books", in what the row counts (books, games, anime, manga, comics; watches on movies, listens on music, episodes on TV), singular for one. It sits under a type tab's measure, under each of Global's Time rows on the right, and under the numbers card on a type tab whose measure counts nothing ("Based on 0 of 1 book"). A percent with no page count, and a log with no length anywhere, are the unknown ones.
+Each row reports `known` and `total`: how many of the things it counted had a length, out of all of them. On movies they count watches (each log, plus a mark the pile holds), on music listens, and on TV episodes: every one counted, a Rewatch-on log's second count included. On books, anime, manga, comics and games they count titles: how many in the range have a known length, out of all of them. An anime with no runtime is the unknown one, and a marked or logged manga or comic with neither a counted amount nor a total. When `known` is below `total`, the app writes a small note under the number: "Based on 4 of 5 books", in what the row counts (books, games, anime, manga, comics; watches on movies, listens on music, episodes on TV), singular for one. It sits under a type tab's measure, under each of Global's Time rows on the right, and under the numbers card on a type tab whose measure counts nothing ("Based on 0 of 1 book"). A percent with no page count, and a log with no length anywhere, are the unknown ones.
+
+Every type reads `api.services.activity_rows` from Phase 3: TV, movies and music joined books, games, anime, manga and comics. The old counters in `api.services.stats_time` stay only for `compare_activity_numbers`. A film or album log is its own row, its full length on its date; a marked film's or album's pile holds it once. A TV row covers the whole show, its title the show's Item.
 
 Books read `api.services.activity_rows`, the same calculation the Activity list reads, so a list adds up to its number. Saves are read in the order they were saved. A rise adds to that save's fixed day, and a drop comes off the newest amounts first, even last year's. A log adds what's left, on its own date, up to the length on its snapshot, else `total_pages`, else the last typed page. A log dated before its read's first activity takes all of that read's amounts onto its date (BK-306). Stopped and picked back up is one read; only Restart begins at zero. A reread counts again. A place with no journey, and `completed_manually`'s `total_pages` less what the read before the mark holds, sit in the undated pile: All Time only, never a row and never in a year. A finish on such a place adds only what's left. A file's read is its own: it joins no read beside it, so its date moves none of that read's pages (BK-306).
 
@@ -1206,7 +1216,7 @@ Run each case for the owner, a follower and a public viewer where it applies.
 | S-01 | A movie log and a TV episode log dated 1 Jan 2025, and a MAL-export anime log stored at 2025-01-01T00:00Z. | All three count in 2025, in stats and in the diary's `watched_from=2025-01-01`. | STAT-100, STAT-400 |
 | S-02 | An anime logged in the app before the anime contract, at 23:30 on 31 Dec 2025 in the owner's zone, viewed by someone in Auckland. | It counts in 2025 for both. | STAT-100, STAT-005 |
 | S-03 | A show with a show log, a season log and an episode log in 2025. | 1 title, 3 logs. | STAT-102, STAT-103 |
-| S-04 | Three episodes of one show ticked on one day, and a season log of that show the same day that fills the rest of the season. | 1 event. The fills count in episodes watched and time only in All Time. | STAT-104, STAT-106 |
+| S-04 | Three episodes of one show ticked on one day, and a season log of that show the same day that fills the rest of the season. | 1 event, the progress row and the log beside it. The fills count on the log's day, in episodes watched and time (STAT-104). | STAT-104, STAT-106 |
 | S-05 | A film marked watched with no log; a book marked read with one dated log. | All Time: the film adds 1 title; the book counts 1 title and 2 reads. 2025: neither undated fact counts. | STAT-105, STAT-107 |
 | S-06 | A Letterboxd import of a film with one diary row (not a rewatch) that is also in watched.csv. | 0 rewatches. | STAT-108 |
 | S-07 | Logs of S1 E1 and S1 E2; then a second log of S1 E1 with Rewatch saved on and off. | Only the second S1 E1 log is a rewatch, whatever its toggle. | STAT-108 |
@@ -1256,6 +1266,8 @@ Writing the laws settled details those decisions leave open. These are provision
 - **Header details (STAT-200).** The list of per-type details and their labels, and that "right now" TV counts appear only in All Time.
 - **Specials (STAT-104).** Viewings of specials count in time, events and episodes watched.
 - **Group keys and labels (STAT-211).** The keys are fixed here; the labels follow the plan ("Thriller & Crime", "Music & Musicals"). Milestone 1 built them in `api.services.genre_groups` (`GROUPS`).
+
+Activity's third phase moved TV, movies and music onto it, with the Rewatch switch's rules, and gave anime TV's rules (decision 62). STAT-104's switch rules, the Terms row for a dated viewing, STAT-106 and STAT-108 for these types, and STAT-201's Movie, TV and Music rows are provisional until its phone test accepts them.
 
 Activity's second phase (2026-11-05) moved anime, manga, comics and games onto it too. Anime's numbers are the same. STAT-106 for these types, STAT-201's anime, manga, comic and game rows with `known` and `total` counting titles, `approximate` false in a range, an anime held only by a mark or a stored number becoming an All Time title (STAT-105), and a manga or comic's typo fix coming off the newest amounts are provisional until its phone test accepts them.
 

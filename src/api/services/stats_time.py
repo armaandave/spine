@@ -3,12 +3,15 @@
 STAT-201 and STAT-202. Every function reads an api.services.stats_scope.StatsScope and
 aggregates in SQL: one or two queries per type, whatever the size of the library.
 
-- Movies and music: the Item's runtime over visible logs in the range, plus each
-  undated completion once in All Time.
-- TV: viewings in the range (dated ones; every one, fills included, in All Time), each
-  the episode's runtime, else its season's, else its show's.
+- Movies and music: the calculation's rows, each log its runtime on its date, plus a
+  marked title once in All Time unless its first log has Rewatch off (decision 38).
+  ``_log_runtime`` still counts them for the comparison.
+- TV: the calculation's rows, each viewing the episode's runtime, else its season's,
+  else its show's, with the Rewatch switch's rules (STAT-104). ``_tv_runtime`` still
+  counts them for the comparison.
 - Anime: the calculation's rows, which read its viewings as this module's
-  ``_anime_runtime`` does (AN-704), plus its pile in All Time.
+  ``_anime_runtime`` does (AN-704) with TV's rules (decision 62), plus its pile in All
+  Time.
 - Manga and comics: the calculation's rows, plus its pile in All Time. ``_progress``
   still counts them for the comparison: in a dated range, positive progress changes
   between consecutive history rows of one tracking row, dated by ``history_date`` on the
@@ -24,11 +27,10 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
 log's fills on the log's day, a mark's fills only in All Time, which also adds a stored
 progress number with no viewings.
 
-``known`` and ``total`` count the things counted (logs, viewings, tracking rows with a
-change or with progress, sessions, undated completions) with a length, out of all. A
-type in api.services.activity_rows.CALCULATED_TYPES counts titles, and reads the
-calculation's rows instead of its counter. The old counters stay for the comparison
-until TV, movies and music have switched too.
+``known`` and ``total`` count what's counted with a length, out of all: episodes on TV,
+watches on movies, listens on music, titles on the rest. Every type is in
+api.services.activity_rows.CALCULATED_TYPES and reads the calculation's rows. The old
+counters stay for the comparison until Phase 4's first commit removes them.
 """
 
 from __future__ import annotations
@@ -149,14 +151,13 @@ def _from_rows(rows, piles, media_type):
     Everything is a plain int: a Decimal renders as 360.0, which the app reads as 0.
     """
     pile = activity_rows.piled(piles, media_type)
-    in_rows = {row.title_id for row in rows if row.counts_title}
-    titles = in_rows | (pile.titles - pile.no_amount)
-    unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known - pile.no_amount)
     result = TypeTime(media_type)
     result.value = int(sum((row.amount for row in rows), pile.amount))
-    result.known = len(titles - unknown)
-    result.total = len(titles)
-    result.progress = int(sum((row.told for row in rows if row.told_unit == activity_rows.EPISODE), pile.told))
+    result.known, result.total = activity_rows.known_and_total(rows, pile, media_type)
+    # A TV episode counted at its season's or show's runtime is an estimate (STAT-201).
+    result.approximate = pile.approximate or any(row.approximate for row in rows)
+    episodes = pile.told if media_type in (MediaTypes.TV.value, MediaTypes.ANIME.value) else 0
+    result.progress = int(sum((row.told for row in rows if row.told_unit == activity_rows.EPISODE), episodes))
     return result
 
 

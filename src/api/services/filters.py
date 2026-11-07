@@ -160,8 +160,8 @@ def update_item_filter_metadata(item, metadata):
     if changed or facets_changed or item.filter_metadata_updated_at is None:
         item.filter_metadata_updated_at = timezone.now()
         item.save(update_fields=[*changed, "filter_metadata_updated_at"])
-        if "runtime_minutes" in changed and item.media_type == MediaTypes.ANIME.value:
-            # An anime's minutes are worked out from its runtime when read (STAT-006).
+        if "runtime_minutes" in changed and item.media_type != MediaTypes.GAME.value:
+            # Minutes are worked out from a runtime when read (STAT-006).
             from api.services.item_metadata import bump_holders
 
             bump_holders(item)

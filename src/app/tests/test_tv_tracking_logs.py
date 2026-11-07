@@ -132,12 +132,16 @@ class TV402EpisodeLogTests(TVTrackingTestCase):
         self.assertEqual(Activity.objects.filter(verb="diary_created").count(), 1)
         self.assertEqual(Activity.objects.count(), 1)
 
-    def test_tv_402_a_claimed_tick_takes_the_logs_day(self):
+    def test_tv_402_a_claimed_tick_keeps_its_own_day(self):
+        """Decision 3: only a backdated log moves it, and that's worked out when read."""
         show = self.make_show({1: 3})
         self.tick(show, 1, 1)
-        self.log(self.episode_item(show, 1, 1), consumed_at=date(2026, 10, 20))
+        ticked_on = self.viewings(show)[0].watched_on
+        entry = self.log(self.episode_item(show, 1, 1), consumed_at=date(2026, 10, 20)).entry
         row = self.viewings(show)[0]
-        self.assertEqual(row.watched_on, date(2026, 10, 20))
+        self.assertEqual((row.diary_entry_id, row.watched_on), (entry.pk, ticked_on))
+        tv_tracking.update_log(entry, {"consumed_at": date(2026, 10, 19)})
+        self.assertEqual(self.viewings(show)[0].watched_on, ticked_on, "A date edit leaves it too")
 
     def test_a_19_rewatch_on_adds_a_second_viewing_and_reopens_nothing(self):
         show = self.make_show({1: 2})
@@ -283,10 +287,11 @@ class TV406DeleteLogTests(TVTrackingTestCase):
     def test_tv_406_a_claimed_tick_stays_as_a_tick_on_its_current_day(self):
         show = self.make_show({1: 3})
         self.tick(show, 1, 1)
+        ticked_on = self.viewings(show)[0].watched_on
         entry = self.log(self.episode_item(show, 1, 1), consumed_at=date(2026, 10, 20)).entry
         tv_tracking.delete_log(self.user, entry)
         row = self.viewings(show)[0]
-        self.assertEqual((row.kind, row.diary_entry_id, row.watched_on), (Episode.Kind.TICK, None, date(2026, 10, 20)))
+        self.assertEqual((row.kind, row.diary_entry_id, row.watched_on), (Episode.Kind.TICK, None, ticked_on))
         self.assertEqual(self.status(show), "In progress")
 
     def test_tv_406_a_deleted_source_log_leaves_the_stars_independent(self):
@@ -515,3 +520,85 @@ class TV703FeedTests(TVTrackingTestCase):
         self.assertEqual(activity.snapshot["rating"], "6.0")
         tv_tracking.delete_log(self.user, entry)
         self.assertFalse(Activity.objects.exists())
+
+
+class ReviewWriteTests(TVTrackingTestCase):
+    """A review of a watched episode describes that watch (decisions 14 and 59, TV-402)."""
+
+    def test_a_review_after_a_season_log_opens_off_and_adds_no_viewing(self):
+        show = self.make_show({1: 3})
+        self.log(self.season_item(show, 1))
+        review = self.log(self.episode_item(show, 1, 2)).entry
+        self.assertFalse(review.is_rewatch)
+        self.assertFalse(Episode.objects.filter(diary_entry=review).exists())
+        self.assertEqual(len(self.viewings(show, 1, 2)), 1)
+
+    def test_a_marked_episode_with_no_covering_log_still_opens_on(self):
+        show = self.make_show({1: 3})
+        tv_tracking.mark_up_to(self.user, show, 1, 1)
+        self.assertTrue(self.log(self.episode_item(show, 1, 1)).entry.is_rewatch)
+
+    def test_a_review_of_a_mark_off_adds_no_viewing_and_holds_the_mark(self):
+        show = self.make_show({1: 3})
+        tv_tracking.mark_up_to(self.user, show, 1, 1)
+        review = self.log(self.episode_item(show, 1, 1), is_rewatch=False).entry
+        self.assertEqual([row.kind for row in self.viewings(show, 1, 1)], [Episode.Kind.FILL])
+        with self.assertRaises(TVLogBlocks) as blocked:
+            self.untick(show, 1, 1)
+        self.assertEqual(blocked.exception.message, tv_tracking.MSG_DELETE_EPISODE_LOG)
+        with self.assertRaises(TVLogBlocks) as blocked:
+            tv_tracking.unmark(self.user, show, season_number=1)
+        self.assertEqual(blocked.exception.message, tv_tracking.MSG_DELETE_LOGS)
+        held = self.viewings(show, 1, 1)
+        self.assertEqual([(row.kind, row.diary_entry_id) for row in held], [(Episode.Kind.FILL, None)])
+        self.assertTrue(DiaryEntry.objects.filter(pk=review.pk).exists())
+
+    def test_deleting_a_season_log_under_a_review_leaves_the_episode_with_the_review(self):
+        show = self.make_show({1: 3})
+        season = self.log(self.season_item(show, 1)).entry
+        review = self.log(self.episode_item(show, 1, 2)).entry
+        tv_tracking.delete_log(self.user, season)
+        self.assertEqual([row.diary_entry_id for row in self.viewings(show, 1, 2)], [review.pk])
+        self.assertEqual(self.viewings(show, 1, 1), [])
+
+    def test_a_review_dated_later_leaves_its_claimed_tick_on_its_day(self):
+        show = self.make_show({1: 3})
+        self.tick(show, 1, 1)
+        ticked_on = self.viewings(show)[0].watched_on
+        entry = self.log(self.episode_item(show, 1, 1)).entry
+        tv_tracking.update_log(entry, {"consumed_at": ticked_on - timedelta(days=3)})
+        self.assertEqual(self.viewings(show)[0].watched_on, ticked_on)
+
+
+class LabelOnlyTests(TVTrackingTestCase):
+    """An installed build's Rewatch on a season or show log stays a badge (TV-900)."""
+
+    def test_an_installed_builds_rewatch_on_season_log_is_stamped(self):
+        show = self.make_show({1: 3})
+        self.log(self.season_item(show, 1))
+        entry = self.log(self.season_item(show, 1), is_rewatch=True, entry_point=tv_tracking.LEGACY_APP).entry
+        self.assertTrue(entry.progress_snapshot["tv"]["label_only"])
+
+    def test_the_apps_rewatch_and_an_installed_builds_off_log_are_not(self):
+        show = self.make_show({1: 3})
+        off = self.log(self.season_item(show, 1), is_rewatch=False, entry_point=tv_tracking.LEGACY_APP).entry
+        on = self.log(self.season_item(show, 1), is_rewatch=True).entry
+        self.assertNotIn("label_only", off.progress_snapshot["tv"])
+        self.assertNotIn("label_only", on.progress_snapshot["tv"])
+
+
+class MarkHandoverTests(TVTrackingTestCase):
+    """Undoing an eye never hands a mark to a log already holding its own fill (TV-302)."""
+
+    def test_the_show_eye_undone_over_a_rewatch_log_holding_its_fills(self):
+        show = self.make_show({1: 2, 2: 2})
+        tv_tracking.mark_watched(self.user, show)
+        self.advance()
+        tv_tracking.start_rewatch(self.user, show, season_number=1)
+        entry = self.log(self.season_item(show, 1), is_rewatch=True).entry
+        self.assertEqual(Episode.objects.filter(diary_entry=entry).count(), 2)
+        self.advance()
+        tv_tracking.unmark(self.user, show)
+        self.assertEqual(Episode.objects.filter(diary_entry=entry).count(), 2)
+        self.assertEqual(len(self.viewings(show, 1)), 2, "The marks went; the log keeps its own")
+        self.assertEqual(self.viewings(show, 2), [])

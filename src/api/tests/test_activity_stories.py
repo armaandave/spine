@@ -1,8 +1,9 @@
 """Stories told across the calculation, and marks that never touch a year (decision 11).
 
-Matrix 11 joins each family at its switch, so this holds books, games, manga and
-comics (anime's are in test_activity_calc_anime): every way to mark a title, on a new
-one and on one first set to To Read, because today's leak needs a previous history row.
+Matrix 11 joins each family at its switch, so this holds books, games, manga, comics,
+films, albums and TV (anime's are in test_activity_calc_anime): every way to mark a
+title, on a new one and on one first set to To Read, because today's leak needs a
+previous history row.
 Marking as watched, read, played or listened is never activity, never in a year and
 never on a feed. It only feeds All Time's undated pile.
 """
@@ -18,8 +19,15 @@ from api.services.activity_rows import piled
 from api.tests.test_activity_book_imports import OneBook, goodreads_file
 from api.tests.test_activity_calc_books import BOOK, NEW_YORK, BookCalcBase, d
 from api.tests.test_stats_v2_activity import ALL_TIME, YEAR_2025, YEAR_2026
-from app import book_tracking, game_tracking, series_tracking
+from app import (
+    book_tracking,
+    game_tracking,
+    series_tracking,
+    single_weight,
+    tv_tracking,
+)
 from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
+from app.tests.tv_fixtures import make_manual_show
 from integrations import exports
 from integrations.imports import goodreads, yamtrack
 
@@ -537,3 +545,130 @@ class BookStoriesTests(BookCalcBase):
         data = self.summary({"schema": "2", "start_date": "2024-01-01", "end_date": "2024-12-31"}, tab=BOOK)
         self.assertEqual((data["header"]["titles"], data["header"]["logs"]), (1, 0))
         self.assertEqual(data["years"]["first"], 2024)
+
+
+class _SingleWeight:
+    """single_weight's writes, in the shape the matrix calls them."""
+
+    @staticmethod
+    def assign_status(user, item, status):
+        single_weight.apply_tracking_state(user, item, status=status)
+
+    @staticmethod
+    def set_like(user, item, liked):
+        single_weight.set_like(user, item, liked)
+
+    @staticmethod
+    def set_rating(user, item, rating):
+        single_weight.set_rating(user, item, rating)
+
+
+class SingleWeightMarkMatrix(TypeMarkMatrix):
+    """Matrix 11 on films and albums: the eye, a heart, stars and Completed."""
+
+    tracking = _SingleWeight
+    length = 100
+
+    def setUp(self):
+        BookCalcBase.setUp(self)
+        other = self.title("other")
+        for day in (d(2025, 3, 1), d(2026, 2, 2)):
+            with self.on(day):
+                single_weight.create_log(self.owner, other, consumed_at=day)
+
+    def title(self, name):
+        item = self.item(self.media_type, name, title=name)
+        self.set_item(item, runtime_minutes=self.length)
+        return item
+
+    def eye(self, item):
+        single_weight.mark_consumed(self.owner, item)
+
+    def test_a_first_log_off_then_its_delete_puts_every_year_back(self):
+        item = self.title("logged")
+        with self.on(d(2026, 3, 1)):
+            self.eye(item)
+        before, value = self.snapshot(), self.all_time()
+        with self.on(d(2026, 3, 2)):
+            entry, _ = single_weight.create_log(self.owner, item, consumed_at=d(2026, 3, 2), is_rewatch=False)
+        self.assertEqual(self.all_time(), value, "Off dates the same watch")
+        with self.on(d(2026, 3, 3)):
+            single_weight.delete_log(self.owner, entry)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.all_time(), value)
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class MovieMarkMatrixTests(SingleWeightMarkMatrix, BookCalcBase):
+    """Matrix 11's marks on this type."""
+
+    media_type = MediaTypes.MOVIE.value
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class MusicMarkMatrixTests(SingleWeightMarkMatrix, BookCalcBase):
+    """Matrix 11's marks on this type."""
+
+    media_type = MediaTypes.MUSIC.value
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class TVMarkMatrixTests(BookCalcBase):
+    """Matrix 11 on TV: each mark, then a Rewatch-off season log and its delete."""
+
+    media_type = MediaTypes.TV.value
+    EPISODES = 3
+
+    def setUp(self):
+        super().setUp()
+        counted = self.show()
+        for day, number in ((d(2025, 3, 1), 1), (d(2026, 2, 2), 2)):
+            with self.on(day):
+                tv_tracking.tick(self.owner, counted, 1, number)
+
+    def show(self):
+        show = make_manual_show(seasons={1: self.EPISODES})
+        Item.objects.filter(media_id=show.media_id, media_type=MediaTypes.EPISODE.value).update(runtime_minutes=45)
+        return show
+
+    snapshot = TypeMarkMatrix.snapshot
+    all_time = TypeMarkMatrix.all_time
+    calc_type = TypeMarkMatrix.calc_type
+
+    def check(self, mark):
+        for planning in (False, True):
+            with self.subTest(mark=mark.__name__, planning=planning):
+                show = self.show()
+                if planning:
+                    with self.on(d(2026, 1, 20)):
+                        tv_tracking.choose(self.owner, show, Status.PLANNING.value)
+                before, value = self.snapshot(), self.all_time()
+                with self.on(d(2026, 3, 1)):
+                    mark(show)
+                marked = self.all_time()
+                self.assertEqual(self.snapshot(), before)
+                self.assertGreater(marked, value)
+                self.assertFalse([row for row in self.calc_type().rows if row.title_id == show.pk])
+                season = Item.objects.get(media_id=show.media_id, media_type=MediaTypes.SEASON.value)
+                with self.on(d(2026, 3, 2)):
+                    entry = tv_tracking.create_log(self.owner, season, consumed_at=d(2026, 3, 2), is_rewatch=False).entry
+                self.assertEqual(self.all_time(), self.EPISODES * 45 + value, "Off dates the marked watch")
+                with self.on(d(2026, 3, 3)):
+                    tv_tracking.delete_log(self.owner, entry)
+                self.assertEqual(self.snapshot(), before)
+                self.assertEqual(self.all_time(), marked)
+
+    def test_the_season_eye(self):
+        self.check(lambda show: tv_tracking.mark_watched(self.owner, show, season_number=1))
+
+    def test_the_show_eye(self):
+        self.check(lambda show: tv_tracking.mark_watched(self.owner, show))
+
+    def test_mark_watched_up_to_here(self):
+        self.check(lambda show: tv_tracking.mark_up_to(self.owner, show, 1, 2))
+
+    def test_a_heart_on_a_show_not_started(self):
+        self.check(lambda show: tv_tracking.set_like(self.owner, show, liked=True))
+
+    def test_stars_on_a_show_not_started(self):
+        self.check(lambda show: tv_tracking.set_rating(self.owner, show, 8))

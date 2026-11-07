@@ -120,7 +120,10 @@ class LetterboxdImporter:
                     "review": row.get("review", ""),
                     # The export says which films are liked, not which viewings.
                     "liked": item.id in liked_ids,
-                    "is_rewatch": row.get("rewatch"),
+                    # A blank Rewatch is a No (decision 57): only a real Yes adds a watch.
+                    # The parser keeps it blank, so a review row's blank never overwrites
+                    # the diary row's Yes.
+                    "is_rewatch": bool(row.get("rewatch")),
                     "tags": row.get("tags", []),
                     "from_diary": row["from_diary"],
                     "from_review": row["from_review"],

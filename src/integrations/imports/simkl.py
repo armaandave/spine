@@ -129,7 +129,7 @@ class SimklImporter:
         self._process_media_lists(data)
 
         helpers.cleanup_existing_media(self.to_delete, self.user)
-        helpers.bulk_create_media(self.bulk_media, self.user)
+        helpers.bulk_create_media(self.bulk_media, self.user, source="simkl")
 
         imported_counts = {
             media_type: len(media_list)

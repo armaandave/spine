@@ -283,7 +283,7 @@ def _bulk_create_media(bulk_media_list, user, source, warnings):
         logger.info("Bulk importing %s", media_type)
 
         if single_weight.supports(media_type):
-            _import_single_weight_rows(bulk_media, user, model)
+            _import_single_weight_rows(bulk_media, user, model, source, warnings)
             continue
 
         if media_type == MediaTypes.GAME.value:
@@ -319,8 +319,16 @@ def _bulk_create_media(bulk_media_list, user, source, warnings):
         )
 
 
-def _import_single_weight_rows(rows, user, model):
-    """Collapse legacy title imports into canonical undated tracking."""
+def _import_single_weight_rows(rows, user, model, source, warnings):
+    """Import a file's film and album rows: a dated play is a log, the rest undated tracking.
+
+    A finished row with a real date is a play on that date, as Letterboxd's and Trakt's
+    are (decision 47): it becomes a log, with an identity from source, title and date, so
+    the same file again adds nothing, and a title already logged that day keeps its log
+    (SW-504). The row states no Rewatch, so only an earlier log makes it a rewatch. A row
+    with no date is the undated mark, and so is every row of an import that names no
+    source: IMDb's dates say when a title was rated or listed, not watched.
+    """
     rows_by_item = defaultdict(list)
     for row in rows:
         rows_by_item[row.item_id].append(row)
@@ -328,7 +336,10 @@ def _import_single_weight_rows(rows, user, model):
         latest = item_rows[-1]
         completed = any(row.status == app.models.Status.COMPLETED.value for row in item_rows)
         rating = next((row.score for row in reversed(item_rows) if row.score is not None), single_weight.UNSET)
-        if completed or rating is not single_weight.UNSET:
+        plays = _dated_plays(item_rows, user, source)
+        if plays:
+            tracking = _import_plays(user, latest, plays, model, source, warnings)
+        elif completed or rating is not single_weight.UNSET:
             tracking = single_weight.import_title_state(
                 user,
                 latest.item,
@@ -346,6 +357,46 @@ def _import_single_weight_rows(rows, user, model):
         if notes and tracking.notes != notes:
             tracking.notes = notes
             tracking.save(update_fields=["notes"])
+
+
+def _dated_plays(rows, user, source):
+    """Return a title's finished rows with a real date, as (day, row), one per day."""
+    if not source:
+        return []
+    plays = {}
+    for row in rows:
+        day = _read_day(row, user) if row.status == app.models.Status.COMPLETED.value else None
+        if day:
+            plays[day] = row
+    return sorted(plays.items(), key=lambda play: play[0])
+
+
+def _import_plays(user, latest, plays, model, source, warnings):
+    """Log a title's dated plays, except on a day it's logged already, and return its tracking."""
+    item = latest.item
+    tracking = model.objects.filter(user=user, item=item).first() or model(user=user, item=item)
+    if tracking.pk is None or tracking.status != app.models.Status.COMPLETED.value:
+        # Completed as a log leaves it, even when every play is logged already, with the
+        # file's date on that history row.
+        tracking.status = app.models.Status.COMPLETED.value
+        tracking.progress = 1
+        history_date = getattr(latest, "_history_date", None)
+        if history_date is not None:
+            tracking._history_date = history_date  # noqa: SLF001
+        tracking.save()
+    logs = [
+        {
+            "consumed_at": day,
+            "source_id": f"{item.source}:{item.media_id}:{day.isoformat()}",
+            "rating": _log_rating(row, warnings),
+            "is_rewatch": None,
+        }
+        for day, row in plays
+        if not book_log_on(user, item, day)
+    ]
+    if logs:
+        single_weight.import_logs(user, item, logs, source=source)
+    return model.objects.get(user=user, item=item)
 
 
 def book_log_on(user, item, day):
