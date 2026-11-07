@@ -342,6 +342,18 @@ struct GameProgressSheet: View {
         return "Enter a percentage from 0 to 100."
     }
 
+    /// Percent mode only: hours have no bar, since a game has no set length.
+    private var progressBar: ProgressSheetBar? {
+        guard mode == .percent else { return nil }
+        return ProgressSheetBar.make(
+            unit: .percent,
+            last: playthrough.completion,
+            typed: newPercent,
+            total: 100,
+            accent: HomeDesign.Palette.starGold
+        )
+    }
+
     var body: some View {
         let warning = validation ?? error
         ProgressSheetForm(
@@ -380,6 +392,7 @@ struct GameProgressSheet: View {
                 Button("Delete Playthrough", systemImage: "trash", role: .destructive) { pending = .delete }
             }
         }
+        .environment(\.progressSheetBar, progressBar)
         .onChange(of: mode) { input = "" }
         .onChange(of: input) { _, value in
             let text = mode == .hours ? String(value.filter(\.isNumber).prefix(5)) : ProgressPercent.sanitized(value)

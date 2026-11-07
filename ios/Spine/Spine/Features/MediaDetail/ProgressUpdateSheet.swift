@@ -13,6 +13,89 @@ struct ProgressUpdateSaveRequest: Equatable {
     var progressedOn: String? = nil
 }
 
+/// The before/today bar a progress sheet draws under its number: earlier progress dim, this save's part lit in the
+/// accent, and "+20 pages" beside it. A sheet turns it on through the environment, so `ProgressSheetForm`'s own
+/// parameters stay as they are; a sheet that sets nothing draws nothing.
+nonisolated struct ProgressSheetBar: Equatable {
+    static let height: CGFloat = 14
+    static let radius: CGFloat = 7
+
+    let model: ProgressMeterModel
+    let accent: Color
+    /// "+20 pages", "+2.5%" or "moved back"; nil when nothing changed or no number is typed.
+    let text: String?
+    /// The widest text this bar's unit shows, so the row's width does not move as the text comes and goes.
+    let sizingText: String
+
+    var palette: MeterPalette {
+        MeterPalette(before: Color(white: 1, opacity: 0.55), rest: Color(white: 1, opacity: 0.14), accent: accent)
+    }
+
+    /// The bar for `typed` against `last` out of `total` (percent runs to 100). Nil when the total is unknown. No
+    /// number typed lights nothing, a number above the total stops at it, and one below `last` lights nothing and
+    /// says it moved back.
+    static func make(unit: MeterUnit, last: Decimal?, typed: Decimal?, total: Int?, accent: Color) -> ProgressSheetBar? {
+        let end = unit == .percent ? 100 : total
+        guard let end, end > 0 else { return nil }
+        let limit = Decimal(end)
+        let from = min(max(last ?? 0, 0), limit)
+        let to = min(max(typed ?? from, 0), limit)
+        guard let model = ProgressMeterModel.make(unit: unit, from: round(from), to: round(to), total: end) else {
+            return nil
+        }
+        let text: String? = to > from ? "+\(amount(to - from, unit: unit))" : to < from ? "moved back" : nil
+        return ProgressSheetBar(model: model, accent: accent, text: text, sizingText: "+\(amount(9999, unit: unit))")
+    }
+
+    private static func round(_ value: Decimal) -> Int {
+        Int(NSDecimalNumber(decimal: value).doubleValue.rounded())
+    }
+
+    private static func amount(_ delta: Decimal, unit: MeterUnit) -> String {
+        let number = ProgressPercent.text(delta)
+        switch unit {
+        case .percent: return "\(number)%"
+        case .pages: return "\(number) page\(delta == 1 ? "" : "s")"
+        case .chapters: return "\(number) chapter\(delta == 1 ? "" : "s")"
+        case .issues: return "\(number) issue\(delta == 1 ? "" : "s")"
+        case .episodes: return "\(number) episode\(delta == 1 ? "" : "s")"
+        case .minutes: return number
+        }
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var progressSheetBar: ProgressSheetBar? = nil
+}
+
+private struct ProgressSheetBarRow: View {
+    let bar: ProgressSheetBar
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressMeterView.bar(
+                model: bar.model,
+                palette: bar.palette,
+                height: ProgressSheetBar.height,
+                radius: ProgressSheetBar.radius
+            )
+            ZStack(alignment: .trailing) {
+                Text(bar.sizingText).hidden()
+                Text("moved back").hidden()
+                if let text = bar.text {
+                    Text(text).foregroundStyle(bar.accent)
+                }
+            }
+            .font(.footnote.weight(.bold))
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize()
+            .dynamicTypeSize(...HomeDesign.Text.maxCategory)
+        }
+        .padding(.top, 2)
+    }
+}
+
 /// The title a progress sheet updates. A Home card knows it before the title's page has loaded, so the sheet opens at
 /// once; the page's own copy takes over once it has.
 struct ProgressSheetTitle: Identifiable, Equatable {
@@ -21,17 +104,21 @@ struct ProgressSheetTitle: Identifiable, Equatable {
     /// A book's page count: from its page, or from a card's page progress. A manga's chapters or a comic's issues so
     /// far, when the provider lists them (MC-002, MC-003).
     let totalPages: Int?
+    /// The poster's accent color, "#RRGGBB", which colors the before/today bar.
+    let posterAccentHex: String?
 
     var id: String { ref.id }
 
     init(detail: MediaDetail) {
         ref = detail.ref
+        posterAccentHex = detail.posterAccentColor
         title = detail.displayTitle
         totalPages = detail.ref.isSeries ? detail.userState?.book?.total : detail.progressTotalPages
     }
 
     init(item: LibraryItem) {
         ref = item.media.ref
+        posterAccentHex = item.media.posterAccentColor
         title = item.media.displayTitle
         // Percentage progress's max is 100, not a page count.
         totalPages = item.tracking.progress.flatMap { progress in
@@ -301,6 +388,24 @@ struct ProgressUpdateSheet: View {
         return viewModel.mode == .pages ? "Page" : "Progress"
     }
 
+    /// The before/today bar: pages or percent for a book, chapters or issues for a manga or comic. Nil when the total is
+    /// unknown.
+    private var progressBar: ProgressSheetBar? {
+        let unit: MeterUnit
+        if title.ref.isSeries {
+            unit = title.ref.mediaType == "comic" ? .issues : .chapters
+        } else {
+            unit = viewModel.mode == .pages ? .pages : .percent
+        }
+        return ProgressSheetBar.make(
+            unit: unit,
+            last: viewModel.lastValue,
+            typed: viewModel.currentValue,
+            total: viewModel.totalPages,
+            accent: ArtAccent.pastel(fromHexOrNil: title.posterAccentHex) ?? HomeDesign.Palette.starGold
+        )
+    }
+
     /// What ⋯ and its dialogs call the title and this read: "book" and "journey", or the type's noun and "attempt".
     private var words: BookJourneyMenuAction.Words {
         title.ref.isSeries
@@ -340,6 +445,7 @@ struct ProgressUpdateSheet: View {
             menuButton(.restart)
             menuButton(.delete)
         }
+        .environment(\.progressSheetBar, progressBar)
         // The page's copy, once it has loaded behind a sheet opened from Home, knows the book's page count.
         .onChange(of: title) { _, title in viewModel.title = title }
         .confirmationDialog(
@@ -423,6 +529,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     @State private var focusRequest = 0
     /// The date row's calendar is open. The number pad is down then, which must not close the sheet.
     @State private var isPickingDate = false
+    @Environment(\.progressSheetBar) private var progressBar
 
     let title: String
     let subtitle: String?
@@ -523,9 +630,14 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
                             dateRow(date)
                         }
                     } footer: {
-                        if let footer {
-                            Text(footer)
-                                .foregroundStyle(footerIsWarning ? Color.red : Color.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let progressBar {
+                                ProgressSheetBarRow(bar: progressBar)
+                            }
+                            if let footer {
+                                Text(footer)
+                                    .foregroundStyle(footerIsWarning ? Color.red : Color.secondary)
+                            }
                         }
                     }
                     .logRowBackground()
