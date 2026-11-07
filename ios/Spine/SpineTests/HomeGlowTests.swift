@@ -1,0 +1,262 @@
+import Nuke
+import XCTest
+@testable import Spine
+
+@MainActor
+final class HomeGlowTests: XCTestCase {
+    private let a = URL(string: "https://example.com/a.jpg")!
+    private let b = URL(string: "https://example.com/b.jpg")!
+    private let c = URL(string: "https://example.com/c.jpg")!
+
+    // MARK: GlowLayers
+
+    func testFirstShowFadesInOnTheUpperLayer() {
+        var layers = GlowLayers()
+        XCTAssertTrue(layers.show(a))
+        XCTAssertNil(layers.lower)
+        XCTAssertEqual(layers.upper, a)
+        XCTAssertTrue(layers.isFading)
+
+        XCTAssertFalse(layers.fadeCompleted(of: a))
+        XCTAssertEqual(layers.lower, a)
+        XCTAssertNil(layers.upper)
+        XCTAssertFalse(layers.isFading)
+    }
+
+    func testShowingTheSameURLDoesNothing() {
+        var layers = GlowLayers()
+        layers.show(a)
+        let fading = layers
+        XCTAssertFalse(layers.show(a))
+        XCTAssertEqual(layers, fading)
+
+        layers.fadeCompleted(of: a)
+        let settled = layers
+        XCTAssertFalse(layers.show(a))
+        XCTAssertEqual(layers, settled)
+    }
+
+    func testAThenBThenAEndsOnA() {
+        var layers = GlowLayers()
+        layers.show(a)
+        layers.fadeCompleted(of: a)
+
+        XCTAssertTrue(layers.show(b))
+        XCTAssertEqual(layers.lower, a, "the outgoing layer keeps its image while the upper one fades")
+        XCTAssertEqual(layers.upper, b)
+        layers.fadeCompleted(of: b)
+        XCTAssertEqual(layers.lower, b)
+
+        XCTAssertTrue(layers.show(a))
+        XCTAssertEqual(layers.upper, a)
+        layers.fadeCompleted(of: a)
+        XCTAssertEqual(layers.lower, a)
+        XCTAssertNil(layers.upper)
+    }
+
+    func testAShowDuringAFadeIsQueuedAndTheLatestWins() {
+        var layers = GlowLayers()
+        layers.show(a)
+        layers.fadeCompleted(of: a)
+        layers.show(b)
+
+        XCTAssertFalse(layers.show(c), "a fade is running, so c waits")
+        XCTAssertEqual(layers.upper, b)
+        XCTAssertEqual(layers.lower, a)
+        XCTAssertEqual(layers.target, c)
+
+        // A quick swipe through the carousel: only the last focus is kept.
+        XCTAssertFalse(layers.show(a))
+        XCTAssertFalse(layers.show(c))
+        XCTAssertEqual(layers.target, c)
+
+        XCTAssertTrue(layers.fadeCompleted(of: b), "the queued image starts when the running fade ends")
+        XCTAssertEqual(layers.lower, b)
+        XCTAssertEqual(layers.upper, c)
+        XCTAssertFalse(layers.fadeCompleted(of: c))
+        XCTAssertEqual(layers.lower, c)
+        XCTAssertNil(layers.upper)
+    }
+
+    func testAskingForTheFadingImageAgainDropsTheQueue() {
+        var layers = GlowLayers()
+        layers.show(a)
+        layers.fadeCompleted(of: a)
+        layers.show(b)
+        layers.show(c)
+
+        XCTAssertFalse(layers.show(b))
+        XCTAssertEqual(layers.target, b)
+        XCTAssertFalse(layers.fadeCompleted(of: b))
+        XCTAssertEqual(layers.lower, b)
+        XCTAssertNil(layers.upper)
+    }
+
+    func testAQueuedImageThatIsAlreadyTheLowerLayerStillFades() {
+        var layers = GlowLayers()
+        layers.show(a)
+        layers.fadeCompleted(of: a)
+        layers.show(b)
+        layers.show(a)
+
+        XCTAssertTrue(layers.fadeCompleted(of: b))
+        XCTAssertEqual(layers.lower, b)
+        XCTAssertEqual(layers.upper, a)
+    }
+
+    func testNeverMoreThanTwoLayersAndNeverTheSameImageTwice() {
+        var layers = GlowLayers()
+        let urls = [a, b, c, a, c, b, b, a]
+        for url in urls {
+            layers.show(url)
+            XCTAssertLessThanOrEqual(layers.alive.count, 2)
+            XCTAssertEqual(Set(layers.alive).count, layers.alive.count)
+        }
+        while let fading = layers.upper {
+            layers.fadeCompleted(of: fading)
+            XCTAssertLessThanOrEqual(layers.alive.count, 2)
+            XCTAssertEqual(Set(layers.alive).count, layers.alive.count)
+        }
+        XCTAssertEqual(layers.lower, urls.last)
+        XCTAssertNil(layers.upper)
+    }
+
+    func testNilClearsEverythingIncludingTheQueue() {
+        var layers = GlowLayers()
+        layers.show(a)
+        layers.fadeCompleted(of: a)
+        layers.show(b)
+        layers.show(c)
+
+        XCTAssertFalse(layers.show(nil))
+        XCTAssertNil(layers.lower)
+        XCTAssertNil(layers.upper)
+        XCTAssertNil(layers.target)
+        XCTAssertTrue(layers.alive.isEmpty)
+
+        // The finished fade of the cleared layer is ignored.
+        XCTAssertFalse(layers.fadeCompleted(of: b))
+        XCTAssertTrue(layers.alive.isEmpty)
+        XCTAssertFalse(layers.show(nil), "clearing an empty glow does nothing")
+    }
+
+    func testAFinishedFadeOfAnImageThatIsNotFadingIsIgnored() {
+        var layers = GlowLayers()
+        layers.show(a)
+        XCTAssertFalse(layers.fadeCompleted(of: b))
+        XCTAssertEqual(layers.upper, a)
+        XCTAssertNil(layers.lower)
+    }
+
+    // MARK: Offset
+
+    func testTheGlowMovesOneToOneWithThePage() {
+        let top = BackdropLayout.topOffset
+        XCTAssertEqual(GlowSpec.offset(scroll: -50), top, "pulled past the top it stays put")
+        XCTAssertEqual(GlowSpec.offset(scroll: 0), top)
+        XCTAssertEqual(GlowSpec.offset(scroll: 220), top - 220)
+        XCTAssertEqual(GlowSpec.offset(scroll: 600), top - 600)
+    }
+
+    func testTheGlowIsOffScreenOnceItsHeightHasScrolled() {
+        XCTAssertEqual(HomeDesign.Metric.glowHeight, 440)
+        let bottom = GlowSpec.offset(scroll: 440) + HomeDesign.Metric.glowHeight
+        XCTAssertLessThanOrEqual(bottom, 0)
+    }
+
+    func testTheGlowSpecIsTheDesign() {
+        XCTAssertEqual(GlowSpec.imageOpacity, 0.95)
+        XCTAssertEqual(GlowSpec.imageWidthRatio, 1.513, accuracy: 0.0005)
+        XCTAssertEqual(GlowSpec.imageHeight, 720)
+        XCTAssertEqual(GlowSpec.imageTop, -170)
+        XCTAssertEqual(GlowSpec.gradientStops.map(\.opacity), [0.22, 0.08, 0.70, 1.0])
+        XCTAssertEqual(GlowSpec.gradientStops.map(\.location), [0, 0.35, 0.78, 1.0])
+    }
+
+    // MARK: Model
+
+    func testActiveIsTheFocusedPosterElseTheIdleOne() {
+        let model = HomeGlowModel()
+        XCTAssertNil(model.active)
+        XCTAssertNil(model.activeURL)
+
+        model.idle = media(id: "idle", backdrop: "https://example.com/idle-backdrop.jpg", poster: "https://example.com/idle.jpg")
+        XCTAssertEqual(model.active?.id, model.idle?.id)
+        XCTAssertEqual(model.activeURL, URL(string: "https://example.com/idle-backdrop.jpg"))
+
+        model.focused = media(id: "focus", backdrop: nil, poster: "https://example.com/focus.jpg")
+        XCTAssertEqual(model.active?.ref.mediaId, "focus")
+        XCTAssertEqual(model.activeURL, URL(string: "https://example.com/focus.jpg"), "no backdrop falls back to the poster")
+
+        model.focused = nil
+        XCTAssertEqual(model.active?.ref.mediaId, "idle")
+    }
+
+    func testScrollOffsetDoesNotChangeWhatIsShown() {
+        let model = HomeGlowModel()
+        model.idle = media(id: "idle", backdrop: nil, poster: "https://example.com/idle.jpg")
+        let before = model.activeURL
+        model.scrollOffset = 300
+        XCTAssertEqual(model.activeURL, before)
+    }
+
+    // MARK: Requests
+
+    func testTheGlowLoadsTheBakedGlowThumbnail() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.com/a.jpg"))
+        let glow = BlurredArt.Style.glow
+        // What the glow's image layer hands the image view.
+        let layerRequest = try XCTUnwrap(SpineImagePipeline.request(
+            url: url,
+            thumbnailSize: glow.thumbnailSize,
+            processors: [glow.processor]
+        ))
+        let expected = try XCTUnwrap(BlurredArt.request(url: url, style: .glow))
+        let cache = ImagePipeline.shared.cache
+        XCTAssertEqual(cache.makeImageCacheKey(for: layerRequest), cache.makeImageCacheKey(for: expected))
+        XCTAssertEqual(glow.thumbnailSize, CGSize(width: 64, height: 77))
+        XCTAssertNotNil(layerRequest.thumbnail)
+        XCTAssertEqual(layerRequest.processors.count, 1)
+
+        let m = media(id: "x", backdrop: "https://example.com/a.jpg", poster: nil)
+        let prefetch = try XCTUnwrap(HomeGlow.request(for: m))
+        XCTAssertEqual(cache.makeImageCacheKey(for: prefetch), cache.makeImageCacheKey(for: expected))
+        XCTAssertNil(HomeGlow.request(for: nil))
+        XCTAssertNil(HomeGlow.request(for: media(id: "none", backdrop: nil, poster: nil)))
+    }
+
+    func testNeighborsAreTwoEitherSideOfTheFocus() {
+        let items = (0 ..< 8).map { media(id: "\($0)", backdrop: nil, poster: "https://example.com/\($0).jpg") }
+        XCTAssertEqual(HomeGlow.neighbors(of: 4, in: items).map(\.ref.mediaId), ["2", "3", "5", "6"])
+        XCTAssertEqual(HomeGlow.neighbors(of: 0, in: items).map(\.ref.mediaId), ["1", "2"])
+        XCTAssertEqual(HomeGlow.neighbors(of: 7, in: items).map(\.ref.mediaId), ["5", "6"])
+        XCTAssertTrue(HomeGlow.neighbors(of: 9, in: items).isEmpty)
+    }
+
+    // MARK: Source
+
+    func testTheGlowAppliesNothingLive() throws {
+        let tiles = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Spine/Features/Home/Tiles")
+        for name in ["HomeGlow.swift", "HomeGlowModel.swift"] {
+            let source = try String(contentsOf: tiles.appendingPathComponent(name), encoding: .utf8)
+            XCTAssertFalse(source.contains(".blur("), "\(name)")
+            XCTAssertFalse(source.contains("compositingGroup"), "\(name)")
+            XCTAssertFalse(source.contains("GeometryReader"), "\(name)")
+            XCTAssertFalse(source.contains(".mask"), "\(name)")
+        }
+        let view = try String(contentsOf: tiles.appendingPathComponent("HomeGlow.swift"), encoding: .utf8)
+        XCTAssertTrue(view.contains("PerfCounters.bump(.glowBody)"))
+    }
+
+    private func media(id: String, backdrop: String?, poster: String?) -> MediaSummary {
+        MediaSummary(
+            ref: MediaRef(itemId: nil, source: "tmdb", mediaType: "movie", mediaId: id, seasonNumber: nil, episodeNumber: nil),
+            title: "Title \(id)",
+            posterUrl: poster,
+            backdropUrl: backdrop
+        )
+    }
+}
