@@ -144,6 +144,7 @@ final class ActivityPhase5Tests: XCTestCase {
         """)
         XCTAssertEqual(day.results.map(\.title), ["Severance", "Andor"])
         XCTAssertEqual(day.count, 2)
+        XCTAssertEqual(try decode(PlanningDay.self, #"{"count": 2}"#).results.count, 0)
         let bare = try decode(PlanningDay.self, #"{"results": []}"#)
         XCTAssertTrue(bare.results.isEmpty)
     }
@@ -258,7 +259,7 @@ final class ActivityPhase5Tests: XCTestCase {
         XCTAssertNil(presentation.patch(for: "120"))
     }
 
-    func testTheNewestRowsNumberOnlyNeedsToChangeOrMoveDay() throws {
+    func testTheNewestRowNeedsANewNumberToSave() throws {
         let edit = try decode(ProgressEdit.self, """
         {"mode": "save", "value": 200, "unit": "page", "kind": "pages", "date": "2025-12-27", "min": null, "max": 400}
         """)
@@ -267,7 +268,7 @@ final class ActivityPhase5Tests: XCTestCase {
         XCTAssertNil(presentation.validation(for: "150"), "A drop is fine on the newest row")
         XCTAssertEqual(presentation.validation(for: "401"), "Enter 400 or less.")
         XCTAssertFalse(presentation.canSave(input: "200"))
-        XCTAssertTrue(presentation.canSave(input: "200", dateChanged: true))
+        XCTAssertTrue(presentation.canSave(input: "199"), "A new day alone writes nothing on the server, so it doesn't save")
         XCTAssertNil(presentation.patch(for: "150"), "The newest row saves again; it has no PATCH")
     }
 
@@ -332,8 +333,10 @@ final class ActivityPhase5Tests: XCTestCase {
         let late = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 12, day: 20, hour: 23, minute: 30)))
         let request = ProgressUpdateSaveRequest(mode: .pages, value: 120)
         XCTAssertNil(request.progressedOn, "A save from elsewhere sends no day")
-        XCTAssertEqual(request.dated(late, calendar: calendar).progressedOn, "2026-12-20")
-        XCTAssertEqual(request.dated(late, calendar: calendar).value, 120)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2027, month: 1, day: 2, hour: 9)))
+        XCTAssertEqual(request.dated(late, now: now, calendar: calendar).progressedOn, "2026-12-20")
+        XCTAssertEqual(request.dated(late, now: now, calendar: calendar).value, 120)
+        XCTAssertNil(request.dated(now, now: now, calendar: calendar).progressedOn, "Today sends no day; the server's today is the owner's")
     }
 
     func testABookAndASeriesSaveSendTheDayOnlyWhenTheyHaveOne() async throws {

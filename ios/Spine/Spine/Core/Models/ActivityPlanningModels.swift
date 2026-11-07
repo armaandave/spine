@@ -17,6 +17,17 @@ struct PlanningDay: Decodable {
     let summary: String?
     let count: Int?
     let results: [MediaSummary]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        actor = try container.decodeIfPresent(UserSummary.self, forKey: .actor)
+        consumedAt = try container.decodeIfPresent(String.self, forKey: .consumedAt)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        count = try container.decodeIfPresent(Int.self, forKey: .count)
+        results = try container.decodeIfPresent([MediaSummary].self, forKey: .results) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey { case actor, consumedAt, summary, count, results }
 }
 
 extension ActivityItem {
@@ -157,10 +168,10 @@ struct ProgressRowEditPresentation {
         return "Between \(ProgressPercent.text(low)) and \(ProgressPercent.text(high)), the saves either side of it."
     }
 
-    /// A different number, or on the newest row a different day.
-    func canSave(input: String, dateChanged: Bool = false) -> Bool {
+    /// A different number. A new day alone isn't a change: the server records a save only when the number moves.
+    func canSave(input: String) -> Bool {
         guard let value = value(from: input), validation(for: input) == nil else { return false }
-        return value != edit.value || dateChanged
+        return value != edit.value
     }
 
     /// The `PATCH` an older row sends.
@@ -193,9 +204,11 @@ enum ProgressDateWords {
 }
 
 extension ProgressUpdateSaveRequest {
-    /// The same save on the day the sheet's date row names, sent as `progressed_on`.
-    func dated(_ date: Date, calendar: Calendar = .autoupdatingCurrent) -> ProgressUpdateSaveRequest {
+    /// The same save on the day the sheet's date row names, sent as `progressed_on`. Today sends none, so the server
+    /// puts the save on its own today, as an older build's save did, not on the phone's calendar day.
+    func dated(_ date: Date, now: Date = Date(), calendar: Calendar = .autoupdatingCurrent) -> ProgressUpdateSaveRequest {
         var request = self
+        guard !calendar.isDate(date, inSameDayAs: now) else { return request }
         request.progressedOn = CalendarDateCodec.string(from: date, calendar: calendar)
         return request
     }

@@ -162,10 +162,6 @@ struct ProgressRowEditSheet: View {
         ProgressRowEditPresentation(edit: edit, mediaType: mediaType)
     }
 
-    private var dateChanged: Bool {
-        edit.isSave && CalendarDateCodec.string(from: date) != edit.date
-    }
-
     var body: some View {
         let validation = presentation.validation(for: input)
         let warning = errorMessage ?? validation
@@ -180,7 +176,7 @@ struct ProgressRowEditSheet: View {
             footer: warning ?? presentation.footer,
             footerIsWarning: warning != nil,
             finishTitle: nil,
-            canSave: presentation.canSave(input: input, dateChanged: dateChanged),
+            canSave: presentation.canSave(input: input),
             isSaving: isSaving,
             date: edit.isSave ? $date : nil,
             showsMore: false,
