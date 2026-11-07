@@ -14,6 +14,7 @@ from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
+from api.serializers.auth import token_response
 from api.services import activity_rows, progress_posts
 from api.tests.feed_fixtures import address_of, show_with_episodes, tick
 from api.tests.test_activity_calc_books import BookCalcBase, d
@@ -563,3 +564,39 @@ class StandingRowsAgreeWithTheOwnersTests(WireBase):
         owners = {(row.title_key, row.day) for row in activity_rows.rows_for([self.owner], self.owner).rows if not row.log_id}
         standing = {(row.title_key, row.day) for row in activity_rows.standing_rows([self.owner.pk])}
         self.assertEqual(owners, standing)
+
+
+class ProfileActivityCountTests(WireBase):
+    """The profile's Activity row says how many rows its list holds, for each viewer."""
+
+    logs = PrivacyTests.logs
+
+    def count(self, viewer, path="/api/v1/users/owner/"):
+        response = self.client_for(viewer).get(path)
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()["counts"]["activity"]
+
+    def test_the_count_is_the_rows_each_viewer_sees_on_the_list(self):
+        self.books()
+        self.logs()
+        for viewer in (self.owner, self.follower, self.stranger):
+            with self.subTest(viewer=viewer.username):
+                seen, _pages = self.pages_to_the_end(viewer, {})
+                self.assertEqual(self.count(viewer), len(seen))
+        self.assertEqual(self.count(self.owner, "/api/v1/me/"), len(self.pages_to_the_end(self.owner, {})[0]))
+        # The followers-only log is one row the stranger doesn't get.
+        self.assertEqual(self.count(self.follower), self.count(self.stranger) + 1)
+
+    def test_a_mark_adds_nothing_and_a_private_account_counts_zero_for_strangers(self):
+        before = self.count(self.owner, "/api/v1/me/")
+        self.do(book_tracking.mark_read, self.book("marked only", pages=200), d(2026, 7, 1))
+        self.assertEqual(self.count(self.owner, "/api/v1/me/"), before)
+        self.books()
+        self.owner.profile_private = True
+        self.owner.save(update_fields=["profile_private"])
+        self.assertGreater(self.count(self.follower), 0)
+        self.assertEqual(self.client_for(self.stranger).get("/api/v1/users/owner/").json()["counts"].get("activity", 0), 0)
+
+    def test_sign_in_leaves_the_count_out(self):
+        self.books()
+        self.assertNotIn("activity", token_response(self.owner)["user"]["counts"])

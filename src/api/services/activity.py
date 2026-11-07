@@ -289,6 +289,14 @@ def profile_response(request, user):
     return response
 
 
+def activity_count(user, viewer):
+    """Return how many rows the viewer sees on this profile's Activity list."""
+    if not can_view_user_profile(viewer, user):
+        return 0
+    calculation = _exposed(activity_rows.rows_for([user], viewer, piles=False))
+    return len(activity_list.select(calculation, activity_list.Filters()))
+
+
 def _exposed(calculation):
     """Keep the rows and piles of the types the server exposes."""
     allowed = set(exposure.primary_media_types())

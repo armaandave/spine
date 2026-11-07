@@ -2018,8 +2018,7 @@ enum ProfileMenuDestination: CaseIterable, Hashable {
         switch self {
         case .library: counts.libraryItems
         case .diary: counts.diaryEntries
-        // No count: a real one would put a whole walk of the history in /me/.
-        case .activity: nil
+        case .activity: counts.activity
         case .stats: nil
         case .reviews: counts.reviews
         case .lists: counts.lists

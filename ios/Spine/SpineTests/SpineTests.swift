@@ -7997,12 +7997,15 @@ final class SpineTests: XCTestCase {
               "reviews": 6,
               "planned_items": 7,
               "liked_items": 8,
-              "tags": 9
+              "tags": 9,
+              "activity": 10
             }
             """.data(using: .utf8)!
         )
 
         XCTAssertEqual(oldCounts.libraryItems, 0)
+        XCTAssertNil(oldCounts.activity)
+        XCTAssertEqual(newCounts.activity, 10)
         XCTAssertEqual(oldCounts.reviews, 0)
         XCTAssertEqual(newCounts.libraryItems, 5)
         XCTAssertEqual(newCounts.reviews, 6)
@@ -8021,7 +8024,8 @@ final class SpineTests: XCTestCase {
             reviews: 3,
             plannedItems: 5,
             likedItems: 6,
-            tags: 7
+            tags: 7,
+            activity: 8
         )
 
         XCTAssertEqual(ProfileMenuDestination.allCases.map(\.title), [
@@ -8035,7 +8039,7 @@ final class SpineTests: XCTestCase {
             "Tags",
             "Stats",
         ])
-        XCTAssertEqual(ProfileMenuDestination.allCases.map { $0.count(from: counts) }, [1, 2, nil, 3, 4, 5, 6, 7, nil])
+        XCTAssertEqual(ProfileMenuDestination.allCases.map { $0.count(from: counts) }, [1, 2, 8, 3, 4, 5, 6, 7, nil])
     }
 
     private func profileFixture(
