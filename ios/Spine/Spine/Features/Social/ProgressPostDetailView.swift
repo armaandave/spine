@@ -121,7 +121,7 @@ struct ProgressPostDetailView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            SpinePageBackground()
+            PostPageBackground(url: pageArtURL, accentHex: pageAccentHex)
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
@@ -284,6 +284,20 @@ struct ProgressPostDetailView: View {
             }
     }
 
+    /// The art behind the whole page: the title's backdrop when it has one, else its poster.
+    private var pageArtURL: URL? {
+        guard let media = viewModel.activity?.media else { return nil }
+        return PostPageStyle.artURL(
+            mediaType: media.ref.mediaType,
+            posterURL: media.displayPosterURL,
+            detail: viewModel.mediaDetail
+        )
+    }
+
+    private var pageAccentHex: String? {
+        viewModel.mediaDetail?.posterAccentColor ?? viewModel.activity?.media?.posterAccentColor
+    }
+
     private func content(_ activity: ActivityItem) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             if let media = activity.media {
@@ -295,6 +309,9 @@ struct ProgressPostDetailView: View {
                     .font(.system(size: 21, weight: .heavy))
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
+
+                PostHairline()
+                    .padding(.top, 6)
 
                 PostCommentsSection(model: viewModel.engagement)
 
@@ -308,34 +325,25 @@ struct ProgressPostDetailView: View {
 
     private func hero(_ activity: ActivityItem, media: MediaSummary) -> some View {
         HStack(alignment: .bottom, spacing: 14) {
-            MediaArtwork(
+            PostHeroPoster(
                 url: viewModel.mediaDetail?.displayPosterURL ?? media.displayPosterURL,
                 title: media.title,
-                slot: .hero,
                 mediaType: media.ref.mediaType,
                 orientation: viewModel.mediaDetail?.posterOrientation ?? media.posterOrientation
             )
-            .shadow(color: .black.opacity(0.48), radius: 22, y: 12)
 
-            VStack(alignment: .leading, spacing: 10) {
-                PostAuthorLink(user: activity.actor, avatarSize: 24, spacing: 7, font: .system(size: 14, weight: .semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                PostHeroAuthorLine(user: activity.actor)
 
-                Text(media.ref.mediaType == "tv" ? "TV" : media.ref.mediaType.capitalized)
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.56))
-                    .textCase(.uppercase)
+                PostHeroTypeLabel(text: media.ref.mediaType == "tv" ? "TV" : media.ref.mediaType.capitalized)
 
                 if let date = ActivityTimestampFormatter.text(for: activity) {
                     Text(date)
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.72))
+                        .font(PostPageStyle.loggedFont)
+                        .foregroundStyle(.white.opacity(0.86))
                 }
 
-                Text(media.displayTitle)
-                    .font(.system(size: 31, weight: .black))
-                    .foregroundStyle(.white)
-                    .lineLimit(4)
-                    .minimumScaleFactor(0.72)
+                PostHeroTitle(text: media.displayTitle)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -347,14 +355,6 @@ struct ProgressPostDetailView: View {
         // The back button ends 50 pt below the safe area; the artwork starts 18 pt under it, as on a log's page.
         .padding(.top, topSafeAreaInset + 68)
         .padding(.bottom, 4)
-        .background {
-            LogHeroArtwork(
-                mediaType: media.ref.mediaType,
-                posterURL: media.displayPosterURL,
-                detail: viewModel.mediaDetail
-            )
-            .offset(y: BackdropLayout.topOffset)
-        }
     }
 }
 
