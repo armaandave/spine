@@ -1016,7 +1016,7 @@ struct ProfileListRow: View {
 
                 Spacer(minLength: 0)
 
-                ListMediaTypeIcons(mediaTypes: list.mediaTypes)
+                ListMediaTypeIcons(mediaTypes: list.mediaTypes, isPeople: list.listType == .people)
                     .opacity(0.52)
                     .padding(.top, 3)
 
@@ -1025,16 +1025,6 @@ struct ProfileListRow: View {
                     .foregroundStyle(.white.opacity(0.52))
                     .lineLimit(1)
                     .padding(.top, 3)
-
-                if list.listType == .people {
-                    Text("People")
-                        .font(.system(size: 10, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.68))
-                        .padding(.horizontal, 7)
-                        .frame(height: 21)
-                        .background(.white.opacity(0.1), in: Capsule())
-                        .padding(.top, 1)
-                }
 
                 if list.isRanked {
                     Text("Ranked")
@@ -2074,17 +2064,8 @@ struct ProfileListDetailView: View {
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(.white.opacity(0.72))
 
-                ListMediaTypeIcons(mediaTypes: list.mediaTypes, size: 12)
+                ListMediaTypeIcons(mediaTypes: list.mediaTypes, isPeople: list.listType == .people, size: 12)
                     .opacity(0.72)
-
-                if list.listType == .people {
-                    Text("People")
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.76))
-                        .padding(.horizontal, 8)
-                        .frame(height: 22)
-                        .background(.white.opacity(0.13), in: Capsule())
-                }
 
                 if list.isRanked {
                     Text("Ranked")
