@@ -422,6 +422,12 @@ def row_address(row):
     """Return the id that opens a day's progress: ``object.id`` on the feed."""
     if row.progress_id and row.bucket in CHANGE_ADDRESSED:
         return row.progress_id
+    if row.title_id > ITEM_LIMIT or row.actor_id > USER_LIMIT:
+        # Packed, it would name another title; SHIP.md stops before the ids get here.
+        if row.progress_id:
+            return row.progress_id
+        msg = f"Row address overflow: person {row.actor_id}, Item {row.title_id}"
+        raise OverflowError(msg)
     return (row.actor_id << (ITEM_BITS + DAY_BITS)) | (row.title_id << DAY_BITS) | row.day.toordinal()
 
 
@@ -603,9 +609,16 @@ def _page_size(request):
 
 
 def _encode_cursor(key):
-    day, tie, kind, row_id, title_id = key
+    day, tie, kind, row_id, title_id, actor_id = key
     data = json.dumps(
-        {"day": day.isoformat(), "tie": tie.isoformat(), "kind": kind, "id": row_id, "title": title_id},
+        {
+            "day": day.isoformat(),
+            "tie": tie.isoformat(),
+            "kind": kind,
+            "id": row_id,
+            "title": title_id,
+            "actor": actor_id,
+        },
     )
     return base64.urlsafe_b64encode(data.encode()).decode()
 
@@ -622,6 +635,7 @@ def _decode_cursor(request):
             int(data["kind"]),
             int(data["id"]),
             int(data.get("title", 0)),
+            int(data.get("actor", 0)),
         )
     except (binascii.Error, ValueError, KeyError, TypeError) as error:
         raise NotFound("Invalid cursor.") from error
