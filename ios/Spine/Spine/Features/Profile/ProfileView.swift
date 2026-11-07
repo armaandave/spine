@@ -741,7 +741,12 @@ struct ProfileView: View {
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
-                viewModel.markStale()
+                if selectedRef == nil && selectedPerson == nil {
+                    // A change from another tab: nothing of the profile is open, so reload as before.
+                    Swift.Task<Void, Never> { await viewModel.reload() }
+                } else {
+                    viewModel.markStale()
+                }
             }
             .fullScreenCover(item: $selectedRef, onDismiss: {
                 selectedRef = nil
