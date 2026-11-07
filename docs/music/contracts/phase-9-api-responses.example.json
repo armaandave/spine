@@ -914,6 +914,7 @@
     "avatar_url": null,
     "bio": "",
     "counts": {
+      "activity": 1,
       "diary_entries": 1,
       "followers": 0,
       "following": 0,
