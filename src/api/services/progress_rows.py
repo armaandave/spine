@@ -114,8 +114,18 @@ class Plan:
 
     @property
     def deletable(self):
-        """Whether the day's saves are the newest the read has: nothing since."""
-        return self.changes[len(self.changes) - len(self.on_day) :] == self.on_day
+        """Whether the day's saves are the newest the read has: no number saved since.
+
+        A retype of the same number is not a row, so one made later doesn't count.
+        """
+        numbers = [change for change in self.changes if _kind(change) != TOUCH]
+        return numbers[len(numbers) - len(self.counted) :] == self.counted
+
+    @property
+    def touches_after(self):
+        """The retypes of a same number made after the day's last save."""
+        newest = max(change.pk for change in self.on_day)
+        return [change for change in self.changes if _kind(change) == TOUCH and change.pk > newest]
 
     @property
     def title_key(self):
@@ -142,6 +152,13 @@ class Plan:
             return {**base, "mode": "save", "min": None, "max": self._limit()}
         following = later[0]
         if _kind(following) != self.kind or following.previous_progress.get("kind") != self.kind:
+            return None
+        # The next save made must also be the next day in date order, or the fix would
+        # move pages onto a row the owner never edited.
+        later_days = [
+            day for day in (activity_rows.saved_day(change, self.zone) for change in self.track) if day > self.day
+        ]
+        if not later_days or activity_rows.saved_day(following, self.zone) != min(later_days):
             return None
         same = [change for change in self.counted if _kind(change) == self.kind]
         positions = [self.track.index(change) for change in same]
@@ -269,7 +286,8 @@ def delete(owner, item, day, *, by):
         raise ProgressRowConflict
     _restore_place(plan)
     ids = [change.pk for change in plan.on_day]
-    progress_posts.delete_changes(owner.pk, ProgressChange.objects.filter(pk__in=ids))
+    gone = ids + [change.pk for change in plan.touches_after]
+    progress_posts.delete_changes(owner.pk, ProgressChange.objects.filter(pk__in=gone))
     if by.pk != owner.pk:
         SocialAuditLog.objects.create(
             actor=by,

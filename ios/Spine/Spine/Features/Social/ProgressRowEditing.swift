@@ -129,9 +129,9 @@ enum ProgressRowEditError: LocalizedError {
     }
 }
 
-/// Edit on a progress page: the shared progress form with the row's number in it. The newest row also shows its day;
-/// an older row keeps its own day and is held between the saves either side of it. No ⋯: the read's own actions
-/// (pause, restart, delete) belong to the title's page.
+/// Edit on a progress page: the shared progress form with the row's number in it. The row keeps its own day, since a
+/// different date would be a new save, not a fix; an older row is held between the saves either side of it. No ⋯: the
+/// read's own actions (pause, restart, delete) belong to the title's page.
 struct ProgressRowEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var input: String
@@ -178,7 +178,7 @@ struct ProgressRowEditSheet: View {
             finishTitle: nil,
             canSave: presentation.canSave(input: input),
             isSaving: isSaving,
-            date: edit.isSave ? $date : nil,
+            date: nil,
             showsMore: false,
             onSave: save,
             onFinish: {}

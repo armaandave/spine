@@ -254,6 +254,15 @@ class DeleteTests(RowEditBase):
         self.assertEqual(_place_book(item), 200)
         self.assertEqual(self.told(item), {"2025-12-27": 200})
 
+    def test_a_same_number_resave_on_a_later_day_does_not_stop_the_delete(self):
+        family = FAMILIES["game"]
+        item = self.sheet(family, ((30, DEC_20), (60, DEC_20), (60, DEC_27)))
+        row = self.rows(item)["2025-12-20"]
+        self.assertTrue(self.page(row).json()["viewer"]["can_delete"])
+        self.assertEqual(self.page(row, method="delete").status_code, 204)
+        self.assertIsNone(family.place(item))
+        self.assertFalse(ProgressChange.objects.filter(item=item, current_progress__kind="minutes").exists())
+
     def test_who_may(self):
         family = FAMILIES["book"]
         item = self.sheet(family, ((100, NOV_2), (120, DEC_20)))
@@ -343,6 +352,15 @@ class FixTests(RowEditBase):
         self.assertEqual([c.current_progress["value"] for c in changes], [100, 110, 200])
         book = Book.objects.get(item=item)
         self.assertEqual(book.current_session.progressed_on, DEC_27)
+
+    def test_a_row_is_not_fixable_when_the_next_save_made_belongs_to_an_earlier_day(self):
+        family = FAMILIES["book"]
+        item = self.sheet(family, ((100, DEC_20), (200, DEC_27), (210, DEC_20)))
+        before = self.told(item)
+        row = self.rows(item)["2025-12-27"]
+        self.assertFalse(self.page(row).json()["viewer"]["can_edit"])
+        self.assertEqual(self.page(row, method="patch", value=130).status_code, 400)
+        self.assertEqual(self.told(item), before)
 
     def test_the_number_stays_between_the_saves_either_side(self):
         for name, family in FAMILIES.items():
