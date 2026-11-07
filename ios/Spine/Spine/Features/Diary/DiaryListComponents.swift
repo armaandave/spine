@@ -431,7 +431,11 @@ struct DiaryEntryRow: View {
     }
 
     private var titleText: AttributedString {
-        let parts = titleParts
+        Self.titleText(titleParts)
+    }
+
+    /// The title in white, its year greyed.
+    static func titleText(_ parts: (title: String, year: String?)) -> AttributedString {
         var text = AttributedString(parts.title)
         text.foregroundColor = .white
 
@@ -451,7 +455,16 @@ struct DiaryEntryRow: View {
 
     /// The title and its trailing "(2008)" year. TV logs read "Show · Season 1" or "Show · S1 E4 · Title" (TV-702).
     static func titleParts(for media: DiaryMedia) -> (title: String, year: String?) {
-        let title = TVTrackingPresentation.diaryTitle(for: media).trimmingCharacters(in: .whitespacesAndNewlines)
+        splitYear(TVTrackingPresentation.diaryTitle(for: media))
+    }
+
+    /// The same for a title on the Activity list.
+    static func titleParts(for media: MediaSummary) -> (title: String, year: String?) {
+        splitYear(TVTrackingPresentation.diaryTitle(for: media))
+    }
+
+    private static func splitYear(_ rawTitle: String) -> (title: String, year: String?) {
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard title.hasSuffix(")") else {
             return (title, nil)
         }
@@ -584,7 +597,7 @@ struct DiaryStarRating: View {
     }
 }
 
-private struct DiaryDateBadge: View {
+struct DiaryDateBadge: View {
     let rawValue: String?
     let mediaType: String
 

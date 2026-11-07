@@ -1,37 +1,26 @@
 """Activity: logs and each day's progress, newest first (docs/activity-contract.md).
 
-Activity is computed from the diary and from recorded progress changes, so it can't
-drift from them. A page merges both, ordered by local calendar day: a log by its log
-date, a day's progress by that day. Within a day, the most recently written comes first.
+Activity is the Activity calculation's rows (api.services.activity_rows), so it can't
+drift from Stats or from the Activity list. A page merges logs and days' progress,
+ordered by the person's calendar day: a log by its log date, a day's progress by the day
+it was saved on. Within a day, the most recently written comes first.
 """
 
 import base64
 import binascii
 import json
 from datetime import UTC, date, datetime
-from functools import reduce
-from operator import or_
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.db.models import (
     Case,
-    CharField,
     Count,
     DateField,
-    Exists,
-    FloatField,
-    IntegerField,
-    Max,
-    Min,
-    OuterRef,
     Q,
-    Sum,
-    Value,
     When,
 )
-from django.db.models.fields.json import KT
-from django.db.models.functions import Cast, Coalesce, Concat, TruncDate, TruncDay
+from django.db.models.functions import TruncDate, TruncDay
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -42,10 +31,12 @@ from rest_framework.utils.urls import replace_query_param
 from api.permissions import can_view_user_profile
 from api.serializers.common import (
     media_summary_from_item,
+    prime_collection_items,
     progress_for_media,
     tv_season_started,
     user_summary,
 )
+from api.services import activity_list, activity_rows
 from api.services import diary as diary_service
 from app import exposure, single_weight, tv_tracking, user_calendar
 from app.curation import prime_curated_artwork
@@ -73,6 +64,9 @@ from social.models import (
 PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
 
+_number = activity_list.number
+_minutes_label = activity_list.minutes_label
+
 # A day's progress is told in the first of these units that moved forward, so a game
 # played for an hour and 5% further reads as time played, and a start shows only on a
 # day without progress.
@@ -82,9 +76,6 @@ CALENDAR_LOG_TYPES = (*TV_TYPES, MediaTypes.ANIME.value, MediaTypes.MANGA.value,
 SHOW_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value)
 # The statuses with progress worth telling: finishing a title says it all.
 UNFINISHED = (Status.IN_PROGRESS.value, Status.PAUSED.value, Status.DROPPED.value)
-
-# Within one date and write time, logs sort before progress.
-PROGRESS, LOG = 0, 1
 
 
 def profile_sources(viewer, target_user):
@@ -242,51 +233,137 @@ def _row_moved_at(row):
     return row.progressed_at or row.created_at
 
 
-def media_type_family(media_type):
-    """Return a media type's item types: a show with its seasons and episodes."""
-    return list(TV_TYPES) if media_type == MediaTypes.TV.value else [media_type]
+def followed_users(user):
+    """Return the people a user follows."""
+    return list(
+        get_user_model().objects.filter(
+            follower_edges__from_user=user,
+            follower_edges__status=FollowStatus.ACCEPTED,
+        ),
+    )
 
 
-def page_response(request, logs, progress):
-    """Return one cursor page of activity in the shape installed apps read."""
+def feed_response(request):
+    """Return the activity of the people the current user follows, one cursor page."""
+    media_type = request.query_params.get("media_type")
+    filters = activity_list.Filters()
+    if media_type:
+        exposure.require_media_type(media_type)
+        filters.media_type = MediaTypes.TV.value if media_type in TV_TYPES else media_type
+    people = followed_users(request.user)
+    calculation = activity_rows.rows_for(
+        people,
+        request.user,
+        types=[filters.media_type] if filters.media_type else None,
+        piles=False,
+    )
+    rows = activity_list.select(_exposed(calculation), filters)
+    return page_response(request, rows)
+
+
+def profile_response(request, user):
+    """Return a profile's activity, one cursor page.
+
+    A list opened from a Stats number has a type, a range of days or a count (5.6). It
+    then also says, to signed-in viewers, the number it adds up to, the type's total and
+    what that number includes with no date.
+    """
+    if not can_view_user_profile(request.user, user):
+        return Response({"next_cursor": None, "previous_cursor": None, "results": []})
+    filters = activity_list.parse_filters(request.query_params)
+    calculation = activity_rows.rows_for(
+        [user],
+        request.user,
+        types=[filters.media_type] if filters.media_type else None,
+        piles=activity_list.needs_piles(filters),
+    )
+    calculation = _exposed(calculation)
+    rows = activity_list.select(calculation, filters)
+    # A list opened from a number, or asked to be a list, reads as the Diary does.
+    list_view = filters.asked or request.query_params.get("view") == "list"
+    response = page_response(request, rows, list_view=list_view)
+    if filters.asked and request.user.is_authenticated:
+        response.data.update(activity_list.extras(calculation, filters, rows, user))
+        if _decode_cursor(request):
+            response.data["undated"] = None
+    return response
+
+
+def activity_count(user, viewer):
+    """Return how many rows the viewer sees on this profile's Activity list."""
+    if not can_view_user_profile(viewer, user):
+        return 0
+    calculation = _exposed(activity_rows.rows_for([user], viewer, piles=False))
+    return len(activity_list.select(calculation, activity_list.Filters()))
+
+
+def _exposed(calculation):
+    """Keep the rows and piles of the types the server exposes."""
+    allowed = set(exposure.primary_media_types())
+    calculation.rows = [row for row in calculation.rows if row.bucket in allowed]
+    calculation.piles = [pile for pile in calculation.piles if pile.bucket in allowed]
+    return calculation
+
+
+def page_response(request, rows, *, list_view=False):
+    """Return one cursor page of these rows, newest first, in the shape apps read."""
     size = _page_size(request)
     after = _decode_cursor(request)
-    days = _progress_days(progress).order_by("-day", "-last_at", "-progress_id")
-    logs = (
-        logs.select_related("user", "item")
-        .annotate(log_day=_log_day())
-        .order_by("-log_day", "-created_at", "-id")
-    )
     if after:
-        logs = _logs_after(logs, after)
-        days = _days_after(days, after)
-    rows = [(_log_key(entry), entry) for entry in logs[: size + 1]]
-    rows += [(_day_key(day), day) for day in days[: size + 1]]
-    rows.sort(key=lambda row: row[0], reverse=True)
+        rows = [row for row in rows if activity_list.row_order(row) < after]
     page = rows[:size]
-
-    entries = [row for key, row in page if key[2] == LOG]
-    progress_days = [row for key, row in page if key[2] == PROGRESS]
-    actors, titles = _day_people_and_titles(progress_days)
-    prime_curated_artwork([entry.item for entry in entries] + list(titles.values()))
-    diary_service.prime_diary_likes(entries, request.user)
-    engagement = _day_engagement(progress_days, request.user)
-    results = [
-        _log_payload(row, request)
-        if key[2] == LOG
-        else _day_payload(row, actors, titles, request, engagement)
-        for key, row in page
-    ]
+    results = _page_items(page, request, list_view=list_view)
     next_cursor = None
     if len(rows) > size:
         next_cursor = replace_query_param(
             request.build_absolute_uri(),
             "cursor",
-            _encode_cursor(page[-1][0]),
+            _encode_cursor(activity_list.row_order(page[-1])),
         )
     return Response(
         {"next_cursor": next_cursor, "previous_cursor": None, "results": results},
     )
+
+
+def _page_items(page, request, *, list_view):
+    """Turn a page of rows into the items a client reads."""
+    entries = {
+        entry.pk: entry
+        for entry in DiaryEntry.objects.filter(pk__in=[row.log_id for row in page if row.log_id]).select_related(
+            "user",
+            "item",
+        )
+    }
+    for row in page:
+        if row.log_id in entries:
+            entries[row.log_id].log_day = row.day
+    progress = [row for row in page if not row.log_id]
+    actors = get_user_model().objects.in_bulk({row.actor_id for row in page})
+    titles = Item.objects.in_bulk({row.title_id for row in progress})
+    items = [*(entry.item for entry in entries.values()), *titles.values()]
+    if list_view:
+        prime_collection_items(items, request.user)
+        diary_service.prime_show_titles(entries.values())
+    else:
+        prime_curated_artwork(items)
+    diary_service.prime_diary_likes(entries.values(), request.user)
+    engagement = _day_engagement([_post_key(row) for row in progress], request.user)
+    results = []
+    for row in page:
+        if row.log_id:
+            entry = entries.get(row.log_id)
+            if entry is not None:
+                results.append(_log_payload(entry, request, row, list_view=list_view))
+        elif row.title_id in titles:
+            results.append(
+                _row_payload(row, actors[row.actor_id], titles[row.title_id], request, engagement, list_view=list_view),
+            )
+    return results
+
+
+def _post_key(row):
+    """Return what a day's likes and comments attach to: the person, title and day."""
+    return {"actor_id": row.actor_id, "title_key": row.title_key, "day": row.day}
 
 
 def _visible_logs(queryset, *, follows):
@@ -297,56 +374,6 @@ def _visible_logs(queryset, *, follows):
     return queryset.filter(
         Q(item__media_type__in=list(single_weight.HALF_STAR_MEDIA_TYPES))
         | Q(visibility__in=visibilities),
-    )
-
-
-def saved_day():
-    """Return a save's fixed day (AC-2), which every viewer reads alike.
-
-    A row from before saved_on reads its moment in one named zone: the viewer's would
-    put one person's likes on two days.
-    """
-    return Coalesce(
-        "saved_on",
-        TruncDate("created_at", tzinfo=user_calendar.server_tz()),
-        output_field=DateField(),
-    )
-
-
-def _progress_days(changes):
-    """Group progress changes into one row per person, title, and day.
-
-    A show's and its seasons' changes count toward the show. Each unit's net change is
-    summed, and a day that didn't move forward is left out. Only rows in a counted unit
-    enter the group: a status move can't change a day's id or its place in the order.
-    A game's change that a log wrote is that log's while it exists, not a day's
-    progress; once the log is deleted it's its saved day's again (GM-219).
-    """
-    return (
-        changes.filter(current_progress__unit__in=UNITS)
-        .annotate(log_ref=Cast(KT("current_progress__log_id"), IntegerField()))
-        .exclude(Exists(DiaryEntry.objects.filter(pk=OuterRef("log_ref"))))
-        .annotate(
-            day=saved_day(),
-            title_key=Case(
-                When(
-                    item__media_type__in=SHOW_TYPES,
-                    then=Concat(Value("tv:"), "item__source", Value(":"), "item__media_id"),
-                ),
-                default=Concat(Value("item:"), Cast("item_id", CharField())),
-                output_field=CharField(),
-            ),
-            delta=Cast(KT("current_progress__value"), FloatField())
-            - Cast(KT("previous_progress__value"), FloatField()),
-        )
-        .values("actor_id", "title_key", "day")
-        .annotate(
-            progress_id=Min("id"),
-            last_at=Max("created_at"),
-            any_item_id=Min("item_id"),
-            **{f"amount_{unit}": Sum("delta", filter=Q(current_progress__unit=unit)) for unit in UNITS},
-        )
-        .filter(reduce(or_, (Q(**{f"amount_{unit}__gt": 0}) for unit in UNITS)))
     )
 
 
@@ -368,65 +395,10 @@ def _log_day():
     )
 
 
-# Every item sorts by (calendar day, last written, kind, id), newest first.
-def _log_key(entry):
-    return (entry.log_day, entry.created_at, LOG, entry.id)
-
-
-def _day_key(day):
-    return (day["day"], day["last_at"], PROGRESS, day["progress_id"])
-
-
-def _logs_after(logs, key):
-    day, tie, kind, row_id = key
-    after = Q(log_day__lt=day) | Q(log_day=day, created_at__lt=tie)
-    if kind == LOG:
-        after |= Q(log_day=day, created_at=tie, id__lt=row_id)
-    return logs.filter(after)
-
-
-def _days_after(days, key):
-    day, tie, kind, row_id = key
-    after = Q(day__lt=day) | Q(day=day, last_at__lt=tie)
-    if kind == LOG:
-        after |= Q(day=day, last_at=tie)
-    else:
-        after |= Q(day=day, last_at=tie, progress_id__lt=row_id)
-    return days.filter(after)
-
-
-def _day_people_and_titles(days):
-    """Load the people and titles a page of progress days names."""
-    actors = get_user_model().objects.in_bulk({day["actor_id"] for day in days})
-    items = Item.objects.in_bulk(
-        {int(day["title_key"].removeprefix("item:")) for day in days if day["title_key"].startswith("item:")}
-        | {day["any_item_id"] for day in days},
-    )
-    shows = {}
-    show_keys = [day["title_key"].split(":", 2)[1:] for day in days if day["title_key"].startswith("tv:")]
-    if show_keys:
-        shows = {
-            (show.source, show.media_id): show
-            for show in Item.objects.filter(
-                reduce(or_, (Q(source=source, media_id=media_id) for source, media_id in show_keys)),
-                media_type=MediaTypes.TV.value,
-            )
-        }
-    titles = {}
-    for day in days:
-        key = day["title_key"]
-        if key.startswith("tv:"):
-            title = shows.get(tuple(key.split(":", 2)[1:]))
-        else:
-            title = items.get(int(key.removeprefix("item:")))
-        titles[(day["actor_id"], key, day["day"])] = title or items[day["any_item_id"]]
-    return actors, titles
-
-
 def progress_post(viewer, progress_id):
     """Return the saved post of a day's progress the viewer may see, creating it if new.
 
-    Any of the day's changes finds it, as ``object.id`` on the feed does.
+    Any address the day has finds it, as ``object.id`` on the feed does.
     """
     day = progress_day(viewer, progress_id)
     post, _ = ProgressPost.objects.get_or_create(
@@ -437,33 +409,96 @@ def progress_post(viewer, progress_id):
     return post
 
 
-def progress_day(viewer, progress_id):
-    """Return the day's progress one of its changes belongs to, or 404."""
+# A row's address (plan 5.8). A book, game, manga or comic day with a change row keeps
+# the lowest change id, so every id already posted or linked still resolves. Any other
+# row is addressed by what names it: the person, the title and the day. The address sits
+# at or above 2**44, where the change ids never reach, and fits a signed 64-bit id.
+ADDRESS_BASE = 1 << 44
+ITEM_BITS, DAY_BITS = 24, 20
+# What an address can name: an Item below one and a person below the other.
+ITEM_LIMIT = (1 << ITEM_BITS) - 1
+USER_LIMIT = (1 << (63 - ITEM_BITS - DAY_BITS)) - 1
+CHANGE_ADDRESSED = (
+    MediaTypes.BOOK.value,
+    MediaTypes.GAME.value,
+    MediaTypes.MANGA.value,
+    MediaTypes.COMIC.value,
+)
+
+
+def row_address(row):
+    """Return the id that opens a day's progress: ``object.id`` on the feed."""
+    if row.progress_id and row.bucket in CHANGE_ADDRESSED:
+        return row.progress_id
+    if row.title_id > ITEM_LIMIT or row.actor_id > USER_LIMIT:
+        # Packed, it would name another title; SHIP.md stops before the ids get here.
+        if row.progress_id:
+            return row.progress_id
+        msg = f"Row address overflow: person {row.actor_id}, Item {row.title_id}"
+        raise OverflowError(msg)
+    return (row.actor_id << (ITEM_BITS + DAY_BITS)) | (row.title_id << DAY_BITS) | row.day.toordinal()
+
+
+def _from_address(progress_id):
+    """Return (person id, Item id, day) a hybrid address names, or 404."""
+    try:
+        day = date.fromordinal(progress_id & ((1 << DAY_BITS) - 1))
+    except ValueError as error:
+        raise Http404 from error
+    return progress_id >> (ITEM_BITS + DAY_BITS), (progress_id >> DAY_BITS) & ((1 << ITEM_BITS) - 1), day
+
+
+def _from_change(progress_id):
+    """Return (the person, the title's Item, the day) a saved change names, or 404."""
     change = get_object_or_404(ProgressChange.objects.select_related("actor", "item"), id=progress_id)
-    if not can_view_user_profile(viewer, change.actor):
-        raise Http404
-    day = (
-        _progress_days(
-            ProgressChange.objects.filter(actor=change.actor, item__media_type__in=exposure.media_types()),
+    item = change.item
+    if item.media_type in SHOW_TYPES:
+        # A show's and its seasons' changes count toward the show.
+        item = get_object_or_404(
+            Item,
+            media_type=MediaTypes.TV.value,
+            source=item.source,
+            media_id=item.media_id,
+            season_number=None,
+            episode_number=None,
         )
-        .filter(
-            title_key=_title_key(change.item),
-            day=change.saved_on or change.created_at.astimezone(user_calendar.server_tz()).date(),
-        )
-        .order_by("day")
-        .first()
-    )
-    if day is None:
+    return change.actor, item, activity_rows.saved_day(change, user_calendar.calendar_tz(change.actor))
+
+
+def progress_day(viewer, progress_id):
+    """Return the day's progress an address belongs to, or 404.
+
+    The day is read from the calculation as this viewer sees it: when a later fix leaves
+    the day with nothing, or a log moves it, the page, its like and its comments are 404
+    until it has a row again. Their rows stay stored (AC-7).
+    """
+    if progress_id >= ADDRESS_BASE:
+        actor_id, item_id, day = _from_address(progress_id)
+        owner = get_object_or_404(get_user_model(), pk=actor_id)
+        item = get_object_or_404(Item, pk=item_id)
+    else:
+        owner, item, day = _from_change(progress_id)
+    if not can_view_user_profile(viewer, owner):
         raise Http404
-    return day
+    exposure.require_media_type(item.media_type)
+    bucket = MediaTypes.TV.value if item.media_type in SHOW_TYPES else item.media_type
+    if bucket not in activity_rows.ADAPTERS:
+        raise Http404
+    rows = activity_rows.rows_for([owner], viewer, titles=[item.pk], types=[bucket], piles=False).rows
+    row = next((row for row in rows if not row.log_id and row.title_id == item.pk and row.day == day), None)
+    if row is None:
+        raise Http404
+    return {"actor_id": owner.pk, "title_key": row.title_key, "day": day, "row": row}
 
 
 def progress_post_response(request, progress_id):
     """Return a day's progress in the shape the feed gives it."""
     day = progress_day(request.user, progress_id)
-    actors, titles = _day_people_and_titles([day])
-    prime_curated_artwork(list(titles.values()))
-    return Response(_day_payload(day, actors, titles, request, _day_engagement([day], request.user)))
+    row = day["row"]
+    actor = get_user_model().objects.get(pk=row.actor_id)
+    title = Item.objects.get(pk=row.title_id)
+    prime_curated_artwork([title])
+    return Response(_row_payload(row, actor, title, request, _day_engagement([_post_key(row)], request.user)))
 
 
 def _title_key(item):
@@ -507,15 +542,16 @@ def _day_engagement(days, viewer):
     }
 
 
-def _log_payload(entry, request):
+def _log_payload(entry, request, row=None, *, list_view=False):
+    fields = activity_list.log_fields(row) if row is not None else {}
     return {
         "id": entry.id,
         "type": "diary_created",
         "created_at": entry.created_at,
-        # The local calendar day, so an evening log isn't shown as the next UTC day.
+        # The person's calendar day, so an evening log isn't shown as the next UTC day.
         "consumed_at": entry.log_day.isoformat(),
         "actor": user_summary(entry.user, request=request),
-        "media": media_summary_from_item(entry.item, request=request),
+        "media": _media(entry.item, request, list_view=list_view, entry=entry),
         "person": None,
         "object": {
             "type": ContentLike.DIARY_ENTRY,
@@ -523,75 +559,54 @@ def _log_payload(entry, request):
             "rating": diary_service.rating_payload(entry),
             "liked": entry.liked,
             "is_rewatch": entry.is_rewatch,
+            **fields,
         },
         "viewer": {"can_view": True, "has_liked": entry.viewer_has_liked},
         "like_count": entry.viewer_like_count,
         "comment_count": entry.viewer_comment_count,
-        "review_title": entry.review_title,
-        "review": entry.review,
+        # A list row shows no review text (decision 24): a spoiler would leak into a
+        # list that has no cover for it.
+        "review_title": "" if list_view else entry.review_title,
+        "review": "" if list_view else entry.review,
         "contains_spoilers": entry.contains_spoilers,
     }
 
 
-def _day_payload(day, actors, titles, request, engagement):
-    key = (day["actor_id"], day["title_key"], day["day"])
-    title = titles[key]
-    summary, label = progress_words(day, title.media_type)
-    counts = engagement.get(key, {})
+def _media(item, request, *, list_view, entry=None):
+    """Return a title's summary; a list's reads as the Diary does."""
+    if not list_view:
+        return media_summary_from_item(item, request=request)
+    media = media_summary_from_item(item, request=request, user=request.user, include_user_state=False)
+    if entry is not None:
+        media["show_title"] = entry.tv_show_title
+        media["episode_title"] = entry.tv_episode_title
+    return media
+
+
+def _row_payload(row, actor, title, request, engagement, *, list_view=False):
+    counts = engagement.get((row.actor_id, row.title_key, row.day), {})
+    summary, label = activity_list.progress_words(row)
+    address = row_address(row)
     return {
         # Negative, so ids stay unique across logs and progress days.
-        "id": -day["progress_id"],
+        "id": -address,
         "type": "progress_updated",
-        "created_at": day["last_at"],
-        "consumed_at": day["day"].isoformat(),
-        "actor": user_summary(actors[day["actor_id"]], request=request),
-        "media": media_summary_from_item(title, request=request),
+        "created_at": row.last_at,
+        "consumed_at": row.day.isoformat(),
+        "actor": user_summary(actor, request=request),
+        "media": _media(title, request, list_view=list_view),
         "person": None,
         "object": {
             "type": "progress_day",
-            "id": day["progress_id"],
+            "id": address,
             "summary": summary,
             "label": label,
+            **activity_list.progress_fields(row),
         },
         "viewer": {"can_view": True, "has_liked": counts.get("has_liked", False)},
         "like_count": counts.get("like_count", 0),
         "comment_count": counts.get("comment_count", 0),
     }
-
-
-def progress_words(day, media_type):
-    """Say what a day's progress was, in short: "read 40 pages", "40 pages", "2.25%"."""
-    unit, amount = next(
-        (unit, day[f"amount_{unit}"])
-        for unit in UNITS
-        if day[f"amount_{unit}"] and day[f"amount_{unit}"] > 0
-    )
-    if unit == ProgressChange.START:
-        verb = {
-            MediaTypes.TV.value: "watching",
-            MediaTypes.SEASON.value: "watching",
-            MediaTypes.ANIME.value: "watching",
-            MediaTypes.GAME.value: "playing",
-        }.get(media_type, "reading")
-        return f"started {verb}", "Started"
-    if unit == "minute":
-        label = _minutes_label(amount)
-        return f"played {label}", label
-    if unit == "percent":
-        label = f"{_number(amount)}%"
-        return (f"progressed {label}" if media_type == MediaTypes.GAME.value else f"read {label}"), label
-    label = f"{_number(amount)} {unit if amount == 1 else unit + 's'}"
-    return f"{'watched' if unit == 'episode' else 'read'} {label}", label
-
-
-def _minutes_label(amount):
-    hours, minutes = divmod(round(amount), 60)
-    return " ".join(part for part in (f"{hours}h" if hours else "", f"{minutes}m" if minutes else "") if part)
-
-
-def _number(amount):
-    rounded = round(amount, 2)
-    return str(int(rounded)) if rounded == int(rounded) else str(rounded)
 
 
 def _page_size(request):
@@ -603,8 +618,17 @@ def _page_size(request):
 
 
 def _encode_cursor(key):
-    day, tie, kind, row_id = key
-    data = json.dumps({"day": day.isoformat(), "tie": tie.isoformat(), "kind": kind, "id": row_id})
+    day, tie, kind, row_id, title_id, actor_id = key
+    data = json.dumps(
+        {
+            "day": day.isoformat(),
+            "tie": tie.isoformat(),
+            "kind": kind,
+            "id": row_id,
+            "title": title_id,
+            "actor": actor_id,
+        },
+    )
     return base64.urlsafe_b64encode(data.encode()).decode()
 
 
@@ -619,6 +643,8 @@ def _decode_cursor(request):
             datetime.fromisoformat(data["tie"]),
             int(data["kind"]),
             int(data["id"]),
+            int(data.get("title", 0)),
+            int(data.get("actor", 0)),
         )
     except (binascii.Error, ValueError, KeyError, TypeError) as error:
         raise NotFound("Invalid cursor.") from error

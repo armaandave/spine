@@ -858,10 +858,33 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["The Crown"])
     }
 
+    /// Activity Phase 4: a write only marks the profile stale; the rail reloads when the cover that made it closes.
+    func testProfileRailReloadsWhenACoverClosesNotOnEveryWrite() async {
+        let activity = CountingActivityRepository()
+        let viewModel = ProfileViewModel(
+            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
+            trackingRepository: tracking,
+            activityRepository: activity,
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+        XCTAssertEqual(activity.requestCount, 1)
+
+        await viewModel.reloadIfStale()
+        XCTAssertEqual(activity.requestCount, 1, "Nothing changed, so closing a cover doesn't walk again")
+
+        viewModel.markStale()
+        XCTAssertEqual(activity.requestCount, 1, "A write alone reloads nothing")
+        await viewModel.reloadIfStale()
+        XCTAssertEqual(activity.requestCount, 2, "The cover closing reloads the rail with no pull")
+        await viewModel.reloadIfStale()
+        XCTAssertEqual(activity.requestCount, 2, "A reload clears the mark")
+    }
+
     func testTV703TheSheetsTickReloadsActivityButLeavesTheRail() async {
         // A tick is the day's progress in activity, so Home reloads its activity (the people you follow) after a tick
-        // or untick in its own sheet (activity contract AC-4), and leaves the rail where it is (TV-701). Profile has no
-        // sheet: any write reloads it.
+        // or untick in its own sheet (activity contract AC-4), and leaves the rail where it is (TV-701). Profile marks
+        // itself stale on a write and reloads when its cover closes (the test above).
         let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
         tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [crown])
         let progress = ActivityItem(

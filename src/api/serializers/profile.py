@@ -22,7 +22,7 @@ from users.models import (
 )
 
 
-def profile_payload(user, request=None, viewer=None, *, restricted=False):
+def profile_payload(user, request=None, viewer=None, *, restricted=False, with_activity=False):
     """Serialize a profile with mobile-relevant preferences.
 
     Someone else's counts cover only the logs and lists they may open. A ``restricted``
@@ -86,6 +86,8 @@ def profile_payload(user, request=None, viewer=None, *, restricted=False):
             "planned_items": _media_count(user, status=Status.PLANNING.value),
             "liked_items": MediaLike.objects.filter(user=user).count(),
             "tags": Tag.objects.filter(diary_entries__in=entries).distinct().count(),
+            # Only profile screens ask: it walks the history, so sign-in skips it.
+            **({"activity": _activity_count(user, viewer)} if with_activity else {}),
         },
         "hof": {} if restricted else hof_payload(user, request=request),
         "preferences": preferences_payload(user),
@@ -105,6 +107,14 @@ def _restricted_counts(user):
         "liked_items": 0,
         "tags": 0,
     }
+
+
+def _activity_count(user, viewer):
+    """Return how many rows this viewer sees on the profile's Activity list."""
+    # Imported here: the activity services import the serializers.
+    from api.services.activity import activity_count
+
+    return activity_count(user, viewer)
 
 
 def _review_q():

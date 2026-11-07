@@ -229,6 +229,7 @@ class TVActivityTests(TestCase):
             [
                 self.progress("2026-10-28", "started watching"),
                 self.progress("2026-10-27", "started watching", "Andor"),
+                self.progress("2026-10-26", "stopped", "Andor"),
                 self.progress("2026-10-25", "watched 1 episode", "Andor"),
             ],
         )
@@ -286,7 +287,8 @@ class TVActivityTests(TestCase):
         self.untick(1, 2, show=andor)
 
         self.assertEqual(self.tv_status(andor), (tv_tracking.DROPPED, tv_tracking.DROPPED))
-        self.assertEqual(self.activity(), [self.progress("2026-10-25", "watched 1 episode", "Andor")])
+        # The stop shows since Phase 4, on the day of the first tick.
+        self.assertEqual(self.activity(), [self.progress("2026-10-25", "watched 1 episode, stopped", "Andor")])
 
     def test_an_untick_that_leaves_the_episode_watched_still_nets_the_day(self):
         self.tick(1, 1)

@@ -23,6 +23,7 @@ from functools import partial, reduce
 from operator import or_
 from types import SimpleNamespace
 
+from django.contrib.auth import get_user_model
 from django.db.models import F, IntegerField, Q, Value
 from django.db.models.functions import NullIf
 
@@ -49,8 +50,7 @@ from app.models import (
 )
 from social.models import Follow, FollowStatus, ProgressChange, Visibility
 
-# The types Stats reads through this calculation: every type, since Phase 3. The old
-# counters stay in api.services.stats_time for the comparison only.
+# The types Stats and the lists read through this calculation: every type.
 CALCULATED_TYPES = frozenset(
     {
         MediaTypes.BOOK.value,
@@ -79,6 +79,13 @@ MULTI_TITLE_DAYS = "multi_title_days"
 EPISODES = "episodes"
 HOURS = "hours"
 STOPPING_MOVES = (ProgressChange.PAUSED, ProgressChange.STOPPED)
+PICKED_BACK_UP = ProgressChange.PICKED_BACK_UP
+# The moves as the API names them; the words use the stored ones ("picked back up").
+MOVE_KEYS = {
+    ProgressChange.PAUSED: "paused",
+    ProgressChange.STOPPED: "stopped",
+    ProgressChange.PICKED_BACK_UP: "picked_back_up",
+}
 # What the calculation reads of a Book.
 BOOK_FIELDS = (
     "id",
@@ -433,8 +440,8 @@ def _book_target(snapshot, total):
     """Return (the pages a finished read comes to, whether that's its real length).
 
     A snapshot with a max holds the length at the finish, and it stays (STAT-201). With
-    no max it's only the last page typed, so the real length wins once it's known. As in
-    stats_time._book_pages, a value of null or 0, or one that's no number, says nothing.
+    no max it's only the last page typed, so the real length wins once it's known. A
+    value of null or 0, or one that's no number, says nothing.
     """
     pages = saved_number(snapshot.get("value")) if snapshot.get("kind") == "pages" else None
     if pages and saved_number(snapshot.get("max")):
@@ -711,8 +718,24 @@ def _collect(result, title, *, piles):
         )
 
 
+class _Standing:
+    """A stand-in viewer who sees no log, so no log moves what they read."""
+
+    pk = None
+    is_authenticated = False
+
+
+STANDING = _Standing()
+
+
+def _sees_no_log(_entry):
+    return False
+
+
 def _who_sees(owners, viewer):
     """Return a test of which logs this viewer sees (AC-5), where visibility counts."""
+    if viewer is STANDING:
+        return _sees_no_log
     viewer_id = viewer.pk if viewer is not None and viewer.is_authenticated else None
     followed = (
         set(
@@ -1248,11 +1271,13 @@ def _place_watches(every, all_logs, sees, *, own):  # noqa: C901, PLR0912
     at_position = defaultdict(list)
     own_by_log = defaultdict(set)
     seen = []
+    # The standing view moves nothing a log would, so every viewing stays where it was.
+    standing = sees is _sees_no_log
     for watch in every:
         at_position[watch.pos].append(watch)
         if watch.entry_id is not None:
             own_by_log[watch.entry_id].add(watch.pos)
-        if watch.entry_id is None or watch.entry_id in logs or (own and watch.entry_id not in log_ids):
+        if standing or watch.entry_id is None or watch.entry_id in logs or (own and watch.entry_id not in log_ids):
             seen.append(watch)
     absorbed, homes = _marks_dated(seen, logs, own_by_log, at_position, all_logs)
     taken = _ticks_taken(logs, seen)
@@ -1720,6 +1745,20 @@ ADAPTERS = {
     MediaTypes.MOVIE.value: partial(_single_weight_rows, Movie, WATCH),
     MediaTypes.MUSIC.value: partial(_single_weight_rows, Music, LISTEN),
 }
+
+
+def standing_rows(owner_ids, titles=None, types=None):
+    """Return the progress rows these people's saves stand on, whoever is looking.
+
+    The viewer-independent view (plan 5.8): no log is visible, so none moves a row (not
+    decision 10 for a manga or comic, nor decisions 38 and 43 for TV and anime). A post
+    a private backdated log hid for one viewer still has a row here, so it isn't dead.
+    Books and games show every log to every viewer (AC-5), so they move here as they do
+    for anyone. Only the progress rows come back: a log is never what keeps a post.
+    """
+    owners = list(get_user_model().objects.filter(pk__in=owner_ids))
+    result = rows_for(owners, STANDING, titles=titles, types=types, piles=False)
+    return [row for row in result.rows if row.kind == PROGRESS]
 
 
 def rows_for(owners, viewer, titles=None, types=None, *, piles=True):

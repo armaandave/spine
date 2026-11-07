@@ -297,6 +297,9 @@ struct StatsHeaderDetail: Decodable, Hashable, Identifiable {
     /// Extra diary params the row opens on top of the scope's (STAT-200); nil when the row opens
     /// nothing, on someone else's stats, or from a server that doesn't send it.
     var drill: [String: String]? = nil
+    /// A streak's first and last day, for every viewer: it opens the Activity list on those days. Nil on other rows
+    /// and from servers that don't send it.
+    var range: StatsDayRange? = nil
 
     var id: String { key }
 }
@@ -774,7 +777,7 @@ extension StatsHeader {
 }
 
 extension StatsHeaderDetail {
-    private enum CodingKeys: String, CodingKey { case key, label, value, unit, approximate, drill }
+    private enum CodingKeys: String, CodingKey { case key, label, value, unit, approximate, drill, range }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -784,6 +787,7 @@ extension StatsHeaderDetail {
         unit = c.statsValue(String.self, forKey: .unit)
         approximate = c.statsBool(forKey: .approximate)
         drill = c.statsValue([String: String].self, forKey: .drill).map(Self.diaryParams)
+        range = c.statsValue(StatsDayRange.self, forKey: .range)
     }
 
     /// The API decoder's `convertFromSnakeCase` rewrites dictionary keys too ("watched_from"

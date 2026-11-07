@@ -298,6 +298,14 @@ protocol DiaryRepository {
 protocol ActivityRepository {
     func userActivity(username: String, limit: Int) async throws -> [ActivityItem]
     func userActivityPage(username: String, pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse
+    /// A profile's Activity list, read as the Diary reads: the filter goes with every page, because the cursor holds
+    /// only the place.
+    func userActivityList(
+        username: String,
+        filter: ActivityListFilter,
+        pageSize: Int,
+        cursorLink: String?
+    ) async throws -> ActivityCursorResponse
     /// The activity of the people the signed-in user follows, newest first.
     func feedPage(pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse
     /// A day's progress, as its own page reads it.
@@ -311,6 +319,15 @@ protocol ActivityRepository {
 }
 
 extension ActivityRepository {
+    func userActivityList(
+        username: String,
+        filter _: ActivityListFilter,
+        pageSize: Int,
+        cursorLink: String?
+    ) async throws -> ActivityCursorResponse {
+        try await userActivityPage(username: username, pageSize: pageSize, cursorLink: cursorLink)
+    }
+
     func progressPost(id _: Int) async throws -> ActivityItem {
         fatalError("Not implemented")
     }
@@ -1564,6 +1581,19 @@ struct APIActivityRepository: ActivityRepository {
             authenticated: true
         )
         return response
+    }
+
+    func userActivityList(
+        username: String,
+        filter: ActivityListFilter,
+        pageSize: Int,
+        cursorLink: String?
+    ) async throws -> ActivityCursorResponse {
+        var query = [URLQueryItem(name: "page_size", value: String(pageSize))] + filter.queryItems
+        if let cursor = Self.cursorValue(from: cursorLink) {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        return try await client.get("/users/\(username)/activity/", query: query, authenticated: true)
     }
 
     func feedPage(pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse {

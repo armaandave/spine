@@ -129,91 +129,75 @@ Run from the feature worktree unless a step says otherwise.
 
 ## One-time data steps
 
-Some ships carry a data step that has to run once, right after their deploy is verified
-(Workflow A, step 8). Each one says which ship carries it.
+Some ships carry a data step or a look that has to run once, around their deploy (Workflow A,
+step 8). Each one says which ship carries it.
 
-### Activity's Phase 3: TV, movies and music
+### Activity's Phase 4: the Activity screen
 
-TV, movies and music read the calculation too (`CALCULATED_TYPES` now holds every type), and
-anime takes TV's rules for the Rewatch switch, logging something marked and backdated logs
-(decision 62). No migration, and no app change, so Xcode Cloud makes no build.
+Home, a profile's Activity list and a day's post page read the calculation's rows, and the
+profile list takes `media_type`, `start_date`, `end_date` and `counts` for the Stats numbers
+that open it. No migration. **There is a TestFlight build:** the iPhone app changes
+(`ios/Spine/Spine/`), so Xcode Cloud archives `Spine` after the push. Tag the commit behind
+the build and check "Me" has it (step 9).
 
-**It ships as one ship.** The read-only counts 8 and 11 (plan 5.12) ran on production on
-2026-11-06, before any of this code was deployed (`count8_before_phase3.txt` and
-`count11_before_phase3.txt` in the plan's folder), so no setup ship goes first: the old eye
-taps step runs right after this deploy, and the closing look checks the rest.
+**It ships as one ship, after the phone test and two looks at production.** Both are
+read-only and run before "ship this" is asked:
+
+1. **Count 2, through the viewer-independent view.** `docker exec spine python manage.py
+   compare_activity_numbers` prints `count 2 class a` to `d` (posts, likes and comments by
+   class, plan 5.8), classed by the new standing view, so a TV post on a day with a tick and
+   no change row is class a. **Class b must be 0.** A viewer's-day post needs the re-key repair
+   before this ships, with its test first (plan 5.8): stop and bring Armaan the number. Classes
+   c and d need no step here: c has no rows left (the likes were already hidden), d hides
+   until the day has a row again. Report all four. The same run prints `count 3`: the biggest
+   Item and User ids against the limits a TV or anime day's address can name
+   (`item_limit=16777215`, `user_limit=524287`). If either biggest id is past its limit,
+   stop: addresses would collide.
+2. **Home's timing.** The same run's `user N feed:` lines time Home's walk for every account
+   that follows someone (`rows_for` of the people followed, plus the sort and the page). The
+   lines to hold, from plan 5.2: Home and its next page under 1 second, the list and the
+   profile rail under 500 milliseconds, a Stats miss under 1.5 seconds and under 2 times
+   today's. Run the speed gate on a throwaway Postgres 15 first (`activity_stress_pg.sh` in
+   the plan's folder, 4 production-shaped people, `ANALYZE` after seeding, median of 5) and
+   bring Armaan its numbers beside the production lines, before asking "ship this". If it
+   fails, the levers in order are: the `piles=False` fill filter (not built), matching moved
+   viewings once outside the correlated subqueries, a limit pushed into the movie and music
+   adapter, and last a versioned rows cache. Re-time when anyone follows more than 10 people.
+
+The comparison's other lines now read "number->list": the Stats reader's figure, then what the
+list's filter adds up to. They agree by design, so **a line with two different numbers is a
+stop**.
 
 Its message (Workflow A, step 5) names these, which keep their type and change meaning, and
 which installed builds decode and never show as numbers:
 
-- `is_rewatch` on a movie, album, TV season or show, or anime log now decides hours as well as
-  the badge (decisions 14, 38, 48). A Rewatch-on season or show log saved by an installed
-  build (no mutation id) is stamped `tv.label_only` and stays a badge (TV-900).
-- An episode log no longer moves the tick it claims to its date, and a date edit moves only
-  the log's own viewing (TV-402, TV-405). A review of an episode a season or show log covers
-  opens with Rewatch off, and a review with Rewatch off of a watched episode adds no viewing.
-  An untick or an eye that would take the last viewing from under such a review is refused or
-  hands the viewing to it.
-- A Letterboxd file's blank Rewatch now saves No (decision 57). Logs already saved keep theirs.
-- A dated film or album play in a Yamtrack or Simkl file now imports as a log on its date
-  (decision 47). IMDb rows stay undated marks.
-- An imported play with no Rewatch value (Trakt, Yamtrack, Simkl) is a rewatch only after a
-  log on its day or before, not after a later one (decision 38), and a Trakt film play lands
-  on its owner's day, not the UTC date. Logs already saved keep theirs.
-- `known` and `total` stay episodes on TV, watches on movies and listens on music, and a marked
-  film or album whose first log has Rewatch on now counts as a second watch or listen.
-
-**Your real numbers, which this ship moves on purpose** (counts 8 and 11, 2026-11-06):
-
-- **Account 1.** Movies All Time rises by 5,295 minutes (88.2 hours): 41 films whose first log
-  has Rewatch on, all from Letterboxd, and none of them could have come from a blank Rewatch,
-  so all 41 are real Yeses. Music All Time rises by 543 minutes (9.1 hours): 10 albums, all
-  logged in Spine. No year moves for either. TV doesn't move: no old eye taps, no Rewatch-off
-  log dates a mark, and no tick moves to an older log's year. Game of Thrones holds, because
-  its four Rewatch-on logs hold their own fills: 2,229 minutes in 2026 and 4,458 in All Time.
-- **Account 6.** Movies All Time rises by 135 minutes (2.2 hours), one film, with no year
-  moving. Its one show log, Whole show with Rewatch on (2026-11-03), sits over 5 marked
-  episodes and holds no fills of its own, so it counts them again: TV 2026 rises by 181
-  minutes (3.0 hours), and TV All Time by the same.
-- **Account 5.** Its one season log (2026-10-27) has Rewatch off and holds no fills, so nothing
-  moves: TV holds at 486 and 486.
-- **Accounts 2 and 4** have nothing that moves, and no account has anime rows.
-- TV and Global All Time Titles can rise: a marked show with no row becomes a title. The
-  counts don't measure this; the closing look prints it.
-
-Anything else in the comparison below is a stop.
-
-**Before you say this is ready to ship:** the speed gate must have passed on this branch (plan
-5.2): a Stats miss on Global, TV and Movies, with a non-empty moved map, median of 5, on a
-throwaway Postgres, under 1.5 seconds and under 2 times today's.
+- `id` and `object.id` of a TV or anime day are no change id: they name the person, the show
+  and the day, a number at or above 2^44 (a signed 63-bit `id` when negative). An id from
+  before still opens its day.
+- `object.label` is null on a day with only a status move (paused, stopped, picked back up),
+  and the day is a row now: Home and the profile list show status-only days, and their pages
+  return 200 and take a like (decision 41). Before, they were not shown.
+- A TV day's amount and day come from its viewings, not from the change rows; a log's day on
+  Home is its owner's calendar day, as on their list.
+- A day with no row left for the viewer, because a fix emptied it, is not found (404) on its
+  page, like and comments until it has a row again. Its likes and comments stay stored.
+- A list row has no review text when the request asks for a list (any filter, or `view=list`);
+  Home keeps it.
+- The cursor gains a `title` key; a cursor from before still works.
+- New optional fields only: `amount`, `unit`, `moves`, `percent`, `time_label` on a day;
+  `amount`, `unit`, `time_label`, `label` on a log; `top_line`, `total`, `undated` on a list
+  opened from a number; `range` on the streak rows of Stats' header.
 
 **The phone test comes first.** Serve the branch with `scripts/ios/test-backend.sh use 12`, then
-run `scripts/ios/seed-activity-checkpoint.sh seed` and work through the plan's Phase 3 sheet.
-`add-t4` and `add-t6` are its two Mac steps.
+run `scripts/ios/seed-activity-checkpoint.sh seed-phase-4` (not `seed`) and work through the
+plan's Phase 4 sheet. Its Mac steps are `add-n`, `comment-on-my-row` and the friend's:
+`friend-day-order`, `friend-typo` then `friend-typo-fixed` (like the row between them),
+`friend-save-and-finish`, `friend-pause-stop-pick-up`, `friend-game-stops-then-plays`,
+`friend-ticks` then `friend-late-tick` (open Monday's row, like it and comment between
+them), `friend-import-last-week`, `friend-marks`, `friend-earlier-question` and
+`friend-private-season`. After a Mac step, pull to refresh on Home, Stats and the list.
 
-**Only these read-only steps run without asking, after the deploy; nothing below writes.** The
-ship message (step 5) names them. Armaan's yes is on record (decision 49), and that yes is the
-request for these two looks, unless he says stop to the message below. It is never a request
-for `old-eye-taps --apply`: that needs his own yes, given after he has seen the dry run.
-
-1. **Old eye taps, dry run only,** after the deploy is verified (step 8):
-   `scripts/activity-steps-production.sh old-eye-taps` prints each account's taps and
-   episodes, per year with minutes, and changes nothing. **Expect 0:** count 11 found every
-   non-fill viewing on every account to be a tick (account 1's 21, account 5's 22, account
-   6's 14). If it finds none, the step is done: say so in the ship report. Any other number
-   stops the ship here, even 17 or fewer: never run `--apply`, and bring him the dry run,
-   since it disagrees with count 11.
-2. **The closing look,** after step 1: `docker exec spine python manage.py
-   compare_activity_numbers`. Read each account's `tv`, `movie` and `music` lines: `value`,
-   `known` and `total` are the old counters beside the calculation, on the same live lengths.
-   Only the moves named above may differ. Its `user N feed:` lines time Home's walk for each
-   account that follows someone; bring Armaan those with the speed gate's before and after,
-   before Phase 4's "ship this".
-
-No step is needed for Letterboxd logs a blank Rewatch saved on before decision 57: count 8
-found none on any account.
-
-Remove this section once Phase 4 has shipped.
+Remove this section once Phase 5 has shipped, or replace it with Phase 5's.
 
 ### The metadata fill, with the ship that adds `src/app/migrations/0091_itemcredit.py`
 

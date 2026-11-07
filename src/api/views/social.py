@@ -26,36 +26,17 @@ class FeedView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        logs, progress = activity_service.feed_sources(request.user)
-        media_types = exposure.media_types()
-        media_type = request.query_params.get("media_type")
-        if media_type:
-            exposure.require_media_type(media_type)
-            media_types = activity_service.media_type_family(media_type)
-        return activity_service.page_response(
-            request,
-            logs.filter(item__media_type__in=media_types),
-            progress.filter(item__media_type__in=media_types),
-        )
+        return activity_service.feed_response(request)
 
 
 class UserActivityView(APIView):
-    """A profile's activity, newest first."""
+    """A profile's activity, newest first; opened from a Stats number, a list of it."""
 
     permission_classes = [AllowAny]
 
     def get(self, request, username):
         user = get_object_or_404(get_user_model(), username=username)
-        sources = activity_service.profile_sources(request.user, user)
-        if sources is None:
-            return Response({"next_cursor": None, "previous_cursor": None, "results": []})
-        logs, progress = sources
-        media_types = exposure.media_types()
-        return activity_service.page_response(
-            request,
-            logs.filter(item__media_type__in=media_types),
-            progress.filter(item__media_type__in=media_types),
-        )
+        return activity_service.profile_response(request, user)
 
 
 class ProgressPostView(APIView):

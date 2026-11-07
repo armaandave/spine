@@ -169,7 +169,7 @@ class HeaderTests(ActivityBase):
             ],
         )
         for row in past["header"]["details"]:
-            self.assertEqual(set(row), {"key", "label", "value", "unit", "approximate", "drill"})
+            self.assertEqual(set(row), {"key", "label", "value", "unit", "approximate", "drill", "range"})
             self.assertIsInstance(row["value"], int)
             self.assertFalse(row["approximate"])
         current = self.summary(YEAR_2026)

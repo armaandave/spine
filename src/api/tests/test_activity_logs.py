@@ -107,7 +107,17 @@ class ActivityIsLogsTests(TestCase):
         self.assertIsNone(activity["person"])
         self.assertEqual(
             activity["object"],
-            {"type": "diary", "id": entry.id, "rating": "4.5", "liked": True, "is_rewatch": False},
+            {
+                "type": "diary",
+                "id": entry.id,
+                "rating": "4.5",
+                "liked": True,
+                "is_rewatch": False,
+                "amount": 0,
+                "unit": "minutes",
+                "time_label": None,
+                "label": None,
+            },
         )
         self.assertEqual(activity["viewer"], {"can_view": True, "has_liked": True})
 

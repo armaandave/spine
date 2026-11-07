@@ -20,7 +20,7 @@ jobs:
   checks:
     name: Fast checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
       # Pinned to a commit because it is a third-party action.
@@ -34,7 +34,7 @@ jobs:
   database:
     name: Database checks
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     services:
       # Production runs postgres:16-alpine (docker-compose.production.yml).
       postgres:

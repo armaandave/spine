@@ -184,7 +184,7 @@ final class StatsSectionsRankingTests: XCTestCase {
         let activeDays = StatsHeaderSection.shownDetails(header, mediaType: "movie", time: time)[0]
         XCTAssertEqual(activeDays.label, "Active days")
         XCTAssertEqual(StatsHeaderSection.detailValue(activeDays), "31")
-        XCTAssertEqual(StatsHeaderSection.drillDown(for: activeDays), .stat(label: "Active days"), "It opens the scope's logs")
+        XCTAssertEqual(StatsHeaderSection.drillDown(for: activeDays), .activity(counts: .days), "Decision 46: it opens the Activity list")
 
         XCTAssertEqual(
             StatsHeaderSection.rows(for: header, mediaType: nil, time: time).map(\.id),
@@ -193,18 +193,26 @@ final class StatsSectionsRankingTests: XCTestCase {
         )
     }
 
-    func testHeaderNumbersOpenTheScopesLogsAndTheStreakItsDays() {
+    /// Decision 46: Titles, the third number and the streak open the Activity list; Logs stays in the Diary.
+    func testHeaderNumbersOpenTheActivityListAndLogsTheDiary() {
         var header = StatsHeader(titles: 40, logs: 52, activeDays: 31, longestDailyStreak: 4, details: [])
         XCTAssertEqual(
             StatsHeaderSection.counts(for: header, mediaType: "movie").map(\.drillDown),
-            [.stat(label: "Movies"), .stat(label: "Logs"), .stat(label: "Active days"), nil],
+            [.activity(counts: .titles), .stat(label: "Logs"), .activity(counts: .days), nil],
             "Without its days the streak opens nothing"
         )
 
         header.longestDailyStreakRange = StatsDayRange(start: "2025-03-01", end: "2025-03-04")
         XCTAssertEqual(
             StatsHeaderSection.counts(for: header, mediaType: nil).last?.drillDown,
-            .stat(label: "Longest streak", drill: ["watched_from": "2025-03-01", "watched_to": "2025-03-04"])
+            .activity(counts: .days, range: StatsDayRange(start: "2025-03-01", end: "2025-03-04"))
+        )
+
+        let minutes = StatsTime(rows: [Self.timeRow("movie", "minutes", 600)], hoursTotal: nil)
+        XCTAssertEqual(
+            StatsHeaderSection.counts(for: header, mediaType: "movie", time: minutes)[2].drillDown,
+            .activity(counts: nil),
+            "A tab's measure lists every day's row"
         )
 
         let empty = StatsHeader(titles: 0, logs: 0, activeDays: 0, longestDailyStreak: 0, details: [])
@@ -219,9 +227,9 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(StatsHeaderSection.drillDown(for: detail("rewatches", drill: ["repeat": "true"])), .stat(label: "Rewatches", drill: ["repeat": "true"]))
         XCTAssertEqual(
             StatsHeaderSection.drillDown(for: detail("current_daily_streak", drill: ["watched_from": "2026-10-20", "watched_to": "2026-10-29"])),
-            .stat(label: "Current_Daily_Streak", drill: ["watched_from": "2026-10-20", "watched_to": "2026-10-29"])
+            .stat(label: "Current_Daily_Streak", drill: ["watched_from": "2026-10-20", "watched_to": "2026-10-29"]),
+            "A server that sends no range keeps the Diary drill"
         )
-        XCTAssertNil(StatsHeaderSection.drillDown(for: detail("episodes", drill: nil)), "No drill, no diary")
         XCTAssertNil(StatsHeaderSection.drillDown(for: detail("reviews", value: 0, drill: ["has_review": "true"])), "Nothing to open")
         XCTAssertNil(StatsHeaderSection.drillDown(for: detail("reads", drill: ["mystery_param": "1"])), "A param the app can't send opens nothing")
         XCTAssertEqual(StatsHeaderSection.drillDown(for: detail("likes", drill: nil)), .liked, "Older servers: Likes still opens the liked logs")

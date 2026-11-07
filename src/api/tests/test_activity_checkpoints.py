@@ -83,9 +83,13 @@ class CheckpointBase(TestCase):
         setattr(connection, stats_cache.PENDING_ATTR, (None, None))
         with self.captureOnCommitCallbacks(execute=True):
             self.dirty_the_dev_user()
-            seed.seed()
+            self.open_the_sheet()
             Follow.objects.create(from_user=self.follower, to_user=seed.dev_user(), status=FollowStatus.ACCEPTED)
         self.dev = seed.dev_user()
+
+    def open_the_sheet(self):
+        """Write the sheet's opening; Phase 4's sheet opens on its own seed."""
+        seed.seed()
 
     def dirty_the_dev_user(self):
         """Leave what a finished sheet leaves, in another year: none of it shows."""
@@ -1010,6 +1014,379 @@ class Phase3SheetTests(CheckpointBase):
         self.assert_type(ANIME, None, 12 * seed.ANIME_MINUTES, 12 * seed.ANIME_MINUTES)
         self.step(self.delete_log, entry)
         self.assert_type(ANIME, None, 12 * seed.ANIME_MINUTES, 12 * seed.ANIME_MINUTES)
+
+
+@override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase4Base(CheckpointBase):
+    """Phase 4's opening, and the phone's reads of an Activity list."""
+
+    def open_the_sheet(self):
+        seed.seed_phase_4()
+
+    def activity(self, params=None, *, viewer=None, user=seed.DEV_USERNAME, view="list"):
+        """Return a list as the phone reads it: the whole of it, page after page."""
+        client = self.phone(viewer or self.dev)
+        query = {**(params or {}), **({"view": view} if view else {})}
+        page = client.get(f"/api/v1/users/{user}/activity/", query)
+        self.assertEqual(page.status_code, 200, page.content)
+        body = page.json()
+        results = list(body["results"])
+        while body["next_cursor"]:
+            body = {**body, **client.get(body["next_cursor"]).json()}
+            results += body["results"]
+        return {**body, "results": results}
+
+    def rows(self, page):
+        """Return a list's rows as (title, summary, label, time), newest first."""
+        return [
+            (
+                row["media"]["title"],
+                row["object"].get("summary", "log"),
+                row["object"].get("label"),
+                row["object"].get("time_label"),
+            )
+            for row in page["results"]
+        ]
+
+
+
+@override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase4SheetTests(Phase4Base):
+    """Phase 4's sheet: the Activity list opens from the numbers, row by row."""
+
+    def test_the_profile_menu_list_has_every_type_and_no_numbers(self):
+        page = self.activity()
+        for key in ("top_line", "total", "undated"):
+            self.assertNotIn(key, page)
+        self.assertGreater(len(page["results"]), 20)
+        types = {row["media"]["ref"]["media_type"] for row in page["results"]}
+        # A log of a season or an episode names that Item; its row is the show's.
+        self.assertEqual(types, {"book", "game", "manga", "comic", "anime", "tv", "season", "episode", "movie"})
+        days = [row["consumed_at"] for row in page["results"]]
+        self.assertEqual(days, sorted(days, reverse=True))
+
+    def test_books_2026_pages(self):
+        page = self.activity({**RANGE_2026, "media_type": BOOK})
+        self.assertEqual(page["top_line"], "360 pages")
+        pages = [row["object"]["amount"] for row in page["results"] if row["object"]["amount"]]
+        self.assertEqual(pages, [50, 120, 50, 100, 40])
+        self.assertEqual(sum(pages), 360)
+        self.assertIsNone(page["undated"])
+        summaries = {(row["media"]["title"], row["consumed_at"]): row["object"]["summary"] for row in page["results"]}
+        self.assertEqual(summaries["Book D", "2026-04-01"], "picked back up")
+        self.assertEqual(summaries["Book G", "2026-06-02"], "read 25%")
+        self.assertEqual(summaries["Book G", "2026-06-01"], "started reading")
+        picked = next(row for row in page["results"] if row["consumed_at"] == "2026-04-01")
+        self.assertEqual((picked["object"]["amount"], picked["object"]["label"]), (0, None))
+
+    def test_books_all_time_1540_with_the_pile_named(self):
+        page = self.activity({"media_type": BOOK})
+        self.assertEqual(page["top_line"], "1,540 pages")
+        self.assertEqual(page["undated"]["label"], "Includes 1 book and 350 pages with no date")
+        self.assertEqual(sum(row["object"]["amount"] for row in page["results"]), 1190)
+        self.assertNotIn("Book E", {row["media"]["title"] for row in page["results"]})
+
+    def test_books_all_time_titles(self):
+        page = self.activity({"media_type": BOOK, "counts": "titles"})
+        self.assertEqual(page["top_line"], "8 books")
+        self.assertEqual(len(page["results"]), 7)
+        self.assertEqual(page["undated"]["label"], "Includes 1 book with no date")
+
+    def test_book_n_started_is_in_no_title_count_but_its_start_shows(self):
+        self.step(seed.add_n)
+        titles = self.activity({**RANGE_2026, "media_type": BOOK, "counts": "titles"})
+        self.assertEqual(titles["top_line"], "5 books")
+        self.assertEqual(
+            [(row["media"]["title"], row["consumed_at"]) for row in titles["results"]],
+            [("Book G", "2026-06-02"), ("Book F", "2026-05-11"), ("Book D", "2026-04-02"), ("Book A", "2026-03-01"), ("Book C", "2026-02-10")],
+        )
+        pages = self.activity({**RANGE_2026, "media_type": BOOK})
+        self.assertEqual(pages["top_line"], "360 pages")
+        self.assertEqual(pages["results"][0]["media"]["title"], "Book N")
+        self.assertEqual(pages["results"][0]["object"]["summary"], "started reading")
+        self.assertEqual(pages["results"][0]["object"]["amount"], 0)
+
+    def test_tv_2026_hours_and_episodes(self):
+        hours = self.activity({**RANGE_2026, "media_type": TV_TAB, "counts": "hours"})
+        self.assertEqual(hours["top_line"], "2 hours")
+        self.assertEqual(self.rows(hours), [("Show T2", "watched 2 episodes", "2 episodes", "2h")])
+        episodes = self.activity({**RANGE_2026, "media_type": TV_TAB, "counts": "episodes"})
+        self.assertEqual(episodes["top_line"], "2 episodes")
+
+    def test_tv_all_time_episodes(self):
+        page = self.activity({"media_type": TV_TAB, "counts": "episodes"})
+        self.assertEqual(page["top_line"], "9 episodes")
+        self.assertEqual(
+            sorted(row["object"].get("label") or "log" for row in page["results"]),
+            ["2 episodes", "3 episodes"],
+        )
+        self.assertEqual(page["undated"]["label"], "Includes 1 show, 4 episodes and 4 hours with no date")
+
+    def test_games_2026_hours_and_all_time_titles(self):
+        hours = self.activity({**RANGE_2026, "media_type": GAME})
+        self.assertEqual(hours["top_line"], "4 hours")
+        summaries = {
+            (row["media"]["title"], row["consumed_at"]): row["object"].get("summary")
+            for row in hours["results"]
+            if row["type"] == "progress_updated"
+        }
+        self.assertEqual(summaries["Game G1", "2026-03-01"], "played 2h")
+        self.assertEqual(summaries["Game G4", "2026-02-02"], "progressed 40%")
+        self.assertEqual(sum(row["object"]["amount"] for row in hours["results"]), 240)
+        self.assertIn("log", [row["object"].get("summary", "log") for row in hours["results"]])
+        titles = self.activity({"media_type": GAME, "counts": "titles"})
+        self.assertEqual(titles["top_line"], "6 games")
+        self.assertEqual(len(titles["results"]), 5)
+        self.assertEqual(titles["undated"]["label"], "Includes 1 game with no date")
+
+    def test_movies_2026_hours(self):
+        page = self.activity({**RANGE_2026, "media_type": MOVIE})
+        self.assertEqual(page["top_line"], "2 hours (2h 15m)")
+        [row] = page["results"]
+        self.assertEqual(row["object"]["time_label"], "2h 15m")
+        self.assertIsNone(row["object"]["label"], "A film log sends no label")
+
+    def test_manga_and_comics(self):
+        year = self.activity({**RANGE_2026, "media_type": MANGA})
+        self.assertEqual(year["top_line"], "20 chapters")
+        self.assertEqual(self.rows(year)[0][1], "read 20 chapters")
+        everything = self.activity({"media_type": MANGA})
+        self.assertEqual(everything["top_line"], "150 chapters")
+        self.assertEqual([row["object"]["amount"] for row in everything["results"]], [20, 30])
+        self.assertEqual(everything["undated"]["label"], "Includes 1 manga and 100 chapters with no date")
+        comics = self.activity({"media_type": COMIC})
+        self.assertEqual(comics["top_line"], "40 issues")
+        self.assertEqual([row["object"]["amount"] for row in comics["results"]], [30])
+        self.assertEqual(comics["undated"]["label"], "Includes 1 comic and 10 issues with no date")
+
+    def test_anime_2026_hours(self):
+        page = self.activity({**RANGE_2026, "media_type": ANIME})
+        self.assertEqual(page["top_line"], "5 hours (4h 48m)")
+        summaries = [(row["object"].get("summary", "log"), row["object"].get("label"), row["object"]["time_label"]) for row in page["results"]]
+        self.assertEqual(summaries, [("log", None, None), ("watched 12 episodes", "12 episodes", "4h 48m")])
+
+    def test_active_days_and_streaks(self):
+        self.step(seed.add_n)
+        days = self.activity({**RANGE_2026, "media_type": BOOK, "counts": "days"})
+        self.assertEqual(days["top_line"], "11 active days")
+        self.assertEqual(
+            sorted({row["consumed_at"] for row in days["results"]}),
+            ["2026-02-01", "2026-02-10", "2026-03-01", "2026-04-02", "2026-05-01", "2026-05-02", "2026-05-10", "2026-05-11", "2026-06-01", "2026-06-02", "2026-08-01"],
+        )
+        header = self.stats(YEAR_2026)["header"]
+        self.assertEqual(header["longest_daily_streak"], 2)
+        self.assertEqual(header["longest_daily_streak_range"], {"start": "2026-06-01", "end": "2026-06-02"})
+        streak = self.activity({**RANGE_2026, "media_type": BOOK, "start_date": "2026-06-01", "end_date": "2026-06-02", "counts": "days"})
+        self.assertEqual(streak["top_line"], "2 active days")
+        weekly = next(row for row in header["details"] if row["key"] == "longest_weekly_streak")
+        self.assertEqual(weekly["value"], 3)
+        weeks = self.activity({"media_type": BOOK, "counts": "weeks", "start_date": weekly["range"]["start"], "end_date": weekly["range"]["end"]})
+        self.assertEqual(weeks["top_line"], "3 weeks")
+
+    def test_did_not_finish_opens_nothing_and_counts_the_stop(self):
+        for params, wanted in ((YEAR_2025, 1), (YEAR_2026, 1)):
+            details = {row["key"]: row for row in self.stats(params)["header"]["details"]}
+            self.assertEqual(details["did_not_finish"]["value"], wanted)
+
+    def test_global_titles(self):
+        year = self.activity({**RANGE_2026, "counts": "titles"})
+        self.assertEqual(year["top_line"], "12 titles")
+        self.assertEqual(
+            sorted(row["media"]["title"] for row in year["results"]),
+            sorted(["Anime AN", "Book A", "Book C", "Book D", "Book F", "Book G", "Game G1", "Game G3", "Game G4", "Movie F3", "Manga M1", "Show T2"]),
+        )
+        everything = self.activity({"counts": "titles"})
+        self.assertEqual(everything["top_line"], "23 titles")
+        self.assertEqual(len(everything["results"]), 18)
+        self.assertEqual(everything["undated"]["label"], "Includes 5 titles with no date")
+
+    def test_global_total_hours(self):
+        year = self.activity({**RANGE_2026, "counts": "hours"})
+        self.assertEqual(year["top_line"], "13 hours (13h 3m)")
+        self.assertEqual(sum(row["object"]["amount"] for row in year["results"]), 783)
+        self.assertEqual({row["media"]["ref"]["media_type"] for row in year["results"]}, {"game", "tv", "movie", "anime"})
+        everything = self.activity({"counts": "hours"})
+        self.assertEqual(everything["top_line"], "110 hours (110h 3m)")
+        self.assertEqual(everything["undated"]["label"], "Includes 4 hours with no date")
+
+    def test_t9_reads_as_the_diary_does_with_no_review_and_no_edit(self):
+        page = self.activity({"media_type": TV_TAB})
+        logs = [row for row in page["results"] if row["type"] == "diary_created"]
+        titles = {(row["media"]["title"], row["media"]["show_title"], row["media"]["episode_title"]) for row in logs}
+        self.assertIn(("Show T9", "Show T9", None), titles)
+        self.assertIn(("Show T9 E2", "Show T9", "Show T9 E2"), titles)
+        for row in logs:
+            self.assertEqual((row["review"], row["review_title"]), ("", ""))
+            self.assertNotIn("editable", row["object"])
+
+    def test_a_follower_reads_the_same_numbers_a_stranger_the_public_part(self):
+        for viewer in (self.follower, self.other):
+            page = self.activity({**RANGE_2026, "media_type": BOOK}, viewer=viewer)
+            self.assertEqual(page["top_line"], "360 pages")
+
+
+@override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase4FriendTests(Phase4Base):
+    """Phase 4's seeded friend: what Home and their list show as the Mac does things."""
+
+    def feed(self, viewer=None):
+        """Return Home's pages, all of them, as (day, summary, likes, comments)."""
+        client = self.phone(viewer or self.dev)
+        page = client.get("/api/v1/feed/", {"page_size": 100})
+        self.assertEqual(page.status_code, 200, page.content)
+        return page.json()["results"]
+
+    def friend_list(self, params=None, viewer=None):
+        return self.activity(params, viewer=viewer, user=seed.FRIEND_USERNAME, view=None)
+
+    def short(self, items):
+        return [
+            (item["consumed_at"], item["media"]["title"], item["object"].get("summary", "log"))
+            for item in items
+        ]
+
+    def like(self, item, viewer=None):
+        response = self.phone(viewer or self.dev).post(f"/api/v1/progress/{item['object']['id']}/like/")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_saves_and_a_movie_log_order_by_day_then_by_when(self):
+        self.step(seed.friend_day_order)
+        self.assertEqual(
+            self.short(self.feed()),
+            [
+                ("2026-11-02", "Book FB1", "read 30 pages"),
+                ("2026-11-01", "Book FB1", "read 100 pages"),
+                ("2026-11-01", "Movie FM", "log"),
+            ],
+        )
+
+    def test_a_typo_fixed_later_keeps_its_like_and_their_stats_agree(self):
+        self.step(seed.friend_typo)
+        [row] = self.feed()
+        self.assertEqual((row["object"]["summary"], row["like_count"]), ("read 300 pages", 1))
+        self.step(seed.friend_typo_fixed)
+        [row] = self.feed()
+        self.assertEqual((row["consumed_at"], row["object"]["summary"], row["like_count"]), ("2025-12-28", "read 30 pages", 1))
+        for params, wanted in ((YEAR_2025, 30), (YEAR_2026, 0)):
+            self.assertEqual(self.friend_pages(params), wanted)
+
+    def friend_pages(self, params):
+        response = self.phone().get(f"/api/v1/users/{seed.FRIEND_USERNAME}/stats/summary/", {"schema": "2", **params, "media_type": BOOK})
+        self.assertEqual(response.status_code, 200, response.content)
+        row = next((row for row in response.json()["time"]["rows"] if row["media_type"] == BOOK), None)
+        return row["value"] if row else 0
+
+    def test_100_pages_and_a_finish_on_one_day_are_two_items(self):
+        self.step(seed.friend_save_and_finish)
+        items = self.feed()
+        self.assertEqual(
+            sorted((item["type"], item["object"].get("summary", "log")) for item in items),
+            [("diary_created", "log"), ("progress_updated", "read 100 pages")],
+        )
+        log = next(item for item in items if item["type"] == "diary_created")
+        self.assertEqual(log["object"]["label"], "300 pages")
+
+    def test_pause_resume_stop_and_restart_are_four_rows_and_one_active_day(self):
+        self.step(seed.friend_pause_stop_pick_up)
+        rows = self.feed()
+        self.assertEqual(
+            [(row["consumed_at"], row["object"]["summary"]) for row in rows],
+            [
+                ("2026-10-15", "picked back up"),
+                ("2026-10-14", "stopped"),
+                ("2026-10-13", "picked back up"),
+                ("2026-10-12", "read 40 pages, paused"),
+            ],
+        )
+        stopped = rows[1]
+        self.assertIsNone(stopped["object"]["label"])
+        page = self.phone().get(f"/api/v1/progress/{stopped['object']['id']}/")
+        self.assertEqual(page.status_code, 200, page.content)
+        self.like(stopped)
+        response = self.phone().get(f"/api/v1/users/{seed.FRIEND_USERNAME}/stats/summary/", {"schema": "2", **YEAR_2026, "media_type": BOOK})
+        self.assertEqual(response.json()["header"]["active_days"], 1)
+
+    def test_a_stopped_game_chosen_playing_is_a_new_playthrough(self):
+        self.step(seed.friend_game_stops_then_plays)
+        self.assertEqual(
+            [(row["consumed_at"], row["object"]["summary"]) for row in self.feed()],
+            [("2026-10-14", "started playing"), ("2026-10-13", "stopped"), ("2026-10-12", "started playing")],
+        )
+
+    def test_ticks_and_an_untick_leave_one_episode_a_day(self):
+        self.step(seed.friend_ticks)
+        self.assertEqual(
+            [(row["consumed_at"], row["object"]["summary"]) for row in self.feed()],
+            [("2026-10-20", "watched 1 episode"), ("2026-10-19", "watched 1 episode")],
+        )
+
+    def test_a_late_tick_dated_that_monday_keeps_the_like_and_comment(self):
+        self.step(seed.friend_ticks)
+        monday = self.feed()[1]
+        self.like(monday)
+        response = self.phone().post(f"/api/v1/progress/{monday['object']['id']}/comments/", {"body": "Nice"}, format="json")
+        self.assertEqual(response.status_code, 201, response.content)
+        self.step(seed.friend_late_tick)
+        rows = {row["consumed_at"]: row for row in self.feed()}
+        row = rows["2026-10-19"]
+        self.assertEqual(row["object"]["summary"], "watched 2 episodes")
+        self.assertEqual((row["like_count"], row["comment_count"]), (1, 1))
+        self.assertEqual(rows["2026-10-20"]["object"]["summary"], "watched 1 episode")
+
+    def test_plays_dated_last_week_sit_in_the_past(self):
+        self.step(seed.friend_import_last_week)
+        self.step(seed.friend_day_order)
+        days = [(row["consumed_at"], row["media"]["title"]) for row in self.feed()]
+        # Written first or last, dated a week ago: under the newer rows, never on top.
+        self.assertEqual(days[-1], ("2026-10-27", "Show FS3"))
+        self.assertEqual([day for day, _ in days], sorted((day for day, _ in days), reverse=True))
+
+    def test_marks_make_no_row(self):
+        self.step(seed.friend_marks)
+        self.assertEqual(self.feed(), [])
+        self.assertEqual(self.friend_list()["results"], [])
+
+    def test_a_tick_and_the_earlier_question_make_one_row(self):
+        self.step(seed.friend_earlier_question)
+        [row] = self.feed()
+        self.assertEqual((row["object"]["summary"], row["object"]["amount"]), ("watched 1 episode", 60))
+
+    def test_a_private_season_log_adds_to_their_numbers_but_not_to_yours(self):
+        self.step(seed.friend_private_season)
+        friend_path = f"/api/v1/users/{seed.FRIEND_USERNAME}/stats/summary/"
+        mine = self.phone().get(friend_path, {"schema": "2", **YEAR_2026, "media_type": TV_TAB}).json()
+        tv = next(row for row in mine["time"]["rows"] if row["media_type"] == TV_TAB)
+        self.assertEqual(tv["value"], 120)
+        page = self.friend_list({**RANGE_2026, "media_type": TV_TAB})
+        self.assertEqual(page["top_line"], "2 hours")
+        self.assertEqual(self.short(page["results"]), [("2026-04-06", "Show FS2", "watched 2 episodes")])
+        own = self.phone(self.friend_account()).get(friend_path, {"schema": "2", **YEAR_2026, "media_type": TV_TAB}).json()
+        tv = next(row for row in own["time"]["rows"] if row["media_type"] == TV_TAB)
+        self.assertEqual(tv["value"], 300)
+        theirs = self.friend_list({**RANGE_2026, "media_type": TV_TAB}, viewer=self.friend_account())
+        self.assertEqual(theirs["top_line"], "5 hours")
+
+    def friend_account(self):
+        return seed.friend_user()
+
+    def test_a_comment_from_the_mac_is_there_when_the_row_opens(self):
+        newest = self.activity()["results"][0]
+        self.step(seed.comment_on_my_row)
+        page = self.phone().get(f"/api/v1/diary/{newest['object']['id']}/comments/" if newest["type"] == "diary_created" else f"/api/v1/progress/{newest['object']['id']}/comments/")
+        self.assertEqual([comment["body"] for comment in page.json()["results"]], ["Nice one."])
+
+
+RANGE_2026 = {"start_date": "2026-01-01", "end_date": "2026-12-31"}
+
+
+@override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase4SheetOnUTCTests(Phase4SheetTests):
+    """The test backend's settings resolve to UTC, so the phone test runs there."""
+
+
+@override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase4FriendOnUTCTests(Phase4FriendTests):
+    """The friend's steps on the test backend's zone."""
 
 
 @override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)

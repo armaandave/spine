@@ -3302,10 +3302,19 @@ def delete_season_tracking(user, show_item, season_number, *, entry_point=APP, m
             viewing.season == season_number for viewing in ctx.facts.viewings
         ):
             return {"changed": False}
-        ctx.delete_viewings([viewing for viewing in ctx.facts.viewings if viewing.season == season_number])
+        gone = [viewing for viewing in ctx.facts.viewings if viewing.season == season_number]
+        # A TV day's row comes from its viewings, so the posts they leave empty are found
+        # by their days, collected before the viewings go (AC-7).
+        days = {viewing.day for viewing in gone if viewing.day is not None}
+        ctx.delete_viewings(gone)
         _delete_season_rows(ctx, [season_number])
         # Deleting a season's tracking deletes its progress, as for any title (AC-2).
         _forget_progress(ctx, [season_number])
+        progress_posts.drop_empty_posts(
+            ctx.user.pk,
+            f"tv:{ctx.show_item.source}:{ctx.show_item.media_id}",
+            days,
+        )
         left = _after_removal(ctx)
         return {"changed": True, "left_library": left}
 

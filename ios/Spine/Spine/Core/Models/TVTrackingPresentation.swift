@@ -203,8 +203,28 @@ nonisolated enum TVTrackingPresentation {
     /// title for show logs. Other media keep their display title.
     @MainActor
     static func diaryTitle(for media: DiaryMedia) -> String {
-        let ref = media.ref
-        let show = nonEmpty(media.showTitle) ?? media.title
+        diaryTitle(ref: media.ref, title: media.title, showTitle: media.showTitle, episodeTitle: media.episodeTitle) {
+            media.displayTitle
+        }
+    }
+
+    /// The same names for a title on the Activity list, whose rows carry a `MediaSummary`.
+    @MainActor
+    static func diaryTitle(for media: MediaSummary) -> String {
+        diaryTitle(ref: media.ref, title: media.title, showTitle: media.showTitle, episodeTitle: media.episodeTitle) {
+            media.displayTitle
+        }
+    }
+
+    @MainActor
+    private static func diaryTitle(
+        ref: MediaRef,
+        title: String,
+        showTitle: String?,
+        episodeTitle: String?,
+        otherTitle: () -> String
+    ) -> String {
+        let show = nonEmpty(showTitle) ?? title
         switch ref.mediaType {
         case "tv":
             return show
@@ -214,10 +234,10 @@ nonisolated enum TVTrackingPresentation {
         case "episode":
             guard let season = ref.seasonNumber, let episode = ref.episodeNumber else { return show }
             let code = episodeCode(season: season, episode: episode)
-            guard let title = nonEmpty(media.episodeTitle) else { return "\(show) · \(code)" }
+            guard let title = nonEmpty(episodeTitle) else { return "\(show) · \(code)" }
             return "\(show) · \(code) · \(title)"
         default:
-            return media.displayTitle
+            return otherTitle()
         }
     }
 

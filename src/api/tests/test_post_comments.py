@@ -2,14 +2,19 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api.tests.feed_fixtures import address_of, show_with_episodes, tick
+from app import book_tracking
 from app.models import DiaryEntry, Item, MediaTypes, Sources
 from social.models import (
     Block,
@@ -44,32 +49,21 @@ class PostTestCase(TestCase):
             media_id="1",
             title="Past Lives",
         )
-        self.season = Item.objects.create(
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.SEASON.value,
-            media_id="2",
-            season_number=1,
-            title="Severance",
-        )
-        self.show = Item.objects.create(
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.TV.value,
-            media_id="2",
-            title="Severance",
-        )
+        self.show = show_with_episodes("Severance", seasons={1: 40})
+        self.season = Item.objects.get(media_id=self.show.media_id, media_type=MediaTypes.SEASON.value)
 
     def log(self, **fields):
         return DiaryEntry.objects.create(user=self.owner, item=self.movie, consumed_at=at(24), **fields)
 
-    def progress(self, previous=0, current=4, when=None, item=None):
-        change = ProgressChange.objects.create(
-            actor=self.owner,
-            item=item or self.season,
-            previous_progress={"kind": "episodes", "value": previous, "max": 10, "unit": "episode"},
-            current_progress={"kind": "episodes", "value": current, "max": 10, "unit": "episode"},
-        )
-        ProgressChange.objects.filter(pk=change.pk).update(created_at=when or at(24))
-        return change
+    def progress(self, previous=0, current=4, when=None):
+        """Tick episodes previous+1 to current at this moment; return the day's address.
+
+        A TV day's row comes from its ticks (plan 5.8), so this writes them as the phone
+        does. Its id reaches the page, like and comments of that person, show and day.
+        """
+        when = when or at(24)
+        tick(self.owner, self.show, range(previous + 1, current + 1), when)
+        return SimpleNamespace(id=address_of(self.owner, self.show, timezone.localtime(when).date()))
 
     def as_user(self, user):
         self.client.force_authenticate(user)
@@ -115,7 +109,7 @@ class FeedPostFieldsTests(PostTestCase):
         for day in range(20, 23):
             entry = self.log()
             Comment.objects.create(user=self.friend, diary_entry=entry, body="Hi")
-            change = self.progress(when=at(day))
+            change = self.progress(day - 1, day, at(day))
             self.as_user(self.friend).post(f"/api/v1/progress/{change.id}/like/")
         with CaptureQueriesContext(connection) as few_posts:
             self.assertEqual(len(self.feed()), 6)
@@ -123,7 +117,7 @@ class FeedPostFieldsTests(PostTestCase):
         for day in range(23, 28):
             entry = self.log()
             Comment.objects.create(user=self.friend, diary_entry=entry, body="Hi")
-            change = self.progress(when=at(day))
+            change = self.progress(day - 1, day, at(day))
             self.as_user(self.friend).post(f"/api/v1/progress/{change.id}/like/")
         with CaptureQueriesContext(connection) as many_posts:
             self.assertEqual(len(self.feed()), 16)
@@ -454,20 +448,19 @@ class ProgressPostTests(PostTestCase):
 
     def test_another_day_or_title_is_another_post(self):
         today = self.progress(0, 2, at(24))
-        tomorrow = self.progress(2, 3, at(25))
+        self.progress(2, 3, at(25))
         book = Item.objects.create(source=Sources.MANUAL.value, media_type=MediaTypes.BOOK.value, media_id="9", title="Book")
-        other = ProgressChange.objects.create(
-            actor=self.owner,
-            item=book,
-            previous_progress={"kind": "pages", "value": 0, "max": 100, "unit": "page"},
-            current_progress={"kind": "pages", "value": 10, "max": 100, "unit": "page"},
-        )
-        ProgressChange.objects.filter(pk=other.pk).update(created_at=at(24))
+        with patch("django.utils.timezone.now", return_value=at(24)):
+            book_tracking.start(self.owner, book)
+            book_tracking.update_progress(self.owner, book, progress_type="pages", value=10)
 
         self.as_user(self.friend).post(f"/api/v1/progress/{today.id}/like/")
 
-        likes = {activity["object"]["id"]: activity["like_count"] for activity in self.feed()}
-        self.assertEqual(likes, {today.id: 1, tomorrow.id: 0, other.id: 0})
+        likes = {(activity["media"]["title"], activity["consumed_at"]): activity["like_count"] for activity in self.feed()}
+        self.assertEqual(
+            likes,
+            {("Severance", "2026-10-24"): 1, ("Severance", "2026-10-25"): 0, ("Book", "2026-10-24"): 0},
+        )
 
     def test_logging_that_day_keeps_the_post_and_its_reactions(self):
         change = self.progress()
@@ -479,8 +472,15 @@ class ProgressPostTests(PostTestCase):
         self.assertEqual([activity["comment_count"] for activity in progress], [1])
 
     def test_a_day_that_netted_to_nothing_isnt_a_post(self):
-        change = self.progress(1, 3, at(24, 9))
-        self.progress(3, 1, at(24, 10))
+        book = Item.objects.create(source=Sources.MANUAL.value, media_type=MediaTypes.BOOK.value, media_id="9", title="Book")
+        with patch("django.utils.timezone.now", return_value=at(23)):
+            book_tracking.start(self.owner, book)
+        with patch("django.utils.timezone.now", return_value=at(24)):
+            book_tracking.update_progress(self.owner, book, progress_type="pages", value=100)
+        with patch("django.utils.timezone.now", return_value=at(25)):
+            book_tracking.update_progress(self.owner, book, progress_type="pages", value=30)
+        # The 25th's change names a day that now has no row: the fix came off the 24th.
+        change = ProgressChange.objects.filter(actor=self.owner, item=book).order_by("id").last()
 
         for request in (
             self.as_user(self.friend).get(f"/api/v1/progress/{change.id}/"),

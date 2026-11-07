@@ -1,10 +1,10 @@
-"""AC-1: status moves get recorded, and recording them changes nothing anyone sees.
+"""AC-1: status moves get recorded, and recording them changes no number.
 
 Pause, resume, stop, pick-up and Restart on a book, game, show, manga and comic, and
 pause, stop and pick-up on an anime (decision 63).
-Deleting only the status rows leaves Stats, Home, the profile list and the post page
-byte-identical, same-day order included. latest_progress_change never reports one, on
-either path.
+Deleting only the status rows leaves every Stats number byte-identical. Since Phase 4
+they show on Home, the profile list and the post page as rows of their own, with no
+amount (decisions 21 and 41). latest_progress_change never reports one, on either path.
 """
 
 import json
@@ -90,17 +90,12 @@ class StatusRowBase(TestCase):
         return rendered(response)
 
     def everything(self):
-        """Return what Stats, Home, the profile list and the post page say, as JSON."""
+        """Return what Stats says, as JSON."""
         pages = {}
         for name, params in (("all_time", ALL_TIME), ("year", YEAR)):
             pages[f"stats_{name}"] = self.get("/api/v1/stats/me/summary/", params)
             for tab in ("book", "game", "tv", "anime", "manga", "comic"):
                 pages[f"stats_{name}_{tab}"] = self.get("/api/v1/stats/me/summary/", {**params, "media_type": tab})
-        pages["home"] = self.get("/api/v1/feed/", user=self.friend)
-        pages["profile"] = self.get("/api/v1/users/reader/activity/", user=self.friend)
-        for row in pages["profile"]["results"]:
-            if row["type"] == "progress_updated":
-                pages[f"post_{row['object']['id']}"] = self.get(f"/api/v1/progress/{row['object']['id']}/")
         return pages
 
     def assert_status_rows_change_nothing(self):
@@ -457,7 +452,7 @@ class AnimeMoveTests(StatusRowBase):
 
 
 class NothingMovesTests(StatusRowBase):
-    """Deleting only the status rows changes nothing any page says."""
+    """Deleting only the status rows changes no number Stats prints."""
 
     def test_on_every_type_with_same_day_order(self):
         book = self.item(MediaTypes.BOOK.value, total_pages=400)
@@ -510,7 +505,26 @@ class NothingMovesTests(StatusRowBase):
         self.later(minutes=60 * 24 * 3)
         book_tracking.resume(self.user, book)
         self.assert_status_rows_change_nothing()
-        self.assertEqual(len(self.get("/api/v1/users/reader/activity/")["results"]), 1)
+
+    def test_a_move_on_another_day_is_a_row_of_its_own(self):
+        book = self.item(MediaTypes.BOOK.value, total_pages=400)
+        book_tracking.start(self.user, book)
+        book_tracking.update_progress(self.user, book, progress_type="pages", value=40)
+        self.later(minutes=60 * 24 * 3)
+        book_tracking.pause(self.user, book)
+        self.later(minutes=60 * 24 * 3)
+        book_tracking.resume(self.user, book)
+        rows = self.get("/api/v1/users/reader/activity/", user=self.friend)["results"]
+        self.assertEqual(
+            [(row["consumed_at"], row["object"]["summary"], row["object"]["label"]) for row in rows],
+            [("2026-10-31", "picked back up", None), ("2026-10-28", "paused", None), ("2026-10-25", "read 40 pages", "40 pages")],
+        )
+        # A status-only day opens as a page and takes a like (decision 41).
+        client = APIClient()
+        client.force_authenticate(self.friend)
+        paused = rows[1]["object"]["id"]
+        self.assertEqual(client.get(f"/api/v1/progress/{paused}/").status_code, 200)
+        self.assertEqual(client.post(f"/api/v1/progress/{paused}/like/").status_code, 200)
 
 
 class LatestProgressChangeTests(StatusRowBase):

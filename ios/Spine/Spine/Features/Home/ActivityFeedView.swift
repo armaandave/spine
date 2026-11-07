@@ -9,23 +9,34 @@ final class ActivityFeedViewModel {
     var isLoadingNextPage = false
     var errorMessage: String?
     var nextPageErrorMessage: String?
+    /// An Activity list opened from a number: the number in words, the type's total, and what it includes with no
+    /// date. They come with the first page only.
+    var topLine: String?
+    var total: ActivityListTotal?
+    var undated: ActivityUndated?
 
     /// A profile's username, or nil for the activity of the people the signed-in user follows (Home).
     private let username: String?
+    /// What an Activity list asks for, sent with every page; nil for Home and the profile's rail.
+    private let filter: ActivityListFilter?
     private let pageSize: Int
     private let activityRepository: ActivityRepository
     private let onUnauthorized: () -> Void
     private var nextCursorLink: String?
     private var didLoad = false
     private var isLoadingFirstPage = false
+    /// Something changed elsewhere since the last load: reload when the screen next appears.
+    private var isStale = false
 
     init(
         username: String?,
+        filter: ActivityListFilter? = nil,
         pageSize: Int = 25,
         activityRepository: ActivityRepository,
         onUnauthorized: @escaping () -> Void
     ) {
         self.username = username
+        self.filter = filter
         self.pageSize = pageSize
         self.activityRepository = activityRepository
         self.onUnauthorized = onUnauthorized
@@ -45,6 +56,17 @@ final class ActivityFeedViewModel {
     }
 
     func refresh() async {
+        await loadFirstPage(force: true)
+    }
+
+    /// A save or a log elsewhere changed what this list would say. It reloads on the next `reloadIfStale`, not at
+    /// once, so a screen behind another doesn't walk the history for every write.
+    func markStale() {
+        isStale = true
+    }
+
+    func reloadIfStale() async {
+        guard isStale, didLoad else { return }
         await loadFirstPage(force: true)
     }
 
@@ -95,7 +117,11 @@ final class ActivityFeedViewModel {
             let response = try await page(cursorLink: nil)
             items = Self.deduplicated(response.results)
             nextCursorLink = response.nextCursor
+            topLine = response.topLine
+            total = response.total
+            undated = response.undated
             didLoad = true
+            isStale = false
         } catch is CancellationError {
             return
         } catch {
@@ -105,6 +131,14 @@ final class ActivityFeedViewModel {
     }
 
     private func page(cursorLink: String?) async throws -> ActivityCursorResponse {
+        if let username, let filter {
+            return try await activityRepository.userActivityList(
+                username: username,
+                filter: filter,
+                pageSize: pageSize,
+                cursorLink: cursorLink
+            )
+        }
         if let username {
             return try await activityRepository.userActivityPage(
                 username: username,

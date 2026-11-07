@@ -933,11 +933,11 @@ Each row's stars and heart are that log's own.
 
 What people see as activity is defined in [the activity contract](activity-contract.md), and TV follows it:
 
-- A day's ticks on a show, across all its seasons, are one item of progress on the show, told in episodes: "watched 4 episodes" (AC-1).
+- A day's ticks on a show, across all its seasons, are one item of progress on the show, told in episodes: "watched 4 episodes" (AC-1). The day and its amount are worked out from the viewings when read, and its id names the person, the show and the day, not a change (AC-7).
 - Unticks count against that day's ticks. A day that didn't move forward shows nothing (AC-2).
 - Marks and fills aren't progress: the show and season eyes, Mark watched up to here, the Yes to the earlier-episodes question, and a log's fills (AC-1).
 - Starting the show is activity: choosing Watching, a tick that puts the show in Watching, or starting a rewatch. Resuming a paused show isn't starting it; starting again after finishing or dropping is. Progress that day replaces the start (AC-1, AC-2).
-- Choosing Paused or Dropped on a started show, or picking it back up, records a status move on the show. Nothing shows it yet, and a tick that ends a pause is just the tick (AC-2).
+- Choosing Paused or Dropped on a started show, or picking it back up, records a status move on the show. It shows as a row of its own, "stopped" or "picked back up", with no amount (AC-1), and a tick that ends a pause is just the tick (AC-2).
 - A log of the show, or of any of its seasons or episodes, is one item on its calendar day (TV-407). It sits beside that day's start and progress, each its own item (AC-2).
 - When the show leaves the library, its starts and progress go with it. Deleting a season's tracking removes that season's progress (AC-2).
 - Imports, scheduled jobs and the repair start nothing and record no progress.
@@ -992,7 +992,7 @@ Imports may write in bulk, but Spine works out each imported show once afterward
 - Imported Planning, Paused and Dropped on a show become the user's choice; imported In progress means Watching.
 - Each imported play becomes its own viewing, with the date supplied or none, even of an episode already watched; TV-101 applies only to taps and webhooks.
 - An imported rating or like with no status marks a show or season with no imported history (TV-303). On one with history it only sets the value: imports never open anything.
-- Imports create no feed activity and never ask the earlier-episodes question.
+- Imports push and notify nothing and never ask the earlier-episodes question. A dated imported play is a row on its real date, so it sits in the past on lists and feeds, not on top (decision 47); an undated one is a mark and a row nowhere.
 - Spine never infers Paused or Dropped from provider inactivity (GM-501).
 - Overwrite replaces the show's viewings, marks and choices with the source's, as today, so it drops marks, choices, a rewatch in progress and star sources made in Spine.
 - Logs survive an overwrite, and each log's own viewing and fills are rebuilt (TV-400). Rebuilding an episode log's viewing claims an imported viewing of that episode on the log's calendar day before adding one.

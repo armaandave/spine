@@ -66,7 +66,7 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(profile_payload(request.user, request=request, viewer=request.user))
+        return Response(profile_payload(request.user, request=request, viewer=request.user, with_activity=True))
 
     def patch(self, request):
         old_private = request.user.profile_private
@@ -81,7 +81,7 @@ class MeView(APIView):
                 target_user=request.user,
                 metadata={"from": old_private, "to": request.user.profile_private},
             )
-        return Response(profile_payload(request.user, request=request, viewer=request.user))
+        return Response(profile_payload(request.user, request=request, viewer=request.user, with_activity=True))
 
 
 class LikedMediaView(APIView):
@@ -324,7 +324,9 @@ class PublicProfileView(APIView):
         if user_blocks(user, request.user):
             return Response(status=status.HTTP_404_NOT_FOUND)
         restricted = not can_view_user_profile(request.user, user)
-        return Response(profile_payload(user, request=request, viewer=request.user, restricted=restricted))
+        return Response(
+            profile_payload(user, request=request, viewer=request.user, restricted=restricted, with_activity=True),
+        )
 
 
 class UserSearchView(APIView):

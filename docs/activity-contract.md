@@ -1,26 +1,34 @@
 # Activity Contract
 
-Activity is what people see of each other: the home feed now, and for everyone
-once Spine has other users. This contract defines it once, for every media type.
+Activity is what people see of each other: the home feed, a profile's Activity list
+and a friend's post pages. This contract defines it once, for every media type. All of
+them read the one calculation in `api.services.activity_rows` (docs/stats-contract.md),
+so a list adds up to the number that opened it and a fixed typo fixes the old row.
 
-## AC-1: Activity is logs and each day's progress
+## AC-1: Activity is logs, each day's progress and status moves
 
-Two things are activity:
+Three things are activity:
 
 - **A diary log.** Imported logs are activity like any other log.
 - **A day's progress on a title.** All of a person's progress on one title in one
   day is one item: "watched 4 episodes", "read 15%", "played 2h 30m". A show's
   episodes across seasons count toward the show. Each later change that day updates
   the same item rather than adding another.
+- **A status move** the person chose: paused, stopped (Did Not Finish or Dropped) or
+  picked back up (decision 21). It is a row of its own with no amount, so "read 40 pages,
+  paused" on a day with progress and "stopped" on a day without. It adds nothing to any
+  number. Anime records them too (decision 63).
 - **Starting a title**, on a day with no progress on it: "started reading",
   "started watching", "started playing". Starting is a new reading journey, manga or
   comic attempt, or game playthrough, or a show, season, or anime set to In progress.
-  Resuming something paused isn't starting it; starting again after finishing or
-  dropping is. Carrying on with a finished manga or comic isn't (Keep Reading, or a
+  Resuming something paused isn't starting it (it reads "picked back up"); starting
+  again after finishing or dropping is, and says only "started" (decision 44 for a game:
+  a new playthrough). Carrying on with a finished manga or comic isn't (Keep Reading, or a
   comic's new issue: MC-200, MC-202).
 
 Nothing else is activity: not rating a title without a log, not marking something
-watched, read, played, or completed without a log, not other status changes,
+watched, read, played, or completed without a log (the eye, a heart, stars, Mark
+watched up to here, an undated import: they only reach All Time's undated pile), not
 hearts, follows, or adding to a list.
 
 ## AC-2: Progress, told plainly
@@ -38,8 +46,8 @@ hearts, follows, or adding to a list.
 - A status move the person chooses is recorded the same way, as a step of kind
   `status` with value 0 in previous and current and its `move`: `paused`, `stopped`
   or `picked back up`. It's on a book, game, show, anime, manga or comic, and never
-  from an import, a mark, a restore or Restart. It adds nothing to any number,
-  and nothing shows it yet (AC-1). A book's Restart writes `began_over` on its start
+  from an import, a mark, a restore or Restart. It adds nothing to any number, and
+  shows as a row of its own (AC-1). A book's Restart writes `began_over` on its start
   row, and so does a reread, which opens over a finished read: deleting that log later
   can't change where it began. A pick-up with nothing before it to carry on from, a
   deleted attempt or an imported place, still isn't a start.
@@ -75,17 +83,23 @@ Activity shows its date, not when it was posted.
 
 - A profile's Recent Activity is the top of that person's activity, showing each
   title once.
+- A profile's Activity list is all of it, newest day first, and opens from the numbers
+  on Stats (the Activity list, below).
 - Home shows the feed: `/api/v1/feed/`, the activity of the people you follow.
 
-All three are computed from `DiaryEntry` and `social.ProgressChange`, so an edit
-or deletion shows everywhere at once.
+All three are computed from the Activity calculation (`DiaryEntry`, the saves and the
+viewings behind it), so an edit or deletion shows everywhere at once. A log's day is
+its owner's calendar day on Home as on the owner's list, whoever is looking. A dated
+import is a row on its real date, so an old play sits in the past, not on top.
 
 ## AC-5: Visibility
 
 - You see all of your own activity.
 - Others see your public logs, and followers-only logs if they follow you. Movie,
   album, book, and game logs are always public.
-- Progress is visible to anyone who can see the profile.
+- Progress is visible to anyone who can see the profile. A log a viewer can't see adds
+  nothing and moves nothing for them, on the list, on Home, on post pages and in the
+  numbers beside them.
 - A private profile shows nothing to someone who doesn't follow it. A block in
   either direction shows nothing.
 
@@ -118,7 +132,15 @@ the shape installed apps read. `consumed_at` is the item's calendar day
 - A day's progress: `type` is `progress_updated`, `id` is negative (so ids stay
   unique across both kinds), `media` is the title, and `object` is
   `{"type": "progress_day", "id", "summary", "label"}`, for example
-  `"watched 4 episodes"` and `"4 episodes"`.
+  `"watched 4 episodes"` and `"4 episodes"`. Since Phase 4 `object` also has `amount`
+  (a number in the tab's unit: minutes on TV, anime, games, movies and albums, else
+  pages, chapters or issues), `unit`, `moves` (`paused`, `stopped`, `picked_back_up`),
+  `percent` (a percent told with no length) and `time_label` ("2h 15m", on TV, anime,
+  movies and albums). `label` is null on a day with only a status move. `summary` is
+  lower case and carries the moves: "read 40 pages, paused", "picked back up".
+- A log's `object` also has `amount`, `unit`, `time_label` and `label`, what the log
+  added in the units it was told in with no plus sign ("200 pages", "3 episodes", "2h");
+  movie and album logs send no `label`.
 - Both have `like_count`, `comment_count`, and `viewer.has_liked`. `object.liked` is
   the person's own heart on the title, which is not a like of the post.
 
@@ -132,6 +154,36 @@ not read by these endpoints.
 `status` is the tracking status, and `progress_label` says how far they got, for
 example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log.
 
+## The Activity list
+
+`GET /api/v1/users/<username>/activity/` is the same endpoint the profile rail reads. A
+request with any of these is a list opened from a number, and reads as the Diary does (a
+log row carries no review text, and its `media` has `show_title` and `episode_title`):
+
+- `media_type`: one type (a show's seasons and episodes are the `tv` type). An unexposed
+  type is a 404.
+- `start_date`, `end_date`: inclusive days on the person's calendar. A year is Jan 1 to
+  Dec 31; All Time sends neither. A bad date is a 400.
+- `counts`: `titles`, `days`, `weeks`, `multi_title_days`, `episodes` or `hours`, else a
+  400. `titles` gives one row per title, on its newest day in range that has an amount, a
+  told number or a log (decision 40). `days`, `weeks` and `hours` leave out status-only
+  rows (`weeks` lists the same rows as `days`). `episodes` keeps rows with episodes
+  told. A plain measure gives every day's row.
+- `view=list` makes a plain request read as a list too.
+
+A signed-in viewer of a list with a type, dates or `counts` also gets, beside `results`:
+`top_line`, the number tapped in words ("360 pages", "5 books", "11 active days",
+"3 weeks", "2 hours (2h 15m)", "≈ 86 hours"); with one type, `total`
+(`value`, `unit`, `known`, `total`, `approximate`, `time_label`), the number Stats prints;
+and `undated` on All Time's first page, when the number includes marks
+(`amount`, `unit`, `titles`, `told`, `label`: "Includes 200 books and 48,829 pages with
+no date"). Never `undated` for `days`, `weeks` or `multi_title_days`. A logged-out caller
+gets public rows and none of the three. Rows plus the line are the number.
+
+A row's `id` and `object.id` address its day: a book, game, manga or comic day with a
+saved change keeps the lowest change id; any other day (TV, anime, or no change) is
+`(person << 44) | (Item << 20) | day ordinal`, at or above 2^44, a signed 63-bit number.
+
 ## AC-7: Likes and comments
 
 - Anyone who can see an item can like it and comment on it, or reply to a comment. Replies go one level deep: a reply to a reply joins the same thread. Replies count in the item's comment count. A deleted comment with replies stays as "Comment deleted" above them, and doesn't count.
@@ -143,6 +195,13 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 - `object.id` of a day's progress addresses it: `/api/v1/progress/<id>/` is its page,
   with `like/` and `comments/` under it. A log uses `/api/v1/diary/<id>/like/` and
   `comments/`. `DELETE /api/v1/comments/<id>/` removes a comment.
+- `object.id` addresses a day: an id from before (a change id) still opens its day. A
+  TV or anime day's id is no change id: it names the person, the show and the day.
+- A day with no row left for a viewer, because a fix emptied it or a backdated log took
+  it, is not found for that viewer: its page, like and comments return 404 until the
+  day has a row again. Its likes and comments stay stored. Only a day with no row in the
+  viewer-independent view (no log visible, so none moves a row) is deleted with its
+  journey, attempt, playthrough or season.
 - Deleting a journey, attempt, playthrough or season's progress deletes the likes and
   comments of each day it leaves with no progress. Removing a title deletes all of that
   person's progress, likes and comments on it. Neither comes back on a later save that

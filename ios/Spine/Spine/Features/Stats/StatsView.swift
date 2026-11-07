@@ -88,6 +88,9 @@ struct StatsView: View {
 
     private let username: String?
     private let services: StatsRouteServices
+    /// Whose Activity list the list-opening numbers show: the profile's own username, since `username` is nil on
+    /// your own stats.
+    private let activityUsername: String?
 
     init(
         profileRepository: ProfileRepository,
@@ -99,6 +102,7 @@ struct StatsView: View {
         selectedTab: AppTab = .profile,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         username: String? = nil,
+        activityUsername: String? = nil,
         enabledMediaTypes: [String]? = nil,
         onUnauthorized: @escaping () -> Void = {}
     ) {
@@ -109,6 +113,7 @@ struct StatsView: View {
             onUnauthorized: onUnauthorized
         ))
         self.username = username
+        self.activityUsername = activityUsername ?? username
         services = StatsRouteServices(
             profileRepository: profileRepository,
             mediaRepository: mediaRepository,
@@ -149,6 +154,8 @@ struct StatsView: View {
         let drillDown: ((StatsDrillDown) -> Void)? = isOwnStats ? { open($0, page: page) } : nil
         // On Global, a Time row switches to its type.
         let selectType: ((String) -> Void)? = mediaType == nil ? { viewModel.selectMediaType($0) } : nil
+        // The Activity list's numbers open on a friend's stats too.
+        let openActivity: ((StatsDrillDown) -> Void)? = activityUsername == nil ? nil : { open($0, page: page) }
 
         switch section {
         case .header:
@@ -157,7 +164,8 @@ struct StatsView: View {
                     header: header,
                     mediaType: mediaType,
                     time: page.time,
-                    onOpen: drillDown
+                    onOpen: drillDown,
+                    onOpenActivity: openActivity
                 )
             }
         case .time:
@@ -165,7 +173,8 @@ struct StatsView: View {
                 StatsTimeSection(
                     time: time,
                     mediaType: mediaType,
-                    onSelectMediaType: selectType
+                    onSelectMediaType: selectType,
+                    onOpenActivity: openActivity
                 )
             }
         case .top:
@@ -291,7 +300,8 @@ struct StatsView: View {
         let context = StatsDrillDownContext(
             period: pageScope.period,
             mediaType: page.mediaType,
-            isOwnStats: isOwnStats
+            isOwnStats: isOwnStats,
+            activityUsername: activityUsername
         )
         guard let route = drillDown.route(in: context) else { return }
         if route.presentsFullScreen {
@@ -303,7 +313,12 @@ struct StatsView: View {
 
     /// The show-all screens' context, so a poster there opens what it opens on the page.
     private func drillDownContext(for scope: StatsScope) -> StatsDrillDownContext {
-        StatsDrillDownContext(period: scope.period, mediaType: scope.mediaType, isOwnStats: isOwnStats)
+        StatsDrillDownContext(
+            period: scope.period,
+            mediaType: scope.mediaType,
+            isOwnStats: isOwnStats,
+            activityUsername: activityUsername
+        )
     }
 
     private func showHighestRated(_ page: StatsPage) {

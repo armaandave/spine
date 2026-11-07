@@ -134,6 +134,8 @@ struct ProfileCounts: Codable {
     let plannedItems: Int
     let likedItems: Int
     let tags: Int
+    /// Rows on the profile's Activity list for this viewer. Only the profile screens send it.
+    let activity: Int?
 
     init(
         followers: Int,
@@ -144,7 +146,8 @@ struct ProfileCounts: Codable {
         reviews: Int = 0,
         plannedItems: Int = 0,
         likedItems: Int = 0,
-        tags: Int = 0
+        tags: Int = 0,
+        activity: Int? = nil
     ) {
         self.followers = followers
         self.following = following
@@ -155,6 +158,7 @@ struct ProfileCounts: Codable {
         self.plannedItems = plannedItems
         self.likedItems = likedItems
         self.tags = tags
+        self.activity = activity
     }
 
     enum CodingKeys: String, CodingKey {
@@ -167,6 +171,7 @@ struct ProfileCounts: Codable {
         case plannedItems
         case likedItems
         case tags
+        case activity
     }
 
     init(from decoder: Decoder) throws {
@@ -180,6 +185,7 @@ struct ProfileCounts: Codable {
         plannedItems = try container.decodeIfPresent(Int.self, forKey: .plannedItems) ?? 0
         likedItems = try container.decodeIfPresent(Int.self, forKey: .likedItems) ?? 0
         tags = try container.decodeIfPresent(Int.self, forKey: .tags) ?? 0
+        activity = try container.decodeIfPresent(Int.self, forKey: .activity)
     }
 }
 

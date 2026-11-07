@@ -210,6 +210,10 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
     /// Featured lists only: the entry's note ("Winner · Best Picture", "▲2 · $12.4M").
     let note: String?
     var userState: UserMediaState?
+    /// A season or episode row on the Activity list: the show's title, and an episode's own title (TV-702). Only a
+    /// list opened from a number sends them.
+    var showTitle: String? = nil
+    var episodeTitle: String? = nil
 
     var id: String { ref.id }
 
@@ -259,6 +263,8 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         case position
         case note
         case userState
+        case showTitle
+        case episodeTitle
     }
 
     init(
@@ -291,7 +297,9 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         defaultSource: String? = nil,
         position: Int? = nil,
         note: String? = nil,
-        userState: UserMediaState? = nil
+        userState: UserMediaState? = nil,
+        showTitle: String? = nil,
+        episodeTitle: String? = nil
     ) {
         self.ref = ref
         self.title = title
@@ -323,6 +331,8 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         self.position = position
         self.note = note
         self.userState = userState
+        self.showTitle = showTitle
+        self.episodeTitle = episodeTitle
     }
 
     init(from decoder: Decoder) throws {
@@ -358,7 +368,9 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
             defaultSource: try container.decodeIfPresent(String.self, forKey: .defaultSource),
             position: try container.decodeIfPresent(Int.self, forKey: .position),
             note: (try? container.decodeIfPresent(String.self, forKey: .note)) ?? nil,
-            userState: try container.decodeIfPresent(UserMediaState.self, forKey: .userState)
+            userState: try container.decodeIfPresent(UserMediaState.self, forKey: .userState),
+            showTitle: try? container.decodeIfPresent(String.self, forKey: .showTitle),
+            episodeTitle: try? container.decodeIfPresent(String.self, forKey: .episodeTitle)
         )
     }
 }
