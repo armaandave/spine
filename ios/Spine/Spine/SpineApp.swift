@@ -6,6 +6,9 @@ struct SpineApp: App {
 
     init() {
         SpineImagePipeline.install()
+        #if DEBUG
+        PerfProbe.startIfRequested()
+        #endif
     }
 
     var body: some Scene {
