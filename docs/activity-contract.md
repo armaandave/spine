@@ -7,7 +7,7 @@ so a list adds up to the number that opened it and a fixed typo fixes the old ro
 
 ## AC-1: Activity is logs, each day's progress and status moves
 
-Three things are activity:
+These are activity:
 
 - **A diary log.** Imported logs are activity like any other log.
 - **A day's progress on a title.** All of a person's progress on one title in one
@@ -25,6 +25,14 @@ Three things are activity:
   again after finishing or dropping is, and says only "started" (decision 44 for a game:
   a new playthrough). Carrying on with a finished manga or comic isn't (Keep Reading, or a
   comic's new issue: MC-200, MC-202).
+- **Adding titles to Planning** (Phase 5): a person's day of adds is one row,
+  "Added 3 shows to Planning" (AC-8). It is recorded when a request from the person
+  says Planning and the title wasn't in Planning before: the app, the website and the
+  API (`social.ProgressChange` kind `planning`, `saved_on` the owner's calendar day).
+  An import never records one, even a watchlist that puts titles in Planning (SW-500),
+  and neither does a webhook or a job. Leaving Planning and coming back is a second
+  add. Heart, stars or a note that make a Planning row as a side effect aren't an add.
+  A Planning row adds nothing to any Stats number and isn't an active day.
 
 Nothing else is activity: not rating a title without a log, not marking something
 watched, read, played, or completed without a log (the eye, a heart, stars, Mark

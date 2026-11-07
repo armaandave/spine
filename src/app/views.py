@@ -23,7 +23,7 @@ from api.services import stats_cache
 from api.services.item_metadata import store_item_metadata
 from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, series_tracking, single_weight
 from app import statistics as stats
-from app import anime_listing, anime_tracking, tv_listing, tv_tracking, user_calendar
+from app import anime_listing, anime_tracking, planning_adds, tv_listing, tv_tracking, user_calendar
 from app.book_tracking import BookTrackingConflict
 from app.forms import EpisodeForm, ManualItemForm, get_form_class, BookProgressForm, BookLogForm, BookStartReadingForm, manual_parent_seasons
 from app.models import TV, BasicMedia, Item, MediaTypes, Season, Sources, Status, Movie, Episode, Book, BookSession, UserMessage, UserMessageLevel
@@ -861,6 +861,9 @@ def media_save(request):
         model = apps.get_model(app_label="app", model_name=media_type)
         instance = model(item=item, user=request.user)
 
+    # Before the form: validating it copies the posted status onto the instance.
+    status_before = planning_adds.status_of(instance)
+
     # Validate the form and save the instance if it's valid
     form_class = get_form_class(media_type)
     form_kwargs = (
@@ -910,6 +913,13 @@ def media_save(request):
             except (BookTrackingConflict, ValidationError) as error:
                 messages.error(request, str(error))
                 return helpers.redirect_back(request)
+        planning_adds.record_if_added(
+            request.user,
+            instance.item,
+            asked=form.cleaned_data.get("status"),
+            before=status_before,
+            after=planning_adds.status_of(saved),
+        )
         logger.info("%s saved successfully.", saved)
     else:
         logger.error(form.errors.as_json())
@@ -1135,7 +1145,7 @@ def create_entry(request):
             messages.error(request, _tv_error_message(error))
             return redirect("create_entry")
     elif single_weight.supports(item):
-        single_weight.apply_tracking_state(
+        saved = single_weight.apply_tracking_state(
             request.user,
             item,
             status=media_form.cleaned_data["status"],
@@ -1143,15 +1153,29 @@ def create_entry(request):
             start_date=media_form.cleaned_data.get("start_date"),
             notes=media_form.cleaned_data.get("notes", ""),
         )
+        planning_adds.record_if_added(
+            request.user,
+            item,
+            asked=media_form.cleaned_data.get("status"),
+            before=None,
+            after=planning_adds.status_of(saved),
+        )
     else:
         try:
-            media_form.save()
+            saved = media_form.save()
         except TV_WRITE_ERRORS as error:
             messages.error(request, _tv_error_message(error))
             return redirect("create_entry")
         except (BookTrackingConflict, ValidationError) as error:
             messages.error(request, str(error))
             return redirect("create_entry")
+        planning_adds.record_if_added(
+            request.user,
+            item,
+            asked=media_form.cleaned_data.get("status"),
+            before=None,
+            after=planning_adds.status_of(saved),
+        )
 
     # Success message
     msg = f"{item} added successfully."
