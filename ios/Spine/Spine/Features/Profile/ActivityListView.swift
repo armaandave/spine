@@ -260,9 +260,16 @@ struct ActivityListRow: View {
             .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(DiaryEntryRow.titleText(titleParts))
-                    .font(.system(size: 16, weight: .semibold))
-                    .lineLimit(2)
+                Group {
+                    // A day of Planning adds reads as its count, not as its first title.
+                    if activity.planning != nil {
+                        Text(PlanningWords.headline(for: activity))
+                    } else {
+                        Text(DiaryEntryRow.titleText(titleParts))
+                    }
+                }
+                .font(.system(size: 16, weight: .semibold))
+                .lineLimit(2)
 
                 detailLine
             }

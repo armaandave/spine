@@ -64,6 +64,10 @@ def decode(planning_id):
     return planning_id >> ADDRESS_SHIFT, day
 
 
+# How many names a row carries: more than any row can show on one line.
+TITLE_NAMES = 20
+
+
 @dataclass
 class PlanningRow:
     """A person's day of Planning adds, shaped for the list's sort and cursor."""
@@ -186,6 +190,8 @@ def payload(row, actor, request):
             "label": None,
             "count": row.count,
             "media_type": row.media_type,
+            # Names under the count, oldest add first; the app shows what fits.
+            "titles": [item.title for item in row.titles[:TITLE_NAMES]],
         },
         "viewer": {"can_view": True, "has_liked": False},
         "like_count": 0,

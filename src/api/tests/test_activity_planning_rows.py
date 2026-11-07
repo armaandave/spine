@@ -66,6 +66,8 @@ class DayRowTests(PlanningRowBase):
         self.assertEqual((row["object"]["count"], row["object"]["media_type"]), (5, None))
         self.assertEqual(row["consumed_at"], "2026-10-25")
         self.assertEqual(row["media"]["title"], movies[0].title)
+        # The row reads as its count, each title's name under it, oldest first.
+        self.assertEqual(row["object"]["titles"], [*(movie.title for movie in movies), book.title, game.title])
         self.assertEqual((row["like_count"], row["comment_count"], row["viewer"]), (0, 0, {"can_view": True, "has_liked": False}))
         self.assertEqual(row["actor"]["username"], "reader")
         self.assertLess(row["id"], 0)
@@ -92,7 +94,7 @@ class DayRowTests(PlanningRowBase):
         )
         self.assertEqual(
             set(row["object"]),
-            {"type", "id", "summary", "label", "count", "media_type"},
+            {"type", "id", "summary", "label", "count", "media_type", "titles"},
         )
         self.assertEqual(row["object"]["type"], "planning")
 

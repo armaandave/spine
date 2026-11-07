@@ -499,6 +499,8 @@ struct ActivityObject: Codable {
     /// `include=planning` gets such a row.
     var count: Int? = nil
     var mediaType: String? = nil
+    /// The Planning row's titles by name, oldest add first, shown under its count.
+    var titles: [String]? = nil
 }
 
 struct ActivityCursorResponse: Codable {

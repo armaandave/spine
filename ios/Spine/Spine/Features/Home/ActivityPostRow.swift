@@ -20,7 +20,8 @@ struct ActivityPostRow: View {
 
                 // One element to VoiceOver, which opens the post from it.
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(activity.media?.displayTitle ?? "")
+                    // A day of Planning adds reads as its count, with the names under it, not as its first title.
+                    Text(activity.planning != nil ? PlanningWords.headline(for: activity) : activity.media?.displayTitle ?? "")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -69,7 +70,11 @@ struct ActivityPostRow: View {
     /// Directly under the title: a log's stars and marks, or in words what the post is when it has none.
     @ViewBuilder
     private var summaryLine: some View {
-        if let status = ActivityFeedPresentation.statusText(for: activity) {
+        if activity.planning != nil {
+            if let names = PlanningWords.names(for: activity) {
+                detailText(names)
+            }
+        } else if let status = ActivityFeedPresentation.statusText(for: activity) {
             detailText(status)
         } else {
             LogRatingMarks(

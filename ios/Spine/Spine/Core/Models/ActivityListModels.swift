@@ -120,7 +120,8 @@ enum ActivityListPresentation {
     /// ("2h 15m"). No Swift time formatter: the server's `time_label` is the only spelling.
     static func caption(for activity: ActivityItem) -> String? {
         if activity.planning != nil {
-            return PlanningWords.headline(for: activity)
+            // The count is the row's title; the names go under it.
+            return PlanningWords.names(for: activity)
         }
         let words: String?
         switch activity.post {
