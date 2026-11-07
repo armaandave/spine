@@ -453,7 +453,12 @@ struct ActivityItem: Codable, Identifiable {
 }
 
 struct ActivityViewer: Codable {
-    let hasLiked: Bool
+    var hasLiked: Bool
+    /// A day's progress page tells its owner what can be done to it (activity contract, AC-9): Edit, a trash, and
+    /// what Edit changes. An admin's page has `canDelete` only. Older servers, lists and feeds send none of them.
+    var canEdit: Bool? = nil
+    var canDelete: Bool? = nil
+    var edit: ProgressEdit? = nil
 }
 
 struct ActivityPersonSnapshot: Codable, Hashable {
@@ -490,6 +495,10 @@ struct ActivityObject: Codable {
     var moves: [String]? = nil
     var percent: Double? = nil
     var timeLabel: String? = nil
+    /// A day of Planning adds (AC-8): how many titles, and the one type they share. Only a request that asks with
+    /// `include=planning` gets such a row.
+    var count: Int? = nil
+    var mediaType: String? = nil
 }
 
 struct ActivityCursorResponse: Codable {

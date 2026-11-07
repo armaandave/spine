@@ -664,12 +664,16 @@ def update_progress(
         raise ValidationError("progress_type must be pages or percentage.")
 
     today = user_calendar.today(user)
-    progress_day = single_weight.sent_day(progressed_on or today, today)
-    if progress_day == today:
+    # The save's day is the one sent (the date picker), and the row keeps it (AC-2).
+    saved_on = single_weight.sent_day(progressed_on or today, today)
+    if saved_on == today:
         # Never refused: after a flight west today can be before the start or last save.
         progress_day = max(filter(None, (today, _day(session.start_date), session.progressed_on)))
-    elif session.start_date and progress_day < _day(session.start_date):
+    elif session.start_date and saved_on < _day(session.start_date):
         raise ValidationError("Progress updates cannot predate the journey start.")
+    else:
+        # Dated before the last save is allowed; the latest progress stays the newest.
+        progress_day = max(filter(None, (saved_on, session.progressed_on)))
     previous = _journey_progress(session)
     session.pages_read = pages
     session.percentage_read = percentage
@@ -681,7 +685,7 @@ def update_progress(
     _set_book_from_session(book, session)
     current = _journey_progress(session)
     if previous != current:
-        _record_progress_change(user, item, previous, current)
+        _record_progress_change(user, item, previous, current, saved_on)
     return book
 
 
@@ -1587,7 +1591,7 @@ def remove_tracking(user, item):
     return None
 
 
-def _record_progress_change(user, item, previous, current):
+def _record_progress_change(user, item, previous, current, saved_on):
     from social.models import Activity
 
     change = ProgressChange.objects.create(
@@ -1601,7 +1605,7 @@ def _record_progress_change(user, item, previous, current):
             "journey_id": current["journey_id"],
         },
         current_progress=current,
-        saved_on=user_calendar.today(user),
+        saved_on=saved_on,
     )
     Activity.objects.create(
         actor=user,

@@ -214,6 +214,8 @@ enum ActivityFeedPresentation {
             "updated a log"
         case "diary_deleted":
             "deleted a log"
+        case "planning_added":
+            PlanningWords.headline(for: activity)
         case "list_created":
             "created a list"
         case "list_item_added":
@@ -229,6 +231,8 @@ enum ActivityFeedPresentation {
             "Opens log details"
         case .progress:
             "Opens this progress"
+        case .planning:
+            "Opens the titles added"
         case .person:
             "Opens person details"
         case .media:
@@ -310,6 +314,7 @@ enum ActivityFeedPresentation {
 enum ActivityDestination: Equatable {
     case diary(Int)
     case progress(Int)
+    case planning(PlanningRef)
     case person(PersonRef)
     case media(MediaRef)
     case none
@@ -320,6 +325,9 @@ enum ActivityDestination: Equatable {
         }
         if activity.object.type == "progress_day" {
             return .progress(activity.object.id)
+        }
+        if let planning = activity.planning {
+            return .planning(planning)
         }
         if let ref = activity.person?.ref {
             return .person(ref)

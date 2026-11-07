@@ -24,7 +24,8 @@ from django.db.models.functions import TruncDate, TruncDay
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework.exceptions import NotFound
+from rest_framework import status
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.utils.urls import replace_query_param
 
@@ -36,7 +37,7 @@ from api.serializers.common import (
     tv_season_started,
     user_summary,
 )
-from api.services import activity_list, activity_rows
+from api.services import activity_list, activity_planning, activity_rows, progress_rows
 from api.services import diary as diary_service
 from app import exposure, single_weight, tv_tracking, user_calendar
 from app.curation import prime_curated_artwork
@@ -258,6 +259,8 @@ def feed_response(request):
         piles=False,
     )
     rows = activity_list.select(_exposed(calculation), filters)
+    if activity_planning.asked(request):
+        rows = _with_planning(rows, people, filters.media_type)
     return page_response(request, rows)
 
 
@@ -279,6 +282,9 @@ def profile_response(request, user):
     )
     calculation = _exposed(calculation)
     rows = activity_list.select(calculation, filters)
+    # Planning rows are no part of any number, so a list opened from one never has them.
+    if activity_planning.asked(request) and not filters.asked:
+        rows = _with_planning(rows, [user], None)
     # A list opened from a number, or asked to be a list, reads as the Diary does.
     list_view = filters.asked or request.query_params.get("view") == "list"
     response = page_response(request, rows, list_view=list_view)
@@ -295,6 +301,12 @@ def activity_count(user, viewer):
         return 0
     calculation = _exposed(activity_rows.rows_for([user], viewer, piles=False))
     return len(activity_list.select(calculation, activity_list.Filters()))
+
+
+def _with_planning(rows, people, media_type):
+    """Add these people's days of Planning adds to a page's rows (AC-8), in order."""
+    planning = activity_planning.rows_for(people, media_type=media_type)
+    return sorted([*rows, *planning], key=activity_list.row_order, reverse=True) if planning else rows
 
 
 def _exposed(calculation):
@@ -327,6 +339,12 @@ def page_response(request, rows, *, list_view=False):
 
 def _page_items(page, request, *, list_view):
     """Turn a page of rows into the items a client reads."""
+    whole = page
+    planning = [row for row in whole if isinstance(row, activity_planning.PlanningRow)]
+    planned = {
+        row.address: payload for row, payload in zip(planning, activity_planning.payloads(planning, request), strict=True)
+    }
+    page = [row for row in whole if not isinstance(row, activity_planning.PlanningRow)]
     entries = {
         entry.pk: entry
         for entry in DiaryEntry.objects.filter(pk__in=[row.log_id for row in page if row.log_id]).select_related(
@@ -349,8 +367,10 @@ def _page_items(page, request, *, list_view):
     diary_service.prime_diary_likes(entries.values(), request.user)
     engagement = _day_engagement([_post_key(row) for row in progress], request.user)
     results = []
-    for row in page:
-        if row.log_id:
+    for row in whole:
+        if isinstance(row, activity_planning.PlanningRow):
+            results.append(planned[row.address])
+        elif row.log_id:
             entry = entries.get(row.log_id)
             if entry is not None:
                 results.append(_log_payload(entry, request, row, list_view=list_view))
@@ -465,6 +485,18 @@ def _from_change(progress_id):
     return change.actor, item, activity_rows.saved_day(change, user_calendar.calendar_tz(change.actor))
 
 
+def resolve_address(progress_id):
+    """Return (the person, the title's Item, the day) an address names, or 404."""
+    if progress_id >= ADDRESS_BASE:
+        actor_id, item_id, day = _from_address(progress_id)
+        return (
+            get_object_or_404(get_user_model(), pk=actor_id),
+            get_object_or_404(Item, pk=item_id),
+            day,
+        )
+    return _from_change(progress_id)
+
+
 def progress_day(viewer, progress_id):
     """Return the day's progress an address belongs to, or 404.
 
@@ -472,12 +504,7 @@ def progress_day(viewer, progress_id):
     the day with nothing, or a log moves it, the page, its like and its comments are 404
     until it has a row again. Their rows stay stored (AC-7).
     """
-    if progress_id >= ADDRESS_BASE:
-        actor_id, item_id, day = _from_address(progress_id)
-        owner = get_object_or_404(get_user_model(), pk=actor_id)
-        item = get_object_or_404(Item, pk=item_id)
-    else:
-        owner, item, day = _from_change(progress_id)
+    owner, item, day = resolve_address(progress_id)
     if not can_view_user_profile(viewer, owner):
         raise Http404
     exposure.require_media_type(item.media_type)
@@ -498,7 +525,50 @@ def progress_post_response(request, progress_id):
     actor = get_user_model().objects.get(pk=row.actor_id)
     title = Item.objects.get(pk=row.title_id)
     prime_curated_artwork([title])
-    return Response(_row_payload(row, actor, title, request, _day_engagement([_post_key(row)], request.user)))
+    payload = _row_payload(row, actor, title, request, _day_engagement([_post_key(row)], request.user))
+    # Only the owner (and an admin, to delete) is told what can be done to the row.
+    payload["viewer"].update(progress_rows.viewer_fields(request.user, actor, title, row.day))
+    return Response(payload)
+
+
+def _row_target(request, progress_id):
+    """Return (owner, Item, day) of a row the person may act on, or raise a 404.
+
+    The row has to exist for them: someone who can't see it gets 404 whatever they
+    try. An admin acts on a row of a profile they can't see as the owner would see it.
+    """
+    owner, item, day = resolve_address(progress_id)
+    viewer = request.user
+    if viewer.is_staff and not can_view_user_profile(viewer, owner):
+        viewer = owner
+    progress_day(viewer, progress_id)
+    return owner, item, day
+
+
+def progress_fix_response(request, progress_id, value, unit):
+    """Fix an older row's number (decision 58); only its owner may."""
+    owner, item, day = _row_target(request, progress_id)
+    if request.user.pk != owner.pk:
+        raise PermissionDenied
+    progress_rows.fix(owner, item, day, value, unit=unit)
+    return _after_change(request, progress_id)
+
+
+def progress_delete_response(request, progress_id):
+    """Take back the newest row (decision 52); its owner or an admin may."""
+    owner, item, day = _row_target(request, progress_id)
+    if request.user.pk != owner.pk and not request.user.is_staff:
+        raise PermissionDenied
+    progress_rows.delete(owner, item, day, by=request.user)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _after_change(request, progress_id):
+    """Return the fixed row's page, or 204 when the fix left the day with no row."""
+    try:
+        return progress_post_response(request, progress_id)
+    except Http404:
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _title_key(item):

@@ -590,6 +590,8 @@ struct BookProgressRequest: Encodable {
     let progressType: String
     let value: Decimal
     let notes: String
+    /// The day of the save; sent only when the sheet named one, so older builds' requests are unchanged.
+    var progressedOn: String? = nil
 }
 
 struct BookCompleteRequest: Encodable {
@@ -612,6 +614,7 @@ struct SeriesProgressRequest: Encodable, Equatable {
     let value: Int
     /// The same on a retry, so a lost answer at the total still opens the log screen (MC-100, MC-101).
     let mutationId: UUID
+    var progressedOn: String? = nil
 }
 
 /// A manga's or a comic's log: the book's, with its own visibility (AC-5) and the optional number a log with no total

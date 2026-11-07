@@ -27,7 +27,10 @@ struct ActivityPostRow: View {
                     summaryLine
                     reviewLine
                     Spacer(minLength: 0)
-                    PostEngagementSummary(engagement: activity.engagement)
+                    // A day of Planning adds has no likes or comments to count.
+                    if activity.planning == nil {
+                        PostEngagementSummary(engagement: activity.engagement)
+                    }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)

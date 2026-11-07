@@ -404,7 +404,11 @@ Completed.
 ### BK-306: Journey dates are chronologically valid
 
 - A live journey start date is required and cannot be in the future.
-- A progress update cannot predate its journey start.
+- A progress update cannot predate its journey start. The save is dated by the day the
+  phone sends (the date picker), and that day is the save's day in activity (AC-2): the
+  phone's own date is never refused, a day one ahead caps at today, any other day after
+  today is refused, and a day before the previous save is allowed. The journey's latest
+  progress stays its newest day.
 - A DNF date cannot predate the journey start or its latest progress update.
 - A completion log can carry any date up to today (the maintainer's decision 10). A
   date before the journey start moves the start with it, and deleting the log puts the
@@ -618,4 +622,5 @@ contract before implementation begins.
 BK-304, BK-305 and BK-306's rules for the phone's own date and a date one day ahead,
 BK-101's kept place and website Completed, BK-103's mark when the last log goes, BK-305's
 opening at a place, BK-306's rules for a log's date, and BK-404's log with no journey, are
-provisional until the phone test of Activity's first phase accepts them.
+provisional until the phone test of Activity's first phase accepts them. BK-306's dated
+progress update is provisional until the phone test of Activity's fifth phase accepts it.

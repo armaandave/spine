@@ -9,6 +9,8 @@ enum ProgressSaveFollowUp: Equatable {
 struct ProgressUpdateSaveRequest: Equatable {
     let mode: ProgressUpdateMode
     let value: Decimal
+    /// The day the sheet's date row named, "YYYY-MM-DD"; the sheet sets it, a save from elsewhere sends none.
+    var progressedOn: String? = nil
 }
 
 /// The title a progress sheet updates. A Home card knows it before the title's page has loaded, so the sheet opens at
@@ -250,6 +252,8 @@ struct ProgressUpdateSheet: View {
     @State private var isSubmitting = false
     /// A choice closed the sheet: a second tap while it slides away does nothing.
     @State private var isClosing = false
+    /// The day this save is on, today until the date row says otherwise.
+    @State private var date = Date()
 
     let title: ProgressSheetTitle
     let isSaving: Bool
@@ -320,6 +324,7 @@ struct ProgressUpdateSheet: View {
             finishTitle: "Finished Reading",
             canSave: viewModel.canSave && !isClosing,
             isSaving: isSaving || isSubmitting,
+            date: $date,
             onSave: save,
             onFinish: { perform(.finish) }
         ) {
@@ -367,7 +372,8 @@ struct ProgressUpdateSheet: View {
     }
 
     private func save() {
-        guard let request = viewModel.saveRequest, !isSubmitting, !isClosing else { return }
+        guard let undated = viewModel.saveRequest, !isSubmitting, !isClosing else { return }
+        let request = undated.dated(date)
         let finishes = viewModel.isFullProgress
         isSubmitting = true
         Task {
@@ -415,6 +421,8 @@ struct ProgressUpdateSheet: View {
 struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     @Environment(\.dismiss) private var dismiss
     @State private var focusRequest = 0
+    /// The date row's calendar is open. The number pad is down then, which must not close the sheet.
+    @State private var isPickingDate = false
 
     let title: String
     let subtitle: String?
@@ -432,6 +440,10 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     let finishTitle: String?
     let canSave: Bool
     let isSaving: Bool
+    /// The day the save is on; nil leaves the date row out.
+    let date: Binding<Date>?
+    /// False leaves out ⋯, for a sheet whose only choice is its number.
+    let showsMore: Bool
     let onSave: () -> Void
     let onFinish: () -> Void
     let countOptions: CountOptions
@@ -451,6 +463,8 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         finishTitle: String?,
         canSave: Bool,
         isSaving: Bool,
+        date: Binding<Date>? = nil,
+        showsMore: Bool = true,
         onSave: @escaping () -> Void,
         onFinish: @escaping () -> Void,
         @ViewBuilder countOptions: () -> CountOptions,
@@ -469,6 +483,8 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         self.finishTitle = finishTitle
         self.canSave = canSave
         self.isSaving = isSaving
+        self.date = date
+        self.showsMore = showsMore
         self.onSave = onSave
         self.onFinish = onFinish
         self.countOptions = countOptions()
@@ -496,9 +512,16 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
                             }
                         }
                         .contentShape(Rectangle())
-                        .onTapGesture { focusRequest += 1 }
+                        .onTapGesture {
+                            isPickingDate = false
+                            focusRequest += 1
+                        }
 
                         countOptions
+
+                        if let date {
+                            dateRow(date)
+                        }
                     } footer: {
                         if let footer {
                             Text(footer)
@@ -539,13 +562,15 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
                     }
                     .disabled(isSaving)
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        moreActions
-                    } label: {
-                        Label("More", systemImage: "ellipsis")
+                if showsMore {
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            moreActions
+                        } label: {
+                            Label("More", systemImage: "ellipsis")
+                        }
+                        .disabled(isSaving)
                     }
-                    .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if isSaving {
@@ -567,8 +592,42 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         // nothing to do, so it closes all the way. Not while a save is out (its failure shows here), nor when the app
         // leaves the screen.
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            guard !isSaving, UIApplication.shared.applicationState == .active else { return }
+            guard !isSaving, !isPickingDate, UIApplication.shared.applicationState == .active else { return }
             dismiss()
+        }
+    }
+
+    /// "Date  Today": a tap opens the calendar under it and lowers the number pad; the number's row brings the pad
+    /// back. The calendar stops at today, since a save can't be a day ahead.
+    @ViewBuilder
+    private func dateRow(_ date: Binding<Date>) -> some View {
+        Button {
+            if isPickingDate {
+                isPickingDate = false
+                focusRequest += 1
+            } else {
+                // Before the pad goes down, so its hiding doesn't close the sheet.
+                isPickingDate = true
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+        } label: {
+            HStack {
+                Text("Date")
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 12)
+                Text(ProgressDateWords.text(for: date.wrappedValue))
+                    .foregroundStyle(isPickingDate ? Color.accentColor : Color.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Date")
+        .accessibilityValue(ProgressDateWords.text(for: date.wrappedValue))
+
+        if isPickingDate {
+            DatePicker("Date", selection: date, in: ...Date(), displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .labelsHidden()
         }
     }
 }

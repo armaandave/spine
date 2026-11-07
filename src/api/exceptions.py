@@ -22,6 +22,14 @@ class BookTrackingConflict(exceptions.APIException):
     default_code = "book_tracking_conflict"
 
 
+class ProgressRowConflict(exceptions.APIException):
+    """The row isn't the one it was when the page loaded: it is no longer the newest."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "This row changed. Reload the page."
+    default_code = "progress_row_changed"
+
+
 class AllMediaSearchUnavailable(exceptions.APIException):
     """Every provider in an all-media search failed."""
 

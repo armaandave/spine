@@ -244,6 +244,23 @@ class ProgressChange(models.Model):
             saved_on=user_calendar.today(actor),
         )
 
+    @classmethod
+    def record_planning(cls, actor, item):
+        """Record the person asking for Planning on a title they weren't planning.
+
+        It says "on this day this person added this title to Planning" and nothing
+        else: whether the title is in Planning now is the tracking row's status. It
+        holds value 0 in previous and current and adds nothing to any number.
+        """
+        snapshot = {"kind": cls.PLANNING, "value": 0, "max": None, "unit": cls.PLANNING}
+        return cls.objects.create(
+            actor=actor,
+            item=item,
+            previous_progress=snapshot,
+            current_progress=snapshot,
+            saved_on=user_calendar.today(actor),
+        )
+
 
 class ProgressPost(models.Model):
     """What likes and comments on a day's progress attach to.

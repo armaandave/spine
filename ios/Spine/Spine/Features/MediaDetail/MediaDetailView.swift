@@ -1280,7 +1280,8 @@ final class MediaDetailViewModel {
                 return .state(try await trackingRepository.updateSeriesProgress(
                     ref: ref,
                     value: NSDecimalNumber(decimal: request.value).intValue,
-                    mutationId: mutationId(for: "series.progress")
+                    mutationId: mutationId(for: "series.progress"),
+                    progressedOn: request.progressedOn
                 ))
             }
             var state = try await trackingRepository.updateBookProgress(
@@ -1288,7 +1289,8 @@ final class MediaDetailViewModel {
                 mediaId: ref.mediaId,
                 progressType: request.mode.apiValue,
                 value: request.value,
-                notes: ""
+                notes: "",
+                progressedOn: request.progressedOn
             )
             state = state.replacingProgress(progressState(for: request, detail: detail, fallback: state.progress))
             ProgressDisplayPreferences.setMode(request.mode, for: ref)
