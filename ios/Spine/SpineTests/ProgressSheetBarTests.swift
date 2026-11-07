@@ -107,9 +107,9 @@ final class ProgressSheetBarTests: XCTestCase {
     }
 
     func testSizingTextIsTheUnitsWidestLabel() throws {
-        XCTAssertEqual(try XCTUnwrap(bar(.pages, last: 0, typed: 1, total: 10)).sizingText, "+9999 pages")
-        XCTAssertEqual(try XCTUnwrap(bar(.percent, last: 0, typed: 1, total: nil)).sizingText, "+9999%")
-        XCTAssertEqual(try XCTUnwrap(bar(.chapters, last: 0, typed: 1, total: 10)).sizingText, "+9999 chapters")
+        XCTAssertEqual(try XCTUnwrap(bar(.pages, last: 0, typed: 1, total: 10)).sizingText, "+999 pages")
+        XCTAssertEqual(try XCTUnwrap(bar(.percent, last: 0, typed: 1, total: nil)).sizingText, "+99.99%")
+        XCTAssertEqual(try XCTUnwrap(bar(.chapters, last: 0, typed: 1, total: 10)).sizingText, "+999 chapters")
     }
 
     func testTheSheetsViewModelFeedsTheBook() throws {

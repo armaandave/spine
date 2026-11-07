@@ -44,7 +44,8 @@ nonisolated struct ProgressSheetBar: Equatable {
             return nil
         }
         let text: String? = to > from ? "+\(amount(to - from, unit: unit))" : to < from ? "moved back" : nil
-        return ProgressSheetBar(model: model, accent: accent, text: text, sizingText: "+\(amount(9999, unit: unit))")
+        let widest: Decimal = unit == .percent ? Decimal(string: "99.99") ?? 99 : 999
+        return ProgressSheetBar(model: model, accent: accent, text: text, sizingText: "+\(amount(widest, unit: unit))")
     }
 
     private static func round(_ value: Decimal) -> Int {
