@@ -14,6 +14,8 @@ def _row(actor_id):
 
 
 class RowOrderActorTests(SimpleTestCase):
+    """Rows that differ only by person keep a stable order."""
+
     def test_actor_breaks_a_tie_on_the_same_title_and_day(self):
         self.assertNotEqual(activity_list.row_order(_row(1)), activity_list.row_order(_row(2)))
 
@@ -21,12 +23,14 @@ class RowOrderActorTests(SimpleTestCase):
         key = activity_list.row_order(_row(5))
         request = SimpleNamespace(query_params={"cursor": activity._encode_cursor(key)})
         self.assertEqual(activity._decode_cursor(request), key)
-        old = {"cursor": activity._encode_cursor(key[:-1] + (0,))}
+        old = {"cursor": activity._encode_cursor((*key[:-1], 0))}
         old_key = activity._decode_cursor(SimpleNamespace(query_params=old))
         self.assertEqual(old_key[-1], 0)
 
 
 class RowAddressLimitTests(SimpleTestCase):
+    """Row addresses refuse ids past their packing limits."""
+
     def test_ids_past_the_limits_never_pack_into_another_titles_address(self):
         row = _row(1)
         row.title_id = activity.ITEM_LIMIT + 1

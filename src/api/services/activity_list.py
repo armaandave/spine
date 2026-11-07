@@ -262,7 +262,7 @@ def select(calculation, filters):
 
 
 def row_order(row):
-    """Return a row's place in the list: its day, when written, kind, id, title, then person."""
+    """Return a row's place in the list: day, written, kind, id, title, then person."""
     day, written, kind, row_id = row.sort_key
     return (day, written or NEVER, kind, row_id, row.title_id, row.actor_id or 0)
 
