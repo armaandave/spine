@@ -66,6 +66,7 @@ REWATCH_LABELS = {
     MediaTypes.GAME.value: "Replays",
     MediaTypes.MUSIC.value: "Relistens",
 }
+STREAK_KEYS = ("current_daily_streak", "longest_weekly_streak", "current_weekly_streak")
 FIXED_MILESTONES = (1, 100, 250, 500, 750, 1000)
 MILESTONE_STEP = 500
 
@@ -117,6 +118,12 @@ def build_header(scope):
         ],
     )
     details.extend(_type_details(scope))
+    # A streak names its days for every viewer, as the Activity list opens on them: the
+    # drill is the owner's only, and this isn't (5.6).
+    for detail in details:
+        if detail["key"] in STREAK_KEYS:
+            drill = detail["drill"]
+            detail["range"] = {"start": drill["watched_from"], "end": drill["watched_to"]} if drill else None
     if not scope.is_owner:
         for detail in details:
             detail["drill"] = None
