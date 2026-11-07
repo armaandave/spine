@@ -90,7 +90,10 @@ extension ActivityItem {
             )
         }
         set {
-            viewer = ActivityViewer(hasLiked: newValue.hasLiked)
+            // A page's Edit and Delete stay: only the like changed.
+            var updated = viewer ?? ActivityViewer(hasLiked: false)
+            updated.hasLiked = newValue.hasLiked
+            viewer = updated
             likeCount = newValue.likeCount
             commentCount = newValue.commentCount
         }

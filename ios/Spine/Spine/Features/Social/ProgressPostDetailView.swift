@@ -8,19 +8,26 @@ final class ProgressPostDetailViewModel {
     private(set) var isLoading = true
     private(set) var errorMessage: String?
     let engagement: PostEngagementModel
+    /// Edit and Delete, for your own row (AC-9); made once the row has loaded.
+    private(set) var editor: ProgressRowEditor?
+    /// What the page offers its viewer, as the server said.
+    var controls: ProgressRowControls { ProgressRowControls(activity: activity) }
 
     private let progressId: Int
     private let activityRepository: ActivityRepository
     private let mediaRepository: MediaRepository
+    private let trackingRepository: TrackingRepository?
     private let onUnauthorized: () -> Void
 
     init(
         progressId: Int,
         activityRepository: ActivityRepository,
         mediaRepository: MediaRepository,
+        trackingRepository: TrackingRepository? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.progressId = progressId
+        self.trackingRepository = trackingRepository
         self.activityRepository = activityRepository
         self.mediaRepository = mediaRepository
         self.onUnauthorized = onUnauthorized
@@ -41,6 +48,16 @@ final class ProgressPostDetailViewModel {
             // Shown right away: the title's details only add artwork, and can be slow to arrive.
             activity = loaded
             engagement.seed(loaded.engagement)
+            if let media = loaded.media, let trackingRepository {
+                editor = ProgressRowEditor(
+                    progressId: progressId,
+                    media: media,
+                    activityRepository: activityRepository,
+                    trackingRepository: trackingRepository,
+                    mediaRepository: mediaRepository,
+                    onUnauthorized: onUnauthorized
+                )
+            }
             if let ref = loaded.media?.ref {
                 mediaDetail = try? await mediaRepository.detail(ref: ref)
             }
@@ -63,6 +80,8 @@ struct ProgressPostDetailView: View {
     @State private var presentedRef: MediaRef?
     @State private var edgeDragOffset: CGFloat = 0
     @State private var topSafeAreaInset: CGFloat = 0
+    @State private var isEditing = false
+    @State private var isDeleteConfirmationPresented = false
     @FocusState private var isCommentFocused: Bool
 
     private let diaryRepository: DiaryRepository
@@ -95,6 +114,7 @@ struct ProgressPostDetailView: View {
             progressId: progressId,
             activityRepository: activityRepository,
             mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
             onUnauthorized: onUnauthorized
         ))
     }
@@ -133,18 +153,54 @@ struct ProgressPostDetailView: View {
                 }
             }
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .bold))
-                    .frame(width: 38, height: 38)
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .bold))
+                            .frame(width: 38, height: 38)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(.circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Back")
+
+                    Spacer()
+
+                    // Your own book, manga, comic or game row: the server says what the page offers (AC-9).
+                    if viewModel.controls.showsEdit {
+                        Button {
+                            isEditing = true
+                        } label: {
+                            Text("Edit")
+                                .font(.system(size: 14, weight: .heavy))
+                                .padding(.horizontal, 13)
+                                .frame(height: 38)
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(.capsule)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .disabled(viewModel.editor?.isDeleting == true)
+                    }
+
+                    if viewModel.controls.showsDelete {
+                        Button(role: .destructive) {
+                            isDeleteConfirmationPresented = true
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .bold))
+                                .frame(width: 38, height: 38)
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(.circle)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .accessibilityLabel("Delete")
+                        .disabled(viewModel.editor?.isDeleting == true)
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .contentShape(.circle)
-            .glassEffect(.regular.interactive(), in: .circle)
-            .accessibilityLabel("Back")
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
@@ -173,6 +229,42 @@ struct ProgressPostDetailView: View {
                 await viewModel.engagement.loadCommentsIfNeeded()
             }
         }
+        .sheet(isPresented: $isEditing, onDismiss: leaveIfChanged) {
+            if let editor = viewModel.editor, let edit = viewModel.activity?.viewer?.edit, let media = viewModel.activity?.media {
+                ProgressRowEditSheet(
+                    title: media.displayTitle,
+                    edit: edit,
+                    mediaType: media.ref.mediaType,
+                    onSave: { input, date in await editor.save(input: input, date: date, edit: edit) }
+                )
+            }
+        }
+        .confirmationDialog(
+            "Delete this day's progress?",
+            isPresented: $isDeleteConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    await viewModel.editor?.delete()
+                    leaveIfChanged()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This takes back what you saved that day and puts your place back where it was.")
+        }
+        .alert(
+            "Couldn't delete",
+            isPresented: Binding(
+                get: { viewModel.editor?.deleteErrorMessage != nil },
+                set: { if !$0 { viewModel.editor?.deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.editor?.deleteErrorMessage ?? "")
+        }
         .fullScreenCover(item: $presentedRef) { ref in
             MediaDetailView(
                 ref: ref,
@@ -184,6 +276,13 @@ struct ProgressPostDetailView: View {
                 onSelectTab: onSelectTab,
                 onUnauthorized: onUnauthorized
             )
+        }
+    }
+
+    /// An edit or a delete went through: Stats, the list and Home were told, and the row may be gone, so the page closes.
+    private func leaveIfChanged() {
+        if viewModel.editor?.didChange == true {
+            dismiss()
         }
     }
 

@@ -194,7 +194,20 @@ struct ActivityListView: View {
                 onUnauthorized: onUnauthorized
             )
         case nil:
-            EmptyView()
+            if let planning = item.planning {
+                PlanningTitlesView(
+                    activity: item,
+                    planning: planning,
+                    activityRepository: activityRepository,
+                    diaryRepository: diaryRepository,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    currentUserId: currentUserId,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            }
         }
     }
 
