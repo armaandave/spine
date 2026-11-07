@@ -1,14 +1,17 @@
 import SwiftUI
 
 /// Time (STAT-201, STAT-202): one row per type in its own unit, "≈" when estimated. On Global
-/// a row opens that type's tab, and "Total hours" adds up the types counted in minutes, with a
+/// a row opens that type's Activity list, and "Total hours" adds up the types counted in minutes, with a
 /// note naming the ones it leaves out. One view per row, for the page's lazy stack.
 struct StatsTimeSection: View {
     let time: StatsTime
     /// The tab: nil on Global.
     let mediaType: String?
-    /// Global only: a tapped row switches to its type.
+    /// Global only: a tapped row switches to its type, when it can't open the Activity list.
     var onSelectMediaType: ((String) -> Void)?
+    /// Global only: a type's row, and Total hours, open the Activity list that adds up to them (decision 46), on
+    /// your stats and on a friend's.
+    var onOpenActivity: ((StatsDrillDown) -> Void)?
 
     enum Row: Hashable, Identifiable {
         case title
@@ -37,7 +40,7 @@ struct StatsTimeSection: View {
                 typeRow(timeRow, isLast: isLast)
                     .statsCardSlice(isFirst: isFirst, isLast: isLast, gapAfter: gap(hasNote: hasNote))
             case let .total(total, isLast):
-                StatsLabelValueRow(label: "Total hours", value: Self.totalValue(total))
+                totalRow(total)
                     .statsCardSlice(isFirst: false, isLast: isLast, gapAfter: gap(hasNote: hasNote))
             case let .note(note):
                 Text(note)
@@ -56,11 +59,35 @@ struct StatsTimeSection: View {
     }
 
     @ViewBuilder
+    private func totalRow(_ total: StatsHoursTotal) -> some View {
+        let value = Self.totalValue(total)
+        if mediaType == nil, let onOpenActivity, total.minutes > 0 {
+            Button {
+                onOpenActivity(.activity(counts: .hours))
+            } label: {
+                StatsLabelValueRow(label: "Total hours", value: value, showsChevron: true)
+            }
+            .buttonStyle(DiaryRowButtonStyle())
+            .accessibilityHint("Shows the activity behind it")
+        } else {
+            StatsLabelValueRow(label: "Total hours", value: value)
+        }
+    }
+
+    @ViewBuilder
     private func typeRow(_ row: StatsTimeRow, isLast: Bool) -> some View {
         let label = MediaTypeTheme.theme(for: row.mediaType).displayName
         let value = Self.value(for: row)
         let note = StatsChartCopy.lengthNote(row)
-        if mediaType == nil, let onSelectMediaType {
+        if mediaType == nil, let onOpenActivity, row.value > 0 {
+            Button {
+                onOpenActivity(.activity(counts: nil, mediaType: row.mediaType))
+            } label: {
+                StatsLabelValueRow(label: label, value: value, showsChevron: true, showsSeparator: !isLast, note: note)
+            }
+            .buttonStyle(DiaryRowButtonStyle())
+            .accessibilityHint("Shows \(label) activity")
+        } else if mediaType == nil, let onSelectMediaType {
             Button {
                 onSelectMediaType(row.mediaType)
             } label: {

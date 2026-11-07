@@ -7,6 +7,9 @@ struct StatsDrillDownContext: Hashable {
     /// The tab; nil is Global.
     let mediaType: String?
     let isOwnStats: Bool
+    /// Whose Activity list the list-opening numbers show. Nil opens none: stats without it can't say whose rows
+    /// they'd be, and your own stats can't leave it out (`StatsView.username` is nil there).
+    var activityUsername: String? = nil
 }
 
 /// What a tap on a stats row or chart part opens (STAT-401).
@@ -46,6 +49,11 @@ enum StatsDrillDown: Hashable {
     /// Top's list or a list progress ring.
     case list(id: Int)
     case collection(MediaSeriesSummary)
+    /// A number the Activity list adds up (decision 46): the tab's measure, Titles, Episodes watched, Active days, a
+    /// streak, Days with 2+ titles, Global's Time rows and Total hours. `counts` nil lists every day's row; `range`
+    /// names a streak's days, else the period's dates apply; `mediaType` is a Time row's own type on Global, else the
+    /// tab's. Opens on someone else's stats too, from the list's own rules.
+    case activity(counts: ActivityListCounts?, range: StatsDayRange? = nil, mediaType: String? = nil)
 
     /// A genre row: a group on Global, the provider's genre on a type tab.
     static func forGenre(_ row: StatsGenreRow, mediaType: String? = nil) -> StatsDrillDown {
@@ -78,6 +86,9 @@ enum StatsDrillDown: Hashable {
         case let .stat(_, drill):
             guard context.isOwnStats, MediaFilterState().applying(drill: drill) != nil else { return nil }
             return .diary(self, context)
+        case .activity:
+            guard context.activityUsername != nil else { return nil }
+            return .activity(self, context)
         case let .person(person, _):
             if context.isOwnStats {
                 return .diary(self, context)
@@ -146,7 +157,7 @@ enum StatsDrillDown: Hashable {
             filter.role = role
         case let .tag(tag):
             filter.tag = tag
-        case .milestone, .list, .collection:
+        case .milestone, .list, .collection, .activity:
             break
         }
         return filter
@@ -166,6 +177,33 @@ enum StatsDrillDown: Hashable {
             parts.append(context.period.title)
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// Whether this number opens the Activity list, which any viewer's stats may, not the Diary.
+    var opensActivityList: Bool {
+        if case .activity = self { true } else { false }
+    }
+
+    /// The Activity list this number opens, or nil for a Diary drill-down.
+    func activityFilter(in context: StatsDrillDownContext) -> ActivityListFilter? {
+        guard case let .activity(counts, range, mediaType) = self else { return nil }
+        var filter = ActivityListFilter()
+        filter.mediaType = mediaType ?? context.mediaType
+        filter.counts = counts
+        if let range {
+            filter.startDate = range.start
+            filter.endDate = range.end
+        } else if let dates = Self.dayRange(for: context.period) {
+            filter.startDate = dates.from
+            filter.endDate = dates.to
+        }
+        return filter
+    }
+
+    /// "Books · 2026": the scope the number was tapped in.
+    func activityTitle(in context: StatsDrillDownContext) -> String {
+        guard case let .activity(_, _, mediaType) = self else { return "Activity" }
+        return StatsPageSection.scopeTitle(mediaType: mediaType ?? context.mediaType, period: context.period)
     }
 
     private var label: String {
@@ -196,7 +234,7 @@ enum StatsDrillDown: Hashable {
             return tag
         case let .milestone(milestone):
             return milestone.media.displayTitle
-        case .list, .collection:
+        case .list, .collection, .activity:
             return ""
         }
     }
@@ -277,13 +315,14 @@ enum StatsRoute: Hashable, Identifiable {
     case series(SeriesRef)
     case title(MediaBrowsingSelection)
     case person(PersonRef)
+    case activity(StatsDrillDown, StatsDrillDownContext)
 
     var id: Self { self }
 
     var presentsFullScreen: Bool {
         switch self {
         case .series, .title, .person: true
-        case .diary, .log, .list: false
+        case .diary, .log, .list, .activity: false
         }
     }
 }
@@ -323,6 +362,22 @@ struct StatsRouteDestination: View {
                 onSelectTab: services.onSelectTab,
                 onUnauthorized: services.onUnauthorized
             )
+        case let .activity(drillDown, context):
+            if let username = context.activityUsername, let filter = drillDown.activityFilter(in: context) {
+                ActivityListView(
+                    username: username,
+                    filter: filter,
+                    title: drillDown.activityTitle(in: context),
+                    activityRepository: services.activityRepository,
+                    diaryRepository: services.diaryRepository,
+                    mediaRepository: services.mediaRepository,
+                    trackingRepository: services.trackingRepository,
+                    currentUserId: services.currentUserId,
+                    selectedTab: services.selectedTab,
+                    onSelectTab: services.onSelectTab,
+                    onUnauthorized: services.onUnauthorized
+                )
+            }
         case let .log(entryId):
             DiaryLogDetailView(
                 entryId: entryId,

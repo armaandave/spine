@@ -8027,6 +8027,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(ProfileMenuDestination.allCases.map(\.title), [
             "Library",
             "Diary",
+            "Activity",
             "Reviews",
             "Lists",
             "Planned",
@@ -8034,7 +8035,7 @@ final class SpineTests: XCTestCase {
             "Tags",
             "Stats",
         ])
-        XCTAssertEqual(ProfileMenuDestination.allCases.map { $0.count(from: counts) }, [1, 2, 3, 4, 5, 6, 7, nil])
+        XCTAssertEqual(ProfileMenuDestination.allCases.map { $0.count(from: counts) }, [1, 2, nil, 3, 4, 5, 6, 7, nil])
     }
 
     private func profileFixture(

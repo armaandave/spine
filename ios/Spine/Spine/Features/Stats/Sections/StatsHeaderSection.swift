@@ -13,6 +13,8 @@ struct StatsHeaderSection: View {
     /// Opens a number's or a row's logs (STAT-401); nil on someone else's stats, where nothing
     /// opens.
     var onOpen: ((StatsDrillDown) -> Void)?
+    /// Opens the Activity list a number adds up (decision 46): on your stats and on a friend's.
+    var onOpenActivity: ((StatsDrillDown) -> Void)?
 
     struct Count: Hashable, Identifiable {
         let label: String
@@ -57,9 +59,9 @@ struct StatsHeaderSection: View {
                 }
                 .padding(.bottom, details.isEmpty ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap)
             case let .detail(detail, isFirst, isLast):
-                if let onOpen, let drillDown = Self.drillDown(for: detail) {
+                if let drillDown = Self.drillDown(for: detail), let open = opener(for: drillDown) {
                     Button {
-                        onOpen(drillDown)
+                        open(drillDown)
                     } label: {
                         StatsLabelValueRow(
                             label: detail.label,
@@ -102,9 +104,9 @@ struct StatsHeaderSection: View {
 
     @ViewBuilder
     private func countCell(_ count: Count) -> some View {
-        if let onOpen, let drillDown = count.drillDown {
+        if let drillDown = count.drillDown, let open = opener(for: drillDown) {
             Button {
-                onOpen(drillDown)
+                open(drillDown)
             } label: {
                 countContent(count, showsChevron: true)
             }
@@ -113,6 +115,11 @@ struct StatsHeaderSection: View {
         } else {
             countContent(count, showsChevron: false)
         }
+    }
+
+    /// The Activity list's numbers open on any stats; the Diary's only on your own.
+    private func opener(for drillDown: StatsDrillDown) -> ((StatsDrillDown) -> Void)? {
+        drillDown.opensActivityList ? onOpenActivity : onOpen
     }
 
     private func countContent(_ count: Count, showsChevron: Bool) -> some View {
@@ -193,6 +200,22 @@ struct StatsHeaderSection: View {
     /// A row that counts nothing opens nothing.
     static func drillDown(for detail: StatsHeaderDetail) -> StatsDrillDown? {
         guard detail.value > 0 else { return nil }
+        // The Activity list's numbers (decision 46). A streak names its days (`range`) for every viewer; a server
+        // without it leaves the streak to its Diary drill below.
+        switch detail.key {
+        case "active_days":
+            return .activity(counts: .days)
+        case "days_with_two_plus_titles":
+            return .activity(counts: .multiTitleDays)
+        case "episodes":
+            return .activity(counts: .episodes)
+        case "current_daily_streak":
+            if let range = detail.range { return .activity(counts: .days, range: range) }
+        case "longest_weekly_streak", "current_weekly_streak":
+            if let range = detail.range { return .activity(counts: .weeks, range: range) }
+        default:
+            break
+        }
         if let drill = detail.drill {
             return StatsDrillDown.headerStat(label: detail.label, drill: drill)
         }
@@ -212,14 +235,20 @@ struct StatsHeaderSection: View {
         for index in counts.indices where counts[index].value > 0 {
             counts[index].drillDown = .stat(label: counts[index].label)
         }
+        // Titles and the third number open the Activity list; Logs stays in the Diary (decision 46). The third is
+        // the tab's measure, which lists every day's row, or Active days.
+        if counts[0].value > 0 {
+            counts[0].drillDown = .activity(counts: .titles)
+        }
+        if counts[2].value > 0 {
+            let isMeasure = primaryMeasure(time: time, mediaType: mediaType) != nil
+            counts[2].drillDown = .activity(counts: isMeasure ? nil : .days)
+        }
 
         let streakLabel = "Longest streak"
         var streak = Count(label: streakLabel, value: header.longestDailyStreak, unit: unitText("day", value: header.longestDailyStreak))
         if header.longestDailyStreak > 0, let range = header.longestDailyStreakRange {
-            streak.drillDown = StatsDrillDown.headerStat(
-                label: streakLabel,
-                drill: ["watched_from": range.start, "watched_to": range.end]
-            )
+            streak.drillDown = .activity(counts: .days, range: range)
         }
         return counts + [streak]
     }

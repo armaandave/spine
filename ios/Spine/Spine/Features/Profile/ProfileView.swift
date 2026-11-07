@@ -27,6 +27,9 @@ final class ProfileViewModel {
     private let onUnauthorized: () -> Void
     private let username: String?
     private var requestGeneration = 0
+    /// A save or a log elsewhere changed what the rail says. It reloads when the cover that made the change closes,
+    /// not for every write, so nothing walks the history while a title's page is still open.
+    private var isStale = false
 
     init(
         profileRepository: ProfileRepository,
@@ -59,6 +62,7 @@ final class ProfileViewModel {
     func load() async {
         requestGeneration += 1
         let generation = requestGeneration
+        isStale = false
         // Placeholders show only on the first load; a refresh keeps what's on screen until new data arrives.
         let isFirstLoad = profile == nil
         isLoading = isFirstLoad
@@ -158,6 +162,16 @@ final class ProfileViewModel {
     }
 
     func reload() async {
+        await load()
+    }
+
+    func markStale() {
+        isStale = true
+    }
+
+    /// Reloads when something changed since the last load; the title and person covers call it as they close.
+    func reloadIfStale() async {
+        guard isStale else { return }
         await load()
     }
 
@@ -727,9 +741,13 @@ struct ProfileView: View {
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
-                Swift.Task<Void, Never> { await viewModel.reload() }
+                viewModel.markStale()
             }
-            .fullScreenCover(item: $selectedRef, onDismiss: { selectedRef = nil }) { ref in
+            .fullScreenCover(item: $selectedRef, onDismiss: {
+                selectedRef = nil
+                // A cover closing fires no onAppear, so a save made inside reloads here.
+                Swift.Task<Void, Never> { await viewModel.reloadIfStale() }
+            }) { ref in
                 MediaDetailView(
                     ref: ref,
                     mediaRepository: mediaRepository,
@@ -743,7 +761,10 @@ struct ProfileView: View {
                     onUnauthorized: onUnauthorized
                 )
             }
-            .fullScreenCover(item: $selectedPerson, onDismiss: { selectedPerson = nil }) { ref in
+            .fullScreenCover(item: $selectedPerson, onDismiss: {
+                selectedPerson = nil
+                Swift.Task<Void, Never> { await viewModel.reloadIfStale() }
+            }) { ref in
                 PersonDetailView(
                     ref: ref,
                     peopleRepository: peopleRepository,
@@ -1438,6 +1459,23 @@ struct ProfileView: View {
                 }
                 .buttonStyle(ProfileMenuRowButtonStyle())
             }
+        case .activity:
+            NavigationLink {
+                ActivityListView(
+                    username: profile.username,
+                    activityRepository: activityRepository,
+                    diaryRepository: diaryRepository,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    currentUserId: currentUserId ?? viewModel.profile?.id,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            } label: {
+                ProfileMenuRow(title: destination.title, count: nil, showsDivider: showsDivider)
+            }
+            .buttonStyle(ProfileMenuRowButtonStyle())
         case .stats:
             NavigationLink {
                 StatsView(
@@ -1450,6 +1488,7 @@ struct ProfileView: View {
                     selectedTab: selectedTab,
                     onSelectTab: onSelectTab,
                     username: username,
+                    activityUsername: profile.username,
                     enabledMediaTypes: isOwnProfile ? viewModel.profile?.preferences.enabledMediaTypes : nil,
                     onUnauthorized: onUnauthorized
                 )
@@ -1943,6 +1982,7 @@ private struct ProfileStatChip: View {
 enum ProfileMenuDestination: CaseIterable, Hashable {
     case library
     case diary
+    case activity
     case reviews
     case lists
     case planned
@@ -1954,6 +1994,7 @@ enum ProfileMenuDestination: CaseIterable, Hashable {
         switch self {
         case .library: "Library"
         case .diary: "Diary"
+        case .activity: "Activity"
         case .stats: "Stats"
         case .reviews: "Reviews"
         case .lists: "Lists"
@@ -1972,6 +2013,8 @@ enum ProfileMenuDestination: CaseIterable, Hashable {
         switch self {
         case .library: counts.libraryItems
         case .diary: counts.diaryEntries
+        // No count: a real one would put a whole walk of the history in /me/.
+        case .activity: nil
         case .stats: nil
         case .reviews: counts.reviews
         case .lists: counts.lists
@@ -2140,6 +2183,8 @@ enum ProfileRecentActivityRailModel {
         var items: [ProfileRecentActivityRailItem] = []
         var titleIndexes: [String: Int] = [:]
         for activity in activities {
+            // A pause, a stop or a pick-up with nothing told isn't a caption for a poster (it is a row on the list).
+            if ActivityListPresentation.isStatusOnly(activity) { continue }
             if let person = activity.person {
                 items.append(ProfileRecentActivityRailItem(activity: activity, subject: .person(person)))
             } else if let media = activity.media {
