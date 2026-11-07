@@ -26,9 +26,14 @@ final class AnimeEpisodes: Identifiable {
     @ObservationIgnored private let makePage: (MediaRef) -> MediaDetailViewModel
     /// A write on this title since the sheet opened on it: the list stays where it opened.
     @ObservationIgnored private var hasWritten = false
+    /// Episodes watched today before the sheet opened, when the screen knows; nil counts only this sheet's ticks.
+    @ObservationIgnored private var todayBase: Int?
+    /// How many rows were watched when they loaded: the header lights the ticks made since.
+    @ObservationIgnored private var watchedBaseline: Int?
 
     /// Home's sheet, starting from what the card already shows: its row shows at once while the rest load.
-    init(item: LibraryItem, makePage: @escaping (MediaRef) -> MediaDetailViewModel) {
+    init(item: LibraryItem, todayCount: Int? = nil, makePage: @escaping (MediaRef) -> MediaDetailViewModel) {
+        todayBase = todayCount
         cardID = item.id
         ref = item.media.ref
         self.makePage = makePage
@@ -91,6 +96,68 @@ final class AnimeEpisodes: Identifiable {
         await page.loadAnimeRows()
         guard let rows = page.detail?.animeRows else { return }
         if !hasWritten { startEpisode = rows.startEpisode }
+        watchedBaseline = rows.episodes.filter(\.isWatched).count
+    }
+
+    // MARK: Header block (R3SheetTV, R3SheetLong)
+
+    /// What the header shows, once the rows have loaded; nil before.
+    var tickModel: EpisodeTickModel? {
+        guard let rows else { return nil }
+        let viewer = page.viewer
+        let episodes = rows.episodes.map { row -> EpisodeTickModel.Episode in
+            let tv = page.tvEpisodeState(rows.state(of: row)) ?? rows.state(of: row)
+            let watched = viewer?.tvIsWatched(tv) ?? page.tvIsWatched(tv)
+            let state: EpisodeTickModel.EpisodeState = if watched {
+                .watched
+            } else if row.hasAired {
+                .unwatched
+            } else {
+                .unaired
+            }
+            let name = row.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .init(number: row.number, state: state, title: name?.isEmpty == false ? name : nil)
+        }
+        return ContinueWatchingEpisodes.tickModel(
+            episodes: episodes,
+            todayBase: todayBase,
+            baseline: watchedBaseline,
+            seriesTotal: rows.count
+        )
+    }
+
+    /// The header's accent: the title's poster color as a pastel.
+    var accent: Color { ArtAccent.pastel(fromHex: page.detail?.posterAccentColor) }
+
+    private func episodeState(_ number: Int) -> TVEpisodeState? {
+        guard let rows, let row = rows.episodes.first(where: { $0.number == number }) else { return nil }
+        return page.tvEpisodeState(rows.state(of: row))
+    }
+
+    /// A tick of the header was tapped.
+    func headerTap(_ number: Int) {
+        guard let model = tickModel else { return }
+        perform(model.sheetTap(number, state: episodeState))
+    }
+
+    /// The white button: ticks up next, through the same toggle as a row's tick.
+    func headerPrimary() {
+        guard let model = tickModel, let next = model.upNext, let state = episodeState(next) else { return }
+        toggle(state)
+    }
+
+    /// An episode number typed in the window asks for everything up to it.
+    func headerType(_ number: Int) {
+        guard let model = tickModel else { return }
+        perform(model.sheetTyped(number, state: episodeState))
+    }
+
+    private func perform(_ tap: EpisodeSheetTap) {
+        switch tap {
+        case let .toggle(state): toggle(state)
+        case let .askUpTo(state): page.askMarkTVUpTo(state)
+        case .none: break
+        }
     }
 
     /// Whether Log… can open: once the title's writes have settled, and not over what they asked next (AN-203).
@@ -123,6 +190,8 @@ final class AnimeEpisodes: Identifiable {
         upNext = nil
         startEpisode = nil
         hasWritten = false
+        todayBase = nil
+        watchedBaseline = nil
         failureTitle = ContinueWatchingEpisodes.tickFailureTitle
         page = makePage(next.ref)
         page.seedAnime(Self.seed(next: next))
@@ -383,8 +452,8 @@ private struct AnimeEpisodeList: View {
     }
 }
 
-/// The episode sheet (AN-701): half height, titled with the title, with its rows, ✕ to close, and a ··· menu with Log…
-/// and Open Anime. It behaves as TV's sheet does (TV-701), and a row's body does nothing, because episodes have no pages
+/// The episode sheet (AN-701): the tick header over its rows, opening at the header's height and pulling up to the
+/// list, titled with the title, ✕ to close, and a ··· menu with Log… and Open Anime. It behaves as TV's sheet does (TV-701), and a row's body does nothing, because episodes have no pages
 /// (AN-101).
 struct AnimeEpisodesSheet: View {
     let episodes: AnimeEpisodes
@@ -396,13 +465,32 @@ struct AnimeEpisodesSheet: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isLogPresented = false
     @State private var failures = 0
+    @State private var headerHeight: CGFloat = 0
+    @State private var listHeight: CGFloat = 0
 
     var body: some View {
         let page = episodes.page
+        let headerModel = episodes.tickModel
+        let hasHeader = headerModel != nil
         NavigationStack {
-            AnimeEpisodeList(episodes: episodes, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
-                // The next title is a new list: its rows don't animate from the last title's ticks.
-                .id(episodes.ref.id)
+            VStack(spacing: 0) {
+                if let model = headerModel {
+                    EpisodeSheetHeaderView(
+                        model: model,
+                        accent: episodes.accent,
+                        height: $headerHeight,
+                        onTap: { episodes.headerTap($0) },
+                        onPrimary: { episodes.headerPrimary() },
+                        onType: { episodes.headerType($0) }
+                    )
+                    // The header is never squeezed by the list below it.
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                AnimeEpisodeList(episodes: episodes, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
+                    // The next title is a new list: its rows don't animate from the last title's ticks.
+                    .id(episodes.ref.id)
+                    .episodeSheetListReveal(hasHeader: hasHeader, height: $listHeight)
+            }
                 .navigationTitle(episodes.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -431,7 +519,7 @@ struct AnimeEpisodesSheet: View {
                     }
                 }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([EpisodeSheetDetent.compact(header: headerHeight), .large])
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
         .task(id: episodes.ref.id) {
