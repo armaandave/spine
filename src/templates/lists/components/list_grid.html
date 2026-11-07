@@ -32,7 +32,8 @@
             {% endfor %}
           </div>
         </div>
-        <div class="flex items-center text-gray-400 text-sm">
+        <div class="flex items-center gap-2 text-gray-400 text-sm">
+          {% include "lists/components/media_type_icons.html" %}
           {% with item_count=custom_list.items.count %}<span>{{ item_count }} item{{ item_count|pluralize }}</span>{% endwith %}
         </div>
       </div>

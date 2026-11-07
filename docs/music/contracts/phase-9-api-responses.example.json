@@ -521,6 +521,7 @@
     "items_count": 0,
     "like_count": 0,
     "list_type": "media",
+    "media_types": [],
     "name": "Favorite Albums",
     "owner": {
       "avatar_url": null,
@@ -577,6 +578,9 @@
     "items_count": 1,
     "like_count": 0,
     "list_type": "media",
+    "media_types": [
+      "music"
+    ],
     "name": "Favorite Albums",
     "owner": {
       "avatar_url": null,
@@ -651,6 +655,9 @@
         "items_count": 1,
         "like_count": 0,
         "list_type": "media",
+        "media_types": [
+          "music"
+        ],
         "name": "Favorite Albums",
         "owner": {
           "avatar_url": null,

@@ -605,6 +605,9 @@ protocol ListRepository {
     func detail(id: Int) async throws -> CustomListDetail
     /// The lists of the user `owner` (a username) that carry `tag`: the list page's tag links.
     func tagged(_ tag: String, owner: String, page: String?) async throws -> PagedResponse<CustomListSummary>
+    /// Your lists (or `username`'s), sorted and filtered on the server. Visibility only counts for your own.
+    func lists(ownedBy username: String?, browse: ListBrowseState) async throws -> [CustomListSummary]
+    func tagged(_ tag: String, owner: String, page: String?, browse: ListBrowseState) async throws -> PagedResponse<CustomListSummary>
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary
     func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail
     func delete(id: Int) async throws
@@ -634,6 +637,17 @@ extension ListRepository {
 
     func tagged(_ tag: String, owner: String, page: String?) async throws -> PagedResponse<CustomListSummary> {
         PagedResponse(count: 0, next: nil, previous: nil, results: [])
+    }
+
+    func lists(ownedBy username: String?, browse _: ListBrowseState) async throws -> [CustomListSummary] {
+        if let username {
+            return try await lists(ownedBy: username)
+        }
+        return try await list()
+    }
+
+    func tagged(_ tag: String, owner: String, page: String?, browse _: ListBrowseState) async throws -> PagedResponse<CustomListSummary> {
+        try await tagged(tag, owner: owner, page: page)
     }
 
     /// Without a shelves endpoint, featured lists are grouped by their preview items' media types.
@@ -1867,6 +1881,8 @@ struct APIListRepository: ListRepository {
                 query.append(URLQueryItem(name: "ref[episode_number]", value: String(episodeNumber)))
             }
         }
+        // Add to List puts the lists you edited last on top.
+        query.append(URLQueryItem(name: "sort", value: ListSort.updated.rawValue))
         let response: PagedResponse<CustomListSummary> = try await client.get(
             "/lists/",
             query: query,
@@ -1882,6 +1898,7 @@ struct APIListRepository: ListRepository {
                 URLQueryItem(name: "list_type", value: CustomListType.people.rawValue),
                 URLQueryItem(name: "person_ref[source]", value: ref.source),
                 URLQueryItem(name: "person_ref[id]", value: ref.id),
+                URLQueryItem(name: "sort", value: ListSort.updated.rawValue),
             ],
             authenticated: true
         )
@@ -1910,6 +1927,24 @@ struct APIListRepository: ListRepository {
             query.append(URLQueryItem(name: "page", value: page))
         }
         return try await client.get("/lists/tagged/", query: query, authenticated: true)
+    }
+
+    func tagged(_ tag: String, owner: String, page: String?, browse: ListBrowseState) async throws -> PagedResponse<CustomListSummary> {
+        var query = [URLQueryItem(name: "tag", value: tag), URLQueryItem(name: "owner", value: owner)]
+        query += browse.queryItems(includesVisibility: false)
+        if let page {
+            query.append(URLQueryItem(name: "page", value: page))
+        }
+        return try await client.get("/lists/tagged/", query: query, authenticated: true)
+    }
+
+    func lists(ownedBy username: String?, browse: ListBrowseState) async throws -> [CustomListSummary] {
+        let response: PagedResponse<CustomListSummary> = try await client.get(
+            userScopedPath("lists/", username: username),
+            query: browse.queryItems(includesVisibility: username == nil),
+            authenticated: true
+        )
+        return response.results
     }
 
     func featuredShelves() async throws -> FeaturedShelvesResponse {

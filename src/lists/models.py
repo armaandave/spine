@@ -4,7 +4,15 @@ from django.db import models
 from django.db.models import Prefetch, Q
 from django.utils.text import slugify
 
-from app.models import Item
+from app import exposure
+from app.models import Item, MediaTypes
+
+
+def list_media_type(media_type):
+    """Return the media type a list counts an item as: seasons and episodes are TV."""
+    if media_type in (MediaTypes.SEASON.value, MediaTypes.EPISODE.value):
+        return MediaTypes.TV.value
+    return media_type
 
 
 class CustomListManager(models.Manager):
@@ -178,6 +186,15 @@ class CustomList(models.Model):
             self.slug = slugify(self.name)[:255]
         super().save(*args, **kwargs)
 
+    def media_types(self):
+        """Return the media types the list holds, in display order."""
+        primed = getattr(self, "_media_types", None)
+        if primed is not None:
+            return primed
+        if self.list_type != self.ListType.MEDIA:
+            return []
+        return held_media_types([self.id]).get(self.id, [])
+
     def user_can_view(self, user):
         """Check if the user can view the list."""
         return self.owner == user or user in self.collaborators.all()
@@ -244,6 +261,37 @@ class CustomListItem(models.Model):
     def __str__(self):
         """Return the name of the list item."""
         return self.item.title
+
+
+def held_media_types(list_ids):
+    """Return the media types each list holds, in display order, in one query."""
+    rows = (
+        CustomListItem.objects.filter(custom_list_id__in=list_ids)
+        .order_by()
+        .values_list("custom_list_id", "item__media_type")
+        .distinct()
+    )
+    held = {}
+    for list_id, media_type in rows:
+        held.setdefault(list_id, set()).add(list_media_type(media_type))
+    order = exposure.primary_media_types()
+    return {
+        list_id: [value for value in order if value in values]
+        for list_id, values in held.items()
+    }
+
+
+def prime_media_types(lists):
+    """Return ``lists`` as a list, each storing its media types so they need no query."""
+    lists = list(lists)
+    held = held_media_types([custom_list.id for custom_list in lists])
+    for custom_list in lists:
+        custom_list._media_types = (  # noqa: SLF001
+            held.get(custom_list.id, [])
+            if custom_list.list_type == CustomList.ListType.MEDIA
+            else []
+        )
+    return lists
 
 
 class PersonListItem(models.Model):

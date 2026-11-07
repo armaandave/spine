@@ -82,6 +82,8 @@ struct CustomListSummary: Codable, Identifiable, Hashable {
     let visibility: String
     let isRanked: Bool
     let listType: CustomListType
+    /// The media types the list holds, for its icon. Seasons and episodes count as TV.
+    let mediaTypes: [String]
     let hasItem: Bool?
     let hasPerson: Bool?
     let personEntryId: Int?
@@ -104,6 +106,7 @@ struct CustomListSummary: Codable, Identifiable, Hashable {
         visibility: String,
         isRanked: Bool = false,
         listType: CustomListType = .media,
+        mediaTypes: [String] = [],
         hasItem: Bool? = nil,
         hasPerson: Bool? = nil,
         personEntryId: Int? = nil,
@@ -125,6 +128,7 @@ struct CustomListSummary: Codable, Identifiable, Hashable {
         self.visibility = visibility
         self.isRanked = isRanked
         self.listType = listType
+        self.mediaTypes = mediaTypes
         self.hasItem = hasItem
         self.hasPerson = hasPerson
         self.personEntryId = personEntryId
@@ -148,6 +152,7 @@ struct CustomListSummary: Codable, Identifiable, Hashable {
         case visibility
         case isRanked
         case listType
+        case mediaTypes
         case hasItem
         case hasPerson
         case personEntryId
@@ -172,6 +177,7 @@ struct CustomListSummary: Codable, Identifiable, Hashable {
         visibility = try container.decode(String.self, forKey: .visibility)
         isRanked = try container.decodeIfPresent(Bool.self, forKey: .isRanked) ?? false
         listType = try container.decodeIfPresent(CustomListType.self, forKey: .listType) ?? .media
+        mediaTypes = try container.decodeIfPresent([String].self, forKey: .mediaTypes) ?? []
         hasItem = try container.decodeIfPresent(Bool.self, forKey: .hasItem)
         hasPerson = try container.decodeIfPresent(Bool.self, forKey: .hasPerson)
         personEntryId = try container.decodeIfPresent(Int.self, forKey: .personEntryId)
@@ -197,6 +203,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
     let visibility: String
     let isRanked: Bool
     let listType: CustomListType
+    let mediaTypes: [String]
     let owner: UserSummary
     let imageUrl: String?
     let itemsCount: Int
@@ -221,6 +228,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         visibility: String,
         isRanked: Bool = false,
         listType: CustomListType = .media,
+        mediaTypes: [String] = [],
         owner: UserSummary,
         imageUrl: String? = nil,
         itemsCount: Int,
@@ -242,6 +250,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         self.visibility = visibility
         self.isRanked = isRanked
         self.listType = listType
+        self.mediaTypes = mediaTypes
         self.owner = owner
         self.imageUrl = imageUrl
         self.itemsCount = itemsCount
@@ -265,6 +274,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         case visibility
         case isRanked
         case listType
+        case mediaTypes
         case owner
         case imageUrl
         case itemsCount
@@ -289,6 +299,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         visibility = try container.decode(String.self, forKey: .visibility)
         isRanked = try container.decodeIfPresent(Bool.self, forKey: .isRanked) ?? false
         listType = try container.decodeIfPresent(CustomListType.self, forKey: .listType) ?? .media
+        mediaTypes = try container.decodeIfPresent([String].self, forKey: .mediaTypes) ?? []
         owner = try container.decode(UserSummary.self, forKey: .owner)
         imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
         itemsCount = try container.decode(Int.self, forKey: .itemsCount)

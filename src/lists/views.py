@@ -12,7 +12,7 @@ from app import exposure, helpers
 from app.models import Item, MediaManager, MediaTypes
 from app.providers import services
 from lists.forms import CustomListForm
-from lists.models import CustomList, CustomListItem
+from lists.models import CustomList, CustomListItem, prime_media_types
 from users.models import ListDetailSortChoices, ListSortChoices, MediaStatusChoices
 
 logger = logging.getLogger(__name__)
@@ -58,6 +58,7 @@ def lists(request):
     items_per_page = 20
     paginator = Paginator(custom_lists, items_per_page)
     lists_page = paginator.get_page(page)
+    lists_page.object_list = prime_media_types(lists_page.object_list)
 
     # Create a form for each list
     # needs unique id for django-select2
@@ -297,7 +298,9 @@ def lists_modal(
         )
         store_item_metadata(item, metadata)
 
-    custom_lists = CustomList.objects.get_user_lists_with_item(request.user, item)
+    custom_lists = prime_media_types(
+        CustomList.objects.get_user_lists_with_item(request.user, item),
+    )
 
     return render(
         request,
