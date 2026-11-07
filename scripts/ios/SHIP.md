@@ -132,49 +132,6 @@ Run from the feature worktree unless a step says otherwise.
 Some ships carry a data step that has to run once, right after their deploy is verified
 (Workflow A, step 8). Each one says which ship carries it.
 
-### Activity's Phase 2: games, anime, manga, comics and the note
-
-Anime, manga, comics and games read the calculation too (`CALCULATED_TYPES`). No migration.
-It changes the app (the note, the header with only active days, the filtered Diary's empty
-words, a stopped book's sheet opening at its place), so Xcode Cloud makes a TestFlight build.
-
-Its message (Workflow A, step 5) says a refusal becomes a success here, which is safe on
-installed code: a game, manga or comic log dated before its start, or its date edited there,
-now moves the start back with it (decision 10). These keep their type and change meaning, and
-installed builds decode them and never show them: `known` and `total` count titles on these
-four types, and `approximate` is false in a dated range for games, manga and comics. Anime's
-numbers don't move. On the real app it also names that a game played with no log becomes a
-Games title in its year (account 5's 2026 Titles go from 0 to 1), and that anime held only by
-a mark or a stored number becomes an All Time title.
-
-**Before the phone test:** run `docker exec spine python manage.py compare_activity_numbers`
-again and read each account's `game`, `anime`, `manga` and `comic` lines, with count 13 (manga,
-comic and anime rows per account, plan 5.12), because anime shipped after Phase 1's count. Bring
-Armaan every difference on a real row before he tests. This run is on the deployed Phase 1
-code, and only it means anything for these four types: once this ship is deployed, their
-`titles` and `active_days` columns read the calculation on both sides, so a run after the
-deploy agrees with itself there. Don't rerun it then and read those as agreement; only `value`,
-`known` and `total` still come from the old counters.
-
-**The phone test comes first.** Serve the branch with `scripts/ios/test-backend.sh use 12`, then
-run `scripts/ios/seed-activity-checkpoint.sh seed` and work through the plan's Phase 2 sheet.
-
-**Each step below waits for the user's request; the ship request doesn't cover it.** The ship
-message (step 5) names it as waiting and prints its dry run. Armaan's yes is on record
-(2026-11-04), and that yes is the request, so it runs after the deploy unless he says stop to
-the message below.
-
-1. **Twerp,** after the deploy is verified (step 8): `scripts/activity-steps-production.sh
-   twerp` prints how many books match (expected 1) and their pages (expected 290), with each
-   one's journeys and saves. Send him a short message with those and what `--apply` will do.
-   If it finds none or more than one, it changes nothing: say so and stop. Otherwise wait 10
-   minutes, then `scripts/activity-steps-production.sh twerp --apply`, and don't run it if he
-   says stop. Twerp gets the eye: Books All Time rises by 290 and no year moves. Tapping the
-   filled eye later puts it at To Read, as with the undated Reads step, not back to a dated
-   Read.
-
-Remove this section once Phase 3 has shipped.
-
 ### Activity's Phase 3: TV, movies and music
 
 TV, movies and music read the calculation too (`CALCULATED_TYPES` now holds every type), and
