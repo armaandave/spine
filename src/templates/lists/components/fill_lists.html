@@ -8,7 +8,10 @@
   <ul class="space-y-3">
     {% for custom_list in custom_lists %}
       <li class="flex items-center justify-between bg-[#39404b] p-3 rounded-md gap-1">
-        <span class="text-white">{{ custom_list.name }}</span>
+        <span class="flex items-center gap-2 text-white">
+          {{ custom_list.name }}
+          <span class="text-gray-400">{% include "lists/components/media_type_icons.html" %}</span>
+        </span>
         {% include "lists/components/list_item_button.html" with has_item=custom_list.has_item %}
       </li>
     {% empty %}

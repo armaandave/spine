@@ -17,6 +17,7 @@ from django.test import TestCase, override_settings
 from api.services import stats_cache
 from api.services.filters import update_item_filter_metadata
 from api.services.item_metadata import store_series_total
+from app import tv_tracking
 from app.admin import ItemAdmin
 from app.models import (
     Anime,
@@ -25,10 +26,12 @@ from app.models import (
     Item,
     Manga,
     MediaTypes,
+    Movie,
+    Music,
     Sources,
     Status,
 )
-from app.tests.tv_fixtures import make_user
+from app.tests.tv_fixtures import make_manual_show, make_user
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "activity-length-cache"}}
 
@@ -85,6 +88,23 @@ class LengthBumpTests(TestCase):
         with mock.patch("app.signals.update_daily_statistics.delay"), self.captureOnCommitCallbacks(execute=True):
             DiaryEntry.objects.create(user=self.owner, item=item, consumed_at=datetime(2026, 2, 1, tzinfo=UTC))
         self.assert_bumps(lambda: update_item_filter_metadata(item, {"runtime": 25}))
+
+    def test_a_film_or_album_runtime_that_really_changes_bumps_whoever_holds_it(self):
+        for media_type, model in ((MediaTypes.MOVIE.value, Movie), (MediaTypes.MUSIC.value, Music)):
+            with self.subTest(media_type=media_type):
+                item = self.title(media_type, runtime_minutes=100)
+                model.objects.bulk_create([model(user=self.owner, item=item, status=Status.COMPLETED.value, direct_consumption=True)])
+                self.assert_bumps(lambda item=item: update_item_filter_metadata(item, {"runtime": 110}))
+
+    def test_a_runtime_on_any_level_of_a_show_bumps_whoever_holds_the_show(self):
+        """An episode falls back to its season's and show's runtime (STAT-201)."""
+        show = make_manual_show(seasons={1: 2})
+        with self.captureOnCommitCallbacks(execute=True):
+            tv_tracking.tick(self.owner, show, 1, 1)
+        for media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value):
+            with self.subTest(media_type=media_type):
+                item = Item.objects.filter(media_id=show.media_id, media_type=media_type).first()
+                self.assert_bumps(lambda item=item: update_item_filter_metadata(item, {"runtime": 40 + Item.objects.count()}))
 
     def test_a_manga_or_comic_total_that_moves_bumps_whoever_holds_it(self):
         for media_type, model in ((MediaTypes.MANGA.value, Manga), (MediaTypes.COMIC.value, Comic)):

@@ -373,8 +373,12 @@ struct AddToListSheet: View {
                 VStack(alignment: .leading, spacing: 9) {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(list.name)
-                                .font(.system(size: 16, weight: .semibold))
+                            HStack(spacing: 7) {
+                                Text(list.name)
+                                    .font(.system(size: 16, weight: .semibold))
+                                ListMediaTypeIcons(mediaTypes: list.mediaTypes)
+                                    .opacity(0.6)
+                            }
                             Text(viewModel.countLabel(for: list))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)

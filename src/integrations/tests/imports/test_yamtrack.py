@@ -82,10 +82,11 @@ class ImportYamtrack(TestCase):
             datetime(2024, 2, 9, 10, 0, 0, tzinfo=UTC),
         )
 
+        # The film's row is dated, so it's a log (decision 47), which writes the film's
+        # end date and rating as their own history rows. The first keeps the source's date.
         movie = Movie.objects.filter(user=self.user).first()
-        self.assertEqual(movie.history.count(), 1)
         self.assertEqual(
-            movie.history.first().history_date,
+            movie.history.earliest("history_date").history_date,
             datetime(2024, 2, 9, 15, 30, 0, tzinfo=UTC),
         )
 

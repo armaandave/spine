@@ -1,8 +1,9 @@
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from app.models import (
     DiaryEntry,
@@ -58,6 +59,23 @@ class ImportTrakt(TestCase):
         trakt_importer.process_watched_movie(movie_entry)
         self.assertEqual(trakt_importer._import_single_weight_history()[MediaTypes.MOVIE.value], 0)
         self.assertEqual(DiaryEntry.objects.filter(user=self.user).count(), 1)
+
+    @override_settings(TIME_ZONE="America/New_York")
+    @patch("integrations.imports.trakt.TraktImporter._get_metadata")
+    def test_a_film_play_lands_on_the_owners_day(self, mock_get_metadata):
+        """11:30 pm on Dec 31 in New York is Jan 1 in UTC; the play is logged on Dec 31."""
+        mock_get_metadata.return_value = {"title": "Test Movie", "image": "movie_image.jpg"}
+        trakt_importer = TraktImporter("test", self.user, "new")
+        trakt_importer.process_watched_movie(
+            {
+                "type": "movie",
+                "movie": {"title": "Test Movie", "ids": {"tmdb": 67890}},
+                "watched_at": "2026-01-01T04:30:00.000Z",
+            },
+        )
+        trakt_importer._import_single_weight_history()
+        entry = DiaryEntry.objects.get(user=self.user)
+        self.assertEqual(entry.consumed_at.date(), date(2025, 12, 31))
 
     @patch("integrations.imports.trakt.TraktImporter._get_metadata")
     def test_process_watched_episode(self, mock_get_metadata):

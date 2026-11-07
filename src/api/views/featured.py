@@ -35,7 +35,7 @@ from app import exposure
 from app.models import MediaTypes
 from app.providers import tmdb
 from lists.featured import health, order, registry
-from lists.models import CustomList, CustomListItem, PersonListItem
+from lists.models import CustomList, CustomListItem, PersonListItem, held_media_types
 from social.models import ContentLike
 
 CARD_PREVIEW_LIMIT = 5
@@ -243,6 +243,7 @@ def list_payloads(lists, request):
     previews = preview_items(media_ids, LIST_PREVIEW_ITEM_LIMIT)
     people = _preview_people(people_ids, LIST_PREVIEW_ITEM_LIMIT)
     first_images = _first_images(media_ids)
+    held_types = held_media_types(media_ids)
     prime_collection_items(
         [row.item for rows in previews.values() for row in rows],
         request.user,
@@ -267,6 +268,7 @@ def list_payloads(lists, request):
             "visibility": custom_list.visibility,
             "is_ranked": custom_list.is_ranked,
             "list_type": custom_list.list_type,
+            "media_types": [] if is_people else held_types.get(custom_list.id, []),
             "owner": user_summary(custom_list.owner, request=request),
             "collaborators": [
                 user_summary(user, request=request) for user in custom_list.collaborators.all()

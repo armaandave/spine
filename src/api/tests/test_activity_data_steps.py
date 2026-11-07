@@ -8,22 +8,35 @@ lands on disk: the wrapper keeps old values from standard output.
 import io
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.core.cache import cache
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.db import connection
+from django.db.models import F
 from django.test import override_settings
 
 from api.services import stats_cache
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from api.tests.test_stats_v2_activity import ALL_TIME, YEAR_2025, YEAR_2026
-from app import book_tracking
-from app.models import Book, BookSession, Game, Item, MediaTypes, Status
+from app import book_tracking, tv_tracking
+from app.models import (
+    TV,
+    Book,
+    BookSession,
+    DiaryEntry,
+    Episode,
+    Game,
+    Item,
+    MediaTypes,
+    Status,
+)
+from app.tests.tv_fixtures import make_manual_show
 from social.models import ProgressChange
+from users.models import QuickWatchDateChoices
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "activity-steps"}}
 
@@ -657,3 +670,171 @@ class TwerpTests(StepBase):
         self.twerp(owner=self.follower)
         _, err = self.step()
         self.assertIn("twerp: 0 found", err)
+
+
+class OldEyeTapsTests(StepBase):
+    """Old eye taps leave their years, and All Time holds (decision 49)."""
+
+    def setUp(self):
+        super().setUp()
+        self.tapped = self.show()
+
+    def show(self, episodes=3):
+        show = make_manual_show(seasons={1: episodes})
+        Item.objects.filter(media_id=show.media_id, media_type=MediaTypes.EPISODE.value).update(runtime_minutes=45)
+        return show
+
+    def tap(self, show, day, *numbers):
+        """Write what the old eye wrote: a season's episodes, dated, in one moment."""
+        with self.on(day):
+            for number in numbers:
+                tv_tracking.tick(self.owner, show, 1, number)
+
+    def repair(self):
+        """Write the TV repair's first fill: only viewings saved before it are taps."""
+        with self.on(d(2026, 10, 27)):
+            tv_tracking.mark_watched(self.owner, self.show(), season_number=1)
+
+    def step(self, **options):
+        return run("undate_old_eye_taps", **options)
+
+    def minutes(self):
+        """Return TV minutes in 2025, 2026 and All Time, as Stats send them."""
+        found = []
+        for params in (YEAR_2025, YEAR_2026, ALL_TIME):
+            cache.clear()
+            data = self.get(self.owner, {**params, "media_type": MediaTypes.TV.value}).json()
+            row = next((row for row in data["time"]["rows"] if row["media_type"] == MediaTypes.TV.value), None)
+            found.append(row["value"] if row else 0)
+        return found
+
+    def kinds(self, show):
+        return list(
+            Episode.objects.filter(related_season__related_tv__item=show)
+            .order_by("item__episode_number")
+            .values_list("kind", "watched_on"),
+        )
+
+    def test_the_dry_run_the_run_and_a_second_run(self):
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2, 3)
+        self.repair()
+        self.assert_step_works("undate_old_eye_taps", lambda: self.kinds(self.tapped))
+
+    def test_the_tap_leaves_its_year_and_its_start_row_goes(self):
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2, 3)
+        self.repair()
+        self.assertEqual(self.minutes(), [135, 0, 270])
+        starts = ProgressChange.objects.filter(actor=self.owner, item=self.tapped, current_progress__kind="start")
+        self.assertEqual(starts.count(), 1)
+        _out, err = self.step()
+        self.assertIn(f"user {self.owner.pk}: 1 taps, 3 episodes (2025: 3 = 135 min)", err)
+        self.step(apply=True)
+        self.assertEqual(self.minutes(), [0, 0, 270])
+        self.assertEqual(self.kinds(self.tapped), [(Episode.Kind.FILL, None)] * 3)
+        self.assertFalse(starts.exists())
+        self.assertIsNone(TV.objects.get(user=self.owner, item=self.tapped).last_watched_on)
+
+    def test_a_real_tick_on_the_taps_day_keeps_the_start_row(self):
+        """The start came from the morning's tick, which stays, so the start stays."""
+        with self.on(d(2025, 3, 1), at="09:00"):
+            tv_tracking.tick(self.owner, self.tapped, 1, 1)
+        with self.on(d(2025, 3, 1), at="20:00"):
+            for number in (2, 3):
+                tv_tracking.tick(self.owner, self.tapped, 1, number)
+        self.repair()
+        starts = ProgressChange.objects.filter(actor=self.owner, item=self.tapped, current_progress__kind="start")
+        self.assertEqual(starts.count(), 1)
+        _out, err = self.step()
+        self.assertIn("1 taps, 2 episodes (2025: 2 = 90 min)", err)
+        self.step(apply=True)
+        self.assertEqual(
+            self.kinds(self.tapped),
+            [(Episode.Kind.TICK, d(2025, 3, 1)), (Episode.Kind.FILL, None), (Episode.Kind.FILL, None)],
+        )
+        self.assertEqual(starts.count(), 1)
+
+    def test_a_date_only_import_of_one_season_stays_dated(self):
+        """The old eye stamped the minute it saved; an import's date isn't that."""
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2)
+        Episode.objects.filter(related_season__related_tv__item=self.tapped).update(
+            end_date=datetime(2023, 5, 1, tzinfo=UTC), watched_on=d(2023, 5, 1),
+        )
+        self.repair()
+        _out, err = self.step(apply=True)
+        self.assertIn("0 episodes in all", err)
+        self.assertEqual({kind for kind, _day in self.kinds(self.tapped)}, {Episode.Kind.TICK})
+
+    def test_a_log_on_the_taps_day_keeps_the_start_row(self):
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2, 3)
+        DiaryEntry.objects.create(user=self.owner, item=self.tapped, consumed_at=datetime(2025, 3, 1, 17, tzinfo=UTC))
+        self.repair()
+        starts = ProgressChange.objects.filter(actor=self.owner, item=self.tapped, current_progress__kind="start")
+        self.assertEqual(starts.count(), 1)
+        self.step(apply=True)
+        self.assertEqual(starts.count(), 1)
+
+    def test_a_single_tick_a_shared_window_and_an_old_logs_own_episodes_stay(self):
+        self.tap(self.tapped, d(2025, 3, 1), 1)
+        other, logged = self.show(), self.show()
+        with self.on(d(2025, 4, 1)):
+            tv_tracking.tick(self.owner, other, 1, 1)
+            tv_tracking.tick(self.owner, other, 1, 2)
+            tv_tracking.tick(self.owner, self.tapped, 1, 2)
+        season = Item.objects.get(media_id=logged.media_id, media_type=MediaTypes.SEASON.value)
+        with self.on(d(2025, 5, 1)):
+            DiaryEntry.objects.create(
+                user=self.owner,
+                item=season,
+                consumed_at=datetime(2025, 5, 1, tzinfo=UTC),
+                progress_snapshot={"tv": {"v": 1, "covers": {"1": [1, 2, 3]}}},
+            )
+            self.tap(logged, d(2025, 5, 1), 1, 2)
+        self.repair()
+        before = [self.kinds(show) for show in (self.tapped, other, logged)]
+        _out, err = self.step(apply=True)
+        self.assertIn("0 episodes in all", err)
+        self.assertEqual([self.kinds(show) for show in (self.tapped, other, logged)], before)
+
+    def test_a_tap_after_the_repair_is_a_tick(self):
+        self.repair()
+        self.tap(self.tapped, d(2026, 10, 28), 1, 2, 3)
+        _out, err = self.step(apply=True)
+        self.assertIn("0 episodes in all", err)
+        self.assertEqual({kind for kind, _day in self.kinds(self.tapped)}, {Episode.Kind.TICK})
+
+    def release_date_account(self):
+        self.owner.quick_watch_date = QuickWatchDateChoices.RELEASE_DATE
+        self.owner.save(update_fields=["quick_watch_date"])
+
+    def test_on_a_release_date_account_one_bulk_write_is_a_tap(self):
+        self.release_date_account()
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2, 3)
+        self.repair()
+        self.step(apply=True)
+        self.assertEqual(self.kinds(self.tapped), [(Episode.Kind.FILL, None)] * 3)
+
+    def test_on_a_release_date_account_two_quick_ticks_stay_ticks(self):
+        """Two taps half a second apart are real ticks, not one bulk write."""
+        self.release_date_account()
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2)
+        Episode.objects.filter(related_season__related_tv__item=self.tapped, item__episode_number=2).update(
+            created_at=F("created_at") + timedelta(milliseconds=500),
+        )
+        self.repair()
+        _out, err = self.step(apply=True)
+        self.assertIn("0 episodes in all", err)
+        self.assertEqual({kind for kind, _day in self.kinds(self.tapped)}, {Episode.Kind.TICK})
+
+    def test_apply_refuses_more_episodes_than_expected(self):
+        shows = [self.show() for _ in range(6)]
+        for number, show in enumerate(shows, start=1):
+            self.tap(show, d(2025, 3, number), 1, 2, 3)
+        self.repair()
+        before = [self.kinds(show) for show in shows]
+        with self.assertRaisesMessage(CommandError, "18 episodes"):
+            self.step(apply=True)
+        self.assertEqual([self.kinds(show) for show in shows], before)
+        _out, err = self.step()
+        self.assertIn("18 episodes in all (expected at most 17)", err)
+        self.step(apply=True, max=18)
+        self.assertEqual({kind for show in shows for kind, _day in self.kinds(show)}, {Episode.Kind.FILL})

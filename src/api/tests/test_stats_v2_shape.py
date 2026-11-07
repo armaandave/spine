@@ -399,8 +399,9 @@ class StatsV2CountingTests(StatsV2Base):
         self.assertEqual(year.viewings.count(), 1)
         self.assertEqual(all_time.viewings.count(), 2)
         self.assertEqual(all_time.dated_viewings.count(), 1)
-        # A fill is never an event and never a title on its own (STAT-105, STAT-106).
-        self.assertEqual(list(all_time.titles.values_list("id", flat=True)), [show.id])
+        # A fill is never an event (STAT-106). A mark's fill makes its show an All Time
+        # title, in the undated pile (STAT-105, plan 5.5).
+        self.assertEqual(sorted(all_time.titles.values_list("id", flat=True)), sorted([show.id, filled_show.id]))
 
     def test_undated_completions_count_only_in_all_time(self):
         # S-05: a film marked watched with no log; a book marked read with a log.

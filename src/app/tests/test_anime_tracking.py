@@ -1209,15 +1209,25 @@ class SingleTests(AnimeTestCase):
         self.assertEqual(self.state(item)["status"], "Completed")
 
     def test_an_002_a_log_after_a_mark_dates_it_and_deleting_gives_the_mark_back(self):
+        """With Rewatch off, a log dates the marked watch (decision 38, as TV's)."""
         item = self.movie()
         anime_tracking.mark_watched(self.user, item)
-        entry = self.log(item, day=date(2025, 3, 1)).entry
+        entry = self.log(item, day=date(2025, 3, 1), is_rewatch=False).entry
         self.assertEqual(self.stats_time(2025), (24, 1))
         self.assertEqual(self.stats_time()[1], 1)
         anime_tracking.delete_log(self.user, entry)
         self.assertEqual(self.row(item).status, "Completed")
         self.assertEqual(self.stats_time(2025), (0, 0))
         self.assertEqual(self.stats_time()[1], 1)
+
+    def test_an_002_a_log_after_a_mark_with_rewatch_on_is_a_second_watch(self):
+        """The switch opens on over a mark (TV-404): the year gains it, All Time holds both."""
+        item = self.movie()
+        anime_tracking.mark_watched(self.user, item)
+        entry = self.log(item, day=date(2025, 3, 1)).entry
+        self.assertTrue(entry.is_rewatch)
+        self.assertEqual(self.stats_time(2025), (24, 1))
+        self.assertEqual(self.stats_time()[1], 2)
 
     def test_an_002_an_imported_single_stays_on_its_shelf_until_marked(self):
         item = self.movie()

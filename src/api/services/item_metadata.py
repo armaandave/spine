@@ -50,6 +50,7 @@ from api.services.filters import _runtime_minutes, update_item_filter_metadata
 from app import anime_titles
 from app.mixins import collect_external_rating_item_id, collect_external_rating_item_ids
 from app.models import (
+    TV,
     Anime,
     Book,
     Comic,
@@ -57,6 +58,8 @@ from app.models import (
     ItemCredit,
     Manga,
     MediaTypes,
+    Movie,
+    Music,
     Sources,
 )
 
@@ -176,16 +179,30 @@ LENGTH_HOLDERS = {
     MediaTypes.ANIME.value: Anime,
     MediaTypes.MANGA.value: Manga,
     MediaTypes.COMIC.value: Comic,
+    MediaTypes.MOVIE.value: Movie,
+    MediaTypes.MUSIC.value: Music,
 }
+TV_LEVELS = (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value)
 
 
 def bump_holders(item):
-    """Move the stats version of everyone holding a title of a new length (STAT-006)."""
-    model = LENGTH_HOLDERS.get(item.media_type)
-    holders = {
-        *(model.objects.filter(item=item).values_list("user_id", flat=True) if model else ()),
-        *DiaryEntry.objects.filter(item=item).values_list("user_id", flat=True),
-    }
+    """Move the stats version of everyone holding a title of a new length (STAT-006).
+
+    A show's, season's or episode's runtime reaches everyone holding any part of that
+    show, since an episode falls back to its season's and show's.
+    """
+    if item.media_type in TV_LEVELS:
+        family = {"item__source": item.source, "item__media_id": item.media_id}
+        holders = {
+            *TV.objects.filter(**family).values_list("user_id", flat=True),
+            *DiaryEntry.objects.filter(item__media_type__in=TV_LEVELS, **family).values_list("user_id", flat=True),
+        }
+    else:
+        model = LENGTH_HOLDERS.get(item.media_type)
+        holders = {
+            *(model.objects.filter(item=item).values_list("user_id", flat=True) if model else ()),
+            *DiaryEntry.objects.filter(item=item).values_list("user_id", flat=True),
+        }
     for user_id in holders:
         stats_cache.bump_user(user_id)
 

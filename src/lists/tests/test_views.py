@@ -73,6 +73,28 @@ class ListsViewTests(TestCase):
         self.assertIn("custom_lists", response.context)
         self.assertIn("form", response.context)
 
+    def test_lists_view_shows_media_type_icons(self):
+        """List cards show one or two media type icons, and a globe past two."""
+        mixed = CustomList.objects.create(name="Mixed", owner=self.user)
+        mixed.items.add(
+            self.item1,
+            self.item2,
+            Item.objects.create(
+                media_id="3",
+                source=Sources.MAL.value,
+                media_type=MediaTypes.ANIME.value,
+                title="Test Anime",
+            ),
+        )
+        self.client.login(**self.credentials)
+
+        response = self.client.get(reverse("lists"))
+
+        self.assertContains(response, 'aria-label="Movie"')
+        self.assertContains(response, 'aria-label="TV Show"')
+        self.assertContains(response, 'aria-label="Movie, TV Show, Anime"')
+        self.assertContains(response, "M21.54 15H17")  # the globe icon
+
     def test_lists_collaborator_view(self):
         """Test the lists view response and context for a collaborator."""
         self.client.login(**self.collaborator_credentials)

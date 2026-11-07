@@ -1,0 +1,17 @@
+{% load app_tags %}
+{% with media_types=custom_list.media_types %}
+  {% if media_types %}
+    <span class="inline-flex items-center gap-1"
+          role="img"
+          aria-label="{% for media_type in media_types %}{{ media_type|media_type_readable }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+          title="{% for media_type in media_types %}{{ media_type|media_type_readable }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+      {% if media_types|length > 2 %}
+        {% include "app/icons/globe.svg" with classes="w-4 h-4" %}
+      {% else %}
+        {% for media_type in media_types %}
+          {% icon media_type False "w-4 h-4" %}
+        {% endfor %}
+      {% endif %}
+    </span>
+  {% endif %}
+{% endwith %}

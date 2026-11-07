@@ -15,6 +15,7 @@ from api.pagination import StandardResultsSetPagination
 from api.serializers.common import SERIES_TYPES, media_summary_from_item
 from api.services import activity as activity_service
 from api.services import diary as diary_service
+from api.services import list_browse
 from api.services import stats as stats_service
 from api.views.diary import DiaryListView
 from api.views.lists import _list_type_query, _lists_visible_to, list_payload
@@ -23,6 +24,7 @@ from api.views.tracking import TrackingListView
 from app import exposure
 from app.curation import prime_curated_artwork
 from app.models import DiaryEntry, MediaLike, MediaTypes
+from lists.models import prime_media_types
 
 # What a manga's or comic's tracking row says about its logs.
 SERIES_LOG_FACTS = (
@@ -104,6 +106,7 @@ class UserListsView(APIView):
         query = request.query_params.get("q", "")
         if query:
             lists = lists.filter(Q(name__icontains=query) | Q(description__icontains=query))
+        lists = list_browse.apply(lists, request.query_params)
         return Response(
             {
                 "count": lists.count(),
@@ -111,7 +114,7 @@ class UserListsView(APIView):
                 "previous": None,
                 "results": [
                     list_payload(custom_list, request=request, include_preview_items=True)
-                    for custom_list in lists[:100]
+                    for custom_list in prime_media_types(lists[:100])
                 ],
             },
         )

@@ -55,14 +55,15 @@ class StatsTests(AnimeTestCase):
     def test_an_704_a_logs_fills_count_on_the_logs_date_and_go_with_it(self):
         item = self.title(total=3)
         self.tick(item, 1)
-        entry = self.log(item, day=date(2025, 3, 1)).entry
-        self.assertEqual(self.stats_time(2025), (48, 2))
-        self.assertEqual(self.stats_time(2026), (24, 1))
-        anime_tracking.update_log(entry, {"consumed_at": date(2024, 3, 1)})
-        self.assertEqual(self.stats_time(2024), (48, 2))
-        self.assertEqual(self.stats_time(2025), (0, 0))
+        entry = self.log(item).entry
+        self.assertEqual(self.stats_time(2026), (72, 3))
+        anime_tracking.update_log(entry, {"consumed_at": date(2025, 3, 1)})
+        # Dated before its pass's tick, the log takes that tick too (decisions 43, 62).
+        self.assertEqual(self.stats_time(2025), (72, 3))
+        self.assertEqual(self.stats_time(2026), (0, 0))
         anime_tracking.delete_log(self.user, entry)
-        self.assertEqual(self.stats_time(2024), (0, 0))
+        self.assertEqual(self.stats_time(2025), (0, 0))
+        self.assertEqual(self.stats_time(2026), (24, 1))
         self.assertEqual(self.stats_time()[1], 1)
 
     def test_an_704_a_marks_fills_count_only_in_all_time(self):

@@ -48,6 +48,8 @@ NAMING = {
     "app/management/commands/flag_past_restarts.py",
     # Reads only: its dry run counts Twerp's saves.
     "app/management/commands/mark_twerp.py",
+    # Reads start rows and deletes those on an old tap's day, through progress_posts.
+    "app/management/commands/undate_old_eye_taps.py",
     "app/music_move.py",
     "app/series_tracking.py",
     "app/tv_tracking.py",

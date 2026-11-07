@@ -195,6 +195,12 @@ The repeat value saved on a diary entry is a historical assertion. Editing or
 deleting another diary entry does not recalculate it. The default is calculated
 only when a new composer opens, and the user may later edit that entry's value.
 
+The first log's saved value, by log date then id, also decides whether the marker
+stands for an earlier consumption when Stats count time (STAT-201, decision 38). On, it
+does: All Time holds the marker and the log. Off, the log dates that same
+consumption, and the marker adds nothing while that log exists. When that log goes,
+the next first log decides, and with none left the marker counts once again (SW-009).
+
 ### SW-011: The eye and heart actions survive rating-picker dismissal
 
 Activating an empty media-page eye or heart may present an optional rating
@@ -447,6 +453,13 @@ so standalone rating rows are not shown.
 - A book row marked Completed with a date is a dated diary entry too, with a source
   identity, unless the title has a log that day or the row says it's an undated mark.
   A book row marked Completed with no date is the undated mark, from every source.
+- A film or album row marked Completed with a date, from Yamtrack or Simkl, is a dated
+  diary entry too (decision 47), with a source identity, unless the title has a log that
+  day. It states no Rewatch, so it's a rewatch only after an earlier log of the title
+  (SW-503). With no date it's the undated mark. IMDb's dates say when a title was rated
+  or listed, not watched, so an IMDb row is always the undated mark. Your own export
+  coming back leaves a film's or album's logs and All Time as they were: the row's date
+  is its newest log's, which is already there.
 - An imported diary rating remains attached to its diary entry.
 - Imports do not emit social feed activity.
 - Your own export coming back in overwrite mode leaves a book's All Time alone, except
@@ -490,8 +503,13 @@ When an imported diary row supplies a rewatch or relisten value, Spine trusts
 and stores that value.
 
 When the source omits it, Spine derives the default by processing rows in
-consumption-date and source order under SW-010. Prior local diary history and
-direct consumption count as prior consumption when deriving the value.
+consumption-date and source order under SW-010. Only prior local diary history
+counts as prior consumption when deriving the value: over a mark alone the first
+such row saves off, so it dates the marked watch (SW-010).
+
+A Letterboxd row's blank Rewatch is a stated No, not an omission: only a real Yes
+saves a rewatch. A blank in `reviews.csv` never overwrites the same row's Yes in
+`diary.csv`. Rows already saved keep the value they were saved with.
 
 ### SW-504: Reimporting the same source record is idempotent
 
@@ -548,3 +566,5 @@ Behavior omitted from this working contract is not implicitly decided.
 SW-500's dated book rows, what your own export can't bring back, and a Read with no date
 staying unflagged on a title that has a log (your own export coming back), are provisional
 until the phone test of Activity's first phase accepts them.
+SW-500's dated film and album rows are provisional until the phone test of Activity's
+third phase accepts them.

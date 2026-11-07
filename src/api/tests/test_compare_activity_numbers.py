@@ -10,6 +10,7 @@ import re
 from datetime import UTC, date, datetime
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
@@ -20,10 +21,18 @@ from api.services import activity as activity_service
 from api.services import activity_rows, stats_time
 from api.services.stats_scope import StatsScope
 from api.tests.test_activity_calc_books import BookCalcBase, d
-from app import book_tracking, game_tracking
+from app import book_tracking, game_tracking, single_weight, tv_tracking
 from app.management.commands.compare_activity_numbers import _qualifying_days
-from app.models import Anime, DiaryEntry, GameSession, MediaTypes, Status
-from social.models import Comment, ContentLike, ProgressChange, ProgressPost
+from app.models import Anime, DiaryEntry, GameSession, Item, MediaTypes, Status
+from app.tests.tv_fixtures import make_manual_show
+from social.models import (
+    Comment,
+    ContentLike,
+    Follow,
+    FollowStatus,
+    ProgressChange,
+    ProgressPost,
+)
 
 WRITES = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b", re.IGNORECASE)
 
@@ -199,6 +208,45 @@ class YearsOnlyTheOldCounterHasTests(CompareTests):
         lines = self.compare()
         self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} book 2025:")])
         self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} anime 2")])
+
+
+class PhaseThreeTypesTests(CompareTests):
+    """TV, movies and music: the old counters beside the rows, for the closing look."""
+
+    def test_a_marked_film_logged_with_rewatch_on_rises_in_all_time_only(self):
+        film = Item.objects.create(source="manual", media_type=MediaTypes.MOVIE.value, media_id="film", title="Film", runtime_minutes=120)
+        with self.on(d(2026, 1, 10)):
+            single_weight.mark_consumed(self.owner, film)
+        with self.on(d(2026, 3, 1)):
+            single_weight.create_log(self.owner, film, consumed_at=d(2026, 3, 1), is_rewatch=True)
+        lines = self.compare()
+        self.assertIn("value=120->120", self.line(lines, f"user {self.owner.pk} movie 2026:"))
+        everything = self.line(lines, f"user {self.owner.pk} movie all:")
+        self.assertIn("value=120->240", everything)
+        self.assertIn("known=1->2", everything)
+        self.assertIn("total=1->2", everything)
+
+    def test_it_times_the_feed_for_an_account_that_follows_someone(self):
+        friend = get_user_model().objects.create_user(username="friend", calendar_timezone="America/New_York")
+        Follow.objects.create(from_user=self.owner, to_user=friend, status=FollowStatus.ACCEPTED)
+        line = self.line(self.compare(), f"user {self.owner.pk} feed:")
+        self.assertRegex(line, r"following=1 rows=0 feed_ms=\d+ feed_queries=\d+$")
+        self.assertFalse([found for found in self.compare() if found.startswith(f"user {friend.pk} feed:")])
+
+    def test_a_tick_a_backdated_season_log_takes_leaves_its_year(self):
+        show = make_manual_show(seasons={1: 2})
+        Item.objects.filter(media_id=show.media_id, media_type=MediaTypes.EPISODE.value).update(runtime_minutes=45)
+        with self.on(d(2026, 3, 1)):
+            tv_tracking.tick(self.owner, show, 1, 1)
+        season = Item.objects.get(media_id=show.media_id, media_type=MediaTypes.SEASON.value)
+        with self.on(d(2026, 3, 2)):
+            tv_tracking.create_log(self.owner, season, consumed_at=d(2025, 12, 20))
+        lines = self.compare()
+        self.assertIn("value=45->90", self.line(lines, f"user {self.owner.pk} tv 2025:"))
+        self.assertIn("value=45->0", self.line(lines, f"user {self.owner.pk} tv 2026:"))
+        everything = self.line(lines, f"user {self.owner.pk} tv all:")
+        self.assertIn("value=90->90", everything)
+        self.assertIn("total=2->2", everything)
 
 
 class CountTwoTests(CompareTests):

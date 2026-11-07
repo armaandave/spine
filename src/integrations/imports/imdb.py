@@ -298,11 +298,11 @@ class IMDBImporter:
         dates = [date_created, date_modified, date_rated]
         most_recent_date = max(date for date in dates if date)
 
-        # Movies can have progress and end_date set directly.
+        # A rated movie is watched, at no date: IMDb's dates say when it was rated or
+        # listed, not watched, so none of them is a play (decision 47).
         # TV shows manage their own progress and dates through episodes.
         if media_type == MediaTypes.MOVIE.value and status == Status.COMPLETED.value:
             params["progress"] = 1
-            params["end_date"] = most_recent_date
 
         instance = model(**params)
         instance._history_date = most_recent_date or timezone.now()
