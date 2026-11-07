@@ -164,6 +164,42 @@ Planning too, not "To Read".
   being media summaries. `media_type` narrows it to the type the row counted. It needs a
   signed-in viewer who can see the profile, else 404.
 
+## AC-9: Fixing a row and taking one back
+
+On a person's own book, manga, comic or game progress row (decision 52): the page offers
+Edit, and a trash on the newest row only. A TV or anime row has neither (unticking fixes
+TV). They are for a read that is still going, reading or paused: a finished read's pages
+belong to its log, and a stopped read's rows are fixed by reading on. The server says
+what is offered (the post page's `viewer`, below); the app holds no rule of its own.
+
+- **Delete** (`DELETE /api/v1/progress/<id>/`, 204): the owner, or an admin (which writes
+  a `SocialAuditLog` row, `progress_delete`). Anyone else who can see the row gets 403,
+  someone who can't see it 404, a row with nothing to take back 400. It removes that
+  day's saves on the title and puts the place back to where it stood before them (a first
+  save goes back to nothing). The day's start and status moves stay, so a day that
+  started stays as "Started reading". The day's post, likes and comments go when the day
+  has no row left (AC-7). Only the newest row can be deleted: newest means nothing was
+  saved on the read after it, decided when the request arrives, so a save from another
+  device since the page loaded gives 409. Stats move at once (`bump_user`).
+- **Fix an older row** (`PATCH /api/v1/progress/<id>/` with `{"value": N, "unit"?}`;
+  200 with the row's page, or 204 when the fix left the day with no row): the owner only
+  (403 for anyone else, an admin too). The day's last save is rewritten in place, and the
+  next save's "from" with it, so nothing else moves and the place stays: 100, 120, 200
+  with the second fixed to 110 reads 100, 10, 90, still 200 (decision 58). `N` stays
+  between the saves either side (`edit.min` to `edit.max`, inclusive), else 400; equal
+  to the number before empties the day. Whole numbers for pages, counts and minutes; a
+  percent has up to two decimals. `unit` picks which number a game's day edits when it
+  saved both (`edit.unit`).
+- **Edit on the newest row** has no route of its own: the app opens the normal sheet with
+  `edit.value` and `edit.date` and saves the number again with that date. A drop comes
+  off the newest amounts first, which is that row. `PATCH` on it is 400.
+- **What the page says**, in `viewer` of `GET /api/v1/progress/<id>/` and nowhere else
+  (the feed and the lists never carry it), to the owner, and to an admin for
+  `can_delete`: `can_edit`, `can_delete` and `edit`, null when there is no Edit:
+  `{"mode": "save" | "number", "value", "unit", "kind", "date", "min", "max"}`. In `save`
+  mode `min` is null and `max` is the title's length, if it has one.
+- It adds nothing to the calculation: the rows are the saves, read as ever.
+
 ## Wire shape
 
 `/api/v1/users/<username>/activity/` and `/api/v1/feed/` return cursor pages in
@@ -192,6 +228,8 @@ the shape installed apps read. `consumed_at` is the item's calendar day
   titles, `media_type` the one type they share or null. `id` is
   `(person << 44) | day ordinal`, at or above 2^44, an address with no Item (no Item has
   id 0), so it can't be a progress day's. `like_count` and `comment_count` are 0.
+- On a progress day's own page (`GET /api/v1/progress/<id>/`) the owner's `viewer` also
+  has `can_edit`, `can_delete` and `edit` (AC-9), and an admin's `can_delete`.
 - Both have `like_count`, `comment_count`, and `viewer.has_liked`. `object.liked` is
   the person's own heart on the title, which is not a like of the post.
 
@@ -256,6 +294,8 @@ saved change keeps the lowest change id; any other day (TV, anime, or no change)
   day has a row again. Its likes and comments stay stored. Only a day with no row in the
   viewer-independent view (no log visible, so none moves a row) is deleted with its
   journey, attempt, playthrough or season.
+- A Planning row has no likes or comments (AC-8). Deleting the newest row (AC-9) deletes
+  its post, likes and comments, unless the day still has a row, such as a start.
 - Deleting a journey, attempt, playthrough or season's progress deletes the likes and
   comments of each day it leaves with no progress. Removing a title deletes all of that
   person's progress, likes and comments on it. Neither comes back on a later save that
@@ -263,7 +303,7 @@ saved change keeps the lowest change id; any other day (TV, anime, or no change)
 
 ## Review status
 
-AC-8 and AC-1's Planning adds are provisional until the phone test of Activity's
+AC-8, AC-9 and AC-1's Planning adds are provisional until the phone test of Activity's
 fifth phase accepts them.
 
 AC-2's status moves, `began_over` and `saved_on`, and AC-7's

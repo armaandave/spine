@@ -6,7 +6,7 @@ keeps that day, so Stats and the Activity list read it there. Rules shared with 
 before the start is refused (BK-306), and a day before the previous save is allowed.
 """
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from django.test import override_settings
@@ -130,7 +130,7 @@ class DatedSaveTests(DatedSaveBase):
                 self.save(item, 20, DEC_27)
                 self.save(item, 25, DEC_20)
                 self.assertEqual(self.stamps(item), [DEC_27, DEC_20])
-                # The rise lands on its own day, and the place is where the last save left it.
+                # The rise lands on its own day; the place is the last save's.
                 self.assertEqual(self.days(item), {DEC_27: 20, DEC_20: 5})
                 self.assertEqual((self.year(item, 2026), self.year(item, 2027)), (25, 0))
 
@@ -162,7 +162,7 @@ class DatedSaveTests(DatedSaveBase):
         self.assertEqual(self.year(item, 2027, client), 0)
 
     def test_the_picker_after_a_year_ago_start(self):
-        """The sheet's own case: started Nov 1 2025, 100 on Nov 2, then 120 on Dec 20 2025."""
+        """The sheet's case: started Nov 1 2025, 100 on Nov 2, 120 on Dec 20 2025."""
         self.clock.set(datetime(2026, 10, 25, 12, 0, tzinfo=NEW_YORK_TZ))
         item = self.item(MediaTypes.BOOK.value, total_pages=400)
         book_tracking.start(self.user, item, start_date=date(2025, 11, 1))

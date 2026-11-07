@@ -24,7 +24,8 @@ from django.db.models.functions import TruncDate, TruncDay
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework.exceptions import NotFound
+from rest_framework import status
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.utils.urls import replace_query_param
 
@@ -36,7 +37,7 @@ from api.serializers.common import (
     tv_season_started,
     user_summary,
 )
-from api.services import activity_list, activity_planning, activity_rows
+from api.services import activity_list, activity_planning, activity_rows, progress_rows
 from api.services import diary as diary_service
 from app import exposure, single_weight, tv_tracking, user_calendar
 from app.curation import prime_curated_artwork
@@ -484,6 +485,18 @@ def _from_change(progress_id):
     return change.actor, item, activity_rows.saved_day(change, user_calendar.calendar_tz(change.actor))
 
 
+def resolve_address(progress_id):
+    """Return (the person, the title's Item, the day) an address names, or 404."""
+    if progress_id >= ADDRESS_BASE:
+        actor_id, item_id, day = _from_address(progress_id)
+        return (
+            get_object_or_404(get_user_model(), pk=actor_id),
+            get_object_or_404(Item, pk=item_id),
+            day,
+        )
+    return _from_change(progress_id)
+
+
 def progress_day(viewer, progress_id):
     """Return the day's progress an address belongs to, or 404.
 
@@ -491,12 +504,7 @@ def progress_day(viewer, progress_id):
     the day with nothing, or a log moves it, the page, its like and its comments are 404
     until it has a row again. Their rows stay stored (AC-7).
     """
-    if progress_id >= ADDRESS_BASE:
-        actor_id, item_id, day = _from_address(progress_id)
-        owner = get_object_or_404(get_user_model(), pk=actor_id)
-        item = get_object_or_404(Item, pk=item_id)
-    else:
-        owner, item, day = _from_change(progress_id)
+    owner, item, day = resolve_address(progress_id)
     if not can_view_user_profile(viewer, owner):
         raise Http404
     exposure.require_media_type(item.media_type)
@@ -517,7 +525,50 @@ def progress_post_response(request, progress_id):
     actor = get_user_model().objects.get(pk=row.actor_id)
     title = Item.objects.get(pk=row.title_id)
     prime_curated_artwork([title])
-    return Response(_row_payload(row, actor, title, request, _day_engagement([_post_key(row)], request.user)))
+    payload = _row_payload(row, actor, title, request, _day_engagement([_post_key(row)], request.user))
+    # Only the owner (and an admin, to delete) is told what can be done to the row.
+    payload["viewer"].update(progress_rows.viewer_fields(request.user, actor, title, row.day))
+    return Response(payload)
+
+
+def _row_target(request, progress_id):
+    """Return (owner, Item, day) of a row the person may act on, or raise a 404.
+
+    The row has to exist for them: someone who can't see it gets 404 whatever they
+    try. An admin acts on a row of a profile they can't see as the owner would see it.
+    """
+    owner, item, day = resolve_address(progress_id)
+    viewer = request.user
+    if viewer.is_staff and not can_view_user_profile(viewer, owner):
+        viewer = owner
+    progress_day(viewer, progress_id)
+    return owner, item, day
+
+
+def progress_fix_response(request, progress_id, value, unit):
+    """Fix an older row's number (decision 58); only its owner may."""
+    owner, item, day = _row_target(request, progress_id)
+    if request.user.pk != owner.pk:
+        raise PermissionDenied
+    progress_rows.fix(owner, item, day, value, unit=unit)
+    return _after_change(request, progress_id)
+
+
+def progress_delete_response(request, progress_id):
+    """Take back the newest row (decision 52); its owner or an admin may."""
+    owner, item, day = _row_target(request, progress_id)
+    if request.user.pk != owner.pk and not request.user.is_staff:
+        raise PermissionDenied
+    progress_rows.delete(owner, item, day, by=request.user)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _after_change(request, progress_id):
+    """Return the fixed row's page, or 204 when the fix left the day with no row."""
+    try:
+        return progress_post_response(request, progress_id)
+    except Http404:
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _title_key(item):

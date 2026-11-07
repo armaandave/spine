@@ -12,6 +12,7 @@ from api.serializers.common import user_summary
 from api.serializers.social import (
     CommentWriteSerializer,
     LikeSerializer,
+    ProgressFixSerializer,
     PushDeviceSerializer,
 )
 from api.services import activity as activity_service
@@ -47,6 +48,21 @@ class ProgressPostView(APIView):
 
     def get(self, request, progress_id):
         return activity_service.progress_post_response(request, progress_id)
+
+    def patch(self, request, progress_id):
+        """Fix an older row's number: its owner only (decision 58)."""
+        serializer = ProgressFixSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return activity_service.progress_fix_response(
+            request,
+            progress_id,
+            serializer.validated_data["value"],
+            serializer.validated_data.get("unit"),
+        )
+
+    def delete(self, request, progress_id):
+        """Take back the newest row: its owner, or an admin (decision 52)."""
+        return activity_service.progress_delete_response(request, progress_id)
 
 
 class PlanningDayView(APIView):
