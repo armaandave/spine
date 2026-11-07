@@ -994,7 +994,13 @@ def like_p_row():
 def print_rows():
     """Print every row the sheet's last row stored, and flag any not saved today."""
     names = [media_id(name) for name in STORED_TITLES]
-    rows = ProgressChange.objects.filter(actor=dev_user(), item__media_id__in=names).select_related("item").order_by("id")
+    # The seed's own Planning choice (show Z) is setup, not what the phone stored.
+    rows = (
+        ProgressChange.objects.filter(actor=dev_user(), item__media_id__in=names)
+        .exclude(current_progress__kind=ProgressChange.PLANNING)
+        .select_related("item")
+        .order_by("id")
+    )
     today = timezone.now().astimezone(ZoneInfo(NEW_YORK)).date()
     for change in rows:
         saved = change.current_progress

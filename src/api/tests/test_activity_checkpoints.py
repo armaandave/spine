@@ -518,7 +518,9 @@ class StoredRowsTests(CheckpointBase):
     """The sheet's last row: each stored row is today's, of the right kind and move."""
 
     def rows(self, item):
-        stored = ProgressChange.objects.filter(actor=self.dev, item=item).order_by("id")
+        # Show Z's Planning row is the seed's own setup (Phase 5 records Planning adds).
+        stored = ProgressChange.objects.filter(actor=self.dev, item=item).exclude(current_progress__kind="planning")
+        stored = stored.order_by("id")
         for change in stored:
             self.assertEqual(change.saved_on, TODAY)
         return [
