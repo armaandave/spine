@@ -158,17 +158,6 @@ final class InProgressUpdatesTests: XCTestCase {
 
     // MARK: The badge above the bar
 
-    func testTheCardsShowLibrarysBadgeAboveTheBar() throws {
-        let features = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Spine/Features", isDirectory: true)
-        let source = try String(contentsOf: features.appendingPathComponent("Home/InProgressUpdates.swift"), encoding: .utf8)
-        let badge = try XCTUnwrap(source.range(of: "LibraryPosterBadge.text(for: item)"))
-        let bar = try XCTUnwrap(source.range(of: "InProgressBar(fraction: progressFraction)"))
-        XCTAssertLessThan(badge.lowerBound, bar.lowerBound, "The badge sits above the bar")
-    }
-
     func testTheBadgeMovesWhereTheCardIsAfterASave() async throws {
         // A book's page saved from its panel.
         let book = Self.item("book", "poster-badge-book", "Project Hail Mary", tracking: Self.bookTracking(status: "In progress", pages: 40))
@@ -651,8 +640,13 @@ final class InProgressUpdatesTests: XCTestCase {
             XCTAssertFalse(source.contains("fontWidth(.condensed)"), "\(path) squeezes the line")
             XCTAssertFalse(source.contains("ContinueWatchingLine("), "\(path) still has the show's own line")
         }
-        let home = try String(contentsOf: features.appendingPathComponent("Home/HomeView.swift"), encoding: .utf8)
-        XCTAssertTrue(home.contains("InProgressCard("), "Home builds its own cards")
+        // The cards became two tiles: Home builds them, and the old rail's card is gone.
+        let home = try String(contentsOf: features.appendingPathComponent("Home/HomeTop.swift"), encoding: .utf8)
+        XCTAssertTrue(home.contains("HomeTilesSection("), "Home builds its tiles")
+        for path in ["Home/HomeView.swift", "Home/HomeTop.swift", "Home/InProgressUpdates.swift"] {
+            let source = try String(contentsOf: features.appendingPathComponent(path), encoding: .utf8)
+            XCTAssertFalse(source.contains("InProgressCard("), "\(path) still builds the old card")
+        }
     }
 
     // MARK: Fixtures

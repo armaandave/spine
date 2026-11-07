@@ -4,7 +4,9 @@ import SwiftUI
 @MainActor
 @Observable
 final class ActivityFeedViewModel {
-    var items: [ActivityItem] = []
+    var items: [ActivityItem] = [] {
+        didSet { onItemsChange?() }
+    }
     var isLoadingInitial = true
     var isLoadingNextPage = false
     var errorMessage: String?
@@ -14,6 +16,10 @@ final class ActivityFeedViewModel {
     var topLine: String?
     var total: ActivityListTotal?
     var undated: ActivityUndated?
+
+    /// Told whenever `items` changes (a load, a next page, an engagement update), so Home can rebuild what it draws
+    /// from them then and never on a body pass.
+    @ObservationIgnored var onItemsChange: (() -> Void)?
 
     /// A profile's username, or nil for the activity of the people the signed-in user follows (Home).
     private let username: String?
@@ -71,7 +77,12 @@ final class ActivityFeedViewModel {
     }
 
     func loadNextPageIfNeeded(currentItem: ActivityItem) async {
-        guard currentItem.id == items.last?.id else { return }
+        await loadNextPageIfNeeded(itemID: currentItem.id)
+    }
+
+    /// For rows that know only an item's id (Home's cards): the next page loads when the last item's row appears.
+    func loadNextPageIfNeeded(itemID: Int) async {
+        guard itemID == items.last?.id else { return }
         await loadNextPage()
     }
 
@@ -165,37 +176,6 @@ struct ActivityFeedDivider: View {
     var body: some View {
         Divider()
             .overlay(.white.opacity(0.07))
-    }
-}
-
-struct ActivityFeedSkeleton: View {
-    var rowCount = 3
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(0 ..< rowCount, id: \.self) { _ in
-                HStack(alignment: .top, spacing: 12) {
-                    RoundedRectangle(cornerRadius: PosterSlot.activityPost.cornerRadius, style: .continuous)
-                        .frame(width: PosterSlot.activityPost.size.width, height: PosterSlot.activityPost.size.height)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        bar(width: 90, height: 12)
-                        bar(width: 150, height: 16)
-                        bar(width: 80, height: 11)
-                        bar(width: 180, height: 12)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.vertical, 14)
-            }
-        }
-        .foregroundStyle(.white.opacity(0.07))
-        .accessibilityHidden(true)
-    }
-
-    private func bar(width: CGFloat, height: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 4)
-            .frame(width: width, height: height)
     }
 }
 

@@ -3,27 +3,92 @@ import SwiftUI
 @MainActor
 @Observable
 final class HomeViewModel {
-    var profile: UserProfile?
-    var inProgressItems: [LibraryItem] = []
+    var profile: UserProfile? {
+        didSet { tiles.followsNobody = (profile?.counts.following ?? 0) == 0 }
+    }
+
     var isLoading = true
-    var isLoadingInProgress = false
     var profileErrorMessage: String?
-    var inProgressErrorMessage: String?
+    /// Why a write from a tile failed, for an alert. Nil when there is nothing to say.
+    var writeFailure: String?
+
+    // MARK: What the page is made of
+
+    /// The two tiles' data, the open tile's state and the glow behind the page. Each is read only by the small views
+    /// that draw it, so none of them redraws the page.
+    let tiles = HomeTilesModel()
+    let tilesState = HomeTilesState()
+    let glowModel = HomeGlowModel()
 
     /// The activity of the people you follow; your own is on your profile.
     let feed: ActivityFeedViewModel
-    var activityItems: [ActivityItem] { feed.items }
-    var activityErrorMessage: String? { feed.errorMessage }
+    /// The feed's day headers and cards, built from `feed` when it changes.
+    let feedModel: HomeFeedModel
+    /// What you did today on each title, for the lit part of the tiles' meters.
+    let todayStore: HomeTodayStore
 
     /// Continue Watching's episode sheet (TV-100, TV-701).
     let continueWatching: ContinueWatchingTicks
-    /// Every In progress card's "Update progress ›": shows open the episode sheet, other titles their page's progress
-    /// UI (TV-701).
+    /// Every tile's Update button: shows open the episode sheet, other titles their page's progress UI (TV-701).
     let progressUpdates: InProgressUpdates
+    /// Trending's "Plan to watch".
+    let planWriter: TrendingPlanWriter
 
-    private let profileRepository: ProfileRepository
-    private let trackingRepository: TrackingRepository
-    private let onUnauthorized: () -> Void
+    // MARK: The rail, kept where the tiles read it
+
+    var inProgressItems: [LibraryItem] {
+        get { tiles.inProgress }
+        set {
+            tiles.inProgress = newValue
+            syncGlowIdle()
+        }
+    }
+
+    var isLoadingInProgress: Bool {
+        get { tiles.isLoadingInProgress }
+        set { tiles.isLoadingInProgress = newValue }
+    }
+
+    var inProgressErrorMessage: String? {
+        get { tiles.inProgressError }
+        set { tiles.inProgressError = newValue }
+    }
+
+    var activityItems: [ActivityItem] { feed.items }
+    var activityErrorMessage: String? { feed.errorMessage }
+
+    /// Where each friend stands on a title (WP17 plugs in here). It starts as nothing: no meter and no "where".
+    var standing: FeedStandingProviding {
+        get { feedModel.standing }
+        set { feedModel.standing = newValue }
+    }
+
+    /// The main button's write for books, games, manga and comics: one at a time, the card patched from the answer.
+    @ObservationIgnored private(set) lazy var quickActions = InProgressQuickActions(
+        trackingRepository: trackingRepository,
+        changeOrigin: continueWatching.changeOrigin,
+        onUpdate: { [weak self] id, tracking in self?.railItemDidChange(id: id, tracking: tracking) },
+        onUnauthorized: onUnauthorized
+    )
+
+    /// The Today refresh and the Trending fill on their way, so a test can wait for them.
+    @ObservationIgnored private(set) var todayRefresh: Task<Void, Never>?
+    @ObservationIgnored private(set) var trendingFill: Task<Void, Never>?
+
+    /// Your own recent activity and the fallback titles, kept for Trending.
+    @ObservationIgnored private var ownActivity: [ActivityItem] = []
+    @ObservationIgnored private var fallbackTitles: [MediaSummary] = []
+    /// A write from a tile changed a card since the rail loaded: the rail re-sorts on its next visit.
+    @ObservationIgnored private var railNeedsResort = false
+
+    @ObservationIgnored private let profileRepository: ProfileRepository
+    @ObservationIgnored private let trackingRepository: TrackingRepository
+    @ObservationIgnored private let activityRepository: ActivityRepository
+    @ObservationIgnored private let onUnauthorized: () -> Void
+    /// Whether Home asks for the extras the tiles show beyond the rail and the feed: today's rows, your own activity
+    /// and the fallback titles for Trending. A view model built to test the rail or the feed makes none of them.
+    @ObservationIgnored private let loadsTileExtras: Bool
+    @ObservationIgnored private let trendingFallback: TrendingFallbackSource?
 
     init(
         profileRepository: ProfileRepository,
@@ -31,25 +96,37 @@ final class HomeViewModel {
         activityRepository: ActivityRepository,
         mediaRepository: MediaRepository? = nil,
         diaryRepository: DiaryRepository? = nil,
+        listRepository: ListRepository? = nil,
+        loadsTileExtras: Bool = false,
         onUnauthorized: @escaping () -> Void
     ) {
         self.profileRepository = profileRepository
         self.trackingRepository = trackingRepository
+        self.activityRepository = activityRepository
         self.onUnauthorized = onUnauthorized
-        feed = ActivityFeedViewModel(
+        self.loadsTileExtras = loadsTileExtras
+        trendingFallback = loadsTileExtras ? listRepository.map { TrendingFallbackSource(listRepository: $0) } : nil
+        let feed = ActivityFeedViewModel(
             username: nil,
             activityRepository: activityRepository,
             onUnauthorized: onUnauthorized
         )
+        self.feed = feed
+        feedModel = HomeFeedModel(
+            feed: feed,
+            planning: FeedPlanningStore(activityRepository: activityRepository, onUnauthorized: onUnauthorized)
+        )
+        todayStore = HomeTodayStore(activityRepository: activityRepository, onUnauthorized: onUnauthorized)
         // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
         let mediaRepository = mediaRepository ?? AppRepositories.current().media
         let diaryRepository = diaryRepository ?? AppRepositories.current().diary
-        continueWatching = ContinueWatchingTicks(
+        let continueWatching = ContinueWatchingTicks(
             mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
             diaryRepository: diaryRepository,
             onUnauthorized: onUnauthorized
         )
+        self.continueWatching = continueWatching
         progressUpdates = InProgressUpdates(
             continueWatching: continueWatching,
             mediaRepository: mediaRepository,
@@ -57,6 +134,12 @@ final class HomeViewModel {
             diaryRepository: diaryRepository,
             onUnauthorized: onUnauthorized
         )
+        planWriter = TrendingPlanWriter(
+            trackingRepository: trackingRepository,
+            changeOrigin: continueWatching.changeOrigin,
+            onUnauthorized: onUnauthorized
+        )
+        tiles.isLoadingTrending = true
         // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
         continueWatching.onUpdate = { [weak self] id, tv in
             guard let self else { return }
@@ -71,9 +154,14 @@ final class HomeViewModel {
             guard let self else { return }
             inProgressItems = InProgressUpdates.replacingProgress(state, id: id, in: inProgressItems)
         }
+        feedModel.onFeedChange = { [weak self] in self?.feedDidChange() }
+        feedModel.onNextPage = { [weak self] in self?.standing.prepare(for: self?.feed.items ?? []) }
     }
 
+    // MARK: Loading
+
     func load() async {
+        tiles.isLoadingTrending = tiles.trending.isEmpty
         guard await loadProfileAndInProgress() else { return }
         await loadActivity()
     }
@@ -94,9 +182,14 @@ final class HomeViewModel {
             return false
         }
 
-        isLoadingInProgress = inProgressItems.isEmpty
-        await loadInProgress()
+        await loadInProgress(forceToday: true)
         return true
+    }
+
+    /// The first load, when the screen appears: nothing happens once the profile is in.
+    func loadIfNeeded() async {
+        guard profile == nil else { return }
+        await load()
     }
 
     func reload() async {
@@ -111,15 +204,18 @@ final class HomeViewModel {
     }
 
     /// You changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's or
-    /// game's progress) keeps its card where it is (TV-701); any other write reloads the rail. The feed is only the
-    /// people you follow, so your own writes can't change it, and it keeps its place however far down you are.
+    /// game's progress) keeps its card where it is (TV-701), and so does the tile's own quick action; any other write
+    /// reloads the rail. The feed is only the people you follow, so your own writes can't change it, and it keeps its
+    /// place however far down you are.
     func mediaStateDidChange(origin: UUID?) async {
         guard origin != continueWatching.changeOrigin else { return }
         guard await loadProfileAndInProgress() else { return }
         await feed.loadIfNeeded()
     }
 
-    func loadInProgress() async {
+    /// Loads the rail, and then today's rows for the lit part of the tiles. `forceToday` skips the twenty-second
+    /// throttle: a pull to refresh, or coming back after a write.
+    func loadInProgress(forceToday: Bool = false) async {
         let mediaTypes = InProgressLibraryLoader.mediaTypes(from: profile)
         guard !mediaTypes.isEmpty else {
             inProgressItems = []
@@ -133,13 +229,17 @@ final class HomeViewModel {
         defer { isLoadingInProgress = false }
 
         do {
-            inProgressItems = try await InProgressLibraryLoader.load(
+            let items = try await InProgressLibraryLoader.load(
                 mediaTypes: mediaTypes,
                 trackingRepository: trackingRepository,
                 limit: 10
             )
+            tiles.baselines = Self.baselines(for: items)
+            inProgressItems = items
+            railNeedsResort = false
             continueWatching.railDidLoad()
             progressUpdates.railDidLoad()
+            refreshToday(force: forceToday)
         } catch is CancellationError {
             return
         } catch {
@@ -150,12 +250,13 @@ final class HomeViewModel {
 
     /// A write from a card's own progress UI changed a card since the rail last loaded (TV-701).
     var inProgressNeedsReload: Bool {
-        continueWatching.needsReload || progressUpdates.needsReload
+        continueWatching.needsReload || progressUpdates.needsReload || railNeedsResort
     }
 
     func loadActivity() async {
         guard profile != nil else { return }
         await feed.load()
+        feedDidLoad()
     }
 
     private func handleUnauthorized(_ error: Error) {
@@ -163,10 +264,174 @@ final class HomeViewModel {
             onUnauthorized()
         }
     }
+
+    // MARK: Today
+
+    /// Where each title stood when the rail loaded, in its tile's unit: gains since then are lit with today's.
+    nonisolated static func baselines(for items: [LibraryItem]) -> [String: Double] {
+        var result: [String: Double] = [:]
+        for item in items {
+            if let position = InProgressTilePresenter.position(for: item) { result[item.id] = position.current }
+        }
+        return result
+    }
+
+    /// Asks for today's rows after the rail has loaded, alongside the feed. Your own writes from the tiles never
+    /// come here: the local change covers them.
+    private func refreshToday(force: Bool) {
+        guard loadsTileExtras, let username = profile?.username else { return }
+        todayRefresh = Task { [weak self] in
+            guard let self else { return }
+            await todayStore.refresh(username: username, force: force)
+            if tiles.todayParts != todayStore.parts { tiles.todayParts = todayStore.parts }
+        }
+    }
+
+    /// How many episodes of a show or an anime were watched today, for its sheet to open on. Nil for the rest.
+    func todayCount(for item: LibraryItem) -> Int? {
+        let mediaType = item.media.ref.mediaType
+        guard mediaType == "tv" || mediaType == "anime",
+              let position = InProgressTilePresenter.position(for: item) else { return nil }
+        let amount = TileTodayMath.today(
+            server: tiles.todayParts[HomeTodayStore.titleKey(for: item.media.ref)],
+            baseline: tiles.baselines[item.id],
+            current: position.current,
+            unit: position.unit,
+            total: position.pagesTotal ?? position.total
+        )
+        return Int(amount.rounded())
+    }
+
+    // MARK: Trending and the glow
+
+    /// The first page of the feed is in: friends' standings start loading, and Trending reads what it can now and
+    /// fills in from your own activity and the fallback list as they arrive.
+    private func feedDidLoad() {
+        standing.prepare(for: feed.items)
+        recomputeTrending()
+        guard loadsTileExtras, let username = profile?.username else {
+            tiles.isLoadingTrending = false
+            return
+        }
+        trendingFill?.cancel()
+        trendingFill = Task { [weak self] in await self?.fillTrending(username: username) }
+    }
+
+    private func fillTrending(username: String) async {
+        defer { tiles.isLoadingTrending = false }
+        if let page = try? await activityRepository.userActivityPage(username: username, pageSize: 25, cursorLink: nil),
+           !Task.isCancelled {
+            ownActivity = page.results
+            recomputeTrending()
+        }
+        guard !Task.isCancelled, let trendingFallback,
+              TrendingAggregator.needsFallback(feed: feed.items, own: ownActivity, you: youSummary) else { return }
+        let titles = await trendingFallback.load()
+        guard !Task.isCancelled else { return }
+        fallbackTitles = titles
+        recomputeTrending()
+    }
+
+    /// The feed's items changed: Trending and the glow follow, and the cards were rebuilt before this.
+    private func feedDidChange() {
+        recomputeTrending()
+        syncGlowIdle()
+    }
+
+    private var youSummary: UserSummary? {
+        profile.map { UserSummary(id: $0.id, username: $0.username, displayName: $0.displayName, avatarUrl: $0.avatarUrl) }
+    }
+
+    private func recomputeTrending() {
+        let result = TrendingAggregator.titles(
+            feed: feed.items,
+            own: ownActivity,
+            you: youSummary,
+            fallback: fallbackTitles
+        )
+        if tiles.trending != result.titles { tiles.trending = result.titles }
+        if tiles.trendingSubtitle != result.subtitle { tiles.trendingSubtitle = result.subtitle }
+    }
+
+    /// The glow rests on the first In progress title, else the newest post's art.
+    private func syncGlowIdle() {
+        let media = tiles.inProgress.first?.media ?? feed.items.first?.media
+        if glowModel.idle != media { glowModel.idle = media }
+    }
+
+    // MARK: Writes from the tiles
+
+    /// What a tile's main button did.
+    enum QuickActionOutcome: Equatable {
+        /// Written, or the screen already says why not.
+        case saved
+        /// Nothing was written: the title's own progress UI opens instead (it reached its end, or has no quick write).
+        case opensUpdate
+        /// The write failed and the card is as it was. The message is nil when the screen already shows it.
+        case failed(String?)
+    }
+
+    /// The In progress tile's main button for `item`: a show's or an anime's next episode, or pages, percent, hours or
+    /// chapters. Writes nothing for a plan that would reach the end.
+    func runQuickAction(_ item: LibraryItem) async -> QuickActionOutcome {
+        guard let plan = QuickActionPlan.make(for: item) else { return .opensUpdate }
+        switch plan {
+        case .openSheet:
+            return .opensUpdate
+        case .tickUpNext:
+            tiles.busyItemIDs.insert(item.id)
+            defer { tiles.busyItemIDs.remove(item.id) }
+            continueWatching.quickTick(for: item)
+            await continueWatching.quickTickSettling?.value
+            let failed = item.media.ref.isAnime
+                ? continueWatching.closedAnimeEpisodes?.page.quickActionErrorMessage
+                : continueWatching.closedEpisodes?.season.quickActionErrorMessage
+            return failed == nil ? .saved : .failed(nil)
+        default:
+            tiles.busyItemIDs.insert(item.id)
+            defer { tiles.busyItemIDs.remove(item.id) }
+            switch await quickActions.run(plan, on: item) {
+            case .done:
+                return .saved
+            case .openSheet:
+                return .opensUpdate
+            case let .failed(message):
+                writeFailure = message
+                return .failed(message)
+            }
+        }
+    }
+
+    private func railItemDidChange(id: String, tracking: TrackingState) {
+        inProgressItems = inProgressItems.map { item in
+            item.id == id ? LibraryItem(media: item.media, tracking: tracking) : item
+        }
+        railNeedsResort = true
+    }
+
+    /// Trending's "Plan to watch": the title shows as planned at once and goes back if the write fails. The task is
+    /// done when the write has settled.
+    @discardableResult
+    func planToWatch(_ title: TrendingTitle) -> Task<Void, Never> {
+        let write = planWriter.plan(title)
+        tiles.plannedIDs = planWriter.plannedIDs
+        tiles.busyItemIDs.insert(title.key)
+        return Task { [weak self] in
+            _ = await write.value
+            guard let self else { return }
+            tiles.busyItemIDs.remove(title.key)
+            tiles.plannedIDs = planWriter.plannedIDs
+            if let message = planWriter.errorMessage {
+                writeFailure = message
+                planWriter.dismissError()
+            }
+        }
+    }
 }
 
 struct HomeView: View {
-    private static let headerAvatarSize: CGFloat = 40
+    /// The glow is off screen, and the status bar's fade full, long before this: past it the offset stops changing.
+    private static let scrollCap = HomeDesign.Metric.glowHeight + 60
 
     @State private var viewModel: HomeViewModel
     @State private var selectedRef: MediaRef?
@@ -176,7 +441,6 @@ struct HomeView: View {
     @State private var selectedPost: ActivityPostSelection?
     /// A day of Planning adds, open on its titles.
     @State private var selectedPlanning: ActivityItem?
-    @State private var scrollPosition = HomeScrollPosition()
 
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
@@ -221,103 +485,64 @@ struct HomeView: View {
             activityRepository: activityRepository,
             mediaRepository: mediaRepository,
             diaryRepository: diaryRepository,
+            listRepository: listRepository,
+            loadsTileExtras: true,
             onUnauthorized: onUnauthorized
         ))
     }
 
+    /// Reads only the covers' selection. The tiles, the feed and the glow are handed to the views that draw them as
+    /// objects, and none of their properties is read here, so scrolling, swiping a carousel and a quick action
+    /// do not run this again.
     var body: some View {
+        let _ = PerfCounters.bump(.homeBody)
+        let glow = viewModel.glowModel
         NavigationStack {
             ZStack(alignment: .top) {
-                HomeScrollingAtmosphere(
-                    media: viewModel.inProgressItems.first?.media,
-                    scrollPosition: scrollPosition
-                )
+                HomeGlow(model: glow)
 
                 ScrollView(showsIndicators: false) {
-                    // One lazy stack, with the top of the page as one plain item and then one item per post. A frozen
-                    // Home was sampled looping in nested lazy stacks' placement of the activity rows, which lazy
-                    // stacks size from estimated heights (TV-705).
+                    // One lazy stack, with the top of the page as one plain item and then one item per day header
+                    // or card. A frozen Home was sampled looping in nested lazy stacks' placement of the activity
+                    // rows, which lazy stacks size from estimated heights (TV-705).
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        VStack(alignment: .leading, spacing: 22) {
-                            header
-                            content
-                                .spineContentTransition(value: contentPhase)
-                        }
-                        feedPosts
+                        HomeTop(
+                            viewModel: viewModel,
+                            actions: tileActions,
+                            onOpenProfile: { onSelectTab(.profile) },
+                            onFindPeople: onFindPeople
+                        )
+                        HomeFeedRows(model: viewModel.feedModel, onOpen: openCard)
+                        HomeFeedFooter(feed: viewModel.feed)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 18)
                     .padding(.bottom, 92)
                 }
                 .refreshable {
                     await viewModel.reload()
                 }
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    max(0, geometry.contentOffset.y)
+                    // How far the page has moved, without the inset that holds it below the status bar.
+                    min(max(0, geometry.contentOffset.y + geometry.contentInsets.top), Self.scrollCap)
                 } action: { _, offset in
-                    scrollPosition.offset = offset
+                    glow.scrollOffset = offset
                 }
 
-                HomeStatusBarFade(scrollPosition: scrollPosition)
+                HomeStatusBarFade(model: glow)
             }
             .background {
-                // A faint wash all the way down the feed, for the tab bar's glass to pick up. It's dimmed well past the
-                // Diary tab's: the posts sit directly on it, so their text and artwork have to stay crisp.
-                LogBackdrop(url: washURL)
-                    .overlay {
-                        SpinePalette.pageBackground
-                            .opacity(0.7)
-                            .ignoresSafeArea()
-                    }
+                HomeDesign.Palette.pageBackground
+                    .ignoresSafeArea()
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
             .task {
-                if viewModel.profile == nil {
-                    await viewModel.load()
-                }
+                await viewModel.loadIfNeeded()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .letterboxdImportDidSucceed)) { _ in
-                Task { await viewModel.reload() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
-                Task { await viewModel.reload() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .marginsImportDidSucceed)) { _ in
-                Task { await viewModel.reload() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
-                Task { await viewModel.reload() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .followsDidChange)) { _ in
-                Task { await viewModel.followsDidChange() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
-                Task { await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID) }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .activityPostDidChange)) { notification in
-                if let change = ActivityPostChange.parse(notification) {
-                    viewModel.feed.apply(change.engagement, to: change.post)
-                }
-            }
-            .onChange(of: selectedTab) { _, tab in
-                // Back on Home after a card's progress changed: the rail re-sorts now, not under the user's finger
-                // (TV-701).
-                if tab == .home, viewModel.inProgressNeedsReload {
-                    Task { await viewModel.loadInProgress() }
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
-                if let profile = notification.userInfo?["profile"] as? UserProfile {
-                    viewModel.profile = profile
-                    Task { await viewModel.loadInProgress() }
-                } else {
-                    Task { await viewModel.reload() }
-                }
-            }
+            .modifier(HomeRefreshTriggers(viewModel: viewModel, selectedTab: selectedTab))
+            .modifier(HomeWriteFailureAlert(viewModel: viewModel))
             .onChange(of: selectedRef) { oldValue, newValue in
                 if oldValue != nil, newValue == nil {
-                    Task { await viewModel.loadInProgress() }
+                    Task { await viewModel.loadInProgress(forceToday: true) }
                 }
             }
             .fullScreenCover(item: $selectedRef, onDismiss: {
@@ -419,193 +644,48 @@ struct HomeView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            Button {
-                onSelectTab(.profile)
-            } label: {
-                HomeAvatar(profile: viewModel.profile, size: Self.headerAvatarSize)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Profile")
+    // MARK: Actions
 
-            Text("Home")
-                .font(.system(size: 30, weight: .black))
-                .foregroundStyle(.white)
-
-            Spacer()
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if let error = viewModel.profileErrorMessage, viewModel.profile == nil {
-            HomeInlineState(
-                title: "Could not load home",
-                systemImage: "exclamationmark.triangle",
-                message: error,
-                actionTitle: "Retry"
-            ) {
-                Task { await viewModel.reload() }
-            }
-            .frame(minHeight: 360)
-        } else if viewModel.isLoading, viewModel.profile == nil {
-            VStack(alignment: .leading, spacing: 22) {
-                SpineSection(title: "In Progress") {
-                    HomeInProgressSkeleton()
-                }
-                SpineSection(title: "Activity") {
-                    ActivityFeedSkeleton()
-                }
-            }
-        } else {
-            inProgressSection
-            activitySection
-        }
-    }
-
-    private var inProgressSection: some View {
-        SpineSection(title: "In Progress") {
-            Group {
-                if viewModel.isLoadingInProgress, viewModel.inProgressItems.isEmpty {
-                    HomeInProgressSkeleton()
-                } else if let error = viewModel.inProgressErrorMessage, viewModel.inProgressItems.isEmpty {
-                    HomeInlineState(
-                        title: "Could not load progress",
-                        systemImage: "exclamationmark.triangle",
-                        message: error,
-                        actionTitle: "Retry"
-                    ) {
-                        Task { await viewModel.loadInProgress() }
-                    }
-                } else if viewModel.inProgressItems.isEmpty {
-                    HomeInlineState(
-                        title: "Nothing in progress",
-                        systemImage: "play.circle",
-                        message: "Things you're watching, reading, listening to, and playing will appear here.",
-                        actionTitle: "Find something"
-                    ) {
-                        onSelectTab(.search)
-                    }
-                } else {
-                    SpineRail(items: viewModel.inProgressItems) { item in
-                        InProgressCard(
-                            item: item,
-                            isLoading: viewModel.progressUpdates.loadingItemID == item.id,
-                            onOpen: { selectedRef = item.media.ref },
-                            onUpdateProgress: { updateProgress(item) }
-                        )
-                    }
-                }
-            }
-            .spineContentTransition(value: inProgressPhase)
-        }
-    }
-
-    /// The section's title and any state in place of posts; the posts follow it as their own lazy items.
-    private var activitySection: some View {
-        SpineSection(title: "Activity") {
-            Group {
-                if viewModel.feed.isLoadingInitial, viewModel.activityItems.isEmpty {
-                    ActivityFeedSkeleton()
-                } else if let error = viewModel.activityErrorMessage, viewModel.activityItems.isEmpty {
-                    HomeInlineState(
-                        title: "Could not load activity",
-                        systemImage: "exclamationmark.triangle",
-                        message: error,
-                        actionTitle: "Retry"
-                    ) {
-                        Task { await viewModel.loadActivity() }
-                    }
-                } else if viewModel.activityItems.isEmpty, viewModel.profile?.counts.following ?? 0 == 0 {
-                    HomeInlineState(
-                        title: "Follow people you know",
-                        systemImage: "person.2",
-                        message: "What they log and watch will appear here.",
-                        actionTitle: "Find People",
-                        action: onFindPeople
-                    )
-                } else if viewModel.activityItems.isEmpty {
-                    HomeInlineState(
-                        title: "No activity yet",
-                        systemImage: "clock.arrow.circlepath",
-                        message: "Logs and progress from people you follow will appear here."
-                    )
-                }
-            }
-            .spineContentTransition(value: activityPhase)
-        }
-    }
-
-    @ViewBuilder
-    private var feedPosts: some View {
-        if viewModel.profile != nil {
-            ForEach(viewModel.activityItems) { activity in
-                ActivityPostRow(activity: activity, onOpen: { open(activity) })
-                .task {
-                    await viewModel.feed.loadNextPageIfNeeded(currentItem: activity)
-                }
-            }
-
-            if viewModel.feed.isLoadingNextPage {
-                ProgressView()
-                    .tint(.white)
-                    .frame(maxWidth: .infinity, minHeight: 60)
-            } else if let error = viewModel.feed.nextPageErrorMessage {
-                VStack(spacing: 8) {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.52))
-                        .multilineTextAlignment(.center)
-
-                    Button("Retry") {
-                        Task { await viewModel.feed.loadNextPage() }
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.86))
-                }
-                .frame(maxWidth: .infinity, minHeight: 60)
-            }
-        }
-    }
-
-    /// The artwork you're on now, or the newest post's when nothing is in progress.
-    private var washURL: URL? {
-        HomeArtworkAtmosphereModel.url(for: viewModel.inProgressItems.first?.media)
-            ?? URL(string: viewModel.activityItems.first?.media?.displayPosterURL ?? "")
-    }
-
-    private var contentPhase: SpineContentPhase {
-        .resolve(
-            isLoading: viewModel.isLoading,
-            hasContent: viewModel.profile != nil,
-            hasError: viewModel.profileErrorMessage != nil
+    /// What the open tile's buttons do. Built here, where the covers are, and handed to the tiles.
+    private var tileActions: HomeTilesActions {
+        HomeTilesActions(
+            onOpenTitle: { selectedRef = $0 },
+            onUpdate: { updateProgress($0) },
+            onQuickAction: { await quickAction($0) },
+            onPlanToWatch: { viewModel.planToWatch($0) },
+            onOpenTrending: { selectedRef = $0.media.ref },
+            onFindSomething: { onSelectTab(.search) },
+            onFindPeople: onFindPeople
         )
     }
 
-    private var inProgressPhase: SpineContentPhase {
-        .resolve(
-            isLoading: viewModel.isLoadingInProgress,
-            hasContent: !viewModel.inProgressItems.isEmpty,
-            hasError: viewModel.inProgressErrorMessage != nil
-        )
-    }
-
-    private var activityPhase: SpineContentPhase {
-        .resolve(
-            isLoading: viewModel.feed.isLoadingInitial,
-            hasContent: !viewModel.activityItems.isEmpty,
-            hasError: viewModel.activityErrorMessage != nil
-        )
-    }
-
-    /// A card's title and "Update progress ›": its progress UI over Home, or its page when it has none.
+    /// A tile's Update: the title's progress UI over Home, or its page when it has none.
     private func updateProgress(_ item: LibraryItem) {
+        let todayCount = viewModel.todayCount(for: item)
         Task {
-            if let ref = await viewModel.progressUpdates.updateProgress(for: item) {
+            if let ref = await viewModel.progressUpdates.updateProgress(for: item, todayCount: todayCount) {
                 selectedRef = ref
             }
         }
+    }
+
+    /// A tile's main button. Returns whether it was saved, for the success or error haptic.
+    private func quickAction(_ item: LibraryItem) async -> Bool {
+        switch await viewModel.runQuickAction(item) {
+        case .saved:
+            return true
+        case .opensUpdate:
+            updateProgress(item)
+            return true
+        case .failed:
+            return false
+        }
+    }
+
+    /// A card's tap. The row is looked up now, so a refreshed row never opens stale data.
+    private func openCard(_ id: Int) {
+        guard let activity = viewModel.feedModel.item(forCardID: id) else { return }
+        open(activity)
     }
 
     private func open(_ activity: ActivityItem) {
@@ -626,11 +706,70 @@ struct HomeView: View {
     }
 }
 
-enum HomeBackdropMotion {
-    private static let fadeDistance: CGFloat = 240
+/// What makes Home load again: an import, a follow, a change to a title, a profile edit, and coming back to the tab
+/// after a card's progress changed. A modifier of its own, so the page's body stays short.
+private struct HomeRefreshTriggers: ViewModifier {
+    let viewModel: HomeViewModel
+    let selectedTab: AppTab
 
-    static func opacity(for scrollOffset: CGFloat) -> Double {
-        Double(max(0, 1 - (scrollOffset / fadeDistance)))
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .letterboxdImportDidSucceed)) { _ in
+                Task { await viewModel.reload() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
+                Task { await viewModel.reload() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .marginsImportDidSucceed)) { _ in
+                Task { await viewModel.reload() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
+                Task { await viewModel.reload() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .followsDidChange)) { _ in
+                Task { await viewModel.followsDidChange() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
+                Task { await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .activityPostDidChange)) { notification in
+                if let change = ActivityPostChange.parse(notification) {
+                    viewModel.feed.apply(change.engagement, to: change.post)
+                }
+            }
+            .onChange(of: selectedTab) { _, tab in
+                // Back on Home after a card's progress changed: the rail re-sorts now, not under the user's finger
+                // (TV-701).
+                if tab == .home, viewModel.inProgressNeedsReload {
+                    Task { await viewModel.loadInProgress(forceToday: true) }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
+                if let profile = notification.userInfo?["profile"] as? UserProfile {
+                    viewModel.profile = profile
+                    Task { await viewModel.loadInProgress() }
+                } else {
+                    Task { await viewModel.reload() }
+                }
+            }
+    }
+}
+
+/// The alert for a write from a tile that failed. It reads the failure, so the page does not.
+private struct HomeWriteFailureAlert: ViewModifier {
+    let viewModel: HomeViewModel
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Tracking Update Failed", isPresented: Binding(
+                get: { viewModel.writeFailure != nil },
+                set: { if !$0 { viewModel.writeFailure = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.writeFailure ?? "")
+            }
+            .sensoryFeedback(.error, trigger: viewModel.writeFailure) { _, message in message != nil }
     }
 }
 
@@ -640,187 +779,18 @@ private struct ActivityPostSelection: Identifiable {
     var id: String { post.id }
 }
 
-/// Home's scroll position. Only the backdrop reads it, so scrolling doesn't redraw the feed.
-@MainActor
-@Observable
-private final class HomeScrollPosition {
-    var offset: CGFloat = 0
-}
-
-/// Blurs posts under the clock once the page has scrolled, leaving the backdrop alone at the top of the page.
+/// Blurs posts under the clock once the page has scrolled, leaving the glow alone at the top of the page.
 private struct HomeStatusBarFade: View {
-    let scrollPosition: HomeScrollPosition
+    let model: HomeGlowModel
 
     var body: some View {
         DiaryTopSoftScrim()
-            .opacity(min(1, scrollPosition.offset / 40))
-    }
-}
-
-private struct HomeScrollingAtmosphere: View {
-    let media: MediaSummary?
-    let scrollPosition: HomeScrollPosition
-
-    var body: some View {
-        HomeArtworkAtmosphere(media: media)
-            .offset(y: BackdropLayout.topOffset - scrollPosition.offset)
-            // Fade the flattened backdrop: opacity on the layers alone also thins the gradient that hides
-            // the artwork's bottom edge, which then shows as a hard line while scrolling.
-            .compositingGroup()
-            .opacity(HomeBackdropMotion.opacity(for: scrollPosition.offset))
-    }
-}
-
-private struct HomeArtworkAtmosphere: View {
-    let media: MediaSummary?
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                if let artworkURL {
-                    SpineAsyncImage(url: artworkURL) { phase in
-                        if case let .success(image) = phase {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: proxy.size.width, height: 420)
-                                .clipped()
-                        } else {
-                            Color.clear
-                        }
-                    }
-                    .blur(radius: 12)
-                    .scaleEffect(1.14)
-                    .saturation(1.15)
-                    .opacity(0.62)
-                }
-
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.28), location: 0),
-                        .init(color: .clear, location: 0.35),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-            }
-            .frame(width: proxy.size.width, height: 420)
-            // Fades out instead of painting the page's color over itself, so the wash shows through below.
-            .mask {
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0.32),
-                        .init(color: .black.opacity(0.28), location: 0.72),
-                        .init(color: .clear, location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-        }
-        .frame(height: 420)
-        .clipped()
-        .ignoresSafeArea(edges: .top)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private var artworkURL: URL? {
-        HomeArtworkAtmosphereModel.url(for: media)
+            .opacity(min(1, model.scrollOffset / 40))
     }
 }
 
 enum HomeArtworkAtmosphereModel {
     static func url(for media: MediaSummary?) -> URL? {
         URL(string: media?.displayBackdropURL ?? media?.displayPosterURL ?? "")
-    }
-}
-
-private struct HomeAvatar: View {
-    let profile: UserProfile?
-    var size: CGFloat = 42
-
-    var body: some View {
-        SpineAsyncImage(url: URL(string: profile?.avatarUrl ?? "")) { phase in
-            if case let .success(image) = phase {
-                image
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .foregroundStyle(.white.opacity(0.42))
-                    .padding(4)
-            }
-        }
-        .frame(width: size, height: size)
-        .background(.white.opacity(0.10), in: Circle())
-        .clipShape(Circle())
-        .overlay {
-            Circle().stroke(.white.opacity(0.12), lineWidth: 1)
-        }
-    }
-}
-
-private struct HomeInlineState: View {
-    let title: String
-    let systemImage: String
-    let message: String
-    var actionTitle: String?
-    var action: (() -> Void)?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.56))
-                .frame(width: 30)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.52))
-
-                if let actionTitle, let action {
-                    Button(actionTitle, action: action)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.88))
-                        .padding(.top, 2)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 10)
-    }
-}
-
-private struct HomeInProgressSkeleton: View {
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach(0 ..< 3, id: \.self) { _ in
-                VStack(alignment: .leading, spacing: 8) {
-                    RoundedRectangle(cornerRadius: PosterSlot.carousel.cornerRadius, style: .continuous)
-                        .fill(.white.opacity(0.08))
-                        .frame(width: PosterSlot.carousel.size.width, height: PosterSlot.carousel.size.height)
-
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(.white.opacity(0.08))
-                        .frame(width: 86, height: 12)
-
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(.white.opacity(0.06))
-                        .frame(width: 54, height: 10)
-                }
-            }
-        }
-        .redacted(reason: .placeholder)
-        .accessibilityHidden(true)
     }
 }
