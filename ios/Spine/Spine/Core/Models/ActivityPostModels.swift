@@ -34,16 +34,42 @@ struct PostEngagement: Equatable {
     }
 }
 
+/// A comment, or a reply to one. Replies go one level deep: a reply's parent is always a top-level comment.
 struct PostComment: Codable, Identifiable, Equatable {
     let id: Int
     let user: UserSummary
-    let body: String
+    var body: String
     let createdAt: String?
-    let canDelete: Bool
+    var canDelete: Bool
+    var parentId: Int? = nil
+    /// A deleted comment with replies stays, emptied, as "Comment deleted" above them.
+    var isDeleted: Bool? = nil
+
+    var deleted: Bool { isDeleted == true }
+}
+
+/// A top-level comment and its replies, oldest first.
+struct PostCommentThread: Identifiable, Equatable {
+    let comment: PostComment
+    let replies: [PostComment]
+
+    var id: Int { comment.id }
+
+    /// Groups comments into threads. A reply whose comment isn't in the list shows as its own thread.
+    static func threads(from comments: [PostComment]) -> [PostCommentThread] {
+        let ids = Set(comments.map(\.id))
+        let repliesByParent = Dictionary(grouping: comments.filter { $0.parentId.map(ids.contains) == true }) {
+            $0.parentId ?? 0
+        }
+        return comments
+            .filter { $0.parentId.map(ids.contains) != true }
+            .map { PostCommentThread(comment: $0, replies: repliesByParent[$0.id] ?? []) }
+    }
 }
 
 struct PostCommentRequest: Encodable {
     let body: String
+    var parentId: Int? = nil
 }
 
 extension ActivityItem {

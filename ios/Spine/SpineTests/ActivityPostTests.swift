@@ -188,13 +188,19 @@ final class ActivityPostTests: XCTestCase {
 
     // MARK: A post's page
 
-    private func comment(_ id: Int, by username: String = "maya", canDelete: Bool = true) -> PostComment {
+    private func comment(
+        _ id: Int,
+        by username: String = "maya",
+        canDelete: Bool = true,
+        replyingTo parentId: Int? = nil
+    ) -> PostComment {
         PostComment(
             id: id,
             user: UserSummary(id: id, username: username, displayName: username, avatarUrl: nil),
             body: "Comment \(id)",
             createdAt: "2026-11-01T12:00:00Z",
-            canDelete: canDelete
+            canDelete: canDelete,
+            parentId: parentId
         )
     }
 
@@ -338,6 +344,136 @@ final class ActivityPostTests: XCTestCase {
         XCTAssertEqual(model.engagement.commentCount, 1)
     }
 
+    // MARK: Replies
+
+    func testACommentDecodesWhatItReplies() throws {
+        let json = """
+        {"id": 3, "user": {"id": 1, "username": "maya", "display_name": "Maya", "avatar_url": null},
+         "body": "", "created_at": null, "can_delete": false, "parent_id": 1, "is_deleted": true}
+        """
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let decoded = try decoder.decode(PostComment.self, from: Data(json.utf8))
+
+        XCTAssertEqual(decoded.parentId, 1)
+        XCTAssertTrue(decoded.deleted)
+    }
+
+    func testRepliesGroupUnderTheirComment() {
+        let threads = PostCommentThread.threads(from: [
+            comment(1), comment(2, replyingTo: 1), comment(3), comment(4, replyingTo: 1), comment(5, replyingTo: 99),
+        ])
+
+        XCTAssertEqual(threads.map(\.id), [1, 3, 5], "a reply whose comment isn't here stands on its own")
+        XCTAssertEqual(threads[0].replies.map(\.id), [2, 4])
+    }
+
+    @MainActor
+    func testAReplySendsItsCommentAndOpensItsThread() async {
+        let repository = FakePostRepository()
+        repository.comments = [comment(1)]
+        repository.nextComment = comment(5, replyingTo: 1)
+        let model = model(repository)
+        await model.loadComments()
+
+        model.reply(to: comment(1))
+        XCTAssertEqual(model.replyRequestCount, 1, "the box takes the keyboard")
+        XCTAssertEqual(model.draft, "", "a reply to a comment needs no name")
+        model.draft = "Same"
+        await model.send()
+
+        XCTAssertEqual(repository.sentParents, [1])
+        XCTAssertNil(model.replyingTo)
+        XCTAssertTrue(model.expandedThreads.contains(1), "so your reply is in view")
+        XCTAssertEqual(model.engagement.commentCount, 2)
+    }
+
+    @MainActor
+    func testReplyingToAReplyNamesItsAuthor() {
+        let model = model(FakePostRepository())
+
+        model.reply(to: comment(2, by: "sam", replyingTo: 1))
+        XCTAssertEqual(model.draft, "@sam ")
+
+        model.reply(to: comment(2, by: "sam", replyingTo: 1))
+        XCTAssertEqual(model.draft, "@sam ", "not named twice")
+
+        model.cancelReply()
+        XCTAssertNil(model.replyingTo)
+        XCTAssertEqual(model.draft, "", "the name goes with the reply")
+    }
+
+    @MainActor
+    func testReplyingToSomeoneElseSwapsTheName() {
+        let model = model(FakePostRepository())
+        model.reply(to: comment(2, by: "sam", replyingTo: 1))
+        model.draft += "agreed"
+
+        model.reply(to: comment(3, by: "joe", replyingTo: 1))
+        XCTAssertEqual(model.draft, "@joe agreed")
+
+        model.reply(to: comment(1, by: "maya"))
+        XCTAssertEqual(model.draft, "agreed", "a top-level comment needs no name")
+        XCTAssertEqual(model.replyingTo?.id, 1)
+    }
+
+    @MainActor
+    func testCancellingAReplyKeepsWhatWasTyped() {
+        let model = model(FakePostRepository())
+        model.reply(to: comment(2, by: "sam", replyingTo: 1))
+        model.draft += "agreed"
+
+        model.cancelReply()
+
+        XCTAssertEqual(model.draft, "agreed")
+    }
+
+    @MainActor
+    func testAFailedReplyStaysAReply() async {
+        let repository = FakePostRepository()
+        let model = model(repository)
+        model.reply(to: comment(1))
+        model.draft = "Same"
+
+        await model.send()
+
+        XCTAssertEqual(model.replyingTo?.id, 1)
+        XCTAssertEqual(model.draft, "Same")
+    }
+
+    @MainActor
+    func testDeletingACommentWithRepliesLeavesAPlaceholder() async {
+        let repository = FakePostRepository()
+        repository.comments = [comment(1), comment(2, replyingTo: 1)]
+        let model = model(repository)
+        await model.loadComments()
+
+        await model.delete(comment(1))
+
+        XCTAssertEqual(model.comments.map(\.id), [1, 2])
+        XCTAssertTrue(model.comments[0].deleted)
+        XCTAssertFalse(model.comments[0].canDelete)
+        XCTAssertEqual(model.engagement.commentCount, 1)
+
+        await model.delete(comment(2, replyingTo: 1))
+
+        XCTAssertTrue(model.comments.isEmpty, "the placeholder goes with its last reply")
+        XCTAssertEqual(model.engagement.commentCount, 0)
+    }
+
+    @MainActor
+    func testAPlaceholderDoesntCount() async {
+        let repository = FakePostRepository()
+        var deleted = comment(1)
+        deleted.isDeleted = true
+        repository.comments = [deleted, comment(2, replyingTo: 1)]
+        let model = model(repository)
+
+        await model.loadComments()
+
+        XCTAssertEqual(model.engagement.commentCount, 1)
+    }
+
     @MainActor
     func testSendingAfterAFailedLoadKeepsThePostsCount() async {
         let repository = FakePostRepository()
@@ -433,6 +569,7 @@ private final class FakePostRepository: ActivityRepository {
     var comments: [PostComment] = []
     var nextComment: PostComment?
     var sent: [String] = []
+    var sentParents: [Int?] = []
     var deleted: [Int] = []
 
     func userActivity(username _: String, limit _: Int) async throws -> [ActivityItem] {
@@ -461,10 +598,11 @@ private final class FakePostRepository: ActivityRepository {
         return comments
     }
 
-    func addComment(post _: ActivityPostRef, body: String) async throws -> PostComment {
+    func addComment(post _: ActivityPostRef, body: String, parentId: Int?) async throws -> PostComment {
         guard let nextComment else { throw URLError(.notConnectedToInternet) }
         whileAdding?()
         sent.append(body)
+        sentParents.append(parentId)
         return nextComment
     }
 

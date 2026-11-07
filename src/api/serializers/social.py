@@ -14,6 +14,7 @@ class CommentWriteSerializer(serializers.Serializer):
     """Validate a new comment: trimmed, and not empty."""
 
     body = serializers.CharField(max_length=2000)
+    parent_id = serializers.IntegerField(min_value=1, required=False)
 
 
 class PushDeviceSerializer(serializers.Serializer):

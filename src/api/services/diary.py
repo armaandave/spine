@@ -73,7 +73,7 @@ def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
         ).count()
     comment_count = getattr(entry, "viewer_comment_count", None)
     if comment_count is None:
-        comment_count = entry.comments.visible_to(viewer).count()
+        comment_count = entry.comments.visible_to(viewer).counted().count()
     viewer_has_liked = getattr(entry, "viewer_has_liked", None)
     if viewer_has_liked is None:
         viewer_has_liked = (
@@ -227,6 +227,7 @@ def prime_diary_likes(entries, viewer):
     )
     comment_counts = dict(
         Comment.objects.visible_to(viewer)
+        .counted()
         .filter(diary_entry_id__in=entry_ids)
         .order_by()
         .values("diary_entry_id")

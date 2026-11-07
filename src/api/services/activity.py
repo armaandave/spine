@@ -517,6 +517,7 @@ def _day_engagement(days, viewer):
     )
     comment_counts = dict(
         Comment.objects.visible_to(viewer)
+        .counted()
         .filter(progress_post_id__in=keys)
         .order_by()
         .values("progress_post_id")

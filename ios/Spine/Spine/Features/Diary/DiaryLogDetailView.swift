@@ -242,7 +242,7 @@ struct DiaryLogDetailView: View {
                 .scrollEdgeEffectStyle(.hard, for: .bottom)
                 .ignoresSafeArea(edges: .top)
                 .onChange(of: viewModel.engagement.sentCount) {
-                    withAnimation { proxy.scrollTo("post-end", anchor: .bottom) }
+                    PostCommentsSection.scrollToSent(viewModel.engagement, with: proxy)
                 }
             }
 

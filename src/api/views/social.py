@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -71,7 +72,7 @@ class ProgressPostLikeView(APIView):
 
 
 class PostCommentsView(APIView):
-    """List or add comments on one post, oldest first."""
+    """List or add comments on one post, oldest first, each followed by its replies."""
 
     permission_classes = [IsAuthenticated]
 
@@ -80,6 +81,9 @@ class PostCommentsView(APIView):
             Comment.objects.visible_to(request.user)
             .filter(**self.comment_filter(request, **target))
             .select_related("user", "diary_entry", "progress_post")
+            # A thread is its top comment's id, so replies follow it across pages.
+            .annotate(thread=Coalesce("parent_id", "id"))
+            .order_by("thread", "created_at", "id")
         )
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(comments, request, view=self)
@@ -91,6 +95,7 @@ class PostCommentsView(APIView):
         comment = social_service.add_comment(
             request.user,
             serializer.validated_data["body"],
+            parent_id=serializer.validated_data.get("parent_id"),
             **self.write_target(request, **target),
         )
         return Response(_comment_payload(comment, request), status=status.HTTP_201_CREATED)
@@ -266,7 +271,9 @@ def _comment_payload(comment, request):
         "user": user_summary(comment.user, request=request),
         "body": comment.body,
         "created_at": comment.created_at,
-        "can_delete": social_service.can_delete_comment(request.user, comment),
+        "can_delete": not comment.is_deleted and social_service.can_delete_comment(request.user, comment),
+        "parent_id": comment.parent_id,
+        "is_deleted": comment.is_deleted,
     }
 
 
