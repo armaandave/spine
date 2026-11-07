@@ -1478,7 +1478,7 @@ struct ProfileView: View {
                     onUnauthorized: onUnauthorized
                 )
             } label: {
-                ProfileMenuRow(title: destination.title, count: nil, showsDivider: showsDivider)
+                ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
             .buttonStyle(ProfileMenuRowButtonStyle())
         case .stats:
