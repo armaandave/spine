@@ -98,8 +98,8 @@ enum FeedCardArt {
 // MARK: Prefetching
 
 /// Looks ahead of the card that just appeared: it prefetches the next `lookahead` cards that nothing has asked for
-/// yet, so a fast fling keeps extending the window and no card is requested twice. Day headers are skipped, not
-/// counted. A card whose art changed (a Planning day's posters arriving) is asked for again.
+/// yet, so a fast fling keeps extending the window and no card is requested twice. A card whose art changed (a
+/// Planning day's posters arriving) is asked for again.
 @MainActor
 final class FeedCardPrefetcher {
     static let shared = FeedCardPrefetcher { ArtworkPrefetch.prefetch($0) }
@@ -118,24 +118,16 @@ final class FeedCardPrefetcher {
     }
 
     /// The cards a card appearing at `index` would prefetch, nearest first, without prefetching them.
-    func cardsToPrefetch(appearing index: Int, in entries: [FeedListEntry]) -> [FeedCardModel] {
+    func cardsToPrefetch(appearing index: Int, in cards: [FeedCardModel]) -> [FeedCardModel] {
         guard index >= 0 else { return [] }
-        var cards: [FeedCardModel] = []
-        var seen = 0
-        var next = index + 1
-        while next < entries.count, seen < lookahead {
-            if case let .card(model) = entries[next] {
-                // A card already asked for still uses one of the window's slots.
-                seen += 1
-                if prefetched[model.id] != FeedCardArt.prefetchKey(for: model) { cards.append(model) }
-            }
-            next += 1
+        // A card already asked for still uses one of the window's slots.
+        return cards.dropFirst(index + 1).prefix(lookahead).filter {
+            prefetched[$0.id] != FeedCardArt.prefetchKey(for: $0)
         }
-        return cards
     }
 
-    /// A card (or a header) at `index` came on screen.
-    func entryAppeared(at index: Int, in entries: [FeedListEntry]) {
+    /// The card at `index` came on screen.
+    func entryAppeared(at index: Int, in entries: [FeedCardModel]) {
         let cards = cardsToPrefetch(appearing: index, in: entries)
         guard !cards.isEmpty else { return }
         if prefetched.count > Self.rememberedLimit { prefetched.removeAll() }
@@ -149,9 +141,9 @@ final class FeedCardPrefetcher {
 }
 
 extension View {
-    /// When this row appears, prefetches the art of the next 8 cards that have not been prefetched. Use it on every
+    /// When this row appears, prefetches the art of the next cards that have not been prefetched. Use it on every
     /// row of the feed's flat list.
-    func prefetchingFeedCards(at index: Int, in entries: [FeedListEntry]) -> some View {
+    func prefetchingFeedCards(at index: Int, in entries: [FeedCardModel]) -> some View {
         onAppear {
             FeedCardPrefetcher.shared.entryAppeared(at: index, in: entries)
         }

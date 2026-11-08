@@ -38,7 +38,8 @@ struct FeedCardView: View, Equatable {
                 if measuredInk != differing { measuredInk = differing }
             }
             content(ink: ink)
-            FeedAuthorLink(username: model.username, avatarURL: model.avatarURL, ink: ink)                .padding(.top, HomeDesign.Metric.cardTextTop)
+            FeedAuthorLink(username: model.username, avatarURL: model.avatarURL, dayLabel: model.dayLabel, ink: ink)
+                .padding(.top, HomeDesign.Metric.cardTextTop)
                 .padding(.leading, textLeading)
                 .padding(.trailing, HomeDesign.Metric.cardTrailing)
         }

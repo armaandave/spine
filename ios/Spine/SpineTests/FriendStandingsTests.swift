@@ -601,12 +601,12 @@ final class FriendStandingsTests: XCTestCase {
             standing: provider
         )
         feed.items = items
-        let before = cards(model.entries)
+        let before = model.entries
         XCTAssertNil(before.first { $0.id == 1 }?.meter)
 
         provider.prepare(for: items)
         await landed(provider)
-        let after = cards(model.entries)
+        let after = model.entries
         XCTAssertEqual(before.count, after.count)
 
         let changed = zip(before, after).filter { $0 != $1 }.map(\.0.id)
@@ -619,10 +619,6 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertEqual(tail, "p. 212")
         XCTAssertNil(after.first { $0.id == 2 }?.meter)
         XCTAssertEqual(after.first { $0.id == -30 }?.kind, .planning)
-    }
-
-    private func cards(_ entries: [FeedListEntry]) -> [FeedCardModel] {
-        entries.compactMap { if case let .card(model) = $0 { model } else { nil } }
     }
 
     // MARK: Wiring
