@@ -35,7 +35,12 @@ RELATED = "progress_changes"
 NAMING = {
     "api/serializers/common.py",
     "api/services/activity.py",
+    # Reads the planning rows, which ProgressChange.record_planning writes.
+    "api/services/activity_planning.py",
     "api/services/progress_posts.py",
+    # Fixes an older save's number in place and takes back the newest: it rewrites and
+    # deletes rows, and creates none.
+    "api/services/progress_rows.py",
     "api/services/activity_rows.py",
     "api/services/stats_scope.py",
     "api/services/tracking.py",
@@ -51,6 +56,8 @@ NAMING = {
     # Reads start rows and deletes those on an old tap's day, through progress_posts.
     "app/management/commands/undate_old_eye_taps.py",
     "app/music_move.py",
+    # Asks social.ProgressChange.record_planning to write an add to Planning.
+    "app/planning_adds.py",
     "app/series_tracking.py",
     "app/tv_tracking.py",
     "social/models.py",
@@ -63,7 +70,7 @@ WRITERS = {
     "app/game_tracking.py": ["ProgressChange.objects.create"],
     "app/series_tracking.py": ["ProgressChange.objects.create"],
     "app/tv_tracking.py": ["ProgressChange(", "ProgressChange.objects.bulk_create"],
-    "social/models.py": ["cls.objects.create", "cls.objects.create"],
+    "social/models.py": ["cls.objects.create", "cls.objects.create", "cls.objects.create"],
 }
 CREATES = {"bulk_create", "create", "get_or_create", "update_or_create"}
 
@@ -320,3 +327,21 @@ class WriterDayTests(TestCase):
                 rows = ProgressChange.objects.filter(actor=user, item__media_id=show.media_id)
                 self.assertEqual(rows.count(), 2)
                 self.assertEqual({row.saved_on for row in rows}, {day})
+
+    def test_an_add_to_planning_through_each_path(self):
+        """A movie through the tracking service, and a show where it chooses."""
+        for user, day in ((self.new_york, DEC_31), (self.tokyo, JAN_1)):
+            film = self.item(MediaTypes.MOVIE.value)
+            tracking_service.create_or_update_tracking(
+                user,
+                source=film.source,
+                media_type=film.media_type,
+                media_id=film.media_id,
+                data={"status": Status.PLANNING.value},
+            )
+            self.assertEqual(self.days(user, film), [day])
+        with FakeTVProvider() as fake:
+            for user, day in ((self.new_york, DEC_31), (self.tokyo, JAN_1)):
+                show = make_show(fake, title=f"Planned for {user.username}", seasons={1: 3})
+                tv_tracking.choose(user, show, tv_tracking.PLANNING)
+                self.assertEqual(self.days(user, show), [day])

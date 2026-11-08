@@ -26,6 +26,7 @@ from app import (
     anime_tracking,
     book_tracking,
     game_tracking,
+    planning_adds,
     series_tracking,
     single_weight,
     tv_listing,
@@ -105,7 +106,7 @@ def get_tracking(user, *, source, media_type, media_id, season_number=None, epis
     ).first()
 
 
-def create_or_update_tracking(user, *, source, media_type, media_id, data, partial=True):  # noqa: C901, PLR0911
+def create_or_update_tracking(user, *, source, media_type, media_id, data, partial=True):
     """Create or update tracking using existing model behavior.
 
     TV shows and seasons go through tv_tracking.apply_written_state and return its
@@ -123,6 +124,25 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
         )
     if anime_tracking.supports(media_type):
         return write_anime_tracking(user, source=source, media_id=media_id, data=data)
+    if data.get("status") != Status.PLANNING.value:
+        return _write_tracking(user, source=source, media_type=media_type, media_id=media_id, data=data)
+    # An add to Planning is recorded once, when the title wasn't there before (AC-1).
+    lookup = {"source": source, "media_type": media_type, "media_id": media_id}
+    before = planning_adds.status_of(get_tracking(user, season_number=data.get("season_number"), **lookup))
+    written = _write_tracking(user, source=source, media_type=media_type, media_id=media_id, data=data)
+    after = get_tracking(user, season_number=data.get("season_number"), **lookup)
+    if after is not None:
+        planning_adds.record_if_added(
+            user,
+            after.item,
+            asked=data["status"],
+            before=before,
+            after=after.status,
+        )
+    return written
+
+
+def _write_tracking(user, *, source, media_type, media_id, data):
     season_number = data.get("season_number")
     media = get_tracking(
         user,

@@ -23,7 +23,7 @@ Core rules, in case of doubt:
    build, its own app with a DEV icon) signed in as the test backend's dev user. Nothing
    is deployed.
    Before the first build, `scripts/ios/machine.sh`; if `unset`, ask Armaan "laptop or
-   HomeMac?" and save it with `machine.sh set`. The laptop is `build-to-iphone.sh --laptop`
+   HomeMac?" in the question picker (`AskUserQuestion`) and save it with `machine.sh set`. The laptop is `build-to-iphone.sh --laptop`
    without `--queue ios` (`scripts/ios/LAPTOP.md`).
 2. Debug builds never talk to production. Never test with the user's real account or the
    TestFlight Spine app, never merge, push or deploy, and never point a build at port

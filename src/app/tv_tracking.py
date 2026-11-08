@@ -1617,7 +1617,7 @@ def _was_started(ctx, title):
 
 
 def _record_status_move(ctx, status, title):
-    """Record the person choosing Paused, Dropped or picking the title back up (AC-1).
+    """Record the person choosing Paused, Dropped, Planning or picking the title back up (AC-1).
 
     `title` is the show, or an anime's own Item (AN-703). A title never started has
     nothing to stop or pick back up. A tick that ends a pause is just the tick. Webhooks,
@@ -1626,6 +1626,10 @@ def _record_status_move(ctx, status, title):
     from social.models import ProgressChange  # noqa: PLC0415
 
     if ctx.entry_point not in (APP, LEGACY_APP, WEB) or status == ctx.status_before:
+        return
+    if status == PLANNING:
+        # Adding to Planning is its own row, whether or not the title ever started.
+        ProgressChange.record_planning(ctx.user, title)
         return
     if status == PAUSED:
         move = ProgressChange.PAUSED

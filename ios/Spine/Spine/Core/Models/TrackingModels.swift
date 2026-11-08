@@ -193,6 +193,8 @@ nonisolated struct BookJourneyState: Codable, Equatable, Hashable, Identifiable 
     var origin: String?
     var startDate: String?
     var endDate: String?
+    /// The day of the latest progress save; older servers don't send it.
+    var progressedOn: String? = nil
     var progress: ProgressState?
     var completionDiaryEntryId: Int?
     var isReread: Bool
@@ -205,6 +207,7 @@ nonisolated struct BookJourneyState: Codable, Equatable, Hashable, Identifiable 
         origin: String? = nil,
         startDate: String? = nil,
         endDate: String? = nil,
+        progressedOn: String? = nil,
         progress: ProgressState? = nil,
         completionDiaryEntryId: Int? = nil,
         isReread: Bool = false,
@@ -215,10 +218,24 @@ nonisolated struct BookJourneyState: Codable, Equatable, Hashable, Identifiable 
         self.origin = origin
         self.startDate = startDate
         self.endDate = endDate
+        self.progressedOn = progressedOn
         self.progress = progress
         self.completionDiaryEntryId = completionDiaryEntryId
         self.isReread = isReread
         self.continues = continues
+    }
+
+    /// The earliest day an Update Progress save can be dated: the later of the start and the last save (decision 66).
+    var progressDateFloor: Date? {
+        ProgressDateFloor.date(startDate: startDate, progressedOn: progressedOn)
+    }
+}
+
+enum ProgressDateFloor {
+    /// The later of the two days, whichever is known; nil when neither is (no lower bound).
+    static func date(startDate: String?, progressedOn: String?, calendar: Calendar = .autoupdatingCurrent) -> Date? {
+        let days = [startDate, progressedOn].compactMap { CalendarDateCodec.date(from: $0, calendar: calendar) }
+        return days.max()
     }
 }
 
@@ -590,6 +607,8 @@ struct BookProgressRequest: Encodable {
     let progressType: String
     let value: Decimal
     let notes: String
+    /// The day of the save; sent only when the sheet named one, so older builds' requests are unchanged.
+    var progressedOn: String? = nil
 }
 
 struct BookCompleteRequest: Encodable {
@@ -612,6 +631,7 @@ struct SeriesProgressRequest: Encodable, Equatable {
     let value: Int
     /// The same on a retry, so a lost answer at the total still opens the log screen (MC-100, MC-101).
     let mutationId: UUID
+    var progressedOn: String? = nil
 }
 
 /// A manga's or a comic's log: the book's, with its own visibility (AC-5) and the optional number a log with no total

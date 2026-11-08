@@ -12,10 +12,19 @@
 #                                            friend-game-stops-then-plays|friend-ticks|
 #                                            friend-late-tick|friend-import-last-week|
 #                                            friend-marks|friend-earlier-question|
-#                                            friend-private-season|comment-on-my-row]
+#                                            friend-private-season|comment-on-my-row|
+#                                            seed-phase-5|add-two-movies|
+#                                            letterboxd-watchlist|friend-adds-three-movies|
+#                                            like-p-row]
 #
 # Phase 4's sheet opens with seed-phase-4 (not seed), and its Mac steps are the friend-*
 # steps and comment-on-my-row, each named after the row of the sheet it runs.
+#
+# Phase 5's sheet opens with seed-phase-5. Its Mac steps are add-two-movies (the website's
+# Save, for movies W1 and W2), letterboxd-watchlist (prints how many it added),
+# friend-adds-three-movies and like-p-row (a like on book P's Dec 20 row). Everything else
+# on the sheet is the phone: the shows PS1 to PS3 to Planning, PB, PG and PM as To Read,
+# and P and M3's dated saves. They are all on the "Checkpoint titles" list.
 #
 # Run it from the feature worktree the test backend is serving ("use"). It clears the dev
 # user's tracking, logs, saves, likes, comments, lists and follows, so it refuses to run

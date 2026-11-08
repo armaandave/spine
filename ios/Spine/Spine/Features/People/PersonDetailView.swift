@@ -1029,21 +1029,12 @@ private struct MediaSeriesCard: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ZStack {
-                ForEach(Array(posters.enumerated()), id: \.offset) { index, url in
-                    MediaArtwork(
-                        url: url,
-                        title: series.name,
-                        slot: .profileRail,
-                        mediaType: series.mediaType
-                    )
-                    .scaleEffect(scale(index))
-                    .rotationEffect(.degrees(rotation(index)))
-                    .offset(x: offset(index))
-                    .shadow(color: .black.opacity(0.32), radius: 8, y: 4)
-                    .zIndex(Double(posters.count - index))
-                }
-            }
+            PosterFan(
+                urls: series.posterUrls.map(Optional.some),
+                title: series.name,
+                slot: .profileRail,
+                mediaType: series.mediaType
+            )
             .frame(width: 80, height: 120)
 
             Text(series.name)
@@ -1053,31 +1044,6 @@ private struct MediaSeriesCard: View {
                 .lineLimit(2)
                 .frame(width: 80, height: 28, alignment: .top)
         }
-    }
-
-    private func offset(_ index: Int) -> CGFloat {
-        switch posters.count {
-        case 2: index == 0 ? -6 : 6
-        case 3: CGFloat(index - 1) * 10
-        default: 0
-        }
-    }
-
-    private func rotation(_ index: Int) -> Double {
-        switch posters.count {
-        case 2: index == 0 ? -3 : 3
-        case 3: Double(index - 1) * 4
-        default: 0
-        }
-    }
-
-    private func scale(_ index: Int) -> CGFloat {
-        posters.count == 3 && index == 1 ? 0.94 : 0.88
-    }
-
-    private var posters: [String?] {
-        let urls = Array(series.posterUrls.prefix(3)).map(Optional.some)
-        return urls.isEmpty ? [nil] : urls
     }
 }
 

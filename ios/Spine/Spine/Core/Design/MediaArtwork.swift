@@ -115,3 +115,53 @@ private struct ArtworkScaleModifier: ViewModifier {
     .padding()
     .background(Color.black)
 }
+
+/// Up to three posters fanned out, the first on top: a series card on a person's page, and a day of Planning adds.
+/// Sized by its slot; the tilt and spread were made for a series card's poster and scale with the slot's width.
+struct PosterFan: View {
+    let urls: [String?]
+    let title: String
+    let slot: PosterSlot
+    var mediaType: String?
+
+    var body: some View {
+        ZStack {
+            ForEach(Array(posters.enumerated()), id: \.offset) { index, url in
+                MediaArtwork(url: url, title: title, slot: slot, mediaType: mediaType)
+                    .scaleEffect(scale(index))
+                    .rotationEffect(.degrees(rotation(index)))
+                    .offset(x: offset(index) * spread)
+                    .shadow(color: .black.opacity(0.32), radius: 8 * spread, y: 4 * spread)
+                    .zIndex(Double(posters.count - index))
+            }
+        }
+    }
+
+    /// The series card's poster is 70 points wide; smaller slots fan out less.
+    private var spread: CGFloat { slot.size.width / 70 }
+
+    private func offset(_ index: Int) -> CGFloat {
+        switch posters.count {
+        case 2: index == 0 ? -6 : 6
+        case 3: CGFloat(index - 1) * 10
+        default: 0
+        }
+    }
+
+    private func rotation(_ index: Int) -> Double {
+        switch posters.count {
+        case 2: index == 0 ? -3 : 3
+        case 3: Double(index - 1) * 4
+        default: 0
+        }
+    }
+
+    private func scale(_ index: Int) -> CGFloat {
+        posters.count == 3 && index == 1 ? 0.94 : 0.88
+    }
+
+    private var posters: [String?] {
+        let urls = Array(urls.prefix(3))
+        return urls.isEmpty ? [nil] : urls
+    }
+}

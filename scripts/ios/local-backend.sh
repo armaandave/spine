@@ -71,6 +71,11 @@ fi
 in_use() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 if [ -n "$port" ]; then
   [ "$port" != 8000 ] || die "port 8000 is the production stack on this Mac"
+  # A named port can still be held for a few seconds by the server this one replaces (the test
+  # backend's switch kills its parent, and the old runserver lets go about 20 s later), so wait
+  # up to 60 s before giving up.
+  waited=0
+  while in_use "$port" && [ "$waited" -lt 60 ]; do sleep 1; waited=$((waited + 1)); done
   in_use "$port" && die "port $port is already in use"
 else
   port=8001

@@ -148,7 +148,7 @@ These defaults are now agent guidance:
 8. Rollout scope:
    - Social features should apply to all media types together (not phased by type).
 9. Feed scope/order:
-   - Activity is diary logs, each day's progress on a title, starting a title and status moves (paused, stopped, picked back up), as defined in `docs/activity-contract.md` and read from the Activity calculation (not ratings without a log, marks, or list activity).
+   - Activity is diary logs, each day's progress on a title, starting a title, status moves (paused, stopped, picked back up) and a day of titles added to Planning (only for builds that ask), as defined in `docs/activity-contract.md` and read from the Activity calculation (not ratings without a log, marks, or list activity).
    - Newest date first (no algorithmic ranking yet).
 10. Social notifications:
     - Push only, no in-app list: a new follower, a follow request, and an accepted request push to the person concerned; a report pushes to the project owner (`src/social/push.py`).
@@ -220,7 +220,7 @@ Every feature follows this path. Armaan drives it with the prompts in quotes.
    - Layout, styling and wording changes get no new tests: compile, then check on the phone or simulator. Don't assert on-screen text or read source files as text in tests.
    - Tests must pass with no `.env` and no API keys, as in CI.
 3. **Try on the phone.** "Test this on my iPhone." Use the `spine-test-on-iphone` skill (`scripts/ios/TEST_ON_IPHONE.md`). It installs **Spine Dev**, the Debug app, which talks to the always-on test backend on the Mac (`scripts/ios/test-backend.sh`), signed in as its dev user. A branch with backend changes is served from the test backend first (`scripts/ios/test-backend.sh use`); never deploy to test. Armaan's real **Spine** app (TestFlight, production, the real account) is never used for testing. Repeat 2–3 until Armaan is happy.
-   - Laptop or HomeMac: before a chat's first iOS build, simulator or test run, check `scripts/ios/machine.sh`; if it says `unset`, ask Armaan which machine and save his answer with `machine.sh set` (every later step reads it). Ships ask first, and wait in the ship line (`scripts/ship-merge.sh`), so several can run at once. The laptop (`scripts/ios/LAPTOP.md`, `spine-ios-on-laptop` skill) skips this Mac's `ios` queue.
+   - Laptop or HomeMac: before a chat's first iOS build, simulator or test run, check `scripts/ios/machine.sh`; if it says `unset`, ask Armaan which machine in the question picker (`AskUserQuestion`, as `scripts/ios/LAPTOP.md` says) and save his answer with `machine.sh set` (every later step reads it). Ships ask first, and wait in the ship line (`scripts/ship-merge.sh`), so several can run at once. The laptop (`scripts/ios/LAPTOP.md`, `spine-ios-on-laptop` skill) skips this Mac's `ios` queue.
 4. **Ship.** "Ship this." Use the `spine-ship` skill (`scripts/ios/SHIP.md`): verify, merge into `myapp-main` in the main checkout, and push. CI then deploys production, and Xcode Cloud makes a TestFlight build if the iOS app changed. Watch both, verify production, then remove the worktree and delete any scratch simulators it left behind.
 5. **Roll back.** "Roll back" if a ship broke production (`scripts/ios/SHIP.md`, Workflow B).
 
