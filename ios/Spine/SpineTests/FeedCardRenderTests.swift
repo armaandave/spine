@@ -29,7 +29,12 @@ final class FeedCardRenderTests: XCTestCase {
         standing: FeedStanding? = nil,
         planning: PlanningDay? = nil
     ) -> FeedCardModel {
-        FeedCardPresenter.model(for: item, standing: standing, isNewestOfTitle: true, planning: planning)
+        // Every kind of day the cards show, by item id; the long name (3) gets the longest day.
+        let days = ["Today", "Yesterday", "Friday", "Thursday", "Oct 21", "Oct 21, 2025", "Tuesday"]
+        let day = item.id == 3 ? "Oct 21, 2025" : days[abs(item.id) % days.count]
+        return FeedCardPresenter.model(
+            for: item, standing: standing, isNewestOfTitle: true, planning: planning, dayLabel: day
+        )
     }
 
     /// Art the gallery with pictures makes: "name|accent" to a file. Unset, a card's art is a web address that
@@ -355,29 +360,10 @@ final class FeedCardRenderTests: XCTestCase {
         XCTAssertEqual(zero.commentCount, 0)
     }
 
-    func testDayHeadersAndSkeletonsHaveTheirFixedSizes() throws {
-        let header = ImageRenderer(content: FeedDayHeaderView(title: "Yesterday").frame(width: 390))
-        header.scale = 3
-        XCTAssertEqual(try XCTUnwrap(header.uiImage).size.height, FeedDayHeaderView.height)
-
+    func testSkeletonsHaveTheirFixedSize() throws {
         let skeleton = ImageRenderer(content: FeedCardSkeleton().frame(width: Self.cardWidth))
         skeleton.scale = 3
         XCTAssertEqual(try XCTUnwrap(skeleton.uiImage).size.height, Self.cardHeight)
-
-        guard let folder = galleryFolder() else { return }
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let page = VStack(spacing: 0) {
-            FeedDayHeaderView(title: "Today")
-            FeedCardSkeleton().padding(.horizontal, 16)
-            FeedDayHeaderView(title: "Saturday")
-            FeedCardSkeleton().padding(.horizontal, 16)
-            FeedDayHeaderView(title: "Nov 3, 2025")
-        }
-        .frame(width: 390)
-        .background(Color.black)
-        let renderer = ImageRenderer(content: page)
-        renderer.scale = 2
-        try XCTUnwrap(renderer.uiImage?.pngData()).write(to: folder.appendingPathComponent("misc-headers-skeletons.png"))
     }
 
     /// Text is a fixed size and every row has a fixed height; a card never grows or reflows with Dynamic Type, and the

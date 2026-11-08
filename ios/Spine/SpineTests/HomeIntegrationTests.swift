@@ -67,10 +67,6 @@ final class HomeIntegrationTests: XCTestCase {
         ActivityCursorResponse(nextCursor: next, previousCursor: nil, results: items)
     }
 
-    private func cards(_ entries: [FeedListEntry]) -> [FeedCardModel] {
-        entries.compactMap { if case let .card(model) = $0 { model } else { nil } }
-    }
-
     private func book(_ id: String, pages: Int) -> Spine.LibraryItem {
         InProgressUpdatesTests.item(
             "book", id, "Perf Book \(id)", tracking: InProgressUpdatesTests.bookTracking(status: "In progress", pages: pages)
@@ -125,17 +121,17 @@ final class HomeIntegrationTests: XCTestCase {
         let home = makeHome()
         await home.load()
 
-        let before = cards(home.feedModel.entries)
+        let before = home.feedModel.entries
         XCTAssertEqual(before.map(\.id), [1, 2])
-        XCTAssertEqual(home.feedModel.entries.count, 3, "A day header, then two cards")
+        XCTAssertEqual(home.feedModel.entries.count, 2, "One entry per card, no day rows")
+        XCTAssertEqual(before.map(\.dayLabel), ["Today", "Today"])
 
         let post = try XCTUnwrap(home.feed.items[0].post)
         home.feed.apply(PostEngagement(hasLiked: true, likeCount: 9, commentCount: 4), to: post)
 
-        let after = cards(home.feedModel.entries)
+        let after = home.feedModel.entries
         XCTAssertEqual(after[0].engagement, PostEngagement(hasLiked: true, likeCount: 9, commentCount: 4))
         XCTAssertEqual(after[1], before[1], "The other card is equal, so its row skips drawing")
-        XCTAssertEqual(home.feedModel.entries.first?.id, "day-\(today)", "The header kept its id")
     }
 
     func testEntriesAreRebuiltFromAReloadAndKeepTheirIds() async throws {
@@ -148,8 +144,8 @@ final class HomeIntegrationTests: XCTestCase {
         await home.reload()
 
         let second = home.feedModel.entries.map(\.id)
-        XCTAssertEqual(first, ["day-\(today)", "card-1", "card-2"])
-        XCTAssertEqual(second, ["day-\(today)", "card-3", "card-1", "card-2"], "A newer card is added without renumbering")
+        XCTAssertEqual(first, [1, 2])
+        XCTAssertEqual(second, [3, 1, 2], "A newer card is added without renumbering")
     }
 
     func testAPlanningDayFansItsPostersOnceItsTitlesArrive() async throws {
@@ -160,17 +156,17 @@ final class HomeIntegrationTests: XCTestCase {
         )
         let home = makeHome()
         await home.load()
-        let card = try XCTUnwrap(cards(home.feedModel.entries).first)
+        let card = try XCTUnwrap(home.feedModel.entries.first)
         XCTAssertEqual(card.kind, .planning)
         XCTAssertTrue(card.art.planningPosterURLs.isEmpty, "Only the day's face until its titles load")
         XCTAssertNil(card.engagement, "Planning has no likes or comments")
         XCTAssertTrue(activity.planningRequests.isEmpty, "Nothing is asked until a Planning card appears")
 
         home.feedModel.cardAppeared(card)
-        await waitUntil { !self.cards(home.feedModel.entries).first!.art.planningPosterURLs.isEmpty }
+        await waitUntil { !home.feedModel.entries.first!.art.planningPosterURLs.isEmpty }
 
         XCTAssertEqual(activity.planningRequests, [row.object.id])
-        XCTAssertEqual(cards(home.feedModel.entries).first?.art.planningPosterURLs.count, 2)
+        XCTAssertEqual(home.feedModel.entries.first?.art.planningPosterURLs.count, 2)
         // A card that is not Planning asks for nothing.
         home.feedModel.cardAppeared(FeedCardPresenter.model(for: try log(5), standing: nil, isNewestOfTitle: false, planning: nil))
         XCTAssertEqual(activity.planningRequests, [row.object.id])
@@ -194,7 +190,7 @@ final class HomeIntegrationTests: XCTestCase {
         await home.feedModel.loadNextPageIfNeeded(cardID: 2)
         XCTAssertEqual(activity.feedRequests.map(\.cursor), [nil, cursor])
         XCTAssertEqual(activity.feedRequests.map(\.pageSize), [25, 25])
-        XCTAssertEqual(cards(home.feedModel.entries).map(\.id), [1, 2, 3])
+        XCTAssertEqual(home.feedModel.entries.map(\.id), [1, 2, 3])
         XCTAssertEqual(standing.prepared, [[1, 2], [1, 2, 3]], "The new rows' standings start too")
 
         await home.feedModel.loadNextPageIfNeeded(cardID: 3)

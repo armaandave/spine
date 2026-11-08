@@ -67,8 +67,6 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.meterBottom, 15)
         XCTAssertEqual(M.meterLineBottom, 17)
         XCTAssertEqual(M.countsBottom, 12)
-        XCTAssertEqual(M.dayHeaderTop, 20)
-        XCTAssertEqual(M.dayHeaderBottom, 10)
         XCTAssertEqual(M.glowHeight, 440)
         XCTAssertEqual(M.carouselStep, 134)
         XCTAssertEqual(M.carouselTop, 70)
@@ -110,8 +108,7 @@ final class HomeDesignTests: XCTestCase {
 
     func testTextTokens() {
         XCTAssertEqual(HomeDesign.Text.maxCategory, .xxLarge)
-        XCTAssertEqual(HomeDesign.Text.dayHeaderTrackingEm, 0.08)
-        XCTAssertEqual(HomeDesign.Text.dayHeaderTracking, 0.96, accuracy: 0.0001)
+        XCTAssertEqual(HomeDesign.Text.day, Font.system(size: 12, weight: .medium))
         XCTAssertEqual(HomeDesign.Text.username, Font.system(size: 13.5, weight: .bold))
         XCTAssertEqual(HomeDesign.Text.tileTitleOpen, Font.system(size: 24, weight: .heavy))
     }

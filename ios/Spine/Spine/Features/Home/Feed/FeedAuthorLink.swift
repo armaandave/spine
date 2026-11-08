@@ -1,13 +1,15 @@
 import SwiftUI
 
-/// A feed card's author line: a 20 pt avatar and the username, in the card's ink. Tapping it opens the person's
-/// profile. It is its own accessibility element, so the card's tap and VoiceOver action leave it alone.
+/// A feed card's author line: a 20 pt avatar, the username in the card's ink and the card's day after it, smaller and
+/// lighter. The username truncates first; the day never does. Tapping it opens the person's profile. It is its own
+/// accessibility element (it reads the day too), so the card's tap and VoiceOver action leave it alone.
 struct FeedAuthorLink: View {
     /// Line one of a card is this tall.
     static let height: CGFloat = 22
 
     let username: String
     let avatarURL: String?
+    let dayLabel: String?
     let ink: ArtInk
 
     var body: some View {
@@ -20,12 +22,20 @@ struct FeedAuthorLink: View {
                     .font(HomeDesign.Text.username)
                     .foregroundStyle(ink.text)
                     .lineLimit(1)
+                if let dayLabel {
+                    Text(dayLabel)
+                        .font(HomeDesign.Text.day)
+                        .foregroundStyle(ink.day)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: Self.height)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(username)
+        .accessibilityLabel([username, dayLabel].compactMap { $0 }.joined(separator: ", "))
         .accessibilityHint("Opens profile")
     }
 }

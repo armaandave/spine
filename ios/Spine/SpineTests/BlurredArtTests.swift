@@ -71,7 +71,12 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertEqual(rgba(ArtInk.dark.star), rgba(HomeDesign.Palette.starGold))
         XCTAssertEqual(rgba(ArtInk.light.star), rgba(HomeDesign.Palette.lightInk))
         XCTAssertEqual(rgba(ArtInk.dark.heart), rgba(ArtInk.light.heart))
-        XCTAssertEqual(rgba(ArtInk.light.rewatch), rgba(ArtInk.light.text))
+        XCTAssertEqual(rgba(ArtInk.dark.rewatch), rgba(HomeDesign.Palette.rewatchGreen))
+        XCTAssertEqual(rgba(ArtInk.light.rewatch), rgba(HomeDesign.Palette.rewatchGreenDeep))
+        XCTAssertEqual(rgba(ArtInk.dark.day)[3], 0.62, accuracy: 0.005)
+        XCTAssertEqual(rgba(ArtInk.light.day)[3], 0.58, accuracy: 0.005)
+        XCTAssertLessThan(rgba(ArtInk.dark.day)[3], rgba(ArtInk.dark.muted)[3], "The day is lighter than muted text")
+        XCTAssertLessThan(rgba(ArtInk.light.day)[3], rgba(ArtInk.light.muted)[3])
     }
 
     func testAccentColor() {
