@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// The flat list Home's feed draws: day headers and cards as siblings, built once from what they depend on and
+/// The flat list of cards Home's feed draws, built once from what they depend on and
 /// rebuilt only when one of those changes (a load, a next page, a like or comment count coming back from a post,
 /// a Planning day arriving, a friend's standing arriving), never on a body pass.
 ///
@@ -10,7 +10,7 @@ import Observation
 @MainActor
 @Observable
 final class HomeFeedModel {
-    private(set) var entries: [FeedListEntry] = []
+    private(set) var entries: [FeedCardModel] = []
 
     let feed: ActivityFeedViewModel
     let planning: FeedPlanningStore

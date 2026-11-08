@@ -155,8 +155,8 @@ final class HomeSourceGuardrailTests: XCTestCase {
 
     func testRowsAreOneFlatListWithoutSectionsOrPinnedHeaders() throws {
         let rows = code(try read("Features/Home/HomeFeedRows.swift"))
-        XCTAssertFalse(rows.contains("Section"), "Day headers are siblings of the cards, not sections")
-        XCTAssertFalse(rows.contains("pinnedViews"), "Day headers scroll away with their cards")
+        XCTAssertFalse(rows.contains("Section"), "The cards are siblings, not sections")
+        XCTAssertFalse(rows.contains("pinnedViews"), "Nothing in the feed is pinned")
         XCTAssertTrue(rows.contains(".equatable()"), "A card skips drawing when its model is equal")
         XCTAssertTrue(rows.contains(".prefetchingFeedCards("), "Cards prefetch the art that follows them")
         XCTAssertTrue(rows.contains("frame(height: Self.cardRowHeight"), "Rows have fixed heights")

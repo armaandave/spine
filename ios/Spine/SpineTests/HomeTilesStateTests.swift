@@ -104,14 +104,134 @@ final class HomeTilesStateTests: XCTestCase {
         XCTAssertEqual(state.focusID, id("a"))
     }
 
-    func testReopeningStartsOnTheFirstTitleAgain() {
+    func testReopeningStartsOnTheTitleItClosedOn() {
         let state = state(["a", "b", "c"])
         state.openTile(.inProgress)
         state.focus(id("b"))
         state.close()
         state.finishClosing()
         state.openTile(.inProgress)
-        XCTAssertEqual(state.focusID, id("a"))
+        XCTAssertEqual(state.focusID, id("b"))
+        XCTAssertEqual(state.focusIndex, 1)
+    }
+
+    // MARK: Rest
+
+    func testATileThatHasNeverClosedRestsOnItsFirstTitle() {
+        let state = state(["a", "b", "c"])
+        XCTAssertEqual(state.restIndex(.inProgress), 0)
+        XCTAssertEqual(state.restID(.inProgress), id("a"))
+        XCTAssertEqual(state.restIndex(.trending), 0, "a tile with no titles")
+        XCTAssertNil(state.restID(.trending))
+    }
+
+    func testClosingRestsTheTileOnTheTitleItWasOn() {
+        let state = state(["a", "b", "c", "d"])
+        state.openTile(.inProgress)
+        XCTAssertEqual(state.restIndex(.inProgress), 0, "opening does not move the rest place")
+        state.focus(id("c"))
+        XCTAssertEqual(state.restIndex(.inProgress), 0, "neither does swiping")
+        state.close()
+        XCTAssertEqual(state.restIndex(.inProgress), 2)
+        XCTAssertEqual(state.restID(.inProgress), id("c"))
+        state.finishClosing()
+        XCTAssertEqual(state.restIndex(.inProgress), 2, "the focus resets, the rest place does not")
+    }
+
+    func testEachTileKeepsItsOwnRestPlace() {
+        let state = state(["a", "b", "c"])
+        state.sync([id("x"), id("y"), id("z")], for: .trending)
+        state.openTile(.inProgress)
+        state.focus(id("c"))
+        state.close()
+        state.finishClosing()
+        state.openTile(.trending)
+        state.focus(id("y"))
+        state.close()
+        XCTAssertEqual(state.restIndex(.inProgress), 2)
+        XCTAssertEqual(state.restIndex(.trending), 1)
+    }
+
+    func testAReloadKeepsTheRestPlaceOnTheSameTitle() {
+        let state = state(["a", "b", "c", "d"])
+        state.openTile(.inProgress)
+        state.focus(id("c"))
+        state.close()
+        state.finishClosing()
+        state.sync([id("n"), id("d"), id("c"), id("a")], for: .inProgress)
+        XCTAssertEqual(state.restID(.inProgress), id("c"))
+        XCTAssertEqual(state.restIndex(.inProgress), 2)
+    }
+
+    func testARestTitleThatLeavesTheListStaysAtThePlaceItHad() {
+        let state = state(["a", "b", "c", "d"])
+        state.openTile(.inProgress)
+        state.focus(id("c"))
+        state.close()
+        state.finishClosing()
+        state.sync([id("a"), id("b"), id("d")], for: .inProgress)
+        XCTAssertEqual(state.restIndex(.inProgress), 2)
+        XCTAssertEqual(state.restID(.inProgress), id("d"))
+        // The list gets shorter than the place: it clamps to the end, and stays there.
+        state.sync([id("a"), id("b")], for: .inProgress)
+        XCTAssertEqual(state.restIndex(.inProgress), 1)
+        state.sync([id("a"), id("b"), id("c"), id("d")], for: .inProgress)
+        XCTAssertEqual(state.restIndex(.inProgress), 1, "it does not drift back")
+    }
+
+    func testAnEmptiedListForgetsTheRestPlace() {
+        let state = state(["a", "b", "c"])
+        state.openTile(.inProgress)
+        state.focus(id("c"))
+        state.close()
+        state.finishClosing()
+        state.sync([], for: .inProgress)
+        XCTAssertEqual(state.restIndex(.inProgress), 0)
+        XCTAssertNil(state.restID(.inProgress))
+        state.sync([id("x"), id("y"), id("z")], for: .inProgress)
+        XCTAssertEqual(state.restIndex(.inProgress), 0, "new titles start from the first")
+    }
+
+    func testAReloadUnderAnOpenTileLeavesTheRestPlaceUntilItCloses() {
+        let state = state(["a", "b", "c", "d"])
+        state.openTile(.inProgress)
+        state.focus(id("c"))
+        state.sync([id("c"), id("a"), id("b"), id("d")], for: .inProgress)
+        state.close()
+        XCTAssertEqual(state.restIndex(.inProgress), 0, "closed on c, which is now the first")
+        XCTAssertEqual(state.restID(.inProgress), id("c"))
+    }
+
+    func testTheGlowAtRestFollowsEachTilesFrontPoster() {
+        let model = HomeTilesModel()
+        model.inProgress = [item("a"), item("b"), item("c")]
+        model.trending = [title("x"), title("y"), title("z")]
+        let state = HomeTilesState()
+        state.sync(model.ids(for: .inProgress), for: .inProgress)
+        state.sync(model.ids(for: .trending), for: .trending)
+        let glow = HomeGlowModel()
+
+        state.syncGlow(glow, model: model)
+        XCTAssertEqual(glow.restLeft, media("a"))
+        XCTAssertEqual(glow.restRight, media("x"))
+        XCTAssertEqual(glow.active, media("a"))
+
+        state.openTile(.inProgress)
+        state.focus(id("c"))
+        state.close()
+        state.syncGlow(glow, model: model)
+        XCTAssertEqual(glow.restLeft, media("c"), "the left of the glow is In progress's front poster")
+        XCTAssertEqual(glow.restRight, media("x"))
+        XCTAssertEqual(glow.active, media("c"))
+        XCTAssertNil(glow.focused)
+
+        state.finishClosing()
+        state.openTile(.trending)
+        state.focus(model.trending[1].id)
+        state.close()
+        state.syncGlow(glow, model: model)
+        XCTAssertEqual(glow.restRight, media("y"), "the right is Trending's front poster")
+        XCTAssertEqual(glow.restLeft, media("c"))
     }
 
     func testATileWithNoTitlesDoesNotOpen() {
@@ -400,6 +520,24 @@ final class HomeTilesStateTests: XCTestCase {
             XCTAssertFalse(source.contains("scrollOffset"), name)
             XCTAssertFalse(source.contains("contentOffset"), name)
             XCTAssertFalse(source.contains("CGFloat"), "\(name) holds no measurements")
+        }
+    }
+
+    func testTheScrollOffsetIsReadOnlyInTheFoldModifier() throws {
+        // Scrolling re-evaluates the glow's offset line and the back posters' fold, and nothing else in the tiles.
+        let carousel = try tileSource("TileCarousel.swift")
+        XCTAssertEqual(carousel.components(separatedBy: "scrollOffset").count - 1, 1)
+        let fold = try XCTUnwrap(carousel.range(of: "struct PosterFold"))
+        let read = try XCTUnwrap(carousel.range(of: "glow.scrollOffset"))
+        let next = try XCTUnwrap(carousel.range(of: "private struct PosterButtonStyle"))
+        XCTAssertTrue(fold.upperBound < read.lowerBound && read.upperBound < next.lowerBound)
+        for name in ["HomeTilesSection.swift", "TileGeometry.swift", "HomeTilesSkeleton.swift", "TileDetailPanel.swift"] {
+            XCTAssertFalse(try tileSource(name).contains("scrollOffset"), name)
+        }
+        // The fold is transforms and one brightness: no new view, no layout.
+        let body = String(carousel[fold.upperBound ..< next.lowerBound])
+        for forbidden in ["GeometryReader", "overlay", "background", "ZStack", "frame(", "Color."] {
+            XCTAssertFalse(body.contains(forbidden), forbidden)
         }
     }
 

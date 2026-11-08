@@ -19,6 +19,8 @@ final class HomeViewModel {
     let tiles = HomeTilesModel()
     let tilesState = HomeTilesState()
     let glowModel = HomeGlowModel()
+    /// The people you follow, for the Friends row.
+    let friends = HomeFriendsModel()
 
     /// The activity of the people you follow; your own is on your profile.
     let feed: ActivityFeedViewModel
@@ -91,6 +93,8 @@ final class HomeViewModel {
     /// For a season with nothing watched yet, which has no tracking: its page still counts its episodes.
     @ObservationIgnored private let seasonPages: MediaRepository
     @ObservationIgnored private let activityRepository: ActivityRepository
+    /// Who you follow, for the Friends row. Nil when Home makes no extra reads (`loadsTileExtras`).
+    @ObservationIgnored private let socialRepository: SocialRepository?
     @ObservationIgnored private let onUnauthorized: () -> Void
     /// Whether Home asks for the extras the tiles show beyond the rail and the feed: today's rows, your own activity
     /// and the fallback titles for Trending. A view model built to test the rail or the feed makes none of them.
@@ -104,6 +108,7 @@ final class HomeViewModel {
         mediaRepository: MediaRepository? = nil,
         diaryRepository: DiaryRepository? = nil,
         listRepository: ListRepository? = nil,
+        socialRepository: SocialRepository? = nil,
         loadsTileExtras: Bool = false,
         onUnauthorized: @escaping () -> Void
     ) {
@@ -112,6 +117,7 @@ final class HomeViewModel {
         self.activityRepository = activityRepository
         self.onUnauthorized = onUnauthorized
         self.loadsTileExtras = loadsTileExtras
+        self.socialRepository = loadsTileExtras ? socialRepository : nil
         trendingFallback = loadsTileExtras ? listRepository.map { TrendingFallbackSource(listRepository: $0) } : nil
         let feed = ActivityFeedViewModel(
             username: nil,
@@ -151,18 +157,20 @@ final class HomeViewModel {
         tiles.railStore = railStore
         tiles.isLoadingTrending = true
         // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
+        // A title the write finished (or paused, or caught up) leaves the rail at once (`patchRail`).
         continueWatching.onUpdate = { [weak self] id, tv in
             guard let self else { return }
-            inProgressItems = ContinueWatchingTicks.replacingTV(tv, id: id, in: inProgressItems)
+            patchRail(ContinueWatchingTicks.replacingTV(tv, id: id, in: inProgressItems), changed: [id])
         }
         continueWatching.onAnimeUpdate = { [weak self] ref, anime in
             guard let self else { return }
-            inProgressItems = ContinueWatchingTicks.replacingAnime(anime, ref: ref, in: inProgressItems)
+            let ids = Set(inProgressItems.filter { $0.media.ref.id == ref.id }.map(\.id))
+            patchRail(ContinueWatchingTicks.replacingAnime(anime, ref: ref, in: inProgressItems), changed: ids)
         }
         // So does a write from another card's progress UI.
         progressUpdates.onUpdate = { [weak self] id, state in
             guard let self else { return }
-            inProgressItems = InProgressUpdates.replacingProgress(state, id: id, in: inProgressItems)
+            patchRail(InProgressUpdates.replacingProgress(state, id: id, in: inProgressItems), changed: [id])
         }
         feedModel.onFeedChange = { [weak self] in self?.feedDidChange() }
         feedModel.onNextPage = { [weak self] in self?.standing.prepare(for: self?.feed.items ?? []) }
@@ -173,7 +181,9 @@ final class HomeViewModel {
     func load() async {
         tiles.isLoadingTrending = tiles.trending.isEmpty
         guard await loadProfileAndInProgress() else { return }
+        async let friendsLoad: Void = loadFriends()
         await loadActivity()
+        await friendsLoad
     }
 
     /// Returns whether the profile loaded.
@@ -210,7 +220,17 @@ final class HomeViewModel {
     func followsDidChange() async {
         guard let refreshed = try? await profileRepository.me() else { return }
         profile = refreshed
+        async let friendsLoad: Void = loadFriends()
         await loadActivity()
+        await friendsLoad
+    }
+
+    /// The first page of the people you follow, for the Friends row. A read that fails leaves the row as it was.
+    func loadFriends() async {
+        guard let socialRepository, let username = profile?.username else { return }
+        guard let page = try? await socialRepository.followList(username: username, followers: false, page: nil),
+              !Task.isCancelled else { return }
+        friends.setFollowing(page.results, feed: feed.items)
     }
 
     /// You changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's or
@@ -218,12 +238,14 @@ final class HomeViewModel {
     /// Trending panel's rail leaves everything where it is while the tile is open and re-sorts the rail when it
     /// closes. Any other write reloads the rail. The feed is only the people you follow, so your own writes can't
     /// change it, and it keeps its place however far down you are.
-    func mediaStateDidChange(origin: UUID?) async {
+    func mediaStateDidChange(origin: UUID?, ref: MediaRef? = nil) async {
         guard origin != continueWatching.changeOrigin else { return }
         if let origin, railStore.changeOrigins.contains(origin) {
             railNeedsResort = true
             return
         }
+        // A title's page finished it: it leaves the rail now, not when the reload below has come back.
+        if let ref { await dropFromRailIfNoLongerInProgress(ref) }
         guard await loadProfileAndInProgress() else { return }
         await feed.loadIfNeeded()
     }
@@ -396,6 +418,7 @@ final class HomeViewModel {
     /// fills in from your own activity and the fallback list as they arrive.
     private func feedDidLoad() {
         standing.prepare(for: feed.items)
+        friends.reorder(feed: feed.items)
         recomputeTrending()
         guard loadsTileExtras, let username = profile?.username else {
             tiles.isLoadingTrending = false
@@ -422,6 +445,7 @@ final class HomeViewModel {
 
     /// The feed's items changed: Trending and the glow follow, and the cards were rebuilt before this.
     private func feedDidChange() {
+        friends.reorder(feed: feed.items)
         recomputeTrending()
         syncGlowIdle()
     }
@@ -494,10 +518,36 @@ final class HomeViewModel {
     }
 
     private func railItemDidChange(id: String, tracking: TrackingState) {
-        inProgressItems = inProgressItems.map { item in
+        patchRail(inProgressItems.map { item in
             item.id == id ? LibraryItem(media: item.media, tracking: tracking) : item
-        }
+        }, changed: [id])
         railNeedsResort = true
+    }
+
+    // MARK: A write that finishes a title
+
+    /// Sets the rail to `items`, a patch of the write's answer into the cards `changed`. A card that is no longer In
+    /// progress (finished, paused, dropped, caught up) leaves the rail now, animated; the open tile's focus moves to a
+    /// neighbor (`HomeTilesState.sync`), and the count and the glow follow the rail.
+    private func patchRail(_ items: [LibraryItem], changed: Set<String>) {
+        let kept = items.filter { !changed.contains($0.id) || InProgressRailMembership.stays($0) }
+        guard kept.count != items.count else {
+            inProgressItems = items
+            return
+        }
+        withAnimation(TileMotion.frame(reduceMotion: UIAccessibility.isReduceMotionEnabled)) {
+            inProgressItems = kept
+        }
+    }
+
+    /// A title's page changed `ref`, and the answer only says which title. A title in the rail is read once; if it
+    /// is no longer In progress it leaves. Nothing else about the card is taken from that read: the reload that
+    /// follows brings the rest.
+    private func dropFromRailIfNoLongerInProgress(_ ref: MediaRef) async {
+        guard let item = inProgressItems.first(where: { $0.media.ref.id == ref.id }),
+              let tracking = try? await trackingRepository.detail(ref: item.media.ref),
+              !InProgressRailMembership.stays(LibraryItem(media: item.media, tracking: tracking)) else { return }
+        patchRail(inProgressItems.filter { $0.id != item.id }, changed: [])
     }
 
     /// The Trending tile closed: a rail write that changed a title in the In progress rail re-sorts it now, once.
@@ -544,6 +594,7 @@ struct HomeView: View {
         activityRepository: ActivityRepository = AppRepositories.current().activity,
         listRepository: ListRepository = AppRepositories.current().lists,
         peopleRepository: PeopleRepository = AppRepositories.current().people,
+        socialRepository: SocialRepository = AppRepositories.current().social,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
@@ -568,6 +619,7 @@ struct HomeView: View {
             mediaRepository: mediaRepository,
             diaryRepository: diaryRepository,
             listRepository: listRepository,
+            socialRepository: socialRepository,
             loadsTileExtras: true,
             onUnauthorized: onUnauthorized
         ))
@@ -830,7 +882,12 @@ private struct HomeRefreshTriggers: ViewModifier {
                 Task { await viewModel.followsDidChange() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
-                Task { await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID) }
+                Task {
+                    await viewModel.mediaStateDidChange(
+                        origin: notification.userInfo?["origin"] as? UUID,
+                        ref: notification.userInfo?["ref"] as? MediaRef
+                    )
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .activityPostDidChange)) { notification in
                 if let change = ActivityPostChange.parse(notification) {

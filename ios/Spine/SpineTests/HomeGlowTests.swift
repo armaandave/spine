@@ -201,7 +201,7 @@ final class HomeGlowTests: XCTestCase {
         XCTAssertEqual(BackdropLayout.topOffset + GlowSpec.height(tilesBottom: 318, isOpen: false), 318 - GlowSpec.restGap)
         XCTAssertEqual(GlowSpec.height(tilesBottom: 318, isOpen: true), HomeDesign.Metric.glowHeight)
         // Unmeasured: the estimate. Never shorter than the minimum or taller than the open glow.
-        XCTAssertEqual(GlowSpec.height(tilesBottom: nil, isOpen: false), GlowSpec.height(tilesBottom: 318, isOpen: false))
+        XCTAssertEqual(GlowSpec.height(tilesBottom: nil, isOpen: false), GlowSpec.height(tilesBottom: GlowSpec.estimatedTilesBottom, isOpen: false))
         XCTAssertEqual(GlowSpec.height(tilesBottom: 40, isOpen: false), GlowSpec.minimumHeight)
         XCTAssertEqual(GlowSpec.height(tilesBottom: 900, isOpen: false), HomeDesign.Metric.glowHeight)
     }
@@ -214,11 +214,11 @@ final class HomeGlowTests: XCTestCase {
         XCTAssertNil(model.tilesBottom, "Both are needed")
         model.tilesTop = 92
         XCTAssertEqual(model.tilesBottom, 62 + 92 + TileGeometry.closedHeight)
-        XCTAssertEqual(model.height, GlowSpec.height(tilesBottom: 318, isOpen: false))
+        XCTAssertEqual(model.height, GlowSpec.height(tilesBottom: 62 + 92 + TileGeometry.closedHeight, isOpen: false))
         model.focused = media(id: "open", backdrop: nil, poster: "https://example.com/open.jpg")
         XCTAssertEqual(model.height, HomeDesign.Metric.glowHeight, "A tile is open")
         model.scrollOffset = 200
-        XCTAssertEqual(model.tilesBottom, 318, "Scrolling moves nothing that was measured")
+        XCTAssertEqual(model.tilesBottom, 62 + 92 + TileGeometry.closedHeight, "Scrolling moves nothing that was measured")
     }
 
     func testTheGlowSpecIsTheDesign() {
@@ -313,6 +313,27 @@ final class HomeGlowTests: XCTestCase {
 
         model.trending = model.idle
         XCTAssertNil(model.art?.right, "the same title on both sides is one image")
+    }
+
+    func testTheFrontPostersOfTheFansTakeOverBothSidesAtRest() throws {
+        let model = HomeGlowModel()
+        model.idle = media(id: "reading", backdrop: "https://example.com/reading-backdrop.jpg", poster: nil)
+        model.trending = media(id: "hot", backdrop: nil, poster: "https://example.com/hot.jpg")
+
+        model.restLeft = media(id: "third", backdrop: nil, poster: "https://example.com/third.jpg")
+        model.restRight = media(id: "fifth", backdrop: nil, poster: "https://example.com/fifth.jpg")
+        XCTAssertEqual(model.art?.left, URL(string: "https://example.com/third.jpg"))
+        XCTAssertEqual(model.art?.right, URL(string: "https://example.com/fifth.jpg"))
+
+        model.focused = media(id: "swiped", backdrop: nil, poster: "https://example.com/swiped.jpg")
+        XCTAssertEqual(model.art, GlowArt(left: try XCTUnwrap(URL(string: "https://example.com/swiped.jpg")), right: nil))
+
+        // A tile with nothing in it leaves its side to the page's own picture.
+        model.focused = nil
+        model.restLeft = nil
+        model.restRight = nil
+        XCTAssertEqual(model.art?.left, URL(string: "https://example.com/reading-backdrop.jpg"))
+        XCTAssertEqual(model.art?.right, URL(string: "https://example.com/hot.jpg"))
     }
 
     func testTheRightImageFadesInFromTheMiddle() throws {

@@ -188,10 +188,13 @@ private struct InProgressPanel: View {
 
 // MARK: - Shared pieces
 
-/// The panel's top row: the title at 19, and the right-hand words at 13, on one baseline. The title gives way first.
+/// The panel's top row: the title at 19, and the other words at 13, on one baseline. The title gives way first. In
+/// progress's has its title at the left and its words at the right; Trending's is `centered`, the title and its words
+/// together in the middle.
 private struct TilePanelTitleRow<Aside: View>: View {
     let title: String
     let accessibilityLabel: String
+    var centered = false
     @ViewBuilder let aside: () -> Aside
 
     var body: some View {
@@ -201,7 +204,7 @@ private struct TilePanelTitleRow<Aside: View>: View {
                 .tracking(-0.3)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: centered ? nil : .infinity, alignment: .leading)
             aside()
                 .font(TileStyle.panelAside)
                 .foregroundStyle(TileStyle.panelSecondary)
@@ -209,6 +212,7 @@ private struct TilePanelTitleRow<Aside: View>: View {
                 .fixedSize()
                 .layoutPriority(1)
         }
+        .frame(maxWidth: .infinity)
         .dynamicTypeSize(...HomeDesign.Text.maxCategory)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)

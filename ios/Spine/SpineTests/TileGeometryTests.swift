@@ -12,25 +12,26 @@ final class TileGeometryTests: XCTestCase {
 
     func testTileSideAndContainerHeight() {
         XCTAssertEqual(TileGeometry.tileSide(contentWidth: 358), 173)
-        // A closed tile is 164 tall whatever its width: no longer square, no band of nothing under its text.
-        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 358, isOpen: false), 164)
+        // A closed tile is 168 tall whatever its width: no longer square, no band of nothing under its text.
+        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 358, isOpen: false), 168)
         XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 358, isOpen: true), 410)
-        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 370, isOpen: false), 164)
-        // The count's line ends 10 above the bottom, and the front poster of the fan sits above the title.
-        let countBottom = TileGeometry.subtitleTop(isOpen: false) + 12 * 1.2
-        XCTAssertEqual(TileGeometry.closedHeight - countBottom, 10, accuracy: 1)
+        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 370, isOpen: false), 168)
+        // The space under the count's letters matches the 16 above the front poster (the count's baseline is about
+        // 11 below its line's top), and the front poster of the fan sits above the title.
+        let countBaseline = TileGeometry.subtitleTop(isOpen: false) + 11
+        XCTAssertEqual(TileGeometry.closedHeight - countBaseline, HomeDesign.Metric.fan(index: 0, tileSide: 173).y, accuracy: 2)
         XCTAssertLessThan(HomeDesign.Metric.fan(index: 0, tileSide: 173).y + 99, TileGeometry.titleClosedTop)
     }
 
     func testClosedFrames() {
         let left = TileGeometry.frame(tile: 0, open: nil, contentWidth: width)
         XCTAssertEqual(left, TileFrame(
-            left: 0, width: 173, height: 164, slide: 0, scale: 1, opacity: 1, z: 1, isOpen: false, hitTestable: true
+            left: 0, width: 173, height: 168, slide: 0, scale: 1, opacity: 1, z: 1, isOpen: false, hitTestable: true
         ))
         let right = TileGeometry.frame(tile: 1, open: nil, contentWidth: width)
         XCTAssertEqual(right.left, 185, "173 and a 12 pt gap")
         XCTAssertEqual(right.width, 173)
-        XCTAssertEqual(right.height, 164)
+        XCTAssertEqual(right.height, 168)
         XCTAssertTrue(right.hitTestable)
         XCTAssertEqual(TileGeometry.frame(tile: 1, open: nil, contentWidth: 370).left, 191)
     }
@@ -185,16 +186,137 @@ final class TileGeometryTests: XCTestCase {
         )
     }
 
-    func testAClosedTileShowsItsFirstTitleInFrontWhateverTheFocusWas() {
-        // The fan is by position: after an open, a swipe and a close the front poster is the first title again.
+    func testAClosedTileIgnoresTheFocus() {
+        // The fan is built from where the tile rests, not from where an open tile is looking.
         for focus in 0 ..< 10 {
-            let front = TileGeometry.pose(index: 0, focus: focus, isOpen: false, contentWidth: width)
-            XCTAssertEqual(front, TileGeometry.fanPose(index: 0, contentWidth: width), "focus \(focus)")
-            for index in 1 ..< 10 {
-                let other = TileGeometry.pose(index: index, focus: focus, isOpen: false, contentWidth: width)
-                XCTAssertGreaterThan(front.z, other.z, "index \(index) at focus \(focus)")
+            for index in 0 ..< 10 {
+                XCTAssertEqual(
+                    TileGeometry.pose(index: index, focus: focus, isOpen: false, rest: 4, count: 10, contentWidth: width),
+                    TileGeometry.fanPose(index: index, rest: 4, count: 10, contentWidth: width)
+                )
             }
         }
+    }
+
+    // MARK: Rest
+
+    func testTheFanIsBuiltAroundTheTitleTheTileRestsOn() {
+        // In the middle: the title in front, the one before it left, the one after it right.
+        var slots = TileGeometry.fanSlots(rest: 4, count: 10)
+        XCTAssertEqual([slots.front, slots.left, slots.right], [4, 3, 5])
+        slots = TileGeometry.fanSlots(rest: 1, count: 3)
+        XCTAssertEqual([slots.front, slots.left, slots.right], [1, 0, 2])
+        // At the first title: today's fan, 1, 2 and 3 (indexes 0, 1, 2).
+        slots = TileGeometry.fanSlots(rest: 0, count: 10)
+        XCTAssertEqual([slots.front, slots.left, slots.right], [0, 1, 2])
+        // At the last: the last in front and the two before it behind.
+        slots = TileGeometry.fanSlots(rest: 9, count: 10)
+        XCTAssertEqual([slots.front, slots.left, slots.right], [9, 7, 8])
+        slots = TileGeometry.fanSlots(rest: 2, count: 3)
+        XCTAssertEqual([slots.front, slots.left, slots.right], [2, 0, 1])
+    }
+
+    func testShortListsFillOnlyTheSlotsTheyHave() {
+        var slots = TileGeometry.fanSlots(rest: 0, count: 1)
+        XCTAssertEqual(slots.front, 0)
+        XCTAssertNil(slots.left)
+        XCTAssertNil(slots.right)
+        slots = TileGeometry.fanSlots(rest: 0, count: 2)
+        XCTAssertEqual([slots.front, slots.left], [0, 1])
+        XCTAssertNil(slots.right)
+        slots = TileGeometry.fanSlots(rest: 1, count: 2)
+        XCTAssertEqual([slots.front, slots.left], [1, 0])
+        XCTAssertNil(slots.right)
+        slots = TileGeometry.fanSlots(rest: 0, count: 0)
+        XCTAssertEqual(slots.front, 0)
+        XCTAssertNil(slots.left)
+    }
+
+    func testARestPastTheEndsIsKeptInsideTheList() {
+        XCTAssertEqual(TileGeometry.fanSlots(rest: 99, count: 5).front, 4)
+        XCTAssertEqual(TileGeometry.fanSlots(rest: -3, count: 5).front, 0)
+    }
+
+    func testEachPosterHasOneRoleAndTheRestAreHidden() {
+        let roles = (0 ..< 10).map { TileGeometry.fanRole(index: $0, rest: 5, count: 10) }
+        XCTAssertEqual(roles[5], .front)
+        XCTAssertEqual(roles[4], .left)
+        XCTAssertEqual(roles[6], .right)
+        XCTAssertEqual(roles.filter { $0 == .hidden }.count, 7)
+        // The first title's fan is the original one.
+        for index in 0 ..< 10 {
+            XCTAssertEqual(
+                TileGeometry.fanPose(index: index, rest: 0, count: 10, contentWidth: width),
+                TileGeometry.fanPose(index: index, contentWidth: width)
+            )
+        }
+    }
+
+    func testTheFrontPosterLandsInTheFrontSlotWhateverTheRest() {
+        // A closed carousel is scrolled to the rest title, so its natural place is that far to the left.
+        for contentWidth: CGFloat in [343, 358, 370] {
+            let side = TileGeometry.tileSide(contentWidth: contentWidth)
+            for rest in 0 ..< 10 {
+                for index in 0 ..< 10 {
+                    let role = TileGeometry.fanRole(index: index, rest: rest, count: 10)
+                    let fan = HomeDesign.Metric.fan(index: role.slot, tileSide: side)
+                    let natural = TileGeometry.naturalCenter(index: index, contentWidth: contentWidth)
+                    let pose = TileGeometry.fanPose(index: index, rest: rest, count: 10, contentWidth: contentWidth)
+                    let onScreenX = natural.x - TileGeometry.scrollX(forIndex: rest) + pose.offsetX
+                    XCTAssertEqual(onScreenX, fan.x + fan.width / 2, accuracy: accuracy, "rest \(rest) poster \(index)")
+                    XCTAssertEqual(natural.y + pose.offsetY, fan.y + fan.height / 2, accuracy: accuracy)
+                }
+            }
+        }
+    }
+
+    func testTheFrontPosterIsAlwaysOnTopOfTheFan() {
+        for rest in 0 ..< 10 {
+            let front = TileGeometry.fanPose(index: rest, rest: rest, count: 10, contentWidth: width)
+            XCTAssertEqual(front.scale, 0.55, accuracy: accuracy)
+            XCTAssertEqual(front.brightness, 1)
+            for index in 0 ..< 10 where index != rest {
+                let other = TileGeometry.fanPose(index: index, rest: rest, count: 10, contentWidth: width)
+                XCTAssertGreaterThan(front.z, other.z, "poster \(index) at rest \(rest)")
+            }
+        }
+    }
+
+    // MARK: Fold
+
+    func testTheFoldFollowsTheScrollOneToOne() {
+        XCTAssertEqual(TileGeometry.foldProgress(scroll: 0, tilesBottom: 320), 0)
+        XCTAssertEqual(TileGeometry.foldProgress(scroll: 160, tilesBottom: 320), 0.5, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.foldProgress(scroll: 80, tilesBottom: 320), 0.25, accuracy: accuracy)
+        // Closed all the way once the tile has left the top of the screen, and no further.
+        XCTAssertEqual(TileGeometry.foldProgress(scroll: 320, tilesBottom: 320), 1)
+        XCTAssertEqual(TileGeometry.foldProgress(scroll: 500, tilesBottom: 320), 1)
+        // Pulled past the top: not folded.
+        XCTAssertEqual(TileGeometry.foldProgress(scroll: -40, tilesBottom: 320), 0)
+    }
+
+    func testTheFoldEndsWhereTheGlowsTilesEndBeforeTheyAreMeasured() {
+        XCTAssertEqual(
+            TileGeometry.foldProgress(scroll: GlowSpec.estimatedTilesBottom, tilesBottom: nil), 1
+        )
+        XCTAssertEqual(TileGeometry.foldProgress(scroll: 100, tilesBottom: 0), 0, "nothing to divide by")
+    }
+
+    func testABackPosterSlidesBehindTheFrontOne() {
+        let side = TileGeometry.tileSide(contentWidth: width)
+        let front = HomeDesign.Metric.fan(index: 0, tileSide: side)
+        for role in [TileGeometry.FanRole.left, .right] {
+            let back = HomeDesign.Metric.fan(index: role.slot, tileSide: side)
+            let slide = TileGeometry.foldSlide(role: role, contentWidth: width)
+            XCTAssertEqual(back.x + back.width / 2 + slide.width, front.x + front.width / 2, accuracy: accuracy)
+            XCTAssertEqual(back.y + back.height / 2 + slide.height, front.y + front.height / 2, accuracy: accuracy)
+        }
+        XCTAssertGreaterThan(TileGeometry.foldSlide(role: .left, contentWidth: width).width, 0, "left moves right")
+        XCTAssertLessThan(TileGeometry.foldSlide(role: .right, contentWidth: width).width, 0, "right moves left")
+        XCTAssertTrue(TileGeometry.FanRole.left.folds)
+        XCTAssertTrue(TileGeometry.FanRole.right.folds)
+        XCTAssertFalse(TileGeometry.FanRole.front.folds)
+        XCTAssertFalse(TileGeometry.FanRole.hidden.folds)
     }
 
     // MARK: Focus
@@ -240,47 +362,47 @@ final class TileGeometryTests: XCTestCase {
 
     // MARK: Stagger
 
-    func testOpeningStaggersFortyFiveMillisecondsApart() {
-        for count in [2, 5, 10] {
-            for index in 0 ..< count {
+    func testOpeningStaggersFortyFiveMillisecondsApartFromTheRestTitle() {
+        for rest in [0, 3, 9] {
+            for index in 0 ..< 10 {
                 XCTAssertEqual(
-                    TileGeometry.staggerDelay(index: index, count: count, opening: true),
-                    Double(index) * 0.045,
+                    TileGeometry.openDelay(index: index, rest: rest),
+                    Double(abs(index - rest)) * 0.045,
                     accuracy: 0.0000001
                 )
             }
         }
-    }
-
-    func testClosingStaggersTheLastPosterFirst() {
-        for count in [2, 5, 10] {
-            XCTAssertEqual(TileGeometry.staggerDelay(index: count - 1, count: count, opening: false), 0)
-            XCTAssertEqual(
-                TileGeometry.staggerDelay(index: 0, count: count, opening: false),
-                Double(count - 1) * 0.022,
-                accuracy: 0.0000001
-            )
-        }
-        XCTAssertEqual(TileGeometry.staggerDelay(index: 3, count: 5, opening: false), 0.022, accuracy: 0.0000001)
-        XCTAssertEqual(TileGeometry.staggerDelay(index: 2, count: 5, opening: false), 0.044, accuracy: 0.0000001)
+        XCTAssertEqual(TileGeometry.openDelay(index: 3, rest: 3), 0, "the title it rests on goes first")
     }
 
     // MARK: Mounting
 
     func testAClosedTileMountsOnlyTheFan() {
-        for index in 0 ..< 3 { XCTAssertTrue(TileGeometry.isMounted(index: index, allMounted: false)) }
-        for index in 3 ..< 10 { XCTAssertFalse(TileGeometry.isMounted(index: index, allMounted: false)) }
+        for index in 0 ..< 3 {
+            XCTAssertTrue(TileGeometry.isMounted(index: index, rest: 0, count: 10, allMounted: false))
+        }
+        for index in 3 ..< 10 {
+            XCTAssertFalse(TileGeometry.isMounted(index: index, rest: 0, count: 10, allMounted: false))
+        }
+        // Resting on the fifth: the fourth, fifth and sixth.
+        let mounted = (0 ..< 10).filter { TileGeometry.isMounted(index: $0, rest: 4, count: 10, allMounted: false) }
+        XCTAssertEqual(mounted, [3, 4, 5])
+        XCTAssertEqual(mounted.count, TileGeometry.fanMountedCount)
     }
 
     func testAnOpeningTileMountsEveryPoster() {
-        for index in 0 ..< 10 { XCTAssertTrue(TileGeometry.isMounted(index: index, allMounted: true)) }
+        for index in 0 ..< 10 {
+            XCTAssertTrue(TileGeometry.isMounted(index: index, rest: 4, count: 10, allMounted: true))
+        }
     }
 
-    func testOpeningWarmsPostersThreeToFive() {
-        XCTAssertTrue(TileGeometry.openPrefetchIndexes(count: 2).isEmpty)
-        XCTAssertTrue(TileGeometry.openPrefetchIndexes(count: 3).isEmpty)
-        XCTAssertEqual(Array(TileGeometry.openPrefetchIndexes(count: 5)), [3, 4])
-        XCTAssertEqual(Array(TileGeometry.openPrefetchIndexes(count: 10)), [3, 4, 5])
+    func testOpeningWarmsThePostersAroundTheFanThatItDoesNotShow() {
+        XCTAssertTrue(TileGeometry.openPrefetchIndexes(rest: 0, count: 2).isEmpty)
+        XCTAssertTrue(TileGeometry.openPrefetchIndexes(rest: 0, count: 3).isEmpty)
+        XCTAssertEqual(TileGeometry.openPrefetchIndexes(rest: 0, count: 5), [3, 4])
+        XCTAssertEqual(TileGeometry.openPrefetchIndexes(rest: 0, count: 10), [3, 4, 5])
+        XCTAssertEqual(TileGeometry.openPrefetchIndexes(rest: 5, count: 10), [2, 3, 7])
+        XCTAssertEqual(TileGeometry.openPrefetchIndexes(rest: 9, count: 10), [4, 5, 6])
     }
 
     // MARK: Label
