@@ -315,3 +315,27 @@ struct HomeTopArtView: View {
             .accessibilityHidden(true)
     }
 }
+
+/// Where the one who may change Home's picture holds it to choose another: a clear region over the top of the page,
+/// above the header row. It is there only while no tile is open, since an open tile rises into it and its own buttons
+/// (the close button among them) must get their taps.
+struct HomePictureHoldRegion: View {
+    let art: HomeTopArtModel
+    let tiles: HomeTilesState
+    let glow: HomeGlowModel
+    let onHold: () -> Void
+
+    var body: some View {
+        if art.canChangeSitePicture, tiles.open == nil {
+            Color.clear
+                .frame(height: HomeTopArtSpec.longPressHeight(
+                    width: glow.screenWidth, topInset: glow.contentTopInset ?? 0
+                ))
+                .contentShape(Rectangle())
+                .onLongPressGesture(minimumDuration: 0.5) {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onHold()
+                }
+        }
+    }
+}

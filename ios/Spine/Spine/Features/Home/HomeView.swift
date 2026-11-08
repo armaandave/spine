@@ -687,16 +687,8 @@ struct HomeView: View {
                     // The picture's long press, for the one who may change it: a region above the header row, so the
                     // header and the tiles keep their taps. A press that is held, not a tap, so scrolling works.
                     .overlay(alignment: .top) {
-                        if viewModel.topArt.canChangeSitePicture {
-                            Color.clear
-                                .frame(height: HomeTopArtSpec.longPressHeight(
-                                    width: glow.screenWidth, topInset: glow.contentTopInset ?? 0
-                                ))
-                                .contentShape(Rectangle())
-                                .onLongPressGesture(minimumDuration: 0.5) {
-                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                    isHomePicturePickerPresented = true
-                                }
+                        HomePictureHoldRegion(art: viewModel.topArt, tiles: viewModel.tilesState, glow: glow) {
+                            isHomePicturePickerPresented = true
                         }
                     }
                     // Where the tiles sit in here does not change as the page scrolls; the glow ends by them.
