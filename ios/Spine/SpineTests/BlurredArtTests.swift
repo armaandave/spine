@@ -37,6 +37,25 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertEqual(ArtInk.resolve(luma: 0.1, guess: .dark), .dark)
     }
 
+    func testConclusiveIsNilWithoutAMeasurementAndInsideTheDeadBand() {
+        XCTAssertNil(ArtInk.conclusive(luma: nil))
+        for luma in [0.461, 0.47, 0.50, 0.53, 0.539] {
+            XCTAssertNil(ArtInk.conclusive(luma: luma))
+        }
+    }
+
+    func testConclusiveSettlesOutsideTheDeadBandAndResolveFollowsIt() {
+        XCTAssertEqual(ArtInk.conclusive(luma: 0.54), .light)
+        XCTAssertEqual(ArtInk.conclusive(luma: 0.9), .light)
+        XCTAssertEqual(ArtInk.conclusive(luma: 0.46), .dark)
+        XCTAssertEqual(ArtInk.conclusive(luma: 0.1), .dark)
+        for guess in [ArtInk.light, .dark] {
+            for luma in [nil, 0.1, 0.46, 0.5, 0.54, 0.9] as [Double?] {
+                XCTAssertEqual(ArtInk.resolve(luma: luma, guess: guess), ArtInk.conclusive(luma: luma) ?? guess)
+            }
+        }
+    }
+
     func testInkTokens() {
         XCTAssertEqual(rgba(ArtInk.dark.text), [1, 1, 1, 1])
         XCTAssertEqual(rgba(ArtInk.dark.muted)[3], 0.80, accuracy: 0.005)

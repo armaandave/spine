@@ -10,7 +10,8 @@ struct HomeTilesSection: View {
     let model: HomeTilesModel
     let state: HomeTilesState
     let glow: HomeGlowModel
-    let actions: HomeTilesActions
+    // Closures the page rebuilds every time it runs: they say nothing new (`StableInput`).
+    @StableInput var actions: HomeTilesActions
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var contentWidth = TileGeometry.referenceContentWidth
@@ -285,24 +286,40 @@ private enum TileURL {
     }
 }
 
-/// The 0.5 pt inner stroke and the 1 pt highlight along the top edge that make the tile read as glass.
+/// The mock's `inset 0 0 0 0.5px rgba(255,255,255,0.26), inset 0 1px 0 rgba(255,255,255,0.2)`: a half-point line round
+/// the edge and a one-point highlight along the top, as two solid shapes. Both are solid colors, because a gradient
+/// stroke is rasterized by Core Graphics on the main thread every frame the tile's size changes (the open and the
+/// close), which was the biggest single cost of both.
 private struct TileOutline: View {
     let shape: RoundedRectangle
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             shape.strokeBorder(TileStyle.stroke, lineWidth: TileStyle.strokeWidth)
-            shape.strokeBorder(
-                LinearGradient(
-                    colors: [TileStyle.highlight, .clear],
-                    startPoint: .top,
-                    endPoint: UnitPoint(x: 0.5, y: 0.14)
-                ),
-                lineWidth: TileStyle.highlightWidth
-            )
+            TileTopHighlight()
+                .fill(TileStyle.highlight)
+                // The crescent lives in the corner's height; a strip that tall is all that is ever redrawn.
+                .frame(height: HomeDesign.Metric.tileCorner + TileStyle.highlightWidth)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// The part of the tile's outline a copy of itself moved down by the highlight's width leaves uncovered: a crescent
+/// one point thick along the top that thins away round the corners. It is drawn in a strip as tall as the corner, so
+/// the outline is taken from a rectangle taller than the strip; only the top corners matter and they do not depend on
+/// the height.
+private struct TileTopHighlight: Shape {
+    func path(in rect: CGRect) -> Path {
+        let full = CGRect(
+            x: rect.minX,
+            y: rect.minY,
+            width: rect.width,
+            height: rect.height + 2 * HomeDesign.Metric.tileCorner
+        )
+        let outline = RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous).path(in: full)
+        return outline.subtracting(outline.offsetBy(dx: 0, dy: TileStyle.highlightWidth))
     }
 }
 

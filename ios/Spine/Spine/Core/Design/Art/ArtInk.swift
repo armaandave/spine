@@ -26,10 +26,17 @@ nonisolated enum ArtInk: Equatable {
     /// The ink for measured art luma. Between 0.46 and 0.54 the guess stays, so near-threshold art does not flip
     /// as its image loads; no measurement keeps the guess too.
     static func resolve(luma: Double?, guess: ArtInk) -> ArtInk {
-        guard let luma else { return guess }
+        conclusive(luma: luma) ?? guess
+    }
+
+    /// The ink a measured luma settles by itself: nil for no measurement and for the dead band between 0.46 and
+    /// 0.54, where the guess stays. A card keeps only this, so a measurement that decides nothing new redraws nothing
+    /// of its text.
+    static func conclusive(luma: Double?) -> ArtInk? {
+        guard let luma else { return nil }
         if luma >= lightAtOrAbove { return .light }
         if luma <= darkAtOrBelow { return .dark }
-        return guess
+        return nil
     }
 
     // MARK: Tokens

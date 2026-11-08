@@ -97,6 +97,13 @@ final class HomeSourceGuardrailTests: XCTestCase {
         XCTAssertEqual(uses, ["HomeTilesSection.swift"], "Glass belongs on the tile's Close button alone")
     }
 
+    func testTheTileSectionDrawsNoGradient() throws {
+        // A gradient stroke or fill on a tile is rasterized by Core Graphics on the main thread every frame the tile's
+        // size changes (the open and the close). The outline is solid colors.
+        let text = code(try read("Features/Home/Tiles/HomeTilesSection.swift"))
+        XCTAssertFalse(text.contains("Gradient"), "HomeTilesSection draws a gradient")
+    }
+
     // MARK: The page
 
     func testHomeHasExactlyOneLazyStackAndNoSecondOneInItsParts() throws {

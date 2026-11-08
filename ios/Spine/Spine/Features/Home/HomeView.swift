@@ -457,17 +457,19 @@ struct HomeView: View {
     /// A day of Planning adds, open on its titles.
     @State private var selectedPlanning: ActivityItem?
 
-    private let mediaRepository: MediaRepository
-    private let trackingRepository: TrackingRepository
-    private let diaryRepository: DiaryRepository
-    private let activityRepository: ActivityRepository
-    private let listRepository: ListRepository
-    private let peopleRepository: PeopleRepository
+    // The repositories and closures are the session's and the shell's own, so a shell that runs again does not run the
+    // page again (`StableInput`); the user and the selected tab are what the page redraws for.
+    @StableInput private var mediaRepository: MediaRepository
+    @StableInput private var trackingRepository: TrackingRepository
+    @StableInput private var diaryRepository: DiaryRepository
+    @StableInput private var activityRepository: ActivityRepository
+    @StableInput private var listRepository: ListRepository
+    @StableInput private var peopleRepository: PeopleRepository
     private let currentUserId: Int?
     private let selectedTab: AppTab
-    private let onSelectTab: (AppTab) -> Void
-    private let onFindPeople: () -> Void
-    private let onUnauthorized: () -> Void
+    @StableInput private var onSelectTab: (AppTab) -> Void
+    @StableInput private var onFindPeople: () -> Void
+    @StableInput private var onUnauthorized: () -> Void
 
     init(
         profileRepository: ProfileRepository,

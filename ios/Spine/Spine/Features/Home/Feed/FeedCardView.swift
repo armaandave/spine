@@ -13,14 +13,16 @@ struct FeedCardView: View, Equatable {
     let onOpen: (Int) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The art's measured brightness. It starts as what was measured before, so a card scrolled back in has the
-    /// right ink on its first frame.
-    @State private var measuredLuma: Double?
+    /// The ink the art's measured brightness settled when that is not the ink the poster's accent already guessed, else
+    /// nil. It starts as what was measured before, so a card scrolled back in has the right ink on its first frame.
+    /// The brightness itself is the background's: a measurement that agrees with the guess changes nothing here, so
+    /// a card whose art lands is drawn a second time only when its ink really changes.
+    @State private var measuredInk: ArtInk?
 
     init(model: FeedCardModel, onOpen: @escaping (Int) -> Void) {
         self.model = model
         self.onOpen = onOpen
-        _measuredLuma = State(initialValue: Self.rememberedLuma(for: model))
+        _measuredInk = State(initialValue: Self.settledInk(for: model))
     }
 
     static func == (lhs: FeedCardView, rhs: FeedCardView) -> Bool {
@@ -29,10 +31,11 @@ struct FeedCardView: View, Equatable {
 
     var body: some View {
         let _ = PerfCounters.bump(.feedCardBody)
-        let ink = ArtInk.resolve(luma: measuredLuma, guess: model.art.guessInk)
+        let ink = measuredInk ?? model.art.guessInk
         ZStack(alignment: .topLeading) {
-            FeedCardBackground(art: model.art, ink: ink, luma: measuredLuma) { luma in
-                measuredLuma = luma
+            FeedCardBackground(art: model.art) { settled in
+                let differing = settled == model.art.guessInk ? nil : settled
+                if measuredInk != differing { measuredInk = differing }
             }
             content(ink: ink)
             FeedAuthorLink(username: model.username, avatarURL: model.avatarURL, ink: ink)
@@ -42,21 +45,26 @@ struct FeedCardView: View, Equatable {
         }
         .frame(maxWidth: .infinity)
         .frame(height: HomeDesign.Metric.cardHeight)
-        // The ink and the tone settle over 0.18 s when the art is measured, instead of jumping.
+        // The ink settles over 0.18 s when the art is measured, instead of jumping.
         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: ink)
-        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: measuredLuma)
         .dynamicTypeSize(...HomeDesign.Text.maxCategory)
         .contentShape(RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous))
         .onTapGesture { onOpen(model.id) }
         .onChange(of: model.art.backgroundURL) { _, _ in
-            measuredLuma = Self.rememberedLuma(for: model)
+            let remembered = Self.settledInk(for: model)
+            if measuredInk != remembered { measuredInk = remembered }
+        }
+        .onChange(of: model.art.guessInk) { _, _ in
+            let remembered = Self.settledInk(for: model)
+            if measuredInk != remembered { measuredInk = remembered }
         }
         .onAppear { PerfCounters.bump(.feedCardAppear) }
     }
 
-    private static func rememberedLuma(for model: FeedCardModel) -> Double? {
-        guard let url = FeedCardArt.url(from: model.art.backgroundURL) else { return nil }
-        return ArtLuma.remembered(key: url.absoluteString)
+    /// What was measured before for this card's art, as `measuredInk` keeps it.
+    private static func settledInk(for model: FeedCardModel) -> ArtInk? {
+        let measured = ArtInk.conclusive(luma: FeedCardArt.rememberedLuma(backgroundURL: model.art.backgroundURL))
+        return measured == model.art.guessInk ? nil : measured
     }
 
     // MARK: Geometry

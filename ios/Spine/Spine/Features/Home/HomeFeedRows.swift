@@ -6,8 +6,9 @@ import SwiftUI
 /// changes redraws these rows and never the page.
 struct HomeFeedRows: View {
     let model: HomeFeedModel
-    /// The card's item id: the page looks the current row up when the tap lands.
-    let onOpen: (Int) -> Void
+    /// The card's item id: the page looks the current row up when the tap lands. Rebuilt every time the page runs, and
+    /// no different for it (`StableInput`).
+    @StableInput var onOpen: (Int) -> Void
 
     /// A card and the gap under it: the lazy stack only ever moves known sizes.
     static let cardRowHeight = HomeDesign.Metric.cardHeight + HomeDesign.Metric.cardGap

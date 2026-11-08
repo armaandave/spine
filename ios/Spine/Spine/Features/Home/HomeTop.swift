@@ -8,9 +8,10 @@ import SwiftUI
 /// scroll offset.
 struct HomeTop: View {
     let viewModel: HomeViewModel
-    let actions: HomeTilesActions
-    let onOpenProfile: () -> Void
-    let onFindPeople: () -> Void
+    // Closures the page rebuilds every time it runs: they say nothing new (`StableInput`).
+    @StableInput var actions: HomeTilesActions
+    @StableInput var onOpenProfile: () -> Void
+    @StableInput var onFindPeople: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

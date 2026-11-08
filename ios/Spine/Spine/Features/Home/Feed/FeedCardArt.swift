@@ -53,6 +53,13 @@ enum FeedCardArt {
         SpineImagePipeline.request(url: url(from: urlString), thumbnailSize: avatarSize)
     }
 
+    /// The brightness measured for this baked art before, so a card scrolled back in has its ink and tone on its
+    /// first frame.
+    static func rememberedLuma(backgroundURL: String?) -> Double? {
+        guard let url = url(from: backgroundURL) else { return nil }
+        return ArtLuma.remembered(key: url.absoluteString)
+    }
+
     /// Every image the card shows: its poster (or a Planning card's fan), the baked art and the avatar.
     static func prefetchRequests(for model: FeedCardModel) -> [ImageRequest] {
         let posters: [ImageRequest?]
@@ -246,18 +253,31 @@ struct FeedCardPoster: View {
 
 /// The card's background: baked blurred art over a solid base, a bounded tone overlay for the ink, and the glass
 /// edge, all clipped to the card's rounded shape. This is the only clipped layer of a card.
+///
+/// It owns the art's measured brightness, which only the tone overlay needs, and tells the card the ink the
+/// measurement settled when that is not what the last one settled, so the card's text is not drawn again for a
+/// measurement that changes nothing about it.
 struct FeedCardBackground: View {
     let art: FeedCardArtSpec
-    let ink: ArtInk
-    let luma: Double?
-    let onMeasured: @MainActor (Double) -> Void
+    /// The ink the art's brightness settles (nil inside the dead band), told only when it differs from before.
+    let onSettled: @MainActor (ArtInk?) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var luma: Double?
+
+    init(art: FeedCardArtSpec, onSettled: @escaping @MainActor (ArtInk?) -> Void) {
+        self.art = art
+        self.onSettled = onSettled
+        _luma = State(initialValue: FeedCardArt.rememberedLuma(backgroundURL: art.backgroundURL))
+    }
 
     var body: some View {
+        let ink = ArtInk.resolve(luma: luma, guess: art.guessInk)
         BlurredArtBackground(
             url: FeedCardArt.url(from: art.backgroundURL),
             accentHex: art.accentHex,
             style: .card,
-            onMeasured: onMeasured
+            onMeasured: measured
         )
         .scaleEffect(FeedCardArt.artZoom)
         .overlay {
@@ -265,6 +285,19 @@ struct FeedCardBackground: View {
         }
         .overlay { FeedCardEdge() }
         .clipShape(RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous))
+        // The tone settles over 0.18 s when the art is measured, instead of jumping.
+        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: luma)
+        .onChange(of: art.backgroundURL) { _, url in
+            luma = FeedCardArt.rememberedLuma(backgroundURL: url)
+        }
+    }
+
+    private func measured(_ value: Double) {
+        guard luma != value else { return }
+        let before = ArtInk.conclusive(luma: luma)
+        luma = value
+        let after = ArtInk.conclusive(luma: value)
+        if after != before { onSettled(after) }
     }
 }
 
