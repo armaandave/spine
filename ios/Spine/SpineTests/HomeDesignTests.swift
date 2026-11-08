@@ -119,18 +119,18 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.tileHeightDuration, 0.62)
         XCTAssertEqual(M.tileWidthDuration, 0.62)
         XCTAssertEqual(M.transformDuration, 0.45)
-        XCTAssertEqual(M.panelRiseDuration, 0.375)
+        XCTAssertEqual(M.panelRiseDuration, 0.319)
         XCTAssertEqual(M.springDuration, 0.7)
         XCTAssertEqual(M.glowCrossfadeDuration, 0.3)
         XCTAssertEqual(M.reducedDuration, 0.1)
-        XCTAssertEqual(M.closeFrameDuration, 0.645)
-        XCTAssertEqual(M.closeSlideDuration, 0.525)
-        XCTAssertEqual(M.closeTileFadeDuration, 0.34)
-        XCTAssertEqual(M.closeArtDuration, 0.525)
+        XCTAssertEqual(M.closeFrameDuration, 0.548)
+        XCTAssertEqual(M.closeSlideDuration, 0.446)
+        XCTAssertEqual(M.closeTileFadeDuration, 0.289)
+        XCTAssertEqual(M.closeArtDuration, 0.446)
         XCTAssertEqual(M.closeNeighborDelay, 0)
-        XCTAssertEqual(M.closeNeighborDuration, 0.645)
-        XCTAssertEqual(M.closeRestDuration, 0.45)
-        XCTAssertEqual(M.closeFadeDuration, 0.225)
+        XCTAssertEqual(M.closeNeighborDuration, 0.548)
+        XCTAssertEqual(M.closeRestDuration, 0.383)
+        XCTAssertEqual(M.closeFadeDuration, 0.191)
     }
 
     func testOpeningMirrorsTheCloseSoEveryPosterEndsTogether() {
@@ -140,11 +140,11 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.openFadeDelay + M.closeFadeDuration, M.closeNeighborDuration, accuracy: 0.0001)
     }
 
-    func testOpeningAndClosingAreAQuarterQuickerThanTheFirstCutAndNeverWhip() {
+    func testOpeningAndClosingAreQuickerThanTheFirstCutAndNeverWhip() {
         typealias M = HomeDesign.Motion
-        // The first cut ran the tile over 0.86 s and the other tile's slide over 0.7 s.
-        XCTAssertEqual(M.closeFrameDuration, 0.86 * 0.75, accuracy: 0.0001)
-        XCTAssertEqual(M.closeSlideDuration, 0.7 * 0.75, accuracy: 0.0001)
+        // The first cut ran the tile over 0.86 s and the other tile's slide over 0.7 s; then 25% faster, then 15%.
+        XCTAssertEqual(M.closeFrameDuration, 0.86 * 0.75 * 0.85, accuracy: 0.001)
+        XCTAssertEqual(M.closeSlideDuration, 0.7 * 0.75 * 0.85, accuracy: 0.001)
         // The three posters that stay visible start together and take as long as the tile.
         XCTAssertEqual(M.closeNeighborDelay, 0, "no stagger between the posters")
         XCTAssertEqual(M.closeNeighborDuration, M.closeFrameDuration)
@@ -169,7 +169,7 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.tileHeight(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.62))
         XCTAssertEqual(M.tileWidth(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.62))
         XCTAssertEqual(M.transform(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.45))
-        XCTAssertEqual(M.panelRise(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.375))
+        XCTAssertEqual(M.panelRise(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.319))
         XCTAssertEqual(M.spring(reduceMotion: false), .timingCurve(0.3, 1.2, 0.4, 1, duration: 0.7))
         XCTAssertEqual(M.pop(reduceMotion: false), .spring(response: 0.4, dampingFraction: 0.6))
         XCTAssertEqual(M.glowCrossfade(reduceMotion: false), .easeOut(duration: 0.3))

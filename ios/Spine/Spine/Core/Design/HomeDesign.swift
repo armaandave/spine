@@ -125,7 +125,7 @@ nonisolated enum HomeDesign {
         static let tileHeightDuration = 0.62
         static let tileWidthDuration = 0.62
         static let transformDuration = 0.45
-        static let panelRiseDuration = 0.375
+        static let panelRiseDuration = 0.319
         static let springDuration = 0.7
         static let glowCrossfadeDuration = 0.3
         /// What every animation becomes when Reduce Motion is on.
@@ -140,17 +140,17 @@ nonisolated enum HomeDesign {
         // A tile opens and closes over these lengths, both ways. Everything that moves does so on `closeCurve`
         // and together: the tile's frame, the page below it, the front poster and its two neighbors share one
         // duration and start at the same moment (no stagger), so they travel in step.
-        static let closeFrameDuration = 0.645
+        static let closeFrameDuration = 0.548
         /// The other tile going out and coming back in: its slide and shrink and its fade.
-        static let closeSlideDuration = 0.525
-        static let closeTileFadeDuration = 0.34
+        static let closeSlideDuration = 0.446
+        static let closeTileFadeDuration = 0.289
         /// The blurred art fading.
-        static let closeArtDuration = 0.525
+        static let closeArtDuration = 0.446
         static let closeNeighborDelay = 0.0
-        static let closeNeighborDuration = 0.645
+        static let closeNeighborDuration = 0.548
         /// The posters that end hidden behind the front one draw in while they fade.
-        static let closeRestDuration = 0.45
-        static let closeFadeDuration = 0.225
+        static let closeRestDuration = 0.383
+        static let closeFadeDuration = 0.191
 
         // Opening is the close played backwards in time, on the same curve and over the same lengths: the front
         // poster and its two neighbors travel together for `closeNeighborDuration`, and the posters that were

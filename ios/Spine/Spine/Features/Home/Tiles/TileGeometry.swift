@@ -477,21 +477,21 @@ enum TileMotion {
         reduceMotion ? HomeDesign.Motion.reduced : ease(0.35)
     }
 
-    /// The detail panel rising in: 0.375 s, after 0.225 s.
+    /// The detail panel rising in: 0.319 s, after 0.191 s.
     static func panelRise(reduceMotion: Bool) -> Animation {
         guard !reduceMotion else { return HomeDesign.Motion.reduced }
-        return HomeDesign.Motion.panelRise(reduceMotion: false).delay(0.225)
+        return HomeDesign.Motion.panelRise(reduceMotion: false).delay(0.191)
     }
 
-    /// The Close button popping in, after 0.225 s.
+    /// The Close button popping in, after 0.191 s.
     static func closePop(reduceMotion: Bool) -> Animation {
         guard !reduceMotion else { return HomeDesign.Motion.reduced }
-        return HomeDesign.Motion.pop(reduceMotion: false).delay(0.225)
+        return HomeDesign.Motion.pop(reduceMotion: false).delay(0.191)
     }
 
-    /// How long a closed tile keeps all its posters mounted so the flight home can finish: the longest close (0.645 s
+    /// How long a closed tile keeps all its posters mounted so the flight home can finish: the longest close (0.548 s
     /// for every poster and the tile) and some slack.
-    static let unmountDelay: Duration = .milliseconds(975)
+    static let unmountDelay: Duration = .milliseconds(830)
     /// One frame or two, so posters mounted at the start of an open are on screen in the fan before they fly.
     static let mountLead: Duration = .milliseconds(24)
 }
