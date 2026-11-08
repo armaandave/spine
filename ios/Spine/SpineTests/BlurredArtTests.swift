@@ -237,11 +237,17 @@ final class BlurredArtTests: XCTestCase {
         let tile = try XCTUnwrap(BlurredArt.Style.tile.processor.process(source)?.cgImage)
         let page = try XCTUnwrap(BlurredArt.Style.page.processor.process(source)?.cgImage)
         let glow = try XCTUnwrap(BlurredArt.Style.glow.processor.process(source)?.cgImage)
-        // Grey stays grey under saturation; brightness multiplies: card x1, tile x0.6, glow x0.82, page x0.6.
-        XCTAssertEqual(Double(rgbaPixels(card).red(4, 2)), 128, accuracy: 3)
+        // Grey stays grey under saturation; brightness multiplies: card x0.7, tile x0.6, glow x0.82, page x0.6.
+        XCTAssertEqual(Double(rgbaPixels(card).red(4, 2)), 128 * 0.7, accuracy: 3)
         XCTAssertEqual(Double(rgbaPixels(tile).red(4, 4)), 128 * 0.6, accuracy: 3)
         XCTAssertEqual(Double(rgbaPixels(glow).red(4, 4)), 128 * 0.82, accuracy: 3)
         XCTAssertEqual(Double(rgbaPixels(page).red(4, 4)), 128 * 0.6, accuracy: 3)
+    }
+
+    func testTheCardIsCalmerThanTheTiles() {
+        XCTAssertEqual(BlurredArt.Style.card.saturation, 1.1)
+        XCTAssertEqual(BlurredArt.Style.card.brightness, 0.7)
+        XCTAssertEqual(BlurredArt.Style.tile.saturation, 1.7, "The tiles keep their boost")
     }
 
     func testBlurSpreadsAnEdgeButKeepsTheBorderSolid() throws {
@@ -257,7 +263,8 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertLessThan(pixels.red(54, 20), 245, "the bright side picks up dark across the edge")
         XCTAssertEqual(pixels.alpha(0, 0), 255)
         XCTAssertEqual(pixels.alpha(119, 38), 255)
-        XCTAssertGreaterThan(pixels.red(0, 20), 240, "clamped edges do not fade toward transparent black")
+        // The card's art is darkened to 70%, so white comes out near 178.
+        XCTAssertGreaterThan(pixels.red(0, 20), 168, "clamped edges do not fade toward transparent black")
         XCTAssertLessThan(pixels.red(119, 20), 15)
     }
 

@@ -364,7 +364,7 @@ final class FeedCardRenderTests: XCTestCase {
 
     /// The glass is not touched by the card's depth: its art, base, sheen and edge keep their numbers.
     func testTheGlassKeepsItsNumbers() throws {
-        XCTAssertEqual(FeedCardArt.artOpacity, 0.74)
+        XCTAssertEqual(FeedCardArt.artOpacity, 0.5)
         XCTAssertEqual(FeedCardArt.baseOpacity, 0.45)
         let source = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()

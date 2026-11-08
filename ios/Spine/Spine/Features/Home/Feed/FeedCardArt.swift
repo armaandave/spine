@@ -13,8 +13,8 @@ enum FeedCardArt {
     /// Avatars are drawn at 20 pt and decoded at that size, never at full size.
     static let avatarSize = CGSize(width: 20, height: 20)
     /// The card is glass: its art and base are partly see-through, so the page (and the glow near the top) shows
-    /// through and the card does not read as a solid block.
-    static let artOpacity: Double = 0.74
+    /// through and the card does not read as a solid block. Half the art shows: dark glass with the poster's tint.
+    static let artOpacity: Double = 0.5
     static let baseOpacity: Double = 0.45
 
     /// How bright the card looks for art measured at `luma`: the art is laid at `artOpacity` over the black page.

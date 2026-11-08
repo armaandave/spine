@@ -48,18 +48,20 @@ nonisolated enum BlurredArt {
             }
         }
 
+        /// The card stays near the poster's own colors (1.1), so a feed of them is calm; the others are boosted.
         var saturation: Double {
             switch self {
-            case .card, .tile: 1.7
+            case .card: 1.1
+            case .tile: 1.7
             case .glow: 1.75
             case .page: 1.6
             }
         }
 
-        /// A multiplier on the color channels. The card's tone is a separate overlay, so it keeps 1.
+        /// A multiplier on the color channels. The card is darkened like the tiles, a little less (0.7).
         var brightness: Double {
             switch self {
-            case .card: 1.0
+            case .card: 0.7
             case .tile: 0.6
             case .glow: 0.82
             case .page: 0.6
