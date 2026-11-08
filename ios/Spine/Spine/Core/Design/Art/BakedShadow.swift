@@ -52,6 +52,33 @@ nonisolated enum BakedShadow {
         return rendered
     }
 
+    /// The slice of a glow for a capsule of any width and 36 pt tall (a template image: tint it with
+    /// `foregroundStyle`). The capsule is 38 wide, so the bitmap is 38 + 4 * blur wide with a 2 pt column in the
+    /// middle that stretches: stretch it with `resizable(capInsets:)` using `capsuleSliceInsets`. Cached.
+    static func capsuleSlice(blur: CGFloat) -> UIImage {
+        image(
+            size: CGSize(width: capsuleSliceWidth, height: capsuleSliceHeight),
+            cornerRadius: capsuleSliceHeight / 2,
+            blur: blur,
+            opacity: 1,
+            offsetY: 0
+        )
+    }
+
+    static let capsuleSliceWidth: CGFloat = 38
+    static let capsuleSliceHeight: CGFloat = 36
+
+    /// Leaves a 2 pt column to stretch, whatever the blur.
+    static func capsuleSliceInsets(blur: CGFloat) -> EdgeInsets {
+        let pad = padding(blur: blur)
+        return EdgeInsets(
+            top: pad + capsuleSliceHeight / 2 - 1,
+            leading: pad + capsuleSliceWidth / 2 - 1,
+            bottom: pad + capsuleSliceHeight / 2 - 1,
+            trailing: pad + capsuleSliceWidth / 2 - 1
+        )
+    }
+
     nonisolated(unsafe) private static let cache = NSCache<NSString, UIImage>()
 }
 

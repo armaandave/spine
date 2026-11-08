@@ -688,6 +688,57 @@ final class HomeTilesStateTests: XCTestCase {
         XCTAssertNil(model.detail(for: book).todayText)
     }
 
+    // MARK: The scroll position the In progress panel follows
+
+    func testOpeningClearsTheScrollPosition() {
+        let state = state(["a", "b", "c"])
+        XCTAssertNil(state.scrollPosition)
+        state.openTile(.inProgress)
+        state.scrollPosition = 1.5
+        state.close()
+        state.finishClosing()
+        state.openTile(.inProgress)
+        XCTAssertNil(state.scrollPosition, "A panel that appears first falls back to the focus")
+    }
+
+    func testAScrollFrameInvalidatesNothingButWhatReadsTheScrollPosition() {
+        let state = state(["a", "b", "c"])
+        state.openTile(.inProgress)
+        var fired = false
+        withObservationTracking {
+            _ = state.open
+            _ = state.mounted
+            _ = state.focusID
+            _ = state.focusIndex
+            _ = state.ids
+        } onChange: {
+            fired = true
+        }
+        state.scrollPosition = 1.5
+        XCTAssertFalse(fired, "The carousel, the section and the page do not redraw for a scroll frame")
+
+        var panelFired = false
+        withObservationTracking {
+            _ = state.scrollPosition
+        } onChange: {
+            panelFired = true
+        }
+        state.scrollPosition = 1.6
+        XCTAssertTrue(panelFired)
+    }
+
+    func testTheCarouselOffsetBecomesAPositionInPosterUnits() {
+        XCTAssertEqual(TileGeometry.scrollPosition(scrollX: 0, count: 5), 0)
+        XCTAssertEqual(TileGeometry.scrollPosition(scrollX: TileGeometry.step * 1.5, count: 5), 1.5, accuracy: 0.0001)
+        XCTAssertEqual(TileGeometry.scrollPosition(scrollX: -30, count: 5), 0, "Rubber-banding reads as the first poster")
+        XCTAssertEqual(TileGeometry.scrollPosition(scrollX: 9_999, count: 5), 4, "and as the last")
+        XCTAssertEqual(TileGeometry.scrollPosition(scrollX: 100, count: 0), 0)
+        XCTAssertEqual(
+            TileGeometry.scrollPosition(scrollX: TileGeometry.step * 2, count: 5),
+            Double(TileGeometry.focusIndex(scrollX: TileGeometry.step * 2, count: 5))
+        )
+    }
+
     func testTrendingDetailReadsTheTitleAndItsNeighborsAreNextThenPrevious() {
         let model = HomeTilesModel()
         model.trending = [title("w"), title("x"), title("y"), title("z")]

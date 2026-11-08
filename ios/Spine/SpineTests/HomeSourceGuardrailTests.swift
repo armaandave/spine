@@ -88,13 +88,46 @@ final class HomeSourceGuardrailTests: XCTestCase {
         }
     }
 
-    func testTheOnlyGlassInTheTilesIsTheCloseButton() throws {
+    func testTheOnlyGlassInTheTilesIsTheCloseButtonAndTheOpenPanelsTwoButtons() throws {
         var uses: [String] = []
         for file in try swiftFiles(in: "Features/Home/Tiles") + swiftFiles(in: "Features/Home/Feed") {
             let text = code(try String(contentsOf: file, encoding: .utf8))
             if text.contains(".glassEffect") { uses.append(file.lastPathComponent) }
         }
-        XCTAssertEqual(uses, ["HomeTilesSection.swift"], "Glass belongs on the tile's Close button alone")
+        XCTAssertEqual(
+            uses.sorted(), ["HomeTilesSection.swift", "PanelGlassButtons.swift"],
+            "Glass belongs on the tile's Close button and the open In progress panel's +N and Update"
+        )
+    }
+
+    func testThePanelsHostNeverReadsTheScrollPositionAndTheCarouselOnlyWritesIt() throws {
+        // The host runs when the model changes; reading the scroll position there would run it on every frame.
+        let host = try read("Features/Home/Tiles/Panel/InProgressMorphPanel.swift")
+        let hostPart = try XCTUnwrap(host.components(separatedBy: "// MARK: - Body").first)
+        XCTAssertGreaterThan(host.count, hostPart.count, "The host and the body are separated by a MARK")
+        XCTAssertFalse(code(hostPart).contains("scrollPosition"), "InProgressMorphPanel (the host) reads the scroll position")
+        // Nothing but the panel's body reads it.
+        for file in try swiftFiles(in: "Features/Home") {
+            let name = file.lastPathComponent
+            guard !["InProgressMorphPanel.swift", "TileCarousel.swift", "HomeTilesState.swift"].contains(name) else {
+                continue
+            }
+            XCTAssertFalse(code(try String(contentsOf: file, encoding: .utf8)).contains("state.scrollPosition"), name)
+        }
+        let carousel = code(try read("Features/Home/Tiles/TileCarousel.swift"))
+        XCTAssertTrue(carousel.contains("state.scrollPosition = position"), "The carousel assigns the position")
+        for use in carousel.components(separatedBy: "state.scrollPosition").dropFirst() {
+            XCTAssertTrue(use.hasPrefix(" = position"), "The carousel only assigns the scroll position: \(use.prefix(20))")
+        }
+    }
+
+    func testThePanelHasNoOffscreenPassesOfItsOwn() throws {
+        for file in try swiftFiles(in: "Features/Home/Tiles/Panel") {
+            let text = code(try String(contentsOf: file, encoding: .utf8))
+            for token in [".mask(", ".compositingGroup", ".drawingGroup", "TimelineView", ".shadow(", ".subtracting("] {
+                XCTAssertFalse(text.contains(token), "\(file.lastPathComponent) uses \(token)")
+            }
+        }
     }
 
     func testTheTrendingRailIsTheSharedActionRail() throws {
@@ -190,6 +223,11 @@ final class HomeSourceGuardrailTests: XCTestCase {
             ("Features/Home/Feed/FeedCardView.swift", "var body: some View {", "feedCardBody"),
             ("Features/Home/Tiles/HomeTilesSection.swift", "var body: some View {", "tilesBody"),
             ("Features/Home/Tiles/HomeGlow.swift", "var body: some View {", "glowBody"),
+            (
+                "Features/Home/Tiles/Panel/InProgressMorphPanel.swift",
+                "set { vector = newValue }\n    }\n\n    var body: some View {",
+                "panelBody"
+            ),
         ]
         for (path, marker, counter) in expectations {
             let source = try read(path)
