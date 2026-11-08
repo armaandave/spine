@@ -232,8 +232,9 @@ private struct HomeHeaderSqueeze<Content: View>: View {
     }
 }
 
-/// Lays its one child out at the width it is offered and its natural height, and is `scale` times that tall. The
-/// child's own `scaleEffect` shrinks what is drawn to match. `scale` is animatable, so the height eases with it.
+/// Lays its one child out `1 / scale` times as wide as it is offered, at its natural height, and is `scale` times that
+/// tall. The child's own `scaleEffect` shrinks what is drawn to match, so the squeezed row still spans the full width:
+/// the photo stays at the right edge instead of drifting in with the scale. `scale` is animatable, so both ease.
 private struct SqueezeLayout: Layout {
     var scale: CGFloat
 
@@ -242,17 +243,22 @@ private struct SqueezeLayout: Layout {
         set { scale = newValue }
     }
 
+    /// The width the child is laid out at for an offered `width`.
+    private func childWidth(_ width: CGFloat?) -> CGFloat? {
+        width.map { $0 / max(scale, 0.01) }
+    }
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard let child = subviews.first else { return .zero }
-        let size = child.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
-        return CGSize(width: proposal.width ?? size.width, height: size.height * scale)
+        let size = child.sizeThatFits(ProposedViewSize(width: childWidth(proposal.width), height: nil))
+        return CGSize(width: proposal.width ?? size.width * scale, height: size.height * scale)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         subviews.first?.place(
             at: bounds.origin,
             anchor: .topLeading,
-            proposal: ProposedViewSize(width: bounds.width, height: nil)
+            proposal: ProposedViewSize(width: childWidth(bounds.width), height: nil)
         )
     }
 }
