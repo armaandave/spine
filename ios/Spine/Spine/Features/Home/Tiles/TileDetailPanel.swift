@@ -66,6 +66,25 @@ private struct InProgressPanel: View {
     @State private var successTicks = 0
     @State private var failureTicks = 0
     @State private var isRunning = false
+    /// The poster's colors: the server's when this payload has them, else the ones counted on the device (shown at
+    /// once when already counted, faded in when they arrive).
+    @State private var swatches: [PosterSwatch]?
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private var posterURL: URL? {
+        item.media.displayPosterURL.flatMap { URL(string: $0) }
+    }
+
+    init(item: LibraryItem, detail: TileDetailModel, busy: Bool, actions: HomeTilesActions) {
+        self.item = item
+        self.detail = detail
+        self.busy = busy
+        self.actions = actions
+        _swatches = State(initialValue: PosterPaletteStore.shared.known(
+            server: item.media.posterPalette,
+            url: item.media.displayPosterURL.flatMap { URL(string: $0) }
+        ))
+    }
 
     var body: some View {
         let accent = ArtAccent.pastel(fromHex: detail.accentHex)
@@ -86,6 +105,12 @@ private struct InProgressPanel: View {
         .sensoryFeedback(.impact, trigger: updateTicks)
         .sensoryFeedback(.success, trigger: successTicks)
         .sensoryFeedback(.error, trigger: failureTicks)
+        .task(id: posterURL) {
+            guard swatches == nil else { return }
+            let found = await PosterPaletteStore.shared.swatches(server: item.media.posterPalette, url: posterURL)
+            guard !Task.isCancelled, let found else { return }
+            swatches = found
+        }
     }
 
     // MARK: Meter
@@ -93,7 +118,12 @@ private struct InProgressPanel: View {
     @ViewBuilder
     private func meter(accent: Color) -> some View {
         if let model = TileGeometry.panelMeter(detail.meter) {
-            let palette = TileStyle.meterPalette(accent: accent)
+            var palette = TileStyle.meterPalette(accent: accent)
+            if let swatches {
+                let highContrast = contrast == .increased
+                palette.tint = MeterTint.make(from: swatches, highContrast: highContrast)
+                if highContrast { palette.tintOpacity = 0.95 }
+            }
             switch model.kind {
             case .bar:
                 ProgressMeterView.bar(model: model, palette: palette, height: TileStyle.tickHeight, radius: 4)
@@ -320,12 +350,13 @@ private struct TilePanelTicks: View, Equatable {
         HStack(spacing: TileStyle.tickGap) {
             ForEach(0 ..< count, id: \.self) { index in
                 RoundedRectangle(cornerRadius: TileStyle.tickRadius, style: .continuous)
-                    .fill(color(for: model.tickState(at: index)))
+                    .fill(color(for: model.tickState(at: index), index: index, count: count))
                     .opacity(fades ? TileGeometry.windowFade(index: index, count: count) : 1)
             }
         }
         .frame(height: TileStyle.tickHeight)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: model)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: palette)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(model.accessibilityLabel)
         .accessibilityAddTraits(.isImage)
@@ -335,10 +366,10 @@ private struct TilePanelTicks: View, Equatable {
         if case .window = model.kind { true } else { false }
     }
 
-    private func color(for state: MeterTickState) -> Color {
+    private func color(for state: MeterTickState, index: Int, count: Int) -> Color {
         switch state {
-        case .before: palette.before
-        case .today: palette.accent
+        case .before: palette.beforeColor(index: index, count: count)
+        case .today: palette.todayColor
         case .rest: palette.rest
         }
     }
