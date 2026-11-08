@@ -246,12 +246,13 @@ class DeleteTests(RowEditBase):
         self.assertEqual(_place_book(item), 150)
 
     def test_a_save_dated_earlier_but_made_last_is_the_newest(self):
-        family = FAMILIES["book"]
+        # Only games still take an earlier-dated save (decision 66 stops it for books, manga and comics).
+        family = FAMILIES["game"]
         item = self.sheet(family, ((200, DEC_27), (250, DEC_20)))
         rows = self.rows(item)
         self.assertEqual(self.page(rows["2025-12-27"], method="delete").status_code, 409)
         self.assertEqual(self.page(rows["2025-12-20"], method="delete").status_code, 204)
-        self.assertEqual(_place_book(item), 200)
+        self.assertEqual(family.place(item), 200)
         self.assertEqual(self.told(item), {"2025-12-27": 200})
 
     def test_a_same_number_resave_on_a_later_day_does_not_stop_the_delete(self):
@@ -354,7 +355,7 @@ class FixTests(RowEditBase):
         self.assertEqual(book.current_session.progressed_on, DEC_27)
 
     def test_a_row_is_not_fixable_when_the_next_save_made_belongs_to_an_earlier_day(self):
-        family = FAMILIES["book"]
+        family = FAMILIES["game"]
         item = self.sheet(family, ((100, DEC_20), (200, DEC_27), (210, DEC_20)))
         before = self.told(item)
         row = self.rows(item)["2025-12-27"]
