@@ -180,6 +180,28 @@ final class UpNextTests: XCTestCase {
         XCTAssertEqual(repository.calls, 0)
         XCTAssertFalse(model.hasLoaded)
     }
+
+    // MARK: The tile's fold
+
+    func testFoldProgressIsZeroAtRestHalfWayAndOneOnceTheTileIsOffScreen() {
+        XCTAssertEqual(UpNextFold.progress(scroll: 0, restBottom: 400), 0)
+        XCTAssertEqual(UpNextFold.progress(scroll: 200, restBottom: 400), 0.5)
+        XCTAssertEqual(UpNextFold.progress(scroll: 400, restBottom: 400), 1)
+        XCTAssertEqual(UpNextFold.progress(scroll: 900, restBottom: 400), 1)
+        XCTAssertEqual(UpNextFold.progress(scroll: -50, restBottom: 400), 0, "Pulled past the top it stays unfolded")
+    }
+
+    func testFoldOffsetsSlideEveryPosterButTheFirstBehindIt() {
+        let step: CGFloat = 37
+        func offsets(count: Int, progress: CGFloat) -> [CGFloat] {
+            (0 ..< count).map { UpNextFold.offset(index: $0, progress: progress, step: step) }
+        }
+        XCTAssertEqual(offsets(count: 1, progress: 1), [0], "A lone poster does not move")
+        XCTAssertEqual(offsets(count: 2, progress: 1), [0, -37], "With two only the second slides")
+        XCTAssertEqual(offsets(count: 5, progress: 0), [0, 0, 0, 0, 0])
+        XCTAssertEqual(offsets(count: 5, progress: 0.5), [0, -18.5, -37, -55.5, -74])
+        XCTAssertEqual(offsets(count: 5, progress: 1), [0, -37, -74, -111, -148])
+    }
 }
 
 private final class UpNextRepository: TrackingRepository {

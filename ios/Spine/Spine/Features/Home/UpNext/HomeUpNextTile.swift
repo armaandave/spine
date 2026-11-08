@@ -5,11 +5,22 @@ import SwiftUI
 /// whole tile opens the Up next page. It shows only once something is coming up.
 struct HomeUpNextTile: View {
     let model: HomeUpNextModel
+    /// Home's glow, which holds how far the page has scrolled: only the posters' fold reads it.
+    let glow: HomeGlowModel
     // A closure the page rebuilds every time it runs: it says nothing new (`StableInput`).
     @StableInput var onOpen: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var taps = 0
+    /// Where the tile starts in the page's content (`HomeGlowModel.contentSpace`), measured once; the content does not
+    /// move as the page scrolls, so scrolling writes nothing here.
+    @State private var top: CGFloat?
+
+    /// The tile's bottom edge on screen with the page at rest, once measured: the page has scrolled this far when the
+    /// tile has left the top, which is when the fold is complete.
+    private var restBottom: CGFloat? {
+        top.map { (glow.contentTopInset ?? GlowSpec.estimatedTopInset) + $0 + UpNextTileSpec.height }
+    }
 
     var body: some View {
         let items = model.items
@@ -19,13 +30,19 @@ struct HomeUpNextTile: View {
                     taps += 1
                     onOpen()
                 } label: {
-                    UpNextTileFace(items: items)
+                    UpNextTileFace(items: items, glow: glow, restBottom: restBottom)
                 }
                 .buttonStyle(UpNextTilePressStyle())
                 .accessibilityLabel("Up next")
                 .accessibilityValue(UpNextPresentation.tileValue(items, today: Date()))
                 .accessibilityHint("Shows what's coming up")
                 .accessibilityIdentifier("home.upNext")
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .named(HomeGlowModel.contentSpace)).minY.rounded()
+                } action: { newTop in
+                    // While a tile is open the header squeezes up and this moves with it: not where it rests.
+                    if glow.focused == nil, top != newTop { top = newTop }
+                }
                 .padding(.top, HomeDesign.Metric.tileGap)
                 .transition(.opacity)
             }
@@ -56,8 +73,45 @@ private enum UpNextTileSpec {
     static let chevronFont = Font.system(size: 14, weight: .bold)
 }
 
+/// The fold of the posters, as a pure function of the page's scroll: the first stays, each later one slides left in
+/// behind the one before it, one to one with the scroll, from nothing at rest to fully folded once the tile has left
+/// the top of the screen (the same curve as the tiles', `TileGeometry.foldProgress`). A lone poster has nothing to do.
+nonisolated enum UpNextFold {
+    /// How far the posters have folded: 0 at rest, 1 once the tile's bottom has scrolled off the top.
+    static func progress(scroll: CGFloat, restBottom: CGFloat?) -> CGFloat {
+        TileGeometry.foldProgress(scroll: scroll, tilesBottom: restBottom)
+    }
+
+    /// How far the poster at `index` has moved left of its place; `step` is one poster and its gap. The first never moves.
+    static func offset(index: Int, progress: CGFloat, step: CGFloat) -> CGFloat {
+        -CGFloat(max(index, 0)) * step * progress
+    }
+}
+
+/// Slides one later poster in behind the first. A modifier of its own, so a scroll frame re-evaluates these few lines
+/// per poster and not the tile; the posters keep their layout places and only their offset, scale and brightness move.
+private struct UpNextPosterFold: ViewModifier {
+    let glow: HomeGlowModel
+    let restBottom: CGFloat?
+    let index: Int
+
+    func body(content: Content) -> some View {
+        let progress = UpNextFold.progress(scroll: glow.scrollOffset, restBottom: restBottom)
+        content
+            .brightness(Double(-TileGeometry.foldDim * progress))
+            .scaleEffect(1 - (1 - TileGeometry.foldScale) * progress)
+            .offset(x: UpNextFold.offset(
+                index: index,
+                progress: progress,
+                step: UpNextTileSpec.poster.width + UpNextTileSpec.posterGap
+            ))
+    }
+}
+
 private struct UpNextTileFace: View {
     let items: [UpNextItem]
+    let glow: HomeGlowModel
+    let restBottom: CGFloat?
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: UpNextTileSpec.corner, style: .continuous)
@@ -79,8 +133,15 @@ private struct UpNextTileFace: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: UpNextTileSpec.posterGap) {
-                ForEach(items.prefix(UpNextTileSpec.maxPosters)) { item in
-                    UpNextTilePoster(item: item)
+                ForEach(Array(items.prefix(UpNextTileSpec.maxPosters).enumerated()), id: \.element.id) { index, item in
+                    if index == 0 {
+                        UpNextTilePoster(item: item).zIndex(0)
+                    } else {
+                        // Later posters sit behind earlier ones as they fold in.
+                        UpNextTilePoster(item: item)
+                            .modifier(UpNextPosterFold(glow: glow, restBottom: restBottom, index: index))
+                            .zIndex(-Double(index))
+                    }
                 }
             }
             .fixedSize()

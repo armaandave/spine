@@ -63,7 +63,7 @@ struct HomeTop: View {
                     )
                     .padding(.top, HomeTopSpec.headerToTiles)
                     // Full width under the two tiles, once something is coming up.
-                    HomeUpNextTile(model: viewModel.upNext, onOpen: onOpenUpNext)
+                    HomeUpNextTile(model: viewModel.upNext, glow: viewModel.glowModel, onOpen: onOpenUpNext)
                     friendsRow
                     HomeFeedStatus(viewModel: viewModel, onFindPeople: onFindPeople)
                 }
