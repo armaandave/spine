@@ -22,6 +22,9 @@ Core rules, in case of doubt:
    `--queue ios` (heavy iOS work takes turns), installs Spine Dev (the Debug
    build, its own app with a DEV icon) signed in as the test backend's dev user. Nothing
    is deployed.
+   Before the chat's first build, ask Armaan "laptop or HomeMac?" and keep his answer for
+   the chat; the laptop is `build-to-iphone.sh --laptop` without `--queue ios`
+   (`scripts/ios/LAPTOP.md`).
 2. Debug builds never talk to production. Never test with the user's real account or the
    TestFlight Spine app, never merge, push or deploy, and never point a build at port
    8000 (production) in this workflow. Shipping is the spine-ship skill.
