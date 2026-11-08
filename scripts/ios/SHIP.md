@@ -20,7 +20,7 @@ the workflow in this file only. Testing a branch on the iPhone before it ships i
 - **A push to `myapp-main` deploys production once CI passes.** GitHub Actions
   (`.github/workflows/ci.yml`) runs "Fast checks" (ruff and models without a migration)
   and "Database checks" (every migration and the test suite on Postgres 16, like
-  production). The ship line already ran the suite on SQLite (`scripts/check.sh`). When both pass, "Deploy production"
+  production, in three parts at once). The ship line already ran the suite on SQLite (`scripts/check.sh`). When both pass, "Deploy production"
   runs `deploy-backend-desk-mac.yml` on this Mac's self-hosted runner. It backs up the
   production database to `~/projects/spine-backups/pre-deploy-<run>.dump`, rebuilds the
   Docker stack from `~/projects/spine-deploy` at exactly the pushed commit, checks

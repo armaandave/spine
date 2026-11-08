@@ -36,10 +36,16 @@ jobs:
         working-directory: src
         run: uv run --locked python manage.py makemigrations --check --dry-run
 
+  # The suite in three parts on three machines at once (scripts/test_shards.py): together
+  # exactly the full suite, so CI takes about a third as long. Deploy waits for all three.
   database:
-    name: Database checks
+    name: Database checks (${{ matrix.part }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
     services:
       # Production runs postgres:16-alpine (docker-compose.production.yml).
       postgres:
@@ -107,7 +113,9 @@ jobs:
           ( sleep 1500 && report 25 && sleep 900 && report 40 ) &
           watchdog=$!
           status=0
-          uv run --locked python manage.py test --parallel 4 --noinput || status=$?
+          labels=$(python3 ../scripts/test_shards.py ${{ matrix.part }} 3)
+          echo "Part ${{ matrix.part }} of 3: $(echo $labels | wc -w) test modules"
+          uv run --locked python manage.py test --parallel 4 --noinput $labels || status=$?
           pkill -P "$watchdog" 2>/dev/null || true
           kill "$watchdog" 2>/dev/null || true
           exit "$status"

@@ -236,7 +236,7 @@ Every feature follows this path. Armaan drives it with the prompts in quotes.
 
 - `.github/workflows/ci.yml` runs on every push to any branch, on GitHub-hosted runners (free for this public repo):
   - "Fast checks": ruff and `makemigrations --check`, with `uv.lock`. The SQLite suite isn't repeated in CI: the ship line runs it (`scripts/check.sh`) on the merged commit before pushing.
-  - "Database checks": every migration, then the full suite, on Postgres 16 like production, with crash safety off (tests don't need it).
+  - "Database checks (1/3, 2/3, 3/3)": every migration, then the full suite on Postgres 16 like production, split into three parts that run on three machines at once (`scripts/test_shards.py`; `config/tests/test_test_shards.py` checks the parts add up to exactly the full suite). Crash safety is off (tests don't need it).
   - "Deploy production": pushes to `myapp-main` only, after both pass (`deploy-backend-desk-mac.yml`).
 - Upstream's App Tests and Stale workflows are disabled in GitHub. Leave upstream's workflow files unedited so upstream merges stay clean.
 - When CI goes red, find the run with `gh run list`, read the failure with `gh run view <run-id> --log-failed`, reproduce it (`scripts/check.sh`, or the Database checks commands against a throwaway Postgres), fix the cause, and push. Keep `myapp-main` green.
