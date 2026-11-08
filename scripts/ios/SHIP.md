@@ -45,12 +45,21 @@ the workflow in this file only. Testing a branch on the iPhone before it ships i
 
 Run from the feature worktree unless a step says otherwise.
 
-1. **Status.** `git fetch origin`, then `scripts/ios/feature-status.sh`. Merge
+1. **Machine first, then status.**
+   - Before anything else: if the branch changes the iOS app
+     (`git diff --name-only origin/myapp-main... -- ios/Spine`, or uncommitted changes
+     there) and `scripts/ios/machine.sh` prints `unset`, ask Armaan right away in the question
+     picker ("Build on the laptop or on HomeMac?", `LAPTOP.md` says how), wait, and save the answer:
+     `scripts/ios/machine.sh set <laptop|homemac>`. Every iOS build and test below reads
+     `scripts/ios/machine.sh`, never memory (`scripts/ios/LAPTOP.md`). Don't ask again later
+     in the ship.
+   - `git fetch origin`, then `scripts/ios/feature-status.sh`. Merge
    `origin/myapp-main` into the branch if it has moved, and resolve conflicts.
 2. **Verify.**
    - Run `scripts/check.sh` (the same checks as CI's Fast checks) and fix anything it
      reports.
-   - If iOS changed, build it and run the iOS tests (`ios/AGENTS.md`).
+   - If iOS changed, build it and run the iOS tests on the machine `scripts/ios/machine.sh`
+     names: HomeMac's `ios` queue (`ios/AGENTS.md`) or the laptop (`LAPTOP.md`).
    - For non-trivial changes, run a code review (`/code-review` in Claude Code) and fix
      the findings.
 3. **Compatibility.** Check every changed file under `src/api/` (feature-status lists
@@ -80,14 +89,18 @@ Run from the feature worktree unless a step says otherwise.
 
    Then carry on.
 6. **Ship.**
-   - Claude Code: if the session is isolated in the feature worktree, leave it with
-     `ExitWorktree` (keep) first.
-   - In the main checkout (`~/projects/spine`), which must be clean and on `myapp-main`:
-     `git merge --no-ff <branch>`.
-   - Run `scripts/check.sh` on the merged `myapp-main`, then `git push origin myapp-main`.
-   - Commit as `armaandave@outlook.com`, with the trailers your instructions require.
-   - Run `scripts/ios/test-backend.sh update`, so the always-on test backend (the one
-     Spine Dev talks to) serves the new `myapp-main`.
+   - Get in the ship line, from the feature worktree, in the background:
+     `~/.local/bin/agent-cleanup run --owner <task> --label spine-ship-merge --timeout 14400 -- scripts/ship-merge.sh <branch> "<merge message>"`.
+     The message ends with the trailers your instructions require; commits are
+     `armaandave@outlook.com`.
+   - One ship at a time goes through the line; the rest wait (up to 3 hours, `Waiting:`).
+     In its turn it catches the main checkout (`~/projects/spine`, which must be clean and
+     on `myapp-main`) up to `origin/myapp-main`, runs `git merge --no-ff <branch>` and
+     `scripts/check.sh` on the result, pushes, and runs `scripts/ios/test-backend.sh update`
+     (the always-on test backend Spine Dev talks to then serves the new `myapp-main`).
+   - It prints `SHIPPED: <sha>`. On a conflict or failing checks it undoes its own merge
+     and stops: fix the branch (merge `origin/myapp-main` into it) and run it again. Never
+     merge or push `myapp-main` by hand outside the line.
 7. **CI and the deploy.** Find the run with `gh run list --commit <sha>`, then
    `gh run watch <run-id> --exit-status`.
    - Red checks: nothing was deployed. Fix forward on a branch and ship again.

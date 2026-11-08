@@ -23,3 +23,6 @@ Core rules, in case of doubt:
 3. Never push, deploy, or write to App Store Connect without the user's explicit yes in
    this conversation for this ship.
 4. The API must keep working for every installed build.
+5. If the branch changes the iOS app, ask "laptop or HomeMac?" first, in the question picker (`AskUserQuestion`), unless
+   `scripts/ios/machine.sh` already has the answer, and save it there. Merge and push only
+   through the ship line, `scripts/ship-merge.sh`, so several ships can run at once.
