@@ -77,8 +77,15 @@ nonisolated enum ArtInk: Equatable {
         self == .dark ? Color.white.opacity(0.22) : Color.white.opacity(0.60)
     }
 
-    /// The rewatch glyph is drawn in the text color.
-    var rewatch: Color { text }
+    /// The day after a card's username: lighter than `muted`.
+    var day: Color {
+        self == .dark ? Color.white.opacity(0.62) : ink.opacity(0.58)
+    }
+
+    /// The rewatch glyph: a green on dark art, a deeper green on light art that still reads on it.
+    var rewatch: Color {
+        self == .dark ? HomeDesign.Palette.rewatchGreen : HomeDesign.Palette.rewatchGreenDeep
+    }
 
     /// Colors the amount text, "Started", lit ticks and the lit part of a bar: a pastel of the poster color on
     /// dark art (white when there is none) and the ink itself on light art.

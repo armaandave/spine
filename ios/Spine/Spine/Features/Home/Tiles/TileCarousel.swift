@@ -59,6 +59,40 @@ struct PosterPoseEffect: ViewModifier, Animatable {
     }
 }
 
+/// Folds a closed tile's two back posters in behind the front one as the page scrolls: they straighten, slide in
+/// under it, shrink and darken, one to one with how far the tile has scrolled off the top (`TileGeometry.foldProgress`),
+/// and unfold as you scroll back. Only transforms and one brightness: nothing is laid out again, and no view is added.
+///
+/// A modifier of its own, so a scroll re-evaluates these few lines for each back poster and not the poster or the
+/// tile. Its `gain` is 1 on a closed tile and 0 on an open one (and on the posters that do not fold), and animates
+/// with the pose, so a tile that closes onto a scrolled page folds in as it lands. At 0 it reads no scroll.
+struct PosterFold: ViewModifier, Animatable {
+    var gain: CGFloat
+    let glow: HomeGlowModel
+    /// The back poster's tilt, which the fold takes out.
+    let degrees: Double
+    /// Where the back poster sits in the poster's frame (as a fraction of it), so it turns and shrinks about itself.
+    let anchor: UnitPoint
+    /// How far its center moves to sit behind the front poster.
+    let slide: CGSize
+
+    var animatableData: CGFloat {
+        get { gain }
+        set { gain = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let progress = gain == 0
+            ? 0
+            : gain * TileGeometry.foldProgress(scroll: glow.scrollOffset, tilesBottom: glow.tilesBottom)
+        content
+            .brightness(Double(-TileGeometry.foldDim * progress))
+            .scaleEffect(1 - (1 - TileGeometry.foldScale) * progress, anchor: anchor)
+            .rotationEffect(.degrees(-degrees * progress), anchor: anchor)
+            .offset(x: slide.width * progress, y: slide.height * progress)
+    }
+}
+
 /// A button that adds no highlight of its own: a poster dims by pose, never by being pressed.
 private struct PosterButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -75,6 +109,7 @@ private struct TilePosterCell: View {
     let tile: HomeTileID
     let contentWidth: CGFloat
     let state: HomeTilesState
+    let glow: HomeGlowModel
     let onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -82,10 +117,20 @@ private struct TilePosterCell: View {
     var body: some View {
         let isOpen = state.open == tile
         let focus = state.focusIndex ?? 0
+        let rest = state.restIndex(tile)
+        let role = TileGeometry.fanRole(index: index, rest: rest, count: count)
         let isFocused = isOpen && focus == index
-        let pose = TileGeometry.pose(index: index, focus: focus, isOpen: isOpen, contentWidth: contentWidth)
-        let delay = TileGeometry.staggerDelay(index: index, count: count, opening: isOpen)
+        let pose = TileGeometry.pose(
+            index: index, focus: focus, isOpen: isOpen, rest: rest, count: count, contentWidth: contentWidth
+        )
+        let openDelay = TileGeometry.openDelay(index: index, rest: rest)
         let media = poster.media
+        // Where the poster sits in its 120 x 180 frame, as a fraction of it: the point its fold turns and shrinks about.
+        let fanPose = TileGeometry.fanPose(index: index, rest: rest, count: count, contentWidth: contentWidth)
+        let foldAnchor = UnitPoint(
+            x: 0.5 + fanPose.offsetX / TileGeometry.posterSize.width,
+            y: 0.5 + fanPose.offsetY / TileGeometry.posterSize.height
+        )
         Button(action: onTap) {
             MediaArtwork(
                 url: media.displayPosterURL,
@@ -108,17 +153,31 @@ private struct TilePosterCell: View {
             degrees: pose.degrees,
             artSize: TilePosterArt.size(for: media)
         ))
+        .frame(width: TileGeometry.posterSize.width, height: TileGeometry.posterSize.height)
+        .modifier(PosterFold(
+            gain: !isOpen && role.folds ? 1 : 0,
+            glow: glow,
+            degrees: fanPose.degrees,
+            anchor: foldAnchor,
+            slide: TileGeometry.foldSlide(role: role, contentWidth: contentWidth)
+        ))
         // The innermost of these two that applies wins, so an open or a close (a flight) beats a change of focus
-        // that happens in the same update.
+        // that happens in the same update. Opening is the spring after a stagger; closing is a zoom into the fan.
         .transaction(value: isOpen) { transaction in
-            transaction.animation = TileMotion.flight(delay: delay, reduceMotion: reduceMotion)
+            transaction.animation = isOpen
+                ? TileMotion.flight(delay: openDelay, reduceMotion: reduceMotion)
+                : TileMotion.close(role: role, reduceMotion: reduceMotion)
         }
         .transaction(value: isFocused) { transaction in
             transaction.animation = TileMotion.focus(reduceMotion: reduceMotion)
         }
         .opacity(pose.opacity)
-        .animation(TileMotion.posterFade(delay: delay, reduceMotion: reduceMotion), value: pose.opacity)
-        .frame(width: TileGeometry.posterSize.width, height: TileGeometry.posterSize.height)
+        .animation(
+            isOpen
+                ? TileMotion.posterFade(delay: openDelay, reduceMotion: reduceMotion)
+                : TileMotion.closeFade(reduceMotion: reduceMotion),
+            value: pose.opacity
+        )
         .zIndex(pose.z)
         .accessibilityHidden(true)
     }
@@ -139,6 +198,7 @@ struct TileCarousel: View {
     let tile: HomeTileID
     let posters: [TilePoster]
     let state: HomeTilesState
+    let glow: HomeGlowModel
     let contentWidth: CGFloat
     /// The focused poster was tapped: open its title.
     let onOpenTitle: (TilePoster) -> Void
@@ -150,11 +210,14 @@ struct TileCarousel: View {
     var body: some View {
         let isOpen = state.open == tile
         let count = posters.count
+        let rest = state.restIndex(tile)
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
                 HStack(spacing: TileGeometry.spacing) {
                     ForEach(Array(posters.enumerated()), id: \.element.id) { index, poster in
-                        if TileGeometry.isMounted(index: index, allMounted: state.isFullyMounted(tile)) {
+                        if TileGeometry.isMounted(
+                            index: index, rest: rest, count: count, allMounted: state.isFullyMounted(tile)
+                        ) {
                             TilePosterCell(
                                 poster: poster,
                                 index: index,
@@ -162,6 +225,7 @@ struct TileCarousel: View {
                                 tile: tile,
                                 contentWidth: contentWidth,
                                 state: state,
+                                glow: glow,
                                 onTap: { tapped(poster, proxy: proxy) }
                             )
                         } else {
@@ -202,26 +266,23 @@ struct TileCarousel: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { state.scrollPosition = position }
             }
-            .onChange(of: isOpen) { _, nowOpen in
-                guard let first = posters.first else { return }
-                // Opening starts on the first poster; closing sends the carousel back to it.
-                resting.value = 0
-                if nowOpen {
-                    proxy.scrollTo(first.id, anchor: .center)
-                } else if reduceMotion {
-                    proxy.scrollTo(first.id, anchor: .center)
-                } else {
-                    // Back to the first poster while the others fly into the fan.
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        proxy.scrollTo(first.id, anchor: .center)
-                    }
-                }
+            .onAppear {
+                if rest > 0 { placeAtRest(proxy: proxy) }
+            }
+            .onChange(of: isOpen) { _, _ in
+                // The carousel stays on the title the tile rests on, open or closed: closing does not scroll it, so
+                // the focused poster zooms out of where it is. A swipe still gliding when the tile closes is settled.
+                placeAtRest(proxy: proxy)
             }
             .onChange(of: state.focusID) { _, _ in
                 syncScroll(proxy: proxy)
             }
             .onChange(of: posters.map(\.id)) { _, _ in
                 syncScroll(proxy: proxy)
+                placeAtRest(proxy: proxy)
+            }
+            .onChange(of: rest) { _, _ in
+                placeAtRest(proxy: proxy)
             }
             .frame(
                 width: contentWidth,
@@ -268,6 +329,20 @@ struct TileCarousel: View {
               index != resting.value else { return }
         resting.value = index
         proxy.scrollTo(focusID, anchor: .center)
+    }
+
+    /// A tile that is not open sits scrolled to the title it rests on (the fan is drawn from there), and a tile that is
+    /// about to open starts there. At once, and not at all when it is already so.
+    private func placeAtRest(proxy: ScrollViewProxy) {
+        guard let id = state.restID(tile) else { return }
+        // While open, the focus rules; the rest place only matters again once the tile has closed.
+        if state.open == tile, state.focusID != id { return }
+        resting.value = state.restIndex(tile)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            proxy.scrollTo(id, anchor: .center)
+        }
     }
 
     private func focusChanged(to index: Int) {

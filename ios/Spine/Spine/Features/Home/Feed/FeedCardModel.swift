@@ -54,6 +54,9 @@ struct FeedCardModel: Identifiable, Equatable {
     let kind: FeedCardKind
     let username: String
     let avatarURL: String?
+    /// The card's day, shown after the username on line one: "Today", "Yesterday", "Friday", "Oct 21" or
+    /// "Oct 21, 2025". Nil when the row has no date.
+    let dayLabel: String?
     let title: String
     /// "S2 E7", "E7", "Season 2", "Planning".
     let tag: String?
@@ -67,18 +70,4 @@ struct FeedCardModel: Identifiable, Equatable {
     let accessibilityLabel: String
     let accessibilityHint: String
     let destination: ActivityDestination
-}
-
-/// One row of the feed's flat list: a day header or a card, as siblings.
-enum FeedListEntry: Identifiable, Equatable {
-    case day(id: String, title: String)
-    case card(FeedCardModel)
-
-    /// "day-2026-11-07" (or "day-2026-11-07-<first card id>" for a later run of the same day), "card-<id>".
-    var id: String {
-        switch self {
-        case let .day(id, _): id
-        case let .card(model): "card-\(model.id)"
-        }
-    }
 }

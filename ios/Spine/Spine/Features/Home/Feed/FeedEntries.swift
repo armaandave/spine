@@ -1,8 +1,8 @@
 import Foundation
 
-/// Turns the feed's items (newest first) into the flat list Home draws: a day header, then that day's cards, with
-/// headers and cards as siblings. Days come from the log's own date (`consumed_at`), never from when it was posted,
-/// because a Phase 5 dated save can land a row on an earlier day.
+/// Turns the feed's items (newest first) into the flat list of cards Home draws. Each card carries its own day, shown
+/// after the username. Days come from the log's own date (`consumed_at`), never from when it was posted, because a
+/// Phase 5 dated save can land a row on an earlier day.
 enum FeedEntries {
     /// - Parameters:
     ///   - standing: where each friend stands on a title; asked only for the newest progress or status card of a
@@ -14,23 +14,19 @@ enum FeedEntries {
         planning: [Int: PlanningDay] = [:],
         now: Date = Date(),
         calendar: Calendar = .autoupdatingCurrent
-    ) -> [FeedListEntry] {
+    ) -> [FeedCardModel] {
         let standing = standing ?? NoFeedStanding()
-        var entries: [FeedListEntry] = []
-        entries.reserveCapacity(items.count + 8)
-        var currentDay: String?
-        var seenDays = Set<String>()
+        var entries: [FeedCardModel] = []
+        entries.reserveCapacity(items.count)
         var seenTitles = Set<String>()
+        var dayLabels: [String: String] = [:]
 
         for item in items {
-            if let day = dayKey(for: item, calendar: calendar), day != currentDay {
-                // The first run of a day is "day-<date>"; a later run of it (a dated row landed under other days)
-                // adds its first card, so no id repeats and none changes when rows are added elsewhere.
-                let id = seenDays.insert(day).inserted ? "day-\(day)" : "day-\(day)-\(item.id)"
-                entries.append(.day(id: id, title: dayTitle(forKey: day, now: now, calendar: calendar)))
-                currentDay = day
+            var dayLabel: String?
+            if let day = dayKey(for: item, calendar: calendar) {
+                dayLabel = dayLabels[day] ?? dayTitle(forKey: day, now: now, calendar: calendar)
+                dayLabels[day] = dayLabel
             }
-
             // Newest first, so the first progress or status card of a person's title is its newest.
             var isNewest = false
             var rowStanding: FeedStanding?
@@ -40,12 +36,13 @@ enum FeedEntries {
                 }
                 rowStanding = standing.standing(for: item, isNewestOfTitle: isNewest)
             }
-            entries.append(.card(FeedCardPresenter.model(
+            entries.append(FeedCardPresenter.model(
                 for: item,
                 standing: rowStanding,
                 isNewestOfTitle: isNewest,
-                planning: item.planning == nil ? nil : planning[item.object.id]
-            )))
+                planning: item.planning == nil ? nil : planning[item.object.id],
+                dayLabel: dayLabel
+            ))
         }
         return entries
     }

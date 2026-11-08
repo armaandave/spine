@@ -35,6 +35,10 @@ enum HomeTileID: String, CaseIterable, Hashable {
 ///
 /// Focus is an item id, not a position, so it survives the rail reloading under an open tile: the tile follows the
 /// title, and when the title is gone the focus moves to its nearest surviving neighbor.
+///
+/// Each tile also keeps a rest place: the title it was on when it closed. A closed tile builds its fan around that
+/// title and opens on it again. It too is an id, so a reload keeps it on the same title, and when that title has
+/// gone it stays at the same place in the list (or at the end of a shorter one).
 @MainActor
 @Observable
 final class HomeTilesState {
@@ -53,10 +57,32 @@ final class HomeTilesState {
     /// a scroll. Nil until the carousel reports after an open: a panel that appears first falls back to `focusIndex`.
     var scrollPosition: Double?
 
+    /// The title each tile rests on, with its place in the list as last known. A tile that has never closed on a
+    /// title has none and rests on its first.
+    private var rests: [HomeTileID: Rest] = [:]
+
+    private struct Rest {
+        var id: String
+        var index: Int
+    }
+
     /// The focused poster's place in the open tile's list.
     var focusIndex: Int? {
         guard let open, let focusID else { return nil }
         return ids[open]?.firstIndex(of: focusID)
+    }
+
+    /// The place in `tile`'s list of the title it rests on: the front of its fan, and where it opens.
+    func restIndex(_ tile: HomeTileID) -> Int {
+        let list = ids[tile] ?? []
+        guard !list.isEmpty, let rest = rests[tile] else { return 0 }
+        return list.firstIndex(of: rest.id) ?? min(max(rest.index, 0), list.count - 1)
+    }
+
+    /// The id of the title `tile` rests on.
+    func restID(_ tile: HomeTileID) -> String? {
+        guard let list = ids[tile], !list.isEmpty else { return nil }
+        return list[restIndex(tile)]
     }
 
     func isOpen(_ tile: HomeTileID) -> Bool {
@@ -76,6 +102,7 @@ final class HomeTilesState {
         let oldIDs = ids[tile] ?? []
         guard newIDs != oldIDs else { return }
         ids[tile] = newIDs
+        keepRest(of: tile, in: newIDs)
 
         guard open == tile else { return }
         guard !newIDs.isEmpty else {
@@ -86,6 +113,17 @@ final class HomeTilesState {
         }
         guard let focusID, !newIDs.contains(focusID) else { return }
         self.focusID = Self.nearest(to: focusID, in: oldIDs, surviving: newIDs)
+    }
+
+    /// A reload: the rest place stays on its title, or at the same place in the list when the title has gone.
+    private func keepRest(of tile: HomeTileID, in newIDs: [String]) {
+        guard rests[tile] != nil else { return }
+        guard !newIDs.isEmpty else {
+            rests[tile] = nil
+            return
+        }
+        let index = restIndex(tile)
+        rests[tile] = Rest(id: newIDs[index], index: index)
     }
 
     /// The title closest to `gone` in the old list that is still in the new one: looking outward from where it was,
@@ -113,12 +151,13 @@ final class HomeTilesState {
         mounted = tile
     }
 
-    /// Opens `tile` on its first poster. Nothing happens for a tile with no titles or while a tile is open.
+    /// Opens `tile` on the title it rests on (its first until it has been closed). Nothing happens for a tile with no
+    /// titles or while a tile is open.
     func openTile(_ tile: HomeTileID) {
-        guard open == nil, let first = ids[tile]?.first else { return }
+        guard open == nil, let rest = restID(tile) else { return }
         mounted = tile
         open = tile
-        focusID = first
+        focusID = rest
         scrollPosition = nil
     }
 
@@ -153,8 +192,12 @@ final class HomeTilesState {
         withAnimation(animation) { close() }
     }
 
-    /// Starts closing. The focus and the mounted posters stay until `finishClosing()`, so the posters can fly home.
+    /// Starts closing, and the tile rests on the title it was on. The focus and the mounted posters stay until
+    /// `finishClosing()`, so the posters can fly home.
     func close() {
+        if let open, let focusID, let index = ids[open]?.firstIndex(of: focusID) {
+            rests[open] = Rest(id: focusID, index: index)
+        }
         open = nil
     }
 
@@ -182,10 +225,20 @@ final class HomeTilesState {
         return model.media(for: open, id: focusID)
     }
 
-    /// Points Home's glow at the focused poster while a tile is open, and back at its own picture when both are
-    /// closed.
+    /// The poster in front of `tile`'s fan: the title it rests on.
+    func frontMedia(_ tile: HomeTileID, model: HomeTilesModel) -> MediaSummary? {
+        guard let id = restID(tile) else { return nil }
+        return model.media(for: tile, id: id)
+    }
+
+    /// Points Home's glow at the focused poster while a tile is open, and back at the tiles' front posters when both
+    /// are closed (In progress's on the left, Trending's on the right).
     func syncGlow(_ glow: HomeGlowModel, model: HomeTilesModel) {
         let media = focusedMedia(model: model)
         if glow.focused != media { glow.focused = media }
+        let left = frontMedia(.inProgress, model: model)
+        if glow.restLeft != left { glow.restLeft = left }
+        let right = frontMedia(.trending, model: model)
+        if glow.restRight != right { glow.restRight = right }
     }
 }
