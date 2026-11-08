@@ -432,6 +432,80 @@ final class BlurredArtTests: XCTestCase {
         )!
     }
 
+    // MARK: Home's picture
+
+    /// Rows of two white pixels then two black ones, top to bottom: sharp has full contrast, a blur has almost none.
+    private func stripedImage(width: Int, height: Int) -> CGImage {
+        let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        for row in 0 ..< height {
+            let white = (row / 2) % 2 == 0
+            context.setFillColor(red: white ? 1 : 0, green: white ? 1 : 0, blue: white ? 1 : 0, alpha: 1)
+            context.fill(CGRect(x: 0, y: height - 1 - row, width: width, height: 1))
+        }
+        return context.makeImage()!
+    }
+
+    /// The largest difference in red between rows `rows` of column `x`.
+    private func contrast(_ pixels: Pixels, rows: ClosedRange<Int>, x: Int = 10) -> Int {
+        let values = rows.map { Int(pixels.red(x, $0)) }
+        return (values.max() ?? 0) - (values.min() ?? 0)
+    }
+
+    func testThePictureIsBakedAsOneOpaqueImageInTheFramesShape() throws {
+        let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
+        let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
+        XCTAssertEqual(CGFloat(output.width) / CGFloat(output.height), HomeBackdropArt.aspect, accuracy: 0.01)
+        XCTAssertEqual(output.height, 90, "a landscape backdrop is cropped to the frame's width, keeping its height")
+        let pixels = rgbaPixels(output)
+        for (x, y) in [(0, 0), (output.width - 1, 0), (10, 45), (output.width - 1, output.height - 1), (5, output.height - 1)] {
+            XCTAssertEqual(pixels.alpha(x, y), 255, "opaque at \(x), \(y)")
+        }
+    }
+
+    func testThePictureIsSharpAtTheTopMeltsInTheMiddleAndIsSoftAtTheBottom() throws {
+        let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
+        let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
+        let pixels = rgbaPixels(output)
+        // Above 34% of the height (row 30) the rows are the source's own.
+        for row in 0 ... 24 {
+            let white = (row / 2) % 2 == 0
+            XCTAssertEqual(Int(pixels.red(10, row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
+        }
+        XCTAssertGreaterThan(contrast(pixels, rows: 4 ... 7), 240)
+        // Half way through the melt some of the blur shows.
+        let middle = contrast(pixels, rows: 42 ... 45)
+        XCTAssertGreaterThan(middle, 40)
+        XCTAssertLessThan(middle, 230)
+        // From 62% (row 56) down it is the blurred copy alone.
+        XCTAssertLessThan(contrast(pixels, rows: 62 ... 85), 30)
+    }
+
+    func testThePictureProcessorHasAStableIdentifierThatNamesItsNumbers() {
+        let identifier = HomeBackdropMeltProcessor().identifier
+        XCTAssertEqual(identifier, HomeBackdropMeltProcessor().identifier)
+        XCTAssertTrue(identifier.hasPrefix("com.armaan.spine.homebackdrop?"))
+        for part in ["aspect=", "from=0.34", "to=0.62", "sigma=", "sat="] {
+            XCTAssertTrue(identifier.contains(part), "\(identifier) lacks \(part)")
+        }
+        XCTAssertNotEqual(identifier, BlurredArt.Style.glow.processor.identifier)
+    }
+
+    func testThePicturesRequestIsWhatTheViewLoadsAndNeedsNoBackdropToBeNil() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.com/backdrop.jpg"))
+        let request = try XCTUnwrap(HomeBackdropArt.request(url: url))
+        let viewRequest = try XCTUnwrap(SpineImagePipeline.request(
+            url: url, thumbnailSize: HomeBackdropArt.thumbnailSize, processors: [HomeBackdropMeltProcessor()]
+        ))
+        let cache = ImagePipeline.shared.cache
+        XCTAssertEqual(cache.makeImageCacheKey(for: request), cache.makeImageCacheKey(for: viewRequest))
+        XCTAssertNotNil(request.thumbnail)
+        XCTAssertEqual(request.processors.count, 1)
+        XCTAssertNil(HomeBackdropArt.request(url: nil))
+    }
+
     private struct Pixels {
         let width: Int
         let data: [UInt8]

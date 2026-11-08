@@ -214,26 +214,23 @@ final class HomeGlowTests: XCTestCase {
 
     // MARK: Height
 
-    func testAtRestTheGlowEndsJustAboveTheClosedTilesAndOpenItIsFull() {
-        // Tiles ending 318 down the screen: the box runs from -6 to 312, black 6 above their bottom edge.
-        XCTAssertEqual(GlowSpec.height(tilesBottom: 318, isOpen: false), 318)
-        XCTAssertEqual(BackdropLayout.topOffset + GlowSpec.height(tilesBottom: 318, isOpen: false), 318 - GlowSpec.restGap)
-        XCTAssertEqual(GlowSpec.height(tilesBottom: 318, isOpen: true), HomeDesign.Metric.glowHeight)
-        // Unmeasured: the estimate. Never shorter than the minimum or taller than the open glow.
-        XCTAssertEqual(GlowSpec.height(tilesBottom: nil, isOpen: false), GlowSpec.height(tilesBottom: GlowSpec.estimatedTilesBottom, isOpen: false))
-        XCTAssertEqual(GlowSpec.height(tilesBottom: 40, isOpen: false), GlowSpec.minimumHeight)
-        XCTAssertEqual(GlowSpec.height(tilesBottom: 900, isOpen: false), HomeDesign.Metric.glowHeight)
+    func testAtRestTheGlowIsAFixedHeightBehindThePictureAndOpenItIsFull() {
+        // It is not measured against the tiles any more: the picture covers it at rest.
+        XCTAssertEqual(GlowSpec.restHeight, 318)
+        XCTAssertEqual(GlowSpec.height(isOpen: false), GlowSpec.restHeight)
+        XCTAssertEqual(GlowSpec.height(isOpen: true), HomeDesign.Metric.glowHeight)
+        XCTAssertLessThan(GlowSpec.restHeight, HomeTopArtSpec.height(width: 390), "the picture covers the glow at rest")
     }
 
     func testTheModelPutsTheTilesBottomOnScreenFromWhatWasMeasured() {
         let model = HomeGlowModel()
         XCTAssertNil(model.tilesBottom)
-        XCTAssertEqual(model.height, GlowSpec.height(tilesBottom: nil, isOpen: false))
+        XCTAssertEqual(model.height, GlowSpec.restHeight)
         model.contentTopInset = 62
         XCTAssertNil(model.tilesBottom, "Both are needed")
         model.tilesTop = 92
         XCTAssertEqual(model.tilesBottom, 62 + 92 + TileGeometry.closedHeight)
-        XCTAssertEqual(model.height, GlowSpec.height(tilesBottom: 62 + 92 + TileGeometry.closedHeight, isOpen: false))
+        XCTAssertEqual(model.height, GlowSpec.restHeight, "Measuring the tiles does not change it")
         model.focused = media(id: "open", backdrop: nil, poster: "https://example.com/open.jpg")
         XCTAssertEqual(model.height, HomeDesign.Metric.glowHeight, "A tile is open")
         model.scrollOffset = 200
@@ -245,6 +242,7 @@ final class HomeGlowTests: XCTestCase {
         XCTAssertEqual(GlowSpec.imageWidthRatio, 1.513, accuracy: 0.0005)
         XCTAssertEqual(GlowSpec.imageHeight, 720)
         XCTAssertEqual(GlowSpec.imageTop, -170)
+        XCTAssertEqual(GlowSpec.restHeight, 318)
         XCTAssertEqual(GlowSpec.gradientStops.map(\.opacity), [0.22, 0.08, 0.70, 1.0])
         XCTAssertEqual(GlowSpec.gradientStops.map(\.location), [0, 0.35, 0.78, 1.0])
     }
@@ -309,71 +307,36 @@ final class HomeGlowTests: XCTestCase {
         XCTAssertTrue(HomeGlow.neighbors(of: 9, in: items).isEmpty)
     }
 
-    // MARK: Two colors at rest
+    // MARK: One image
 
-    func testAtRestInProgressIsOnTheLeftAndTrendingOnTheRight() throws {
+    func testTheGlowRestsOnTheFrontPosterElseTheIdleOneAndAFocusedPosterFillsIt() throws {
         let model = HomeGlowModel()
         XCTAssertNil(model.art)
 
-        model.trending = media(id: "hot", backdrop: nil, poster: "https://example.com/hot.jpg")
-        XCTAssertEqual(model.art, GlowArt(left: try XCTUnwrap(URL(string: "https://example.com/hot.jpg")), right: nil),
-                       "Trending alone fills the glow")
-
         model.idle = media(id: "reading", backdrop: "https://example.com/reading-backdrop.jpg", poster: nil)
-        XCTAssertEqual(model.art?.left, URL(string: "https://example.com/reading-backdrop.jpg"))
-        XCTAssertEqual(model.art?.right, URL(string: "https://example.com/hot.jpg"))
-
-        model.focused = media(id: "swiped", backdrop: nil, poster: "https://example.com/swiped.jpg")
-        XCTAssertEqual(model.art, GlowArt(left: try XCTUnwrap(URL(string: "https://example.com/swiped.jpg")), right: nil),
-                       "an open carousel's poster fills the glow")
-
-        model.focused = nil
-        XCTAssertEqual(model.art?.right, URL(string: "https://example.com/hot.jpg"), "closing it goes back to the two colors")
-
-        model.trending = model.idle
-        XCTAssertNil(model.art?.right, "the same title on both sides is one image")
-    }
-
-    func testTheFrontPostersOfTheFansTakeOverBothSidesAtRest() throws {
-        let model = HomeGlowModel()
-        model.idle = media(id: "reading", backdrop: "https://example.com/reading-backdrop.jpg", poster: nil)
-        model.trending = media(id: "hot", backdrop: nil, poster: "https://example.com/hot.jpg")
+        XCTAssertEqual(model.art, GlowArt(url: try XCTUnwrap(URL(string: "https://example.com/reading-backdrop.jpg"))))
 
         model.restLeft = media(id: "third", backdrop: nil, poster: "https://example.com/third.jpg")
-        model.restRight = media(id: "fifth", backdrop: nil, poster: "https://example.com/fifth.jpg")
-        XCTAssertEqual(model.art?.left, URL(string: "https://example.com/third.jpg"))
-        XCTAssertEqual(model.art?.right, URL(string: "https://example.com/fifth.jpg"))
+        XCTAssertEqual(model.art?.url, URL(string: "https://example.com/third.jpg"), "the tile's front poster takes over")
 
         model.focused = media(id: "swiped", backdrop: nil, poster: "https://example.com/swiped.jpg")
-        XCTAssertEqual(model.art, GlowArt(left: try XCTUnwrap(URL(string: "https://example.com/swiped.jpg")), right: nil))
+        XCTAssertEqual(model.art?.url, URL(string: "https://example.com/swiped.jpg"), "an open carousel's poster fills the glow")
 
-        // A tile with nothing in it leaves its side to the page's own picture.
         model.focused = nil
         model.restLeft = nil
-        model.restRight = nil
-        XCTAssertEqual(model.art?.left, URL(string: "https://example.com/reading-backdrop.jpg"))
-        XCTAssertEqual(model.art?.right, URL(string: "https://example.com/hot.jpg"))
+        XCTAssertEqual(model.art?.url, URL(string: "https://example.com/reading-backdrop.jpg"))
     }
 
-    func testTheRightImageFadesInFromTheMiddle() throws {
-        let source = UIImage(cgImage: bitmap(width: 100, height: 10), scale: 3, orientation: .up)
-        let output = try XCTUnwrap(GlowMeetProcessor().process(source)?.cgImage)
-        XCTAssertEqual(output.width, 100)
-        XCTAssertEqual(output.height, 10)
-        let alpha = alphas(output)
-        XCTAssertEqual(alpha(5, 5), 0, "clear on the left")
-        XCTAssertEqual(alpha(30, 5), 0)
-        XCTAssertGreaterThan(alpha(50, 5), 60, "half way in the middle")
-        XCTAssertLessThan(alpha(50, 5), 200)
-        XCTAssertEqual(alpha(70, 5), 255)
-        XCTAssertEqual(alpha(95, 5), 255, "opaque on the right")
-        XCTAssertNotEqual(
-            GlowMeetProcessor().identifier,
-            BlurredArt.Style.glow.processor.identifier
-        )
-        XCTAssertEqual(HomeGlow.meetingProcessors.map(\.identifier), [
-            BlurredArt.Style.glow.processor.identifier, GlowMeetProcessor().identifier,
-        ])
+    func testTheGlowShowsWhileATileIsOpenAndAtRestOnlyBehindAPicture() {
+        let model = HomeGlowModel()
+        XCTAssertFalse(model.showsGlow, "no picture: plain black at rest")
+        model.hasRestPicture = true
+        XCTAssertTrue(model.showsGlow, "behind the picture, ready for the fade")
+        model.hasRestPicture = false
+        model.focused = media(id: "open", backdrop: nil, poster: "https://example.com/open.jpg")
+        XCTAssertTrue(model.showsGlow, "a tile is open")
+        model.focused = nil
+        XCTAssertFalse(model.showsGlow)
     }
 
     private func bitmap(width: Int, height: Int) -> CGImage {
@@ -430,11 +393,21 @@ final class HomeGlowTests: XCTestCase {
 
         let home = try String(contentsOf: features.appendingPathComponent("HomeView.swift"), encoding: .utf8)
         let scroll = try XCTUnwrap(home.range(of: "ScrollView(showsIndicators: false) {"))
-        let glowUse = try XCTUnwrap(home.range(of: "HomeGlow(model: glow)"))
         let refresh = try XCTUnwrap(home.range(of: ".modifier(HomePullToRefresh("))
-        XCTAssertTrue(scroll.upperBound < glowUse.lowerBound && glowUse.upperBound < refresh.lowerBound,
-                      "HomeGlow sits inside the ScrollView's content, not behind it")
+        for use in ["HomeGlow(model: glow)", "HomeTopArtView(art:"] {
+            let range = try XCTUnwrap(home.range(of: use))
+            XCTAssertTrue(scroll.upperBound < range.lowerBound && range.upperBound < refresh.lowerBound,
+                          "\(use) sits inside the ScrollView's content, not behind it")
+        }
         XCTAssertEqual(home.components(separatedBy: "HomeGlow(model:").count - 1, 1)
+        XCTAssertEqual(home.components(separatedBy: "HomeTopArtView(art:").count - 1, 1)
+
+        // Today's picture is the same kind of thing: placed by the render-time effect, nothing applied live.
+        let art = try String(contentsOf: features.appendingPathComponent("HomeTopArt.swift"), encoding: .utf8)
+        XCTAssertTrue(art.contains("GlowPlacement("))
+        for banned in [".blur(", ".mask", "compositingGroup", "drawingGroup", "GeometryReader", "scrollOffset", "Material"] {
+            XCTAssertFalse(art.contains(banned), "HomeTopArt.swift uses \(banned)")
+        }
     }
 
     /// The system refresh control changed the scroll view's inset while it spun, which moved the glow and its height.

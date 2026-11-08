@@ -202,7 +202,7 @@ final class HomeTilesStateTests: XCTestCase {
         XCTAssertEqual(state.restID(.inProgress), id("c"))
     }
 
-    func testTheGlowAtRestFollowsEachTilesFrontPoster() {
+    func testTheGlowAtRestFollowsTheInProgressTilesFrontPoster() {
         let model = HomeTilesModel()
         model.inProgress = [item("a"), item("b"), item("c")]
         model.trending = [title("x"), title("y"), title("z")]
@@ -213,15 +213,13 @@ final class HomeTilesStateTests: XCTestCase {
 
         state.syncGlow(glow, model: model)
         XCTAssertEqual(glow.restLeft, media("a"))
-        XCTAssertEqual(glow.restRight, media("x"))
         XCTAssertEqual(glow.active, media("a"))
 
         state.openTile(.inProgress)
         state.focus(id("c"))
         state.close()
         state.syncGlow(glow, model: model)
-        XCTAssertEqual(glow.restLeft, media("c"), "the left of the glow is In progress's front poster")
-        XCTAssertEqual(glow.restRight, media("x"))
+        XCTAssertEqual(glow.restLeft, media("c"), "the glow rests on In progress's front poster")
         XCTAssertEqual(glow.active, media("c"))
         XCTAssertNil(glow.focused)
 
@@ -230,8 +228,8 @@ final class HomeTilesStateTests: XCTestCase {
         state.focus(model.trending[1].id)
         state.close()
         state.syncGlow(glow, model: model)
-        XCTAssertEqual(glow.restRight, media("y"), "the right is Trending's front poster")
-        XCTAssertEqual(glow.restLeft, media("c"))
+        XCTAssertEqual(glow.restLeft, media("c"), "Trending's front poster does not move the glow at rest")
+        XCTAssertNil(glow.focused)
     }
 
     func testATileWithNoTitlesDoesNotOpen() {

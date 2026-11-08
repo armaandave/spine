@@ -19,6 +19,10 @@ final class HomeViewModel {
     let tiles = HomeTilesModel()
     let tilesState = HomeTilesState()
     let glowModel = HomeGlowModel()
+    /// Today's picture at the top of the page, chosen from the rail (else Trending).
+    let topArt: HomeTopArtModel
+    /// Whether the rail has loaded at least once, so Trending cannot be chosen for the picture before it.
+    @ObservationIgnored private var inProgressLoaded = false
     /// The people you follow, for the Friends row.
     let friends = HomeFriendsModel()
 
@@ -44,6 +48,7 @@ final class HomeViewModel {
             tiles.inProgress = newValue
             syncGlowIdle()
             syncSeasons()
+            updateTopArt()
         }
     }
 
@@ -134,6 +139,7 @@ final class HomeViewModel {
         let mediaRepository = mediaRepository ?? AppRepositories.current().media
         let diaryRepository = diaryRepository ?? AppRepositories.current().diary
         seasonPages = mediaRepository
+        topArt = HomeTopArtModel(mediaRepository: mediaRepository)
         let continueWatching = ContinueWatchingTicks(
             mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
@@ -156,6 +162,9 @@ final class HomeViewModel {
         )
         tiles.railStore = railStore
         tiles.isLoadingTrending = true
+        // The glow behind the page knows whether today's picture covers it at rest, including one restored at launch.
+        glowModel.hasRestPicture = topArt.art != nil
+        topArt.onChange = { [weak self] art in self?.glowModel.hasRestPicture = art != nil }
         // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
         // A title the write finished (or paused, or caught up) leaves the rail at once (`patchRail`).
         continueWatching.onUpdate = { [weak self] id, tv in
@@ -264,6 +273,7 @@ final class HomeViewModel {
     func loadInProgress(forceToday: Bool = false) async {
         let mediaTypes = InProgressLibraryLoader.mediaTypes(from: profile)
         guard !mediaTypes.isEmpty else {
+            inProgressLoaded = true
             inProgressItems = []
             inProgressErrorMessage = nil
             isLoadingInProgress = false
@@ -281,6 +291,7 @@ final class HomeViewModel {
                 limit: 10
             )
             tiles.baselines = Self.baselines(for: items)
+            inProgressLoaded = true
             inProgressItems = items
             railNeedsResort = false
             continueWatching.railDidLoad()
@@ -290,6 +301,9 @@ final class HomeViewModel {
             return
         } catch {
             inProgressErrorMessage = error.localizedDescription
+            // The rail failed, so Trending may supply the picture.
+            inProgressLoaded = true
+            updateTopArt()
             handleUnauthorized(error)
         }
     }
@@ -472,9 +486,17 @@ final class HomeViewModel {
         )
         if tiles.trending != result.titles { tiles.trending = result.titles }
         if tiles.trendingSubtitle != result.subtitle { tiles.trendingSubtitle = result.subtitle }
-        // The right of the glow at rest.
-        let lead = tiles.trending.first?.media
-        if glowModel.trending != lead { glowModel.trending = lead }
+        updateTopArt()
+    }
+
+    /// Offers the rail and Trending to today's picture. Only a page that loads the tiles' extras chooses one: a view
+    /// model built to test the rail or the feed asks no title page.
+    private func updateTopArt() {
+        guard loadsTileExtras else { return }
+        topArt.update(
+            inProgress: inProgressLoaded ? tiles.inProgress.map(\.media) : nil,
+            trending: tiles.trending.map(\.media)
+        )
     }
 
     /// The glow rests on the first In progress title, else the newest post's art.
@@ -568,7 +590,7 @@ final class HomeViewModel {
 
 struct HomeView: View {
     /// The glow is off screen, and the status bar's fade full, long before this: past it the offset stops changing.
-    private static let scrollCap = HomeDesign.Metric.glowHeight + 60
+    private static let scrollCap = HomeTopArtSpec.referenceHeight * 1.2 + 60
 
     @State private var viewModel: HomeViewModel
     /// How far the page is pulled and whether it is reloading; only the pull modifier and the spinner read it.
@@ -665,8 +687,12 @@ struct HomeView: View {
                     .modifier(HomeRefreshShift(model: refresh))
                     // The glow is part of the scrolling content, so the scroll view moves it with the page natively and
                     // it never trails by a frame. It reaches up under the status bar by its own offset.
+                    // Today's picture is drawn over the glow, which is out of sight behind it until a tile opens.
                     .background(alignment: .top) {
-                        HomeGlow(model: glow)
+                        ZStack(alignment: .top) {
+                            HomeGlow(model: glow)
+                            HomeTopArtView(art: viewModel.topArt, glow: glow)
+                        }
                     }
                     .padding(.bottom, 92)
                 }
@@ -683,6 +709,11 @@ struct HomeView: View {
                     geometry.contentInsets.top
                 } action: { _, top in
                     if glow.contentTopInset != top { glow.contentTopInset = top }
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.containerSize.width
+                } action: { _, width in
+                    if width > 0, glow.screenWidth != width { glow.screenWidth = width }
                 }
 
                 HomeStatusBarFade(model: glow)

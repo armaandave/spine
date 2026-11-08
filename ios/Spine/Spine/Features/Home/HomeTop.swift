@@ -22,11 +22,11 @@ struct HomeTop: View {
             error: viewModel.profileErrorMessage
         )
         VStack(alignment: .leading, spacing: 0) {
-            // It squeezes up as a tile opens, with the tile; its top and left stay where they are.
-            HomeHeaderSqueeze(state: viewModel.tilesState) {
-                HomeTopHeader(viewModel: viewModel, onOpenProfile: onOpenProfile)
+            // It sits above the tiles, on the picture's soft lower part, and squeezes up to the top of the page as a
+            // tile opens, with the tile; its left stays where it is.
+            HomeHeaderSqueeze(state: viewModel.tilesState, glow: viewModel.glowModel) {
+                HomeTopHeader(viewModel: viewModel, onOpenProfile: onOpenProfile, onOpenTitle: actions.onOpenTitle)
             }
-            .padding(.top, HomeTopSpec.headerTop)
 
             switch phase {
             case let .failed(message):
@@ -107,21 +107,29 @@ struct HomeTop: View {
 
 /// The numbers of the page top that the design's tokens do not hold: they come from the Home mock.
 private enum HomeTopSpec {
-    static let avatar: CGFloat = 44
-    static let headerGap: CGFloat = 12
-    /// Below the status bar. The mock's 64 less a 47 pt safe area.
-    static let headerTop: CGFloat = 17
+    static let avatar: CGFloat = 36
+    /// Below the status bar while a tile is open. The mock's 64 less a 47 pt safe area.
+    static let squeezedTop: CGFloat = 17
     /// How small the header gets while a tile is open.
     static let squeezedScale: CGFloat = 0.7
     static let headerToTiles: CGFloat = 22
+    /// What the header adds under itself at rest, so the tiles start `HomeTopArtSpec.headerToTiles` below its row.
+    static let restExtraGap: CGFloat = HomeTopArtSpec.headerToTiles - headerToTiles
     static let tilesToFriends: CGFloat = 30
     /// Under the Friends row, to the first card: as much as above it.
     static let friendsToFeed: CGFloat = tilesToFriends
     /// Four 115 pt cards fill about the height three of the old 164 pt ones did.
     static let skeletonCards = 4
     static let dateFont = Font.system(size: 13, weight: .semibold)
-    static let titleFont = Font.system(size: 32, weight: .heavy)
-    static let titleTracking: CGFloat = -0.6
+    static let titleFont = Font.system(size: 30, weight: .heavy)
+    static let titleTracking: CGFloat = -0.5
+    /// The museum-style label over the profile photo, naming the picture.
+    static let labelFont = Font.system(size: 11, weight: .semibold)
+    static let labelTracking: CGFloat = 0.4
+    static let labelOpacity: Double = 0.7
+    /// The label's longest line, as a share of the page's width.
+    static let labelMaxWidthShare: CGFloat = 0.55
+    static let labelToAvatar: CGFloat = 4
     static let friendsFont = Font.system(size: HomeFriendsSpec.headingSize, weight: .heavy)
     static let friendsTracking: CGFloat = -0.4
     /// The mock's placeholder for an avatar with no picture.
@@ -130,22 +138,21 @@ private enum HomeTopSpec {
 
 // MARK: - Header
 
-/// The profile button, the day's date and "Home". It reads the profile and nothing else.
+/// The day's date over "Home" on the left; on the right the profile photo with, right above it, a small label naming
+/// the picture ("Title · Year"), which opens that title's page. It reads the profile, the picture and whether a tile is
+/// open, and nothing else.
 private struct HomeTopHeader: View {
     let viewModel: HomeViewModel
     let onOpenProfile: () -> Void
+    let onOpenTitle: (MediaRef) -> Void
 
     /// The date line is worked out when the header appears and again when the day changes under it.
     @State private var today = Date()
 
     var body: some View {
-        HStack(spacing: HomeTopSpec.headerGap) {
-            Button(action: onOpenProfile) {
-                HomeAvatar(profile: viewModel.profile, size: HomeTopSpec.avatar)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Profile")
-
+        // The label goes while a tile is open: the picture it names has faded out.
+        let labelHidden = viewModel.tilesState.open != nil
+        HStack(alignment: .bottom, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(today.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
                     .font(HomeTopSpec.dateFont)
@@ -160,18 +167,52 @@ private struct HomeTopHeader: View {
             .dynamicTypeSize(...HomeDesign.Text.maxCategory)
 
             Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: HomeTopSpec.labelToAvatar) {
+                if let art = viewModel.topArt.art {
+                    Button {
+                        onOpenTitle(art.ref)
+                    } label: {
+                        Text(art.label)
+                            .font(HomeTopSpec.labelFont)
+                            .tracking(HomeTopSpec.labelTracking)
+                            .foregroundStyle(.white.opacity(HomeTopSpec.labelOpacity))
+                            .shadow(color: .black.opacity(0.55), radius: 3, y: 1)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: viewModel.glowModel.screenWidth * HomeTopSpec.labelMaxWidthShare, alignment: .trailing)
+                            .dynamicTypeSize(...HomeDesign.Text.maxCategory)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Opens \(art.title)")
+                    .accessibilityAddTraits(.isButton)
+                    .opacity(labelHidden ? 0 : 1)
+                    .allowsHitTesting(!labelHidden)
+                    .accessibilityHidden(labelHidden)
+                }
+                Button(action: onOpenProfile) {
+                    HomeAvatar(profile: viewModel.profile, size: HomeTopSpec.avatar)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Profile")
+            }
         }
+        .frame(minHeight: HomeTopArtSpec.headerRowHeight, alignment: .bottom)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
             today = Date()
         }
     }
 }
 
-/// Shrinks the header while a tile is open: about 0.7, anchored at its top-leading corner so its top and left stay put,
-/// and its layout height shrinks with it so the open tile rides up into the room. Both run under the tile's own curve,
-/// started by the same change that opens or closes the tile, and nothing here runs while the page scrolls.
+/// Places the header and shrinks it while a tile is open. At rest its row starts `HomeTopArtSpec.referenceHeaderTop`
+/// down the screen, above the tiles. Open, it goes to the top of the page (`HomeTopSpec.squeezedTop`) at about 0.7,
+/// anchored at its top-leading corner so its left stays put, and its layout height shrinks with it so the open tile
+/// rides up into the room. All of it runs under the tile's own curve, started by the same change that opens or closes
+/// the tile, and nothing here runs while the page scrolls.
 private struct HomeHeaderSqueeze<Content: View>: View {
     let state: HomeTilesState
+    let glow: HomeGlowModel
     @ViewBuilder let content: () -> Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -179,9 +220,14 @@ private struct HomeHeaderSqueeze<Content: View>: View {
     var body: some View {
         let squeezed = state.open != nil
         let scale = squeezed ? HomeTopSpec.squeezedScale : 1
+        // The page's content starts below the status bar, so the row's place on screen less that inset.
+        let restTop = HomeTopArtSpec.headerRowTop(width: glow.screenWidth)
+            - (glow.contentTopInset ?? GlowSpec.estimatedTopInset)
         SqueezeLayout(scale: scale) {
             content().scaleEffect(scale, anchor: .topLeading)
         }
+        .padding(.top, squeezed ? HomeTopSpec.squeezedTop : max(HomeTopSpec.squeezedTop, restTop))
+        .padding(.bottom, squeezed ? 0 : HomeTopSpec.restExtraGap)
         .animation(TileMotion.frame(closing: !squeezed, reduceMotion: reduceMotion), value: squeezed)
     }
 }
@@ -211,7 +257,7 @@ private struct SqueezeLayout: Layout {
     }
 }
 
-/// The signed-in person's picture at 44 pt, decoded at that size; their initial on a light disc without one.
+/// The signed-in person's picture (44 pt unless told otherwise), decoded at that size; their initial on a light disc without one.
 struct HomeAvatar: View {
     let profile: UserProfile?
     var size: CGFloat = 44

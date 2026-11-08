@@ -326,7 +326,7 @@ enum TrendingTileModel {
         }
     }
 
-    private static func year(of detail: MediaDetail) -> String? {
+    static func year(of detail: MediaDetail) -> String? {
         func text(_ key: String) -> String? {
             if case let .string(value)? = detail.details?[key] { value } else { nil }
         }
@@ -337,7 +337,7 @@ enum TrendingTileModel {
     }
 
     /// The year at the front of a date ("2025-03-14" or "2025"), if it is one.
-    private static func year(from date: String?) -> String? {
+    static func year(from date: String?) -> String? {
         guard let date, date.count >= 4 else { return nil }
         let year = date.prefix(4)
         return year.allSatisfy(\.isASCII) && year.allSatisfy(\.isNumber) ? String(year) : nil

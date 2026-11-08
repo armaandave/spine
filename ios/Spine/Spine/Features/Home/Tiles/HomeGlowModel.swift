@@ -2,25 +2,26 @@ import CoreGraphics
 import Foundation
 import Observation
 
-/// What Home's glow is showing: at rest, In progress's color on the left and Trending's on the right, meeting in the
-/// middle; while a tile's carousel is open, the poster it is on (`focused`) across the whole glow. Also how far the
-/// page has scrolled. The glow itself does not read `scrollOffset` (it moves with the content); only the status bar
-/// fade and the back posters' fold do, so scrolling redraws their small bodies and never the feed.
+/// What Home's glow is showing while a tile's carousel is open: the poster it is on (`focused`) across the whole glow.
+/// At rest the glow is behind Home's picture, on the first In progress title's art, ready to be shown. Also how far
+/// the page has scrolled. The glow itself does not read `scrollOffset` (it moves with the content); only the status
+/// bar fade and the back posters' fold do, so scrolling redraws their small bodies and never the feed.
 @MainActor
 @Observable
 final class HomeGlowModel {
-    /// The first In progress item, else the newest feed item: the left of the glow at rest.
+    /// The first In progress item, else the newest feed item: what the glow rests on.
     var idle: MediaSummary?
-    /// The first Trending title: the right of the glow at rest.
-    var trending: MediaSummary?
-    /// The poster in front of each closed tile's fan, set by the tiles: they take over the glow's two sides at rest from
-    /// `idle` and `trending`, which are what the page falls back on while a tile has none.
+    /// The poster in front of the In progress tile's fan, set by the tiles: it takes over from `idle` while there is one.
     var restLeft: MediaSummary?
-    var restRight: MediaSummary?
     /// The poster a tile's carousel is on. Set by the tiles; nil puts the glow back to rest.
     var focused: MediaSummary?
     /// Points the page has scrolled down; negative while it is pulled past the top.
     var scrollOffset: CGFloat = 0
+    /// Whether today's picture covers the top of the page at rest. Without one the page is plain black there and the
+    /// glow shows only while a tile is open.
+    var hasRestPicture = false
+    /// The screen's width, measured: the picture and the header's place scale with it.
+    var screenWidth: CGFloat = HomeTopArtSpec.referenceWidth
 
     var active: MediaSummary? { focused ?? restLeft ?? idle }
 
@@ -40,29 +41,21 @@ final class HomeGlowModel {
         return contentTopInset + tilesTop + TileGeometry.closedHeight
     }
 
-    /// How tall the glow is: at rest it ends just above the closed tiles' bottom edge; while a tile is open, the full
+    /// How tall the glow is: `GlowSpec.restHeight` at rest; while a tile is open, the full
     /// `HomeDesign.Metric.glowHeight`, so the open tile's posters sit in it.
-    var height: CGFloat { GlowSpec.height(tilesBottom: tilesBottom, isOpen: focused != nil) }
+    var height: CGFloat { GlowSpec.height(isOpen: focused != nil) }
 
-    /// What the glow draws: the focused poster alone; at rest `idle` and `trending` side by side, or whichever of
-    /// them there is when there is one, or both are the same image.
-    var art: GlowArt? {
-        let rightSide = restRight ?? trending
-        guard let left = activeURL else {
-            return HomeArtworkAtmosphereModel.url(for: rightSide).map { GlowArt(left: $0, right: nil) }
-        }
-        guard focused == nil, let right = HomeArtworkAtmosphereModel.url(for: rightSide), right != left else {
-            return GlowArt(left: left, right: nil)
-        }
-        return GlowArt(left: left, right: right)
-    }
+    /// Whether the glow is seen: while a tile is open, and at rest only when a picture covers it, so it is already
+    /// there as the picture fades out.
+    var showsGlow: Bool { focused != nil || hasRestPicture }
+
+    /// What the glow draws: the focused poster, else the poster it rests on.
+    var art: GlowArt? { activeURL.map(GlowArt.init) }
 }
 
-/// One state of the glow: an image across it, or two images that meet in the middle.
+/// One state of the glow: an image across it.
 nonisolated struct GlowArt: Hashable {
-    let left: URL
-    /// Drawn over the right side, faded out toward the middle; nil when `left` fills the glow.
-    let right: URL?
+    let url: URL
 }
 
 /// The glow's numbers from the design: a 390 x 440 box holding each image at 590 x 720, offset -100 / -170, at
@@ -97,20 +90,14 @@ enum GlowSpec {
         min(topOffset - topInset, topOffset - layoutTop)
     }
 
-    /// At rest the glow is fully black this far above the closed tiles' bottom edge.
-    static let restGap: CGFloat = 6
     /// Where the closed tiles end on a 393-402 pt phone, until they have been measured.
     static let estimatedTilesBottom: CGFloat = 322
-    /// The shortest the glow gets, whatever is measured.
-    static let minimumHeight: CGFloat = 200
+    /// How tall the glow is at rest, behind the picture: down to where the closed tiles start.
+    static let restHeight: CGFloat = 318
 
-    /// The glow's height: while a tile is open, `HomeDesign.Metric.glowHeight`; at rest, from its top (at
-    /// `BackdropLayout.topOffset`) to `restGap` above the tiles' bottom edge.
-    static func height(tilesBottom: CGFloat?, isOpen: Bool) -> CGFloat {
-        let full = HomeDesign.Metric.glowHeight
-        guard !isOpen else { return full }
-        let bottom = tilesBottom ?? estimatedTilesBottom
-        return min(full, max(minimumHeight, (bottom - BackdropLayout.topOffset - restGap).rounded()))
+    /// The glow's height: while a tile is open, `HomeDesign.Metric.glowHeight`; at rest, `restHeight`.
+    static func height(isOpen: Bool) -> CGFloat {
+        isOpen ? HomeDesign.Metric.glowHeight : restHeight
     }
 }
 

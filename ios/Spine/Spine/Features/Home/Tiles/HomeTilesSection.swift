@@ -103,11 +103,10 @@ private struct TilesSync: View {
     var body: some View {
         let inProgressIDs = model.ids(for: .inProgress)
         let trendingIDs = model.ids(for: .trending)
-        // What the glow is showing: the focused poster, else the front posters of the two fans.
+        // What the glow is showing: the focused poster, else the front poster of the In progress fan.
         let glowTargets = [
             state.focusedMedia(model: model),
             state.frontMedia(.inProgress, model: model),
-            state.frontMedia(.trending, model: model),
         ]
         Color.clear
             .frame(width: 0, height: 0)

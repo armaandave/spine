@@ -231,14 +231,12 @@ final class HomeTilesState {
         return model.media(for: tile, id: id)
     }
 
-    /// Points Home's glow at the focused poster while a tile is open, and back at the tiles' front posters when both
-    /// are closed (In progress's on the left, Trending's on the right).
+    /// Points Home's glow at the focused poster while a tile is open, and back at the In progress tile's front poster
+    /// when both are closed.
     func syncGlow(_ glow: HomeGlowModel, model: HomeTilesModel) {
         let media = focusedMedia(model: model)
         if glow.focused != media { glow.focused = media }
         let left = frontMedia(.inProgress, model: model)
         if glow.restLeft != left { glow.restLeft = left }
-        let right = frontMedia(.trending, model: model)
-        if glow.restRight != right { glow.restRight = right }
     }
 }

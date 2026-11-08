@@ -1,10 +1,9 @@
 import Nuke
 import SwiftUI
 
-/// The colored glow at the top of Home, already blurred and saturated in the image cache, under a black gradient: at
-/// rest In progress's art on the left and Trending's on the right, meeting in the middle; the focused poster's art
-/// while a carousel is open. At rest it ends just above the closed tiles' bottom edge; while a tile is open it is
-/// `HomeDesign.Metric.glowHeight` tall (`HomeGlowModel.height`). It scrolls away with the page and cross-fades
+/// The colored glow at the top of Home while a tile is open, already blurred and saturated in the image cache, under
+/// a black gradient: the focused poster's art, `HomeDesign.Metric.glowHeight` tall (`HomeGlowModel.height`). At rest
+/// it is behind Home's picture (`HomeTopArtView`) and out of sight. It scrolls away with the page and cross-fades
 /// between images.
 ///
 /// It is the background of the scrolling content itself (`HomeView`), so the scroll view moves it with the content
@@ -48,19 +47,25 @@ struct HomeGlow: View {
                 )
             }
             .clipped()
+            // At rest Home's picture covers it (or, with no picture, the page is plain black), so it shows only while
+            // a tile is open, and fades in and out with the picture's own cross-fade.
+            .opacity(model.showsGlow ? 1 : 0)
+            .animation(HomeDesign.Motion.glowCrossfade(reduceMotion: reduceMotion), value: model.showsGlow)
             .modifier(GlowPlacement(topInset: model.contentTopInset ?? GlowSpec.estimatedTopInset))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
             .onChange(of: model.art, initial: true) { old, art in
+                // With nothing to show it keeps its last image, so it does not pop out as the picture fades back.
+                guard let art else { return }
                 let first = layers.show(art)
                 // Coming back into the page (the content was rebuilt) with an image already chosen: it is simply there,
                 // not faded in from nothing. A first image that arrives later still fades in.
-                if first, old == art, let art { layers.fadeCompleted(of: art) }
+                if first, old == art { layers.fadeCompleted(of: art) }
             }
     }
 }
 
-/// Tells the glow where the tiles start in the page's content, so at rest it ends just above their bottom edge. The
+/// Tells the glow where the tiles start in the page's content, so the closed tiles' posters know their bottom edge. The
 /// place is read in the content's own space, which does not move as the page scrolls, so scrolling writes nothing.
 struct HomeGlowTilesAnchor: ViewModifier {
     let glow: HomeGlowModel
@@ -69,7 +74,8 @@ struct HomeGlowTilesAnchor: ViewModifier {
         content.onGeometryChange(for: CGFloat.self) { proxy in
             proxy.frame(in: .named(HomeGlowModel.contentSpace)).minY.rounded()
         } action: { top in
-            if glow.tilesTop != top { glow.tilesTop = top }
+            // While a tile is open the header squeezes up and the tiles move with it: that is not where they rest.
+            if glow.focused == nil, glow.tilesTop != top { glow.tilesTop = top }
         }
     }
 }
@@ -78,12 +84,14 @@ struct HomeGlowTilesAnchor: ViewModifier {
 /// content's top and the scroll view moves it; this lifts it up under the status bar by the inset and the design's
 /// offset, and while the page is pulled past the top, lifts it by the pull so it stays at the top with no gap. It reads
 /// the glow's place in the render pass, so nothing is written to state and no body runs.
-private struct GlowPlacement: ViewModifier {
+struct GlowPlacement: ViewModifier {
     let topInset: CGFloat
+    /// Where the top sits on screen at rest; Home's picture sits at the very top (0).
+    var topOffset: CGFloat = BackdropLayout.topOffset
 
     func body(content: Content) -> some View {
         let topInset = topInset
-        let topOffset = BackdropLayout.topOffset
+        let topOffset = topOffset
         content.visualEffect { content, proxy in
             content.offset(y: GlowSpec.offset(
                 layoutTop: proxy.frame(in: .global).minY, topInset: topInset, topOffset: topOffset
@@ -93,7 +101,7 @@ private struct GlowPlacement: ViewModifier {
 }
 
 /// One layer of the glow at the design's 590 x 720 (1.513 times the box's width), centered on the box: one baked
-/// image, or two where the right one has its fade toward the middle baked in. The upper layer fades in from nothing
+/// image. The upper layer fades in from nothing
 /// when it appears and tells its owner when it has finished; a lower layer is simply there. The view is keyed by its
 /// layer's token, so a layer that moves from upper to lower stays the same view and the hand-over has no frame where
 /// it is redrawn.
@@ -114,10 +122,7 @@ private struct GlowImageLayer: View {
         Color.clear
             .frame(height: GlowSpec.imageHeight)
             .containerRelativeFrame(.horizontal) { width, _ in width * GlowSpec.imageWidthRatio }
-            .overlay { Self.image(art.left, processors: [BlurredArt.Style.glow.processor]) }
-            .overlay {
-                if let right = art.right { Self.image(right, processors: HomeGlow.meetingProcessors) }
-            }
+            .overlay { Self.image(art.url, processors: [BlurredArt.Style.glow.processor]) }
             .clipped()
             .offset(y: GlowSpec.imageTop)
             // Without a compositing group SwiftUI sets this on each image, not on the pair, so nothing is flattened.
@@ -159,11 +164,6 @@ extension HomeGlow {
     /// The request the glow loads and the prefetcher warms, so both share one cache entry.
     static func request(for media: MediaSummary?) -> ImageRequest? {
         BlurredArt.request(url: HomeArtworkAtmosphereModel.url(for: media), style: .glow)
-    }
-
-    /// The right-hand image of the glow at rest: the same bake, faded out toward the middle.
-    static var meetingProcessors: [any ImageProcessing] {
-        [BlurredArt.Style.glow.processor, GlowMeetProcessor()]
     }
 
     /// Warms the glow's thumbnails for `media` (the focused poster's neighbors), at low priority.

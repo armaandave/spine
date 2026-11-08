@@ -88,7 +88,7 @@ final class HomeSourceGuardrailTests: XCTestCase {
     }
 
     func testTheNewHomeFilesUseNoLiveBlurMaterialOrGeometryReader() throws {
-        for path in ["HomeTop.swift", "HomeFeedRows.swift", "HomeFeedModel.swift"] {
+        for path in ["HomeTop.swift", "HomeTopArt.swift", "HomeFeedRows.swift", "HomeFeedModel.swift"] {
             let text = code(try read("Features/Home/\(path)"))
             for (name, pattern) in Self.banned {
                 XCTAssertNil(text.range(of: pattern, options: .regularExpression), "\(path) uses \(name)")

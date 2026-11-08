@@ -339,13 +339,76 @@ final class HomeTopTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Spine/Features/Home", isDirectory: true)
         let top = try String(contentsOf: sources.appendingPathComponent("HomeTop.swift"), encoding: .utf8)
-        XCTAssertTrue(top.contains("HomeHeaderSqueeze(state: viewModel.tilesState)"), "The header squeezes with the open tile")
+        XCTAssertTrue(
+            top.contains("HomeHeaderSqueeze(state: viewModel.tilesState, glow: viewModel.glowModel)"),
+            "The header squeezes with the open tile"
+        )
         XCTAssertTrue(top.contains("TileMotion.frame(closing: !squeezed, reduceMotion: reduceMotion)"), "...under the tile's own curve, opening and closing")
         XCTAssertTrue(top.contains("anchor: .topLeading"), "...from its top-leading corner")
         // HomeTop's own body does not read the open tile, or opening one would redraw the whole page top.
         let body = try XCTUnwrap(top.range(of: "var body: some View {"))
         let end = try XCTUnwrap(top.range(of: "private var friendsRow"))
         XCTAssertFalse(String(top[body.upperBound ..< end.lowerBound]).contains("tilesState.open"))
+    }
+
+    // MARK: The header above the tiles, under the picture
+
+    func testThePictureHeaderAndTilesSitWhereTheMockPutsThemOnA390PointPhone() {
+        typealias S = HomeTopArtSpec
+        XCTAssertEqual(S.height(width: 390), 470)
+        XCTAssertEqual(S.headerRowTop(width: 390), 232)
+        XCTAssertEqual(S.headerRowHeight, 54)
+        XCTAssertEqual(S.headerToTiles, 32)
+        XCTAssertEqual(S.tilesTop(width: 390), 318)
+        XCTAssertEqual(S.tilesTop(width: 390), S.headerRowTop(width: 390) + S.headerRowHeight + S.headerToTiles)
+        XCTAssertEqual(HomeBackdropArt.aspect, 390.0 / 470, accuracy: 0.0001)
+    }
+
+    func testThePicturesNumbersScaleWithTheWidthWithinLimits() {
+        typealias S = HomeTopArtSpec
+        XCTAssertEqual(S.scale(width: 390), 1)
+        XCTAssertEqual(S.scale(width: 100), 0.9, "clamped from below")
+        XCTAssertEqual(S.scale(width: 2000), 1.2, "clamped from above")
+        XCTAssertEqual(S.headerRowTop(width: 429), (232 * 429 / 390).rounded())
+        XCTAssertEqual(S.height(width: 429), (470 * 429 / 390).rounded())
+        XCTAssertEqual(S.headerRowTop(width: 100), (232 * 0.9).rounded())
+        XCTAssertEqual(S.height(width: 2000), (470 * 1.2).rounded())
+    }
+
+    func testThePicturesShadeKeepsTheStatusBarReadableAndEndsInTheBlackPage() {
+        let shade = HomeTopArtSpec.shade
+        XCTAssertEqual(shade.first?.opacity, 0.35)
+        XCTAssertEqual(shade.first?.location, 0)
+        XCTAssertEqual(shade[1].opacity, 0, "gone by 16%")
+        XCTAssertEqual(shade[1].location, 0.16)
+        XCTAssertEqual(shade.last?.opacity, 1, "solid black at the bottom")
+        XCTAssertEqual(shade.last?.location, 1)
+        XCTAssertEqual(shade.map(\.location), shade.map(\.location).sorted())
+    }
+
+    func testTheRestingHeaderGapPlusTheTilesPaddingIsTheMocksGap() throws {
+        let sources = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Spine/Features/Home", isDirectory: true)
+        let top = try String(contentsOf: sources.appendingPathComponent("HomeTop.swift"), encoding: .utf8)
+        XCTAssertTrue(top.contains("static let restExtraGap: CGFloat = HomeTopArtSpec.headerToTiles - headerToTiles"))
+        XCTAssertTrue(top.contains("static let headerToTiles: CGFloat = 22"), "open, the tiles sit where they always did")
+        XCTAssertTrue(top.contains("static let squeezedTop: CGFloat = 17"), "open, the header is where it always was")
+    }
+
+    func testTheLabelIsAButtonThatOpensThePicturesTitle() throws {
+        let sources = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Spine/Features/Home", isDirectory: true)
+        let top = try String(contentsOf: sources.appendingPathComponent("HomeTop.swift"), encoding: .utf8)
+        XCTAssertTrue(top.contains(#".accessibilityLabel("Opens \(art.title)")"#))
+        XCTAssertTrue(top.contains("onOpenTitle(art.ref)"))
+        XCTAssertTrue(top.contains("onOpenTitle: actions.onOpenTitle"), "the page opens it as it opens any title")
+        XCTAssertTrue(top.contains(".dynamicTypeSize(...HomeDesign.Text.maxCategory)"))
+        let art = try String(contentsOf: sources.appendingPathComponent("HomeTopArt.swift"), encoding: .utf8)
+        XCTAssertTrue(art.contains(".accessibilityHidden(true)"), "the picture is decorative")
     }
 }
 
