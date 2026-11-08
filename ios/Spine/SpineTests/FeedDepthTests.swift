@@ -226,9 +226,10 @@ final class FeedDepthTests: XCTestCase {
         XCTAssertEqual(components(FeedStatusPill.Kind.pickedBackUp.dot(ink: .light).color), [0x0C, 0x8F, 0x47])
         XCTAssertEqual(components(FeedStatusPill.Kind.stopped.dot(ink: .dark).color), [0xFF, 0x6B, 0x6B])
         XCTAssertEqual(components(FeedStatusPill.Kind.stopped.dot(ink: .light).color), [0xC0, 0x39, 0x2B])
-        XCTAssertEqual(FeedStatusPill.Kind.paused.dot(ink: .dark).glow?.alpha, 0.85)
-        XCTAssertEqual(FeedStatusPill.Kind.paused.dot(ink: .light).glow?.alpha, 0.55)
-        XCTAssertEqual(FeedStatusPill.Kind.stopped.dot(ink: .dark).glow?.alpha, 0.7)
+        // Half the strength the glows first had.
+        XCTAssertEqual(FeedStatusPill.Kind.paused.dot(ink: .dark).glow?.alpha ?? 0, 0.425, accuracy: 0.0001)
+        XCTAssertEqual(FeedStatusPill.Kind.paused.dot(ink: .light).glow?.alpha ?? 0, 0.275, accuracy: 0.0001)
+        XCTAssertEqual(FeedStatusPill.Kind.stopped.dot(ink: .dark).glow?.alpha ?? 0, 0.35, accuracy: 0.0001)
         XCTAssertNil(FeedStatusPill.Kind.other.dot(ink: .dark).glow)
         XCTAssertNil(FeedStatusPill.Kind.other.dot(ink: .light).glow)
     }
