@@ -521,19 +521,26 @@ final class HomeTilesStateTests: XCTestCase {
         }
     }
 
-    func testTheScrollOffsetIsReadOnlyInTheFoldModifier() throws {
-        // Scrolling re-evaluates the glow's offset line and the back posters' fold, and nothing else in the tiles.
+    func testTheScrollOffsetIsReadOnlyInTheFoldModifiers() throws {
+        // Scrolling re-evaluates the glow's offset line and the two folds (a closed tile's back posters, an open
+        // tile's other posters), and nothing else in the tiles.
         let carousel = try tileSource("TileCarousel.swift")
-        XCTAssertEqual(carousel.components(separatedBy: "scrollOffset").count - 1, 1)
+        XCTAssertEqual(carousel.components(separatedBy: "scrollOffset").count - 1, 2)
         let fold = try XCTUnwrap(carousel.range(of: "struct PosterFold"))
-        let read = try XCTUnwrap(carousel.range(of: "glow.scrollOffset"))
+        let openFold = try XCTUnwrap(carousel.range(of: "struct PosterOpenFold"))
         let next = try XCTUnwrap(carousel.range(of: "private struct PosterButtonStyle"))
-        XCTAssertTrue(fold.upperBound < read.lowerBound && read.upperBound < next.lowerBound)
+        XCTAssertTrue(fold.upperBound < openFold.lowerBound && openFold.upperBound < next.lowerBound)
+        let closedBody = carousel[fold.upperBound ..< openFold.lowerBound]
+        let openBody = carousel[openFold.upperBound ..< next.lowerBound]
+        XCTAssertEqual(closedBody.components(separatedBy: "glow.scrollOffset").count - 1, 1)
+        XCTAssertEqual(openBody.components(separatedBy: "glow.scrollOffset").count - 1, 1)
         for name in ["HomeTilesSection.swift", "TileGeometry.swift", "HomeTilesSkeleton.swift", "TileDetailPanel.swift"] {
             XCTAssertFalse(try tileSource(name).contains("scrollOffset"), name)
         }
-        // The fold is transforms and one brightness: no new view, no layout.
+        // The folds are transforms and one brightness: no new view, no layout. The open fold reads where its poster
+        // sits in the render pass (`visualEffect`'s proxy), which lays nothing out.
         let body = String(carousel[fold.upperBound ..< next.lowerBound])
+            .replacingOccurrences(of: "proxy.frame(in: .scrollView(axis: .horizontal))", with: "")
         for forbidden in ["GeometryReader", "overlay", "background", "ZStack", "frame(", "Color."] {
             XCTAssertFalse(body.contains(forbidden), forbidden)
         }
