@@ -501,11 +501,11 @@ final class TileGeometryTests: XCTestCase {
         for closing in [false, true] {
             XCTAssertEqual(
                 TileMotion.frame(closing: closing, reduceMotion: false),
-                HomeDesign.Motion.closing(duration: 0.86, reduceMotion: false)
+                HomeDesign.Motion.closing(duration: 0.645, reduceMotion: false)
             )
             XCTAssertEqual(
                 TileMotion.slide(closing: closing, reduceMotion: false),
-                HomeDesign.Motion.closing(duration: 0.7, reduceMotion: false)
+                HomeDesign.Motion.closing(duration: 0.525, reduceMotion: false)
             )
             XCTAssertEqual(
                 TileMotion.fade(closing: closing, reduceMotion: false),
@@ -518,7 +518,7 @@ final class TileGeometryTests: XCTestCase {
         }
 
         let curve = HomeDesign.Motion.closeCurve
-        let closeFrame = Animation.timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.86)
+        let closeFrame = Animation.timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.645)
         XCTAssertEqual(TileMotion.frame(closing: true, reduceMotion: false), closeFrame)
         // The poster the tile closes on lands with the tile, and its neighbors travel with it, with no delay.
         XCTAssertEqual(TileMotion.close(role: .front, reduceMotion: false), closeFrame)
@@ -526,11 +526,11 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileMotion.close(role: .right, reduceMotion: false), closeFrame.delay(0))
         XCTAssertEqual(
             TileMotion.close(role: .hidden, reduceMotion: false),
-            .timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.6)
+            .timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.45)
         )
-        XCTAssertEqual(TileMotion.closeFade(reduceMotion: false), .easeOut(duration: 0.3))
+        XCTAssertEqual(TileMotion.closeFade(reduceMotion: false), .easeOut(duration: 0.225))
         // The mounted posters are kept until the longest close is over.
-        XCTAssertGreaterThan(TileMotion.unmountDelay, .seconds(0.86))
+        XCTAssertGreaterThan(TileMotion.unmountDelay, .seconds(0.645))
     }
 
     @MainActor
@@ -547,12 +547,20 @@ final class TileGeometryTests: XCTestCase {
             .timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: duration)
         }
         // The front poster and its neighbors travel together over the close's whole length.
-        XCTAssertEqual(TileMotion.open(role: .front, reduceMotion: false), timing(0.86).delay(0))
-        XCTAssertEqual(TileMotion.open(role: .left, reduceMotion: false), timing(0.86))
-        XCTAssertEqual(TileMotion.open(role: .right, reduceMotion: false), timing(0.86))
-        // The rest start late, so they end with them, and appear only in the last 0.3 s.
-        XCTAssertEqual(TileMotion.open(role: .hidden, reduceMotion: false), timing(0.6).delay(0.26))
-        XCTAssertEqual(TileMotion.openFade(reduceMotion: false), Animation.easeIn(duration: 0.3).delay(0.56))
+        XCTAssertEqual(TileMotion.open(role: .front, reduceMotion: false), timing(0.645).delay(0))
+        XCTAssertEqual(TileMotion.open(role: .left, reduceMotion: false), timing(0.645))
+        XCTAssertEqual(TileMotion.open(role: .right, reduceMotion: false), timing(0.645))
+        // The rest start late, so they end with them, and appear only in the last 0.225 s.
+        XCTAssertEqual(
+            TileMotion.open(role: .hidden, reduceMotion: false),
+            timing(0.45).delay(HomeDesign.Motion.openRestDelay)
+        )
+        XCTAssertEqual(HomeDesign.Motion.openRestDelay, 0.195, accuracy: 0.0001)
+        XCTAssertEqual(
+            TileMotion.openFade(reduceMotion: false),
+            Animation.easeIn(duration: 0.225).delay(HomeDesign.Motion.openFadeDelay)
+        )
+        XCTAssertEqual(HomeDesign.Motion.openFadeDelay, 0.42, accuracy: 0.0001)
     }
 
     @MainActor

@@ -167,7 +167,7 @@ private struct HomeTile: View {
                         .transition(.asymmetric(
                             insertion: .scale(scale: 0.5).combined(with: .opacity)
                                 .animation(TileMotion.closePop(reduceMotion: reduceMotion)),
-                            removal: .opacity.animation(.easeOut(duration: 0.12))
+                            removal: .opacity.animation(.easeOut(duration: 0.09))
                         ))
                 }
             }
@@ -237,7 +237,7 @@ private struct HomeTile: View {
                     .transition(.asymmetric(
                         insertion: .offset(y: 12).combined(with: .opacity)
                             .animation(TileMotion.panelRise(reduceMotion: reduceMotion)),
-                        removal: .opacity.animation(.easeOut(duration: 0.12))
+                        removal: .opacity.animation(.easeOut(duration: 0.09))
                     ))
             }
         }
