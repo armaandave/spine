@@ -17,8 +17,11 @@ struct HomeGlow: View {
             .frame(height: HomeDesign.Metric.glowHeight)
             .overlay(alignment: .top) {
                 ZStack(alignment: .top) {
-                    ForEach(layers.alive, id: \.self) { url in
-                        GlowImageLayer(url: url, fades: url == layers.upper) { finished in
+                    ForEach(layers.aliveLayers, id: \.token) { layer in
+                        GlowImageLayer(
+                            url: layer.url,
+                            fades: layers.upper != nil && layer.token == layers.upperToken
+                        ) { finished in
                             layers.fadeCompleted(of: finished)
                         }
                     }
@@ -104,6 +107,11 @@ private struct GlowImageLayer: View {
                 ) {
                     shown = true
                 } completion: {
+                    onFinished(url)
+                }
+                // A backstop in case the completion never arrives: the layers would stay "fading" and the glow would
+                // stop following the carousel. A second call is harmless (fadeCompleted ignores a layer that isn't upper).
+                DispatchQueue.main.asyncAfter(deadline: .now() + HomeDesign.Motion.glowCrossfadeDuration + 0.3) {
                     onFinished(url)
                 }
             }

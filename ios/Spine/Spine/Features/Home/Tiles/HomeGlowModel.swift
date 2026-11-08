@@ -52,15 +52,35 @@ enum GlowSpec {
 /// fading both makes a dip in brightness. When the fade ends, the image is the `lower` layer and the upper clears.
 /// A `show` during a fade is queued, the latest one wins, and it starts when the running fade ends.
 nonisolated struct GlowLayers: Equatable {
+    /// One layer on screen. The view is keyed by `token`, not the URL: a URL that comes back as a new upper layer
+    /// (swiping away and back during a fade) gets a new view, so its fade-in runs and reports its end. Keyed by URL,
+    /// the old lower layer's view was reused, its fade never ran, `upper` never cleared, and every later swipe only
+    /// queued: the glow stuck.
+    nonisolated struct Layer: Hashable {
+        let url: URL
+        let token: Int
+    }
+
     private(set) var lower: URL?
     private(set) var upper: URL?
     private var queued: URL?
+    private var lowerToken = 0
+    private(set) var upperToken = 0
+    private var lastToken = 0
 
     /// The image the layers will end on.
     var target: URL? { queued ?? upper ?? lower }
     var isFading: Bool { upper != nil }
     /// The layers on screen, bottom first. Never more than two.
     var alive: [URL] { [lower, upper].compactMap { $0 } }
+    /// The same layers with the identity their views are keyed by. An upper layer keeps its token when its fade
+    /// ends and it becomes the lower one, so the hand-over redraws nothing.
+    var aliveLayers: [Layer] {
+        var layers: [Layer] = []
+        if let lower { layers.append(Layer(url: lower, token: lowerToken)) }
+        if let upper { layers.append(Layer(url: upper, token: upperToken)) }
+        return layers
+    }
 
     /// Shows `url`, or clears with nil. Returns true when a fade just started on the upper layer.
     @discardableResult
@@ -77,7 +97,7 @@ nonisolated struct GlowLayers: Equatable {
             queued = (url == upper) ? nil : url
             return false
         }
-        upper = url
+        startUpper(url)
         return true
     }
 
@@ -86,11 +106,18 @@ nonisolated struct GlowLayers: Equatable {
     mutating func fadeCompleted(of url: URL) -> Bool {
         guard upper == url else { return false }
         lower = url
+        lowerToken = upperToken
         upper = nil
         guard let next = queued else { return false }
         queued = nil
         guard next != lower else { return false }
-        upper = next
+        startUpper(next)
         return true
+    }
+
+    private mutating func startUpper(_ url: URL) {
+        lastToken += 1
+        upper = url
+        upperToken = lastToken
     }
 }

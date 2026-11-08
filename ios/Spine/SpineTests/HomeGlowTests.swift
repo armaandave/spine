@@ -104,6 +104,35 @@ final class HomeGlowTests: XCTestCase {
         XCTAssertEqual(layers.upper, a)
     }
 
+    /// The stuck-glow bug: a fast swipe away and back during a fade put an image that was already on screen (the
+    /// lower layer) back on top. Its view was keyed by URL, so it was reused, its fade never ran and never ended,
+    /// and every later swipe only queued. A layer that comes back on top must get a new identity.
+    func testAnImageThatComesBackOnTopGetsANewViewIdentity() {
+        var layers = GlowLayers()
+        layers.show(a)
+        layers.fadeCompleted(of: a)
+        let aAsLower = layers.aliveLayers.first { $0.url == a }
+        layers.show(b)
+        layers.show(a)
+        XCTAssertTrue(layers.fadeCompleted(of: b))
+
+        let aOnTop = layers.aliveLayers.first { $0.url == a }
+        XCTAssertNotNil(aOnTop)
+        XCTAssertNotEqual(aOnTop?.token, aAsLower?.token, "a re-shown image must be a new view so its fade runs")
+        XCTAssertEqual(aOnTop?.token, layers.upperToken)
+        XCTAssertFalse(layers.fadeCompleted(of: a))
+        XCTAssertNil(layers.upper)
+        XCTAssertTrue(layers.show(c), "after the fade ends the glow follows the carousel again")
+    }
+
+    func testAnUpperLayerKeepsItsIdentityWhenItBecomesTheLowerOne() {
+        var layers = GlowLayers()
+        layers.show(a)
+        let fading = layers.aliveLayers.last
+        layers.fadeCompleted(of: a)
+        XCTAssertEqual(layers.aliveLayers.first, fading, "the hand-over must not redraw the image")
+    }
+
     func testNeverMoreThanTwoLayersAndNeverTheSameImageTwice() {
         var layers = GlowLayers()
         let urls = [a, b, c, a, c, b, b, a]
