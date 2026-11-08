@@ -635,7 +635,8 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertNil(before.first { $0.id == 1 }?.meter)
 
         provider.prepare(for: items)
-        await landed(provider)
+        // Home's feed model takes the provider's change callback for itself, so wait on what it rebuilds.
+        await until(model.entries.first { $0.id == 1 }?.meter != nil)
         let after = model.entries
         XCTAssertEqual(before.count, after.count)
 

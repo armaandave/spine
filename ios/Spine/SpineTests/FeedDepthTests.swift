@@ -244,7 +244,8 @@ final class FeedDepthTests: XCTestCase {
         let fixed = 2 * D.countsPillHPad + 2 * (D.countsIcon + D.countsPairGap) + D.countsPillGap
         XCTAssertEqual(fixed, 55)
         XCTAssertGreaterThan(pill.size.width, fixed)
-        XCTAssertLessThan(pill.size.width, fixed + 2 * 9, "Two digits take under 9 pt each")
+        // The rendered width is rounded up to a whole point, so two digits can come to exactly 9 each.
+        XCTAssertLessThanOrEqual(pill.size.width, fixed + 2 * 9, "Two digits take at most 9 pt each")
     }
 
     func testAZeroCountStillReadsItsNumber() {
