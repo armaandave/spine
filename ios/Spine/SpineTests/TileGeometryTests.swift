@@ -360,19 +360,23 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileGeometry.cornerRadius(forScale: 0), 1200, "a zero scale cannot divide by zero")
     }
 
-    // MARK: Stagger
+    // MARK: Opacity
 
-    func testOpeningStaggersFortyFiveMillisecondsApartFromTheRestTitle() {
-        for rest in [0, 3, 9] {
+    func testAPosterFromBehindTheFanStaysClearUntilItHasBeenDrawnOnce() {
+        let width = TileGeometry.referenceContentWidth
+        for rest in [0, 4, 9] {
             for index in 0 ..< 10 {
+                let role = TileGeometry.fanRole(index: index, rest: rest, count: 10)
+                let open = TileGeometry.openPose(index: index, focus: rest)
+                let fan = TileGeometry.fanPose(index: index, rest: rest, count: 10, contentWidth: width)
+                let fresh = TileGeometry.cellOpacity(pose: open, role: role, isOpen: true, entered: false)
+                XCTAssertEqual(fresh, role == .hidden ? 0 : 1, "index \(index), rest \(rest)")
+                XCTAssertEqual(TileGeometry.cellOpacity(pose: open, role: role, isOpen: true, entered: true), 1)
                 XCTAssertEqual(
-                    TileGeometry.openDelay(index: index, rest: rest),
-                    Double(abs(index - rest)) * 0.045,
-                    accuracy: 0.0000001
+                    TileGeometry.cellOpacity(pose: fan, role: role, isOpen: false, entered: false), fan.opacity
                 )
             }
         }
-        XCTAssertEqual(TileGeometry.openDelay(index: 3, rest: 3), 0, "the title it rests on goes first")
     }
 
     // MARK: Mounting
@@ -473,9 +477,11 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileMotion.slide(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.fade(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.art(reduceMotion: true), reduced)
-        XCTAssertEqual(TileMotion.flight(delay: 0.2, reduceMotion: true), reduced, "no flying, no stagger")
+        for role in [TileGeometry.FanRole.front, .left, .right, .hidden] {
+            XCTAssertEqual(TileMotion.open(role: role, reduceMotion: true), reduced)
+        }
         XCTAssertEqual(TileMotion.focus(reduceMotion: true), reduced)
-        XCTAssertEqual(TileMotion.posterFade(delay: 0.2, reduceMotion: true), reduced)
+        XCTAssertEqual(TileMotion.openFade(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.dim(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.panelRise(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.closePop(reduceMotion: true), reduced)
@@ -490,12 +496,26 @@ final class TileGeometryTests: XCTestCase {
     }
 
     @MainActor
-    func testOpeningKeepsItsAnimationsAndClosingIsSlowerOnTheGentlerCurve() {
-        // Opening is unchanged whichever way it is asked for.
-        XCTAssertEqual(TileMotion.frame(closing: false, reduceMotion: false), TileMotion.frame(reduceMotion: false))
-        XCTAssertEqual(TileMotion.slide(closing: false, reduceMotion: false), TileMotion.slide(reduceMotion: false))
-        XCTAssertEqual(TileMotion.fade(closing: false, reduceMotion: false), TileMotion.fade(reduceMotion: false))
-        XCTAssertEqual(TileMotion.art(closing: false, reduceMotion: false), TileMotion.art(reduceMotion: false))
+    func testOpeningRunsTheCloseTimingsAndTheCloseIsOnTheGentlerCurve() {
+        // Opening is the close played backwards: the same lengths and curve both ways.
+        for closing in [false, true] {
+            XCTAssertEqual(
+                TileMotion.frame(closing: closing, reduceMotion: false),
+                HomeDesign.Motion.closing(duration: 0.86, reduceMotion: false)
+            )
+            XCTAssertEqual(
+                TileMotion.slide(closing: closing, reduceMotion: false),
+                HomeDesign.Motion.closing(duration: 0.7, reduceMotion: false)
+            )
+            XCTAssertEqual(
+                TileMotion.fade(closing: closing, reduceMotion: false),
+                TileMotion.fade(closing: true, reduceMotion: false)
+            )
+            XCTAssertEqual(
+                TileMotion.art(closing: closing, reduceMotion: false),
+                TileMotion.art(closing: true, reduceMotion: false)
+            )
+        }
 
         let curve = HomeDesign.Motion.closeCurve
         let closeFrame = Animation.timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.86)
@@ -518,10 +538,21 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileMotion.frame(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.62))
         XCTAssertEqual(TileMotion.slide(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.5))
         XCTAssertEqual(TileMotion.focus(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.45))
-        XCTAssertEqual(
-            TileMotion.flight(delay: 0.135, reduceMotion: false),
-            Animation.timingCurve(0.3, 1.2, 0.4, 1, duration: 0.7).delay(0.135)
-        )
+    }
+
+    @MainActor
+    func testOpeningIsTheClosePlayedBackwardsOnTheSameCurve() {
+        let curve = HomeDesign.Motion.closeCurve
+        func timing(_ duration: Double) -> Animation {
+            .timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: duration)
+        }
+        // The front poster and its neighbors travel together over the close's whole length.
+        XCTAssertEqual(TileMotion.open(role: .front, reduceMotion: false), timing(0.86).delay(0))
+        XCTAssertEqual(TileMotion.open(role: .left, reduceMotion: false), timing(0.86))
+        XCTAssertEqual(TileMotion.open(role: .right, reduceMotion: false), timing(0.86))
+        // The rest start late, so they end with them, and appear only in the last 0.3 s.
+        XCTAssertEqual(TileMotion.open(role: .hidden, reduceMotion: false), timing(0.6).delay(0.26))
+        XCTAssertEqual(TileMotion.openFade(reduceMotion: false), Animation.easeIn(duration: 0.3).delay(0.56))
     }
 
     @MainActor

@@ -101,7 +101,7 @@ private struct PosterButtonStyle: ButtonStyle {
 }
 
 /// One poster. Which pose it takes, and how it gets there, depends on whether its tile is opening, closing or only
-/// moving its focus: a flight is the spring after a stagger, a change of focus is the soft 0.45 s, a dim is 0.35 s.
+/// moving its focus: a flight is the close's curve played the other way, a change of focus is the soft 0.45 s, a dim is 0.35 s.
 private struct TilePosterCell: View {
     let poster: TilePoster
     let index: Int
@@ -113,6 +113,9 @@ private struct TilePosterCell: View {
     let onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Whether this poster has been drawn once. One drawn for the first time with its tile already open stays clear
+    /// until this is set (see `TileGeometry.cellOpacity`).
+    @State private var entered = false
 
     var body: some View {
         let isOpen = state.open == tile
@@ -123,7 +126,6 @@ private struct TilePosterCell: View {
         let pose = TileGeometry.pose(
             index: index, focus: focus, isOpen: isOpen, rest: rest, count: count, contentWidth: contentWidth
         )
-        let openDelay = TileGeometry.openDelay(index: index, rest: rest)
         let media = poster.media
         // Where the poster sits in its 120 x 180 frame, as a fraction of it: the point its fold turns and shrinks about.
         let fanPose = TileGeometry.fanPose(index: index, rest: rest, count: count, contentWidth: contentWidth)
@@ -162,22 +164,23 @@ private struct TilePosterCell: View {
             slide: TileGeometry.foldSlide(role: role, contentWidth: contentWidth)
         ))
         // The innermost of these two that applies wins, so an open or a close (a flight) beats a change of focus
-        // that happens in the same update. Opening is the spring after a stagger; closing is a zoom into the fan.
+        // that happens in the same update. Opening zooms out of the fan and closing zooms back into it, on the same curve.
         .transaction(value: isOpen) { transaction in
             transaction.animation = isOpen
-                ? TileMotion.flight(delay: openDelay, reduceMotion: reduceMotion)
+                ? TileMotion.open(role: role, reduceMotion: reduceMotion)
                 : TileMotion.close(role: role, reduceMotion: reduceMotion)
         }
         .transaction(value: isFocused) { transaction in
             transaction.animation = TileMotion.focus(reduceMotion: reduceMotion)
         }
-        .opacity(pose.opacity)
+        .opacity(TileGeometry.cellOpacity(pose: pose, role: role, isOpen: isOpen, entered: entered))
         .animation(
             isOpen
-                ? TileMotion.posterFade(delay: openDelay, reduceMotion: reduceMotion)
+                ? TileMotion.openFade(reduceMotion: reduceMotion)
                 : TileMotion.closeFade(reduceMotion: reduceMotion),
-            value: pose.opacity
+            value: TileGeometry.cellOpacity(pose: pose, role: role, isOpen: isOpen, entered: entered)
         )
+        .onAppear { entered = true }
         .zIndex(pose.z)
         .accessibilityHidden(true)
     }

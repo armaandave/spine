@@ -81,7 +81,7 @@ struct HomeTilesSection: View {
         state.requestOpen(
             tile,
             posterCount: posters.count,
-            animation: TileMotion.frame(reduceMotion: reduceMotion),
+            animation: TileMotion.frame(closing: false, reduceMotion: reduceMotion),
             defersMount: !reduceMotion
         )
     }

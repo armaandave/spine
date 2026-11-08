@@ -228,10 +228,11 @@ nonisolated enum TileGeometry {
 
     // MARK: Motion
 
-    /// Seconds before poster `index` of `count` starts to move when the tile opens: the title it rests on first, the
-    /// others 45 ms apart by their distance from it.
-    static func openDelay(index: Int, rest: Int) -> Double {
-        HomeDesign.Motion.openStagger(index: abs(index - rest))
+    /// The opacity a poster is drawn with. A poster that is not part of the fan fades in as the tile opens, so one
+    /// that is drawn for the first time with its tile already open (mounted too late to have a closed pose to leave)
+    /// starts clear and not at its carousel place at full strength.
+    static func cellOpacity(pose: PosterPose, role: FanRole, isOpen: Bool, entered: Bool) -> Double {
+        isOpen && role == .hidden && !entered ? 0 : pose.opacity
     }
 
     // MARK: Mounting
@@ -373,11 +374,10 @@ enum TileMotion {
         HomeDesign.Motion.tileHeight(reduceMotion: reduceMotion)
     }
 
-    /// The same, closing: about 1.4 times as long, on the gentler close curve.
-    static func frame(closing: Bool, reduceMotion: Bool) -> Animation {
-        closing
-            ? HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeFrameDuration, reduceMotion: reduceMotion)
-            : frame(reduceMotion: reduceMotion)
+    /// The tile's frame opening or closing: the same length and curve both ways, so the open is the close played
+    /// backwards.
+    static func frame(closing _: Bool, reduceMotion: Bool) -> Animation {
+        HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeFrameDuration, reduceMotion: reduceMotion)
     }
 
     /// The other tile's slide and shrink: 0.5 s.
@@ -385,11 +385,9 @@ enum TileMotion {
         HomeDesign.Motion.soft(duration: 0.5, reduceMotion: reduceMotion)
     }
 
-    /// The other tile's slide and shrink, closing: it comes back at the pace of the tile closing.
-    static func slide(closing: Bool, reduceMotion: Bool) -> Animation {
-        closing
-            ? HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeSlideDuration, reduceMotion: reduceMotion)
-            : slide(reduceMotion: reduceMotion)
+    /// The other tile's slide and shrink, opening or closing: at the pace of the tile, the same both ways.
+    static func slide(closing _: Bool, reduceMotion: Bool) -> Animation {
+        HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeSlideDuration, reduceMotion: reduceMotion)
     }
 
     /// The other tile's fade: 0.32 s.
@@ -397,10 +395,9 @@ enum TileMotion {
         reduceMotion ? HomeDesign.Motion.reduced : ease(0.32)
     }
 
-    /// The other tile's fade, closing.
-    static func fade(closing: Bool, reduceMotion: Bool) -> Animation {
-        guard closing else { return fade(reduceMotion: reduceMotion) }
-        return reduceMotion ? HomeDesign.Motion.reduced : ease(HomeDesign.Motion.closeTileFadeDuration)
+    /// The other tile's fade, opening or closing: the same both ways.
+    static func fade(closing _: Bool, reduceMotion: Bool) -> Animation {
+        reduceMotion ? HomeDesign.Motion.reduced : ease(HomeDesign.Motion.closeTileFadeDuration)
     }
 
     /// The baked art's fade: 0.5 s.
@@ -408,16 +405,33 @@ enum TileMotion {
         reduceMotion ? HomeDesign.Motion.reduced : ease(0.5)
     }
 
-    /// The baked art's fade, closing.
-    static func art(closing: Bool, reduceMotion: Bool) -> Animation {
-        guard closing else { return art(reduceMotion: reduceMotion) }
-        return reduceMotion ? HomeDesign.Motion.reduced : ease(HomeDesign.Motion.closeArtDuration)
+    /// The baked art's fade, opening or closing: the same both ways.
+    static func art(closing _: Bool, reduceMotion: Bool) -> Animation {
+        reduceMotion ? HomeDesign.Motion.reduced : ease(HomeDesign.Motion.closeArtDuration)
     }
 
-    /// A poster flying out of the fan into the carousel as the tile opens: the spring, after its stagger.
-    static func flight(delay: Double, reduceMotion: Bool) -> Animation {
+    /// How a poster moves as its tile opens, by the place it starts in: the close played backwards in time. The front
+    /// poster zooms out of its fan spot and the two beside it fly from the back places, together; the posters that
+    /// were hidden behind them start late and end with them.
+    static func open(role: TileGeometry.FanRole, reduceMotion: Bool) -> Animation {
         guard !reduceMotion else { return HomeDesign.Motion.reduced }
-        return HomeDesign.Motion.spring(reduceMotion: false).delay(delay)
+        switch role {
+        case .front:
+            return HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeFrameDuration, reduceMotion: false)
+                .delay(HomeDesign.Motion.openFrontDelay)
+        case .left, .right:
+            return HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeNeighborDuration, reduceMotion: false)
+        case .hidden:
+            return HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeRestDuration, reduceMotion: false)
+                .delay(HomeDesign.Motion.openRestDelay)
+        }
+    }
+
+    /// A poster's opacity as the tile opens: the posters from behind the fan appear in the last 0.3 s, when they are
+    /// nearly in their places (the others do not change opacity).
+    static func openFade(reduceMotion: Bool) -> Animation {
+        guard !reduceMotion else { return HomeDesign.Motion.reduced }
+        return .easeIn(duration: HomeDesign.Motion.closeFadeDuration).delay(HomeDesign.Motion.openFadeDelay)
     }
 
     /// The poster the tile closes on, zooming out into the fan's front place: the tile's own close animation, so it
@@ -456,12 +470,6 @@ enum TileMotion {
     /// A poster growing or shrinking as the focus passes: 0.45 s.
     static func focus(reduceMotion: Bool) -> Animation {
         HomeDesign.Motion.transform(reduceMotion: reduceMotion)
-    }
-
-    /// A poster's opacity while flying out as the tile opens: 0.3 s after the stagger.
-    static func posterFade(delay: Double, reduceMotion: Bool) -> Animation {
-        guard !reduceMotion else { return HomeDesign.Motion.reduced }
-        return ease(0.3).delay(delay)
     }
 
     /// A poster's dim: 0.35 s.

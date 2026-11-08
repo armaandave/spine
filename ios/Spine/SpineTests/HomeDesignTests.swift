@@ -123,7 +123,6 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.springDuration, 0.7)
         XCTAssertEqual(M.glowCrossfadeDuration, 0.3)
         XCTAssertEqual(M.reducedDuration, 0.1)
-        XCTAssertEqual(M.openStaggerMs, 45)
         XCTAssertEqual(M.closeFrameDuration, 0.86)
         XCTAssertEqual(M.closeSlideDuration, 0.7)
         XCTAssertEqual(M.closeTileFadeDuration, 0.45)
@@ -132,6 +131,13 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.closeNeighborDuration, 0.86)
         XCTAssertEqual(M.closeRestDuration, 0.6)
         XCTAssertEqual(M.closeFadeDuration, 0.3)
+    }
+
+    func testOpeningMirrorsTheCloseSoEveryPosterEndsTogether() {
+        typealias M = HomeDesign.Motion
+        XCTAssertEqual(M.openFrontDelay + M.closeFrameDuration, M.closeNeighborDelay + M.closeNeighborDuration)
+        XCTAssertEqual(M.openRestDelay + M.closeRestDuration, M.closeNeighborDuration, accuracy: 0.0001)
+        XCTAssertEqual(M.openFadeDelay + M.closeFadeDuration, M.closeNeighborDuration, accuracy: 0.0001)
     }
 
     func testClosingIsSlowerThanOpeningAndNeverWhips() {
@@ -181,12 +187,6 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.spring(reduceMotion: true), reduced)
         XCTAssertEqual(M.pop(reduceMotion: true), reduced)
         XCTAssertEqual(M.glowCrossfade(reduceMotion: true), reduced)
-    }
-
-    func testPosterStagger() {
-        typealias M = HomeDesign.Motion
-        XCTAssertEqual(M.openStagger(index: 0), 0)
-        XCTAssertEqual(M.openStagger(index: 3), 0.135, accuracy: 0.0001)
     }
 
     // MARK: Helpers

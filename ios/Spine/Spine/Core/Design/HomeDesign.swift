@@ -131,28 +131,34 @@ nonisolated enum HomeDesign {
         /// What every animation becomes when Reduce Motion is on.
         static let reducedDuration = 0.1
 
-        static let openStaggerMs = 45
-
         /// The design's cubic-bezier(.25, 1, .35, 1) is front-loaded: nearly all of a poster's flight happens in the
         /// first quarter of its time, which is why the old close read as a whip. The close uses this gentler curve
         /// instead: it still settles without overshoot (no control point leaves 0...1) but spreads the travel over
         /// the whole duration, so each poster's path is easy to follow.
         static let closeCurve = (c1x: 0.33, c1y: 0.55, c2x: 0.2, c2y: 1.0)
 
-        // Closing a tile runs about 1.4 times as long as opening it. Everything that moves does so on `closeCurve`
+        // A tile opens and closes over these lengths, both ways. Everything that moves does so on `closeCurve`
         // and together: the tile's frame, the page below it, the front poster and its two neighbors share one
         // duration and start at the same moment (no stagger), so they travel in step.
         static let closeFrameDuration = 0.86
-        /// The other tile coming back in: its slide and shrink (0.5 s on the open) and its fade (0.32 s).
+        /// The other tile going out and coming back in: its slide and shrink and its fade.
         static let closeSlideDuration = 0.7
         static let closeTileFadeDuration = 0.45
-        /// The blurred art fading back in (0.5 s on the open).
+        /// The blurred art fading.
         static let closeArtDuration = 0.7
         static let closeNeighborDelay = 0.0
         static let closeNeighborDuration = 0.86
         /// The posters that end hidden behind the front one draw in while they fade.
         static let closeRestDuration = 0.6
         static let closeFadeDuration = 0.3
+
+        // Opening is the close played backwards in time, on the same curve and over the same lengths: the front
+        // poster and its two neighbors travel together for `closeNeighborDuration`, and the posters that were
+        // hidden behind the front one start late so that each ends exactly with the others. They stay invisible
+        // until the last `closeFadeDuration`, by which time they are all but in their places.
+        static let openFrontDelay = closeNeighborDelay
+        static let openRestDelay = closeNeighborDuration - closeRestDuration
+        static let openFadeDelay = closeNeighborDuration - closeFadeDuration
 
         static func soft(duration: Double, reduceMotion: Bool) -> Animation {
             guard !reduceMotion else { return reduced }
@@ -202,11 +208,6 @@ nonisolated enum HomeDesign {
 
         static var reduced: Animation {
             .easeOut(duration: reducedDuration)
-        }
-
-        /// Delay in seconds before poster `index` moves when a tile opens.
-        static func openStagger(index: Int) -> Double {
-            Double(index * openStaggerMs) / 1000
         }
     }
 }
