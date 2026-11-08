@@ -13,21 +13,35 @@ struct BlurredArtBackground: View {
     let accentHex: String?
     let style: BlurredArt.Style
     var onMeasured: (@MainActor (Double) -> Void)?
+    /// Below 1 the art and the base let what is behind show through (a feed card's glass). Each is set on its own
+    /// layer, so nothing is composited offscreen.
+    var artOpacity: Double = 1
+    var baseOpacity: Double = 1
 
     var body: some View {
         Color.clear
-            .background(Self.baseColor(accentHex: accentHex))
+            .background(Self.baseColor(accentHex: accentHex).opacity(baseOpacity))
             .overlay {
                 LazyImage(
                     request: BlurredArt.request(url: url, style: style),
                     transaction: Transaction(animation: SpineMotion.animation(reduceMotion: reduceMotion))
                 ) { state in
                     if let image = state.image {
-                        image
-                            .resizable()
-                            .interpolation(.high)
-                            .scaledToFill()
-                            .transition(.opacity)
+                        if style.bakedAspect == nil {
+                            image
+                                .resizable()
+                                .interpolation(.high)
+                                .scaledToFill()
+                                .opacity(artOpacity)
+                                .transition(.opacity)
+                        } else {
+                            // Baked to the frame's shape already: filling would crop its top and bottom.
+                            image
+                                .resizable()
+                                .interpolation(.high)
+                                .opacity(artOpacity)
+                                .transition(.opacity)
+                        }
                     }
                 }
                 .onCompletion { result in

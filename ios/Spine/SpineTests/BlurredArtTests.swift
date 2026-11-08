@@ -187,7 +187,7 @@ final class BlurredArtTests: XCTestCase {
     // MARK: Processors
 
     func testProcessorsKeepSizeAndOpaqueEdges() throws {
-        for style in BlurredArt.Style.allCases {
+        for style in BlurredArt.Style.allCases where style.bakedAspect == nil {
             let source = UIImage(cgImage: bitmap(width: 8, height: 8) { _, _ in (200, 120, 60) }, scale: 3, orientation: .up)
             let output = try XCTUnwrap(style.processor.process(source), "\(style)")
             XCTAssertEqual(output.size, source.size, "\(style)")
@@ -202,6 +202,30 @@ final class BlurredArtTests: XCTestCase {
         }
     }
 
+    func testTheCardBakesTheWholePosterSqueezedToTheCardsShape() throws {
+        XCTAssertEqual(BlurredArt.Style.card.bakedAspect, 2.2)
+        // A 2:3 poster as the card thumbnail decodes it (120x180 at 3x): red on top, blue at the bottom.
+        let source = UIImage(
+            cgImage: bitmap(width: 120, height: 180) { _, y in y < 90 ? (255, 0, 0) : (0, 0, 255) },
+            scale: 3,
+            orientation: .up
+        )
+        let output = try XCTUnwrap(BlurredArt.Style.card.processor.process(source))
+        XCTAssertEqual(output.scale, 3)
+        let cg = try XCTUnwrap(output.cgImage)
+        XCTAssertEqual(cg.width, 120)
+        XCTAssertEqual(cg.height, 55)
+        let pixels = rgbaPixels(cg)
+        // Both halves of the poster are on the card, top above bottom, and every edge stays opaque.
+        XCTAssertGreaterThan(pixels.red(60, 2), 200, "the poster's top is the card's top")
+        XCTAssertLessThan(pixels.blue(60, 2), 60)
+        XCTAssertGreaterThan(pixels.blue(60, 52), 200, "the poster's bottom is the card's bottom")
+        XCTAssertLessThan(pixels.red(60, 52), 60)
+        for (x, y) in [(0, 0), (119, 0), (0, 54), (119, 54)] {
+            XCTAssertEqual(pixels.alpha(x, y), 255, "edge \(x),\(y)")
+        }
+    }
+
     func testProcessorsBakeTheBrightnessAndSaturation() throws {
         let source = UIImage(cgImage: bitmap(width: 8, height: 8) { _, _ in (128, 128, 128) }, scale: 3, orientation: .up)
         let card = try XCTUnwrap(BlurredArt.Style.card.processor.process(source)?.cgImage)
@@ -209,14 +233,14 @@ final class BlurredArtTests: XCTestCase {
         let page = try XCTUnwrap(BlurredArt.Style.page.processor.process(source)?.cgImage)
         let glow = try XCTUnwrap(BlurredArt.Style.glow.processor.process(source)?.cgImage)
         // Grey stays grey under saturation; brightness multiplies: card x1, tile x0.6, glow x0.82, page x0.6.
-        XCTAssertEqual(Double(rgbaPixels(card).red(4, 4)), 128, accuracy: 3)
+        XCTAssertEqual(Double(rgbaPixels(card).red(4, 2)), 128, accuracy: 3)
         XCTAssertEqual(Double(rgbaPixels(tile).red(4, 4)), 128 * 0.6, accuracy: 3)
         XCTAssertEqual(Double(rgbaPixels(glow).red(4, 4)), 128 * 0.82, accuracy: 3)
         XCTAssertEqual(Double(rgbaPixels(page).red(4, 4)), 128 * 0.6, accuracy: 3)
     }
 
     func testBlurSpreadsAnEdgeButKeepsTheBorderSolid() throws {
-        // A bright left half and dark right half at the size the card thumbnail decodes to (120x72 at 3x).
+        // A bright left half and dark right half, 120 wide like the card thumbnail at 3x; the card squeezes it to 120x55.
         let source = UIImage(
             cgImage: bitmap(width: 120, height: 72) { x, _ in x < 60 ? (255, 255, 255) : (0, 0, 0) },
             scale: 3,
@@ -227,7 +251,7 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertGreaterThan(pixels.red(66, 36), 10, "the dark side picks up light across the edge")
         XCTAssertLessThan(pixels.red(54, 36), 245, "the bright side picks up dark across the edge")
         XCTAssertEqual(pixels.alpha(0, 0), 255)
-        XCTAssertEqual(pixels.alpha(119, 71), 255)
+        XCTAssertEqual(pixels.alpha(119, 54), 255)
         XCTAssertGreaterThan(pixels.red(0, 36), 240, "clamped edges do not fade toward transparent black")
         XCTAssertLessThan(pixels.red(119, 36), 15)
     }
@@ -400,6 +424,7 @@ final class BlurredArtTests: XCTestCase {
         let data: [UInt8]
 
         func red(_ x: Int, _ y: Int) -> UInt8 { data[(y * width + x) * 4] }
+        func blue(_ x: Int, _ y: Int) -> UInt8 { data[(y * width + x) * 4 + 2] }
         func alpha(_ x: Int, _ y: Int) -> UInt8 { data[(y * width + x) * 4 + 3] }
     }
 

@@ -11,9 +11,16 @@ enum FeedCardArt {
     static let lookahead = 8
     /// Avatars are drawn at 20 pt and decoded at that size, never at full size.
     static let avatarSize = CGSize(width: 20, height: 20)
-    /// The baked art is laid over the card enlarged to the mock's 478 x 290 box on a 358 pt card, so the blurred
-    /// poster fills the card's middle rather than the whole poster.
-    static let artZoom: CGFloat = 478.0 / 358.0
+    /// The card is glass: its art and base are partly see-through, so the page (and the glow near the top) shows
+    /// through and the card does not read as a solid block.
+    static let artOpacity: Double = 0.74
+    static let baseOpacity: Double = 0.45
+
+    /// How bright the card looks for art measured at `luma`: the art is laid at `artOpacity` over the black page.
+    /// The ink and the tone are chosen from this, not from the bitmap alone.
+    static func shownLuma(_ luma: Double) -> Double {
+        luma * artOpacity
+    }
 
     /// The URL an image view loads: a missing or blank string has none.
     static func url(from string: String?) -> URL? {
@@ -57,7 +64,7 @@ enum FeedCardArt {
     /// first frame.
     static func rememberedLuma(backgroundURL: String?) -> Double? {
         guard let url = url(from: backgroundURL) else { return nil }
-        return ArtLuma.remembered(key: url.absoluteString)
+        return ArtLuma.remembered(key: url.absoluteString).map(shownLuma)
     }
 
     /// Every image the card shows: its poster (or a Planning card's fan), the baked art and the avatar.
@@ -251,7 +258,8 @@ struct FeedCardPoster: View {
     }
 }
 
-/// The card's background: baked blurred art over a solid base, a bounded tone overlay for the ink, and the glass
+/// The card's background: baked blurred art over a base, both partly see-through, a bounded tone overlay for the
+/// ink, a sheen, and the glass
 /// edge, all clipped to the card's rounded shape. This is the only clipped layer of a card.
 ///
 /// It owns the art's measured brightness, which only the tone overlay needs, and tells the card the ink the
@@ -277,12 +285,14 @@ struct FeedCardBackground: View {
             url: FeedCardArt.url(from: art.backgroundURL),
             accentHex: art.accentHex,
             style: .card,
-            onMeasured: measured
+            onMeasured: measured,
+            artOpacity: FeedCardArt.artOpacity,
+            baseOpacity: FeedCardArt.baseOpacity
         )
-        .scaleEffect(FeedCardArt.artZoom)
         .overlay {
             ArtTone.overlayColor(ink: ink).opacity(ArtTone.overlayAlpha(ink: ink, luma: luma))
         }
+        .overlay { FeedCardSheen() }
         .overlay { FeedCardEdge() }
         .clipShape(RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous))
         // The tone settles over 0.18 s when the art is measured, instead of jumping.
@@ -292,7 +302,8 @@ struct FeedCardBackground: View {
         }
     }
 
-    private func measured(_ value: Double) {
+    private func measured(_ raw: Double) {
+        let value = FeedCardArt.shownLuma(raw)
         guard luma != value else { return }
         let before = ArtInk.conclusive(luma: luma)
         luma = value
@@ -301,16 +312,34 @@ struct FeedCardBackground: View {
     }
 }
 
-/// The mock's `inset 0 0 0 0.5px rgba(255,255,255,0.22), inset 0 1px 0 rgba(255,255,255,0.16)`: a half-point line
-/// round the edge and a one-point highlight along the top, as two shapes.
+/// The glass rim: a half-point line round the edge and a one-point highlight along the top, as two shapes, a little
+/// brighter than the mock's `0.22` / `0.16` so the see-through card keeps a clear edge.
 struct FeedCardEdge: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5)
+                .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.5)
             FeedCardTopHighlight()
-                .fill(Color.white.opacity(0.16))
+                .fill(Color.white.opacity(0.28))
         }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Light on the glass: a soft white sheen down from the top edge that is gone by the middle, and a faint lift at the
+/// bottom. One gradient layer, drawn by the GPU.
+struct FeedCardSheen: View {
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .white.opacity(0.12), location: 0),
+                .init(color: .white.opacity(0.03), location: 0.4),
+                .init(color: .white.opacity(0), location: 0.7),
+                .init(color: .white.opacity(0.03), location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
         .allowsHitTesting(false)
     }
 }

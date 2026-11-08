@@ -2,15 +2,18 @@ import CoreGraphics
 import Foundation
 import Observation
 
-/// What Home's glow is showing: the artwork you are on now (`idle`) until a tile focuses another poster (`focused`),
-/// and how far the page has scrolled. The glow view is the only reader of `scrollOffset`, so scrolling redraws the
-/// glow's own small body and never the feed.
+/// What Home's glow is showing: at rest, In progress's color on the left and Trending's on the right, meeting in the
+/// middle; while a tile's carousel is open, the poster it is on (`focused`) across the whole glow. Also how far the
+/// page has scrolled. The glow view is the only reader of `scrollOffset`, so scrolling redraws the glow's own small
+/// body and never the feed.
 @MainActor
 @Observable
 final class HomeGlowModel {
-    /// The first In progress item, else the newest feed item.
+    /// The first In progress item, else the newest feed item: the left of the glow at rest.
     var idle: MediaSummary?
-    /// The poster a tile's carousel is on. Set by the tiles; nil puts the glow back on `idle`.
+    /// The first Trending title: the right of the glow at rest.
+    var trending: MediaSummary?
+    /// The poster a tile's carousel is on. Set by the tiles; nil puts the glow back to rest.
     var focused: MediaSummary?
     /// Points the page has scrolled down; negative while it is pulled past the top.
     var scrollOffset: CGFloat = 0
@@ -19,6 +22,25 @@ final class HomeGlowModel {
 
     /// The image the glow shows for `active`: its backdrop, else its poster.
     var activeURL: URL? { HomeArtworkAtmosphereModel.url(for: active) }
+
+    /// What the glow draws: the focused poster alone; at rest `idle` and `trending` side by side, or whichever of
+    /// them there is when there is one, or both are the same image.
+    var art: GlowArt? {
+        guard let left = activeURL else {
+            return HomeArtworkAtmosphereModel.url(for: trending).map { GlowArt(left: $0, right: nil) }
+        }
+        guard focused == nil, let right = HomeArtworkAtmosphereModel.url(for: trending), right != left else {
+            return GlowArt(left: left, right: nil)
+        }
+        return GlowArt(left: left, right: right)
+    }
+}
+
+/// One state of the glow: an image across it, or two images that meet in the middle.
+nonisolated struct GlowArt: Hashable {
+    let left: URL
+    /// Drawn over the right side, faded out toward the middle; nil when `left` fills the glow.
+    let right: URL?
 }
 
 /// The glow's numbers from the design: a 390 x 440 box holding each image at 590 x 720, offset -100 / -170, at
@@ -51,40 +73,40 @@ enum GlowSpec {
 /// A new image goes on the `upper` layer and only that layer fades in; the `lower` layer is never touched, because
 /// fading both makes a dip in brightness. When the fade ends, the image is the `lower` layer and the upper clears.
 /// A `show` during a fade is queued, the latest one wins, and it starts when the running fade ends.
-nonisolated struct GlowLayers: Equatable {
-    /// One layer on screen. The view is keyed by `token`, not the URL: a URL that comes back as a new upper layer
-    /// (swiping away and back during a fade) gets a new view, so its fade-in runs and reports its end. Keyed by URL,
+nonisolated struct GlowLayers<Art: Hashable>: Equatable {
+    /// One layer on screen. The view is keyed by `token`, not the art: art that comes back as a new upper layer
+    /// (swiping away and back during a fade) gets a new view, so its fade-in runs and reports its end. Keyed by art,
     /// the old lower layer's view was reused, its fade never ran, `upper` never cleared, and every later swipe only
     /// queued: the glow stuck.
     nonisolated struct Layer: Hashable {
-        let url: URL
+        let art: Art
         let token: Int
     }
 
-    private(set) var lower: URL?
-    private(set) var upper: URL?
-    private var queued: URL?
+    private(set) var lower: Art?
+    private(set) var upper: Art?
+    private var queued: Art?
     private var lowerToken = 0
     private(set) var upperToken = 0
     private var lastToken = 0
 
     /// The image the layers will end on.
-    var target: URL? { queued ?? upper ?? lower }
+    var target: Art? { queued ?? upper ?? lower }
     var isFading: Bool { upper != nil }
     /// The layers on screen, bottom first. Never more than two.
-    var alive: [URL] { [lower, upper].compactMap { $0 } }
+    var alive: [Art] { [lower, upper].compactMap { $0 } }
     /// The same layers with the identity their views are keyed by. An upper layer keeps its token when its fade
     /// ends and it becomes the lower one, so the hand-over redraws nothing.
     var aliveLayers: [Layer] {
         var layers: [Layer] = []
-        if let lower { layers.append(Layer(url: lower, token: lowerToken)) }
-        if let upper { layers.append(Layer(url: upper, token: upperToken)) }
+        if let lower { layers.append(Layer(art: lower, token: lowerToken)) }
+        if let upper { layers.append(Layer(art: upper, token: upperToken)) }
         return layers
     }
 
     /// Shows `url`, or clears with nil. Returns true when a fade just started on the upper layer.
     @discardableResult
-    mutating func show(_ url: URL?) -> Bool {
+    mutating func show(_ url: Art?) -> Bool {
         guard url != target else { return false }
         guard let url else {
             lower = nil
@@ -103,7 +125,7 @@ nonisolated struct GlowLayers: Equatable {
 
     /// The upper layer's fade ended. Returns true when a queued image started its own fade.
     @discardableResult
-    mutating func fadeCompleted(of url: URL) -> Bool {
+    mutating func fadeCompleted(of url: Art) -> Bool {
         guard upper == url else { return false }
         lower = url
         lowerToken = upperToken
@@ -115,7 +137,7 @@ nonisolated struct GlowLayers: Equatable {
         return true
     }
 
-    private mutating func startUpper(_ url: URL) {
+    private mutating func startUpper(_ url: Art) {
         lastToken += 1
         upper = url
         upperToken = lastToken

@@ -366,6 +366,9 @@ final class HomeViewModel {
         )
         if tiles.trending != result.titles { tiles.trending = result.titles }
         if tiles.trendingSubtitle != result.subtitle { tiles.trendingSubtitle = result.subtitle }
+        // The right of the glow at rest.
+        let lead = tiles.trending.first?.media
+        if glowModel.trending != lead { glowModel.trending = lead }
     }
 
     /// The glow rests on the first In progress title, else the newest post's art.

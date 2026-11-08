@@ -11,7 +11,7 @@ final class HomeGlowTests: XCTestCase {
     // MARK: GlowLayers
 
     func testFirstShowFadesInOnTheUpperLayer() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         XCTAssertTrue(layers.show(a))
         XCTAssertNil(layers.lower)
         XCTAssertEqual(layers.upper, a)
@@ -24,7 +24,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testShowingTheSameURLDoesNothing() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         let fading = layers
         XCTAssertFalse(layers.show(a))
@@ -37,7 +37,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testAThenBThenAEndsOnA() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         layers.fadeCompleted(of: a)
 
@@ -55,7 +55,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testAShowDuringAFadeIsQueuedAndTheLatestWins() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         layers.fadeCompleted(of: a)
         layers.show(b)
@@ -79,7 +79,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testAskingForTheFadingImageAgainDropsTheQueue() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         layers.fadeCompleted(of: a)
         layers.show(b)
@@ -93,7 +93,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testAQueuedImageThatIsAlreadyTheLowerLayerStillFades() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         layers.fadeCompleted(of: a)
         layers.show(b)
@@ -108,15 +108,15 @@ final class HomeGlowTests: XCTestCase {
     /// lower layer) back on top. Its view was keyed by URL, so it was reused, its fade never ran and never ended,
     /// and every later swipe only queued. A layer that comes back on top must get a new identity.
     func testAnImageThatComesBackOnTopGetsANewViewIdentity() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         layers.fadeCompleted(of: a)
-        let aAsLower = layers.aliveLayers.first { $0.url == a }
+        let aAsLower = layers.aliveLayers.first { $0.art == a }
         layers.show(b)
         layers.show(a)
         XCTAssertTrue(layers.fadeCompleted(of: b))
 
-        let aOnTop = layers.aliveLayers.first { $0.url == a }
+        let aOnTop = layers.aliveLayers.first { $0.art == a }
         XCTAssertNotNil(aOnTop)
         XCTAssertNotEqual(aOnTop?.token, aAsLower?.token, "a re-shown image must be a new view so its fade runs")
         XCTAssertEqual(aOnTop?.token, layers.upperToken)
@@ -126,7 +126,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testAnUpperLayerKeepsItsIdentityWhenItBecomesTheLowerOne() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         let fading = layers.aliveLayers.last
         layers.fadeCompleted(of: a)
@@ -134,7 +134,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testNeverMoreThanTwoLayersAndNeverTheSameImageTwice() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         let urls = [a, b, c, a, c, b, b, a]
         for url in urls {
             layers.show(url)
@@ -151,7 +151,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testNilClearsEverythingIncludingTheQueue() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         layers.fadeCompleted(of: a)
         layers.show(b)
@@ -170,7 +170,7 @@ final class HomeGlowTests: XCTestCase {
     }
 
     func testAFinishedFadeOfAnImageThatIsNotFadingIsIgnored() {
-        var layers = GlowLayers()
+        var layers = GlowLayers<URL>()
         layers.show(a)
         XCTAssertFalse(layers.fadeCompleted(of: b))
         XCTAssertEqual(layers.upper, a)
@@ -260,6 +260,75 @@ final class HomeGlowTests: XCTestCase {
         XCTAssertEqual(HomeGlow.neighbors(of: 0, in: items).map(\.ref.mediaId), ["1", "2"])
         XCTAssertEqual(HomeGlow.neighbors(of: 7, in: items).map(\.ref.mediaId), ["5", "6"])
         XCTAssertTrue(HomeGlow.neighbors(of: 9, in: items).isEmpty)
+    }
+
+    // MARK: Two colors at rest
+
+    func testAtRestInProgressIsOnTheLeftAndTrendingOnTheRight() throws {
+        let model = HomeGlowModel()
+        XCTAssertNil(model.art)
+
+        model.trending = media(id: "hot", backdrop: nil, poster: "https://example.com/hot.jpg")
+        XCTAssertEqual(model.art, GlowArt(left: try XCTUnwrap(URL(string: "https://example.com/hot.jpg")), right: nil),
+                       "Trending alone fills the glow")
+
+        model.idle = media(id: "reading", backdrop: "https://example.com/reading-backdrop.jpg", poster: nil)
+        XCTAssertEqual(model.art?.left, URL(string: "https://example.com/reading-backdrop.jpg"))
+        XCTAssertEqual(model.art?.right, URL(string: "https://example.com/hot.jpg"))
+
+        model.focused = media(id: "swiped", backdrop: nil, poster: "https://example.com/swiped.jpg")
+        XCTAssertEqual(model.art, GlowArt(left: try XCTUnwrap(URL(string: "https://example.com/swiped.jpg")), right: nil),
+                       "an open carousel's poster fills the glow")
+
+        model.focused = nil
+        XCTAssertEqual(model.art?.right, URL(string: "https://example.com/hot.jpg"), "closing it goes back to the two colors")
+
+        model.trending = model.idle
+        XCTAssertNil(model.art?.right, "the same title on both sides is one image")
+    }
+
+    func testTheRightImageFadesInFromTheMiddle() throws {
+        let source = UIImage(cgImage: bitmap(width: 100, height: 10), scale: 3, orientation: .up)
+        let output = try XCTUnwrap(GlowMeetProcessor().process(source)?.cgImage)
+        XCTAssertEqual(output.width, 100)
+        XCTAssertEqual(output.height, 10)
+        let alpha = alphas(output)
+        XCTAssertEqual(alpha(5, 5), 0, "clear on the left")
+        XCTAssertEqual(alpha(30, 5), 0)
+        XCTAssertGreaterThan(alpha(50, 5), 60, "half way in the middle")
+        XCTAssertLessThan(alpha(50, 5), 200)
+        XCTAssertEqual(alpha(70, 5), 255)
+        XCTAssertEqual(alpha(95, 5), 255, "opaque on the right")
+        XCTAssertNotEqual(
+            GlowMeetProcessor().identifier,
+            BlurredArt.Style.glow.processor.identifier
+        )
+        XCTAssertEqual(HomeGlow.meetingProcessors.map(\.identifier), [
+            BlurredArt.Style.glow.processor.identifier, GlowMeetProcessor().identifier,
+        ])
+    }
+
+    private func bitmap(width: Int, height: Int) -> CGImage {
+        let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.setFillColor(red: 0.8, green: 0.4, blue: 0.2, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()!
+    }
+
+    /// Alpha at (x, y), y down from the top.
+    private func alphas(_ image: CGImage) -> (Int, Int) -> Int {
+        let width = image.width
+        let height = image.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let context = CGContext(
+            data: &bytes, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return { x, y in Int(bytes[(y * width + x) * 4 + 3]) }
     }
 
     // MARK: Source
