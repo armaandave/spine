@@ -31,8 +31,8 @@ final class HomeViewModel {
     let continueWatching: ContinueWatchingTicks
     /// Every tile's Update button: shows open the episode sheet, other titles their page's progress UI (TV-701).
     let progressUpdates: InProgressUpdates
-    /// Trending's "Plan to watch".
-    let planWriter: TrendingPlanWriter
+    /// The viewer's state for the Trending titles in focus: what the panel's rail is made from and writes through.
+    let railStore: TrendingRailStore
 
     // MARK: The rail, kept where the tiles read it
 
@@ -142,11 +142,13 @@ final class HomeViewModel {
             diaryRepository: diaryRepository,
             onUnauthorized: onUnauthorized
         )
-        planWriter = TrendingPlanWriter(
+        railStore = TrendingRailStore(
+            mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
-            changeOrigin: continueWatching.changeOrigin,
+            diaryRepository: diaryRepository,
             onUnauthorized: onUnauthorized
         )
+        tiles.railStore = railStore
         tiles.isLoadingTrending = true
         // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
         continueWatching.onUpdate = { [weak self] id, tv in
@@ -212,11 +214,16 @@ final class HomeViewModel {
     }
 
     /// You changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's or
-    /// game's progress) keeps its card where it is (TV-701), and so does the tile's own quick action; any other write
-    /// reloads the rail. The feed is only the people you follow, so your own writes can't change it, and it keeps its
-    /// place however far down you are.
+    /// game's progress) keeps its card where it is (TV-701), and so does the tile's own quick action; a write from the
+    /// Trending panel's rail leaves everything where it is while the tile is open and re-sorts the rail when it
+    /// closes. Any other write reloads the rail. The feed is only the people you follow, so your own writes can't
+    /// change it, and it keeps its place however far down you are.
     func mediaStateDidChange(origin: UUID?) async {
         guard origin != continueWatching.changeOrigin else { return }
+        if let origin, railStore.changeOrigins.contains(origin) {
+            railNeedsResort = true
+            return
+        }
         guard await loadProfileAndInProgress() else { return }
         await feed.loadIfNeeded()
     }
@@ -493,23 +500,10 @@ final class HomeViewModel {
         railNeedsResort = true
     }
 
-    /// Trending's "Plan to watch": the title shows as planned at once and goes back if the write fails. The task is
-    /// done when the write has settled.
-    @discardableResult
-    func planToWatch(_ title: TrendingTitle) -> Task<Void, Never> {
-        let write = planWriter.plan(title)
-        tiles.plannedIDs = planWriter.plannedIDs
-        tiles.busyItemIDs.insert(title.key)
-        return Task { [weak self] in
-            _ = await write.value
-            guard let self else { return }
-            tiles.busyItemIDs.remove(title.key)
-            tiles.plannedIDs = planWriter.plannedIDs
-            if let message = planWriter.errorMessage {
-                writeFailure = message
-                planWriter.dismissError()
-            }
-        }
+    /// The Trending tile closed: a rail write that changed a title in the In progress rail re-sorts it now, once.
+    func trendingTileDidClose() async {
+        guard railNeedsResort else { return }
+        await loadInProgress(forceToday: true)
     }
 }
 
@@ -519,6 +513,8 @@ struct HomeView: View {
 
     @State private var viewModel: HomeViewModel
     @State private var selectedRef: MediaRef?
+    /// What the Trending rail left for the page to finish (a log composer, a sheet), when it opened the page.
+    @State private var selectedHandoff: RailHandoff?
     /// The season's episodes, when Continue Watching's sheet opened one of them: its page pages through them.
     @State private var selectedEpisodes: MediaBrowsingContext?
     @State private var selectedPerson: PersonRef?
@@ -641,6 +637,7 @@ struct HomeView: View {
             .fullScreenCover(item: $selectedRef, onDismiss: {
                 selectedRef = nil
                 selectedEpisodes = nil
+                selectedHandoff = nil
             }) { ref in
                 MediaDetailView(
                     ref: ref,
@@ -653,7 +650,8 @@ struct HomeView: View {
                     currentUserId: currentUserId,
                     selectedTab: selectedTab,
                     onSelectTab: onSelectTab,
-                    onUnauthorized: onUnauthorized
+                    onUnauthorized: onUnauthorized,
+                    railHandoff: selectedHandoff
                 )
             }
             .fullScreenCover(item: $selectedPerson, onDismiss: { selectedPerson = nil }) { ref in
@@ -747,8 +745,15 @@ struct HomeView: View {
             onOpenTitle: { selectedRef = $0 },
             onUpdate: { updateProgress($0) },
             onQuickAction: { await quickAction($0) },
-            onPlanToWatch: { viewModel.planToWatch($0) },
-            onOpenTrending: { selectedRef = $0.media.ref },
+            onOpenTrending: { selectedHandoff = nil; selectedRef = $0.media.ref },
+            onRailHandoff: { title, handoff in
+                selectedHandoff = handoff
+                selectedRef = title.media.ref
+            },
+            onRailMessage: { viewModel.writeFailure = $0 },
+            onTileClosed: { tile in
+                if tile == .trending { Task { await viewModel.trendingTileDidClose() } }
+            },
             onFindSomething: { onSelectTab(.search) },
             onFindPeople: onFindPeople
         )

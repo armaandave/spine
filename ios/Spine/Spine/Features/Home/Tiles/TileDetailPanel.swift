@@ -10,10 +10,14 @@ struct HomeTilesActions {
     /// success or the error haptic. A plan that would reach the end of the title never gets here: the section opens
     /// the progress UI for it through `onUpdate`.
     var onQuickAction: (LibraryItem) async -> Bool = { _ in true }
-    /// "Plan to watch" on a Trending title, or taking it back.
-    var onPlanToWatch: (TrendingTitle) -> Void = { _ in }
-    /// A poster in the Trending carousel was tapped, or its Open button: the title's page.
+    /// A poster in the Trending carousel was tapped, or the rail's Open or the faces: the title's page.
     var onOpenTrending: (TrendingTitle) -> Void = { _ in }
+    /// A Trending rail tap that needs the title's own screen (a log composer, a sheet): the page opens and finishes it.
+    var onRailHandoff: (TrendingTitle, RailHandoff) -> Void = { _, _ in }
+    /// Something a Trending rail write has to say (a notice, a failure): Home's alert shows it.
+    var onRailMessage: (String) -> Void = { _ in }
+    /// A tile has closed: the page re-sorts what a Trending rail write changed.
+    var onTileClosed: (HomeTileID) -> Void = { _ in }
     /// The empty In progress tile's button.
     var onFindSomething: () -> Void = {}
     /// The empty Trending tile's button, shown when you follow nobody.
@@ -42,14 +46,37 @@ struct TileDetailPanel: View {
             }
         case .trending:
             if let id = state.focusID, let title = model.trendingTitle(id: id) {
+                // No `.id` on the panel: the rail's glass stays put as you swipe; its own title block is keyed.
                 TrendingPanel(
                     title: title,
                     detail: model.trendingDetail(for: title),
-                    busy: model.busyItemIDs.contains(title.key),
+                    neighbors: model.trendingNeighbors(of: title),
+                    store: model.railStore,
                     actions: actions
                 )
-                .id(title.id)
             }
+        }
+    }
+}
+
+/// Where a tile's panel sits inside the tile. The In progress panel hangs under the posters, inset 16 pt; the
+/// Trending panel is a full-width, full-height layer that places its title block and anchors its rail to the tile's
+/// foot, so a different tile height only moves the rail.
+struct TilePanelPlacement: ViewModifier {
+    let tile: HomeTileID
+    let contentWidth: CGFloat
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch tile {
+        case .inProgress:
+            content
+                .frame(width: contentWidth - 2 * TileGeometry.panelInset)
+                .padding(.leading, TileGeometry.panelInset)
+                .padding(.top, TileGeometry.panelTop)
+        case .trending:
+            content
+                .frame(width: contentWidth, height: HomeDesign.Metric.tileOpenHeight, alignment: .top)
         }
     }
 }
@@ -159,110 +186,6 @@ private struct InProgressPanel: View {
     }
 }
 
-// MARK: - Trending
-
-private struct TrendingPanel: View {
-    let title: TrendingTitle
-    let detail: TrendingTileDetail
-    let busy: Bool
-    let actions: HomeTilesActions
-
-    @State private var planTicks = 0
-    @State private var openTicks = 0
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TilePanelTitleRow(title: detail.title, accessibilityLabel: detail.accessibilityLabel) {
-                Text(detail.averageText.map { "\($0) avg" } ?? "")
-            }
-            friends
-                .padding(.top, 8)
-                .frame(height: TileGeometry.panelMeterBlock, alignment: .top)
-            HStack(spacing: 10) {
-                TilePillButton(
-                    title: detail.primaryTitle,
-                    style: .primary,
-                    identifier: "trending.plan",
-                    isDisabled: busy,
-                    checked: detail.isPlanned
-                ) {
-                    planTicks += 1
-                    actions.onPlanToWatch(title)
-                }
-                TilePillButton(
-                    title: detail.secondaryTitle,
-                    style: .secondary,
-                    identifier: "trending.open",
-                    isDisabled: false
-                ) {
-                    openTicks += 1
-                    actions.onOpenTrending(title)
-                }
-            }
-            .padding(.top, 12)
-        }
-        .sensoryFeedback(.selection, trigger: planTicks)
-        .sensoryFeedback(.impact, trigger: openTicks)
-    }
-
-    /// Up to three faces overlapping by 6 pt, and who they are: "2 logged it", "You logged it".
-    private var friends: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: -TileStyle.avatarOverlap) {
-                ForEach(Array(detail.avatars.enumerated()), id: \.offset) { _, avatar in
-                    TileAvatar(avatar: avatar)
-                }
-            }
-            Text(detail.whoLine)
-                .font(TileStyle.friendsFont)
-                .foregroundStyle(TileStyle.panelSecondary)
-                .lineLimit(1)
-        }
-        .frame(height: 26)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(detail.whoLine)
-    }
-}
-
-/// A person's picture at 22 pt, decoded at that size, with a dark ring so overlapping faces read apart. Without a
-/// picture, their initial on a pastel that stays the same for the same letter.
-private struct TileAvatar: View {
-    let avatar: TrendingTileDetail.Avatar
-
-    var body: some View {
-        SpineAsyncImage(
-            url: avatar.url.flatMap { URL(string: $0) },
-            thumbnailSize: CGSize(width: TileStyle.avatarSize, height: TileStyle.avatarSize)
-        ) { phase in
-            if case let .success(image) = phase {
-                image
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    Color(hue: Self.hue(for: avatar.initial), saturation: 0.36, brightness: 0.97)
-                    Text(avatar.initial)
-                        .font(.system(size: 10, weight: .heavy))
-                        .foregroundStyle(HomeDesign.Palette.avatarInk)
-                }
-            }
-        }
-        .frame(width: TileStyle.avatarSize, height: TileStyle.avatarSize)
-        .clipShape(Circle())
-        .background {
-            Circle()
-                .fill(TileStyle.avatarRing)
-                .padding(-2)
-        }
-        .accessibilityHidden(true)
-    }
-
-    nonisolated static func hue(for initial: String) -> Double {
-        let value = initial.unicodeScalars.first.map { Int($0.value) } ?? 0
-        return Double((value &* 37) % 360) / 360
-    }
-}
-
 // MARK: - Shared pieces
 
 /// The panel's top row: the title at 19, and the right-hand words at 13, on one baseline. The title gives way first.
@@ -347,18 +270,11 @@ private struct TilePillButton: View {
     let style: Style
     let identifier: String
     let isDisabled: Bool
-    var checked = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Text(title)
-                if checked {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .heavy))
-                }
-            }
+            Text(title)
             .font(TileStyle.buttonFont)
             .foregroundStyle(style == .primary ? TileStyle.primaryInk : TileStyle.secondaryInk)
             .lineLimit(1)

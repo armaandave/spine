@@ -48,8 +48,8 @@ final class HomeTilesModel {
     var isLoadingTrending = false
     /// The viewer follows nobody, so an empty Trending can offer to find people.
     var followsNobody = false
-    /// Trending titles (by `TrendingTitle.key`) that are in the viewer's library as Planning.
-    var plannedIDs: Set<String> = []
+    /// The viewer's state for the focused Trending title and its neighbors, which the panel's rail is made from.
+    var railStore: TrendingRailStore?
 
     // MARK: Posters
 
@@ -138,6 +138,13 @@ final class HomeTilesModel {
     }
 
     func trendingDetail(for title: TrendingTitle) -> TrendingTileDetail {
-        TrendingTileModel.detail(for: title, planned: plannedIDs.contains(title.key))
+        TrendingTileModel.detail(for: title)
+    }
+
+    /// The titles beside `title` in the carousel, next first, to have the rail's state ready for.
+    func trendingNeighbors(of title: TrendingTitle) -> [TrendingTitle] {
+        let shown = Array(trending.prefix(TileGeometry.maxPosters))
+        guard let index = shown.firstIndex(where: { $0.id == title.id }) else { return [] }
+        return [index + 1, index - 1].filter { shown.indices.contains($0) }.map { shown[$0] }
     }
 }
