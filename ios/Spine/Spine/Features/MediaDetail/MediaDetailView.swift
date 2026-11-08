@@ -2599,6 +2599,7 @@ private struct MediaDetailPageView: View {
                 isSaving: viewModel.isSavingProgress,
                 errorMessage: viewModel.progressErrorMessage,
                 journeyStatus: viewModel.viewer?.book?.currentJourney?.status ?? viewModel.viewer?.status,
+                dateFloor: viewModel.viewer?.book?.currentJourney?.progressDateFloor,
                 onSave: { await viewModel.saveProgress($0, for: detail).value },
                 onFinish: { openBookCompletion(for: detail) },
                 opensLogAfterSave: { viewModel.viewer?.book?.opensLog == true },
