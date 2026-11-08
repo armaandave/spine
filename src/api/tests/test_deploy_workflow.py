@@ -84,9 +84,9 @@ class DeskMacDeployWorkflowTests(SimpleTestCase):
     def test_push_deploys_skip_stale_and_frontend_only_pushes(self):
         workflow = WORKFLOW.read_text()
 
-        # A passing push deploys when it's newer than production, even if a later push is
-        # still in CI; one production already includes is skipped, so a late older run
-        # never undoes a newer deploy.
+        # A passing push deploys when it's newer than production, even if a later
+        # push is still in CI; one production already includes is skipped, so a
+        # late older run never undoes a newer deploy.
         self.assertNotIn('if [[ "$tip" != "$REQUESTED_REF" ]]; then', workflow)
         self.assertIn('merge-base --is-ancestor "$REQUESTED_REF" "origin/$branch"', workflow)
         self.assertIn('merge-base --is-ancestor "$REQUESTED_REF" "$deployed"; then', workflow)
