@@ -212,6 +212,7 @@
     "poster_aspect_ratio": 1.0,
     "poster_height": 500,
     "poster_orientation": "square",
+    "poster_palette": null,
     "poster_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
     "poster_width": 500,
     "providers": null,

@@ -34,6 +34,7 @@ from api.serializers.tracking import (
 from api.services import completion as completion_service
 from api.services import diary as diary_service
 from api.services import filters as filter_service
+from api.services import media as media_service
 from api.services import tracking as tracking_service
 from api.views.mixins import MediaExposureMixin
 from app import anime_titles, anime_tracking, series_tracking, tv_tracking
@@ -131,20 +132,27 @@ class TrackingListView(MediaExposureMixin, APIView):
             owner,
             media_by_item={media.item_id: media for media in page},
         )
-        response = paginator.get_paginated_response(
-            [
-                {
-                    "media": media_summary_from_item(
-                        media.item,
-                        request=request,
-                        user=owner,
-                        include_user_state=owner == request.user,
-                    ),
-                    "tracking": tracking_service.serialize_tracking(media),
-                }
-                for media in page
-            ],
-        )
+        rows = [
+            {
+                "media": media_summary_from_item(
+                    media.item,
+                    request=request,
+                    user=owner,
+                    include_user_state=owner == request.user,
+                ),
+                "tracking": tracking_service.serialize_tracking(media),
+            }
+            for media in page
+        ]
+        # Each row's shown poster's colors, as on its media page, read in one query.
+        shown_posters = [
+            row["media"].get("custom_poster_url") or row["media"].get("poster_url") or row["media"].get("image_url")
+            for row in rows
+        ]
+        palettes = media_service.poster_palettes(shown_posters)
+        for row, poster in zip(rows, shown_posters, strict=True):
+            row["media"]["poster_palette"] = palettes.get(poster)
+        response = paginator.get_paginated_response(rows)
         response.data["completion"] = completion
         if streaming is not None:
             response.data["streaming"] = streaming

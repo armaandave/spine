@@ -3492,6 +3492,19 @@ class CustomPosterPreference(models.Model):
         return f"{self.user.username}'s custom poster for {self.item.title}"
 
 
+class PosterPalette(models.Model):
+    """A poster's biggest colors by share of its pixels, keyed by the image they came from."""
+
+    image_url = models.CharField(max_length=2000, unique=True)
+    # [{"hex": "#0B0B0B", "share": 0.83}, ...], biggest share first.
+    colors = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Return string representation."""
+        return self.image_url
+
+
 class CustomBackdropPreference(models.Model):
     """Model to store user's custom backdrop preferences for media items."""
 

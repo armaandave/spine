@@ -509,14 +509,16 @@ class BackfillExternalRatingsCommandTests(TestCase):
         self.assertEqual(events[-1]["event"], "failed")
         self.assertEqual(events[-1]["batches_completed"], 0)
 
-    @patch("app.management.commands.backfill_external_ratings.time.monotonic")
+    # Replaces the command's own reference to the time module: patching time.monotonic
+    # itself would hand these clock values to every other thread in the process too.
+    @patch("app.management.commands.backfill_external_ratings.time")
     @patch("app.management.commands.backfill_external_ratings.Command._wait_for_batch")
     @patch("app.management.commands.backfill_external_ratings.enqueue_external_rating_batches")
     def test_drain_pauses_cleanly_after_runtime_limit(
         self,
         enqueue_mock,
         wait_mock,
-        monotonic_mock,
+        time_mock,
     ):
         second = Item.objects.create(
             media_id="runtime-2",
@@ -542,7 +544,7 @@ class BackfillExternalRatingsCommandTests(TestCase):
             return self._batch_result(1)
 
         wait_mock.side_effect = wait
-        monotonic_mock.side_effect = [0, 0, 2, 2, 2]
+        time_mock.monotonic.side_effect = [0, 0, 2, 2, 2]
         stdout = StringIO()
 
         call_command(

@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -18,11 +19,26 @@ from app.models import (
 from events.models import Event
 
 
+def mock_provider_metadata(test_case):
+    """Keep in-progress media from asking the real providers about their titles."""
+    patcher = patch(
+        "app.providers.services.get_media_metadata",
+        return_value={
+            "title": "Test TV Show",
+            "image": "https://example.com/poster.jpg",
+            "max_progress": 10,
+        },
+    )
+    patcher.start()
+    test_case.addCleanup(patcher.stop)
+
+
 class EventModelTests(TestCase):
     """Test the Event model."""
 
     def setUp(self):
         """Set up test data."""
+        mock_provider_metadata(self)
         self.credentials = {"username": "testuser", "password": "testpassword"}
         self.user = get_user_model().objects.create_user(**self.credentials)
 
@@ -131,6 +147,7 @@ class EventManagerTests(TestCase):
 
     def setUp(self):
         """Set up test data."""
+        mock_provider_metadata(self)
         self.credentials = {"username": "testuser", "password": "testpassword"}
         self.user = get_user_model().objects.create_user(**self.credentials)
 
