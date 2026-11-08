@@ -85,8 +85,32 @@ jobs:
       # What every deploy does when the new container starts (entrypoint.sh).
       - name: Apply every migration to an empty database
         run: uv run --locked python manage.py migrate --noinput
+      # The suite has hung here before, until the job's time limit cut it off with no
+      # clue. If it's still running at 25 and 40 minutes, print what Postgres is waiting on
+      # and each test process's Python stack (which test, which line), then carry on.
       - name: Tests on Postgres
-        run: uv run --locked python manage.py test --parallel 4 --noinput
+        env:
+          PGPASSWORD: spine-ci
+        run: |
+          report() {
+            echo "::group::Still running after $1 minutes: Postgres sessions"
+            psql -h 127.0.0.1 -U spine -d spine -c "SELECT pid, datname, state, wait_event_type, wait_event, now() - query_start AS running_for, left(query, 300) AS query FROM pg_stat_activity WHERE datname LIKE 'test_%' ORDER BY query_start" || true
+            echo "::endgroup::"
+            echo "::group::Still running after $1 minutes: test processes"
+            uv tool install --quiet py-spy >/dev/null 2>&1 || true
+            for pid in $(pgrep -f "manage.py test"); do
+              echo "--- process $pid"
+              sudo "$HOME/.local/bin/py-spy" dump --pid "$pid" || true
+            done
+            echo "::endgroup::"
+          }
+          ( sleep 1500 && report 25 && sleep 900 && report 40 ) &
+          watchdog=$!
+          status=0
+          uv run --locked python manage.py test --parallel 4 --noinput || status=$?
+          pkill -P "$watchdog" 2>/dev/null || true
+          kill "$watchdog" 2>/dev/null || true
+          exit "$status"
 
   deploy:
     name: Deploy production
