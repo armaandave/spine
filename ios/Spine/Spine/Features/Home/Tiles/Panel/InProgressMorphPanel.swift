@@ -138,7 +138,9 @@ struct MorphPanelBody: View {
             let split = PanelPosition.split(position, count: specs.count)
             let spec = specs[nearest]
             let vector = MorphVector(lo: specs[split.lo].values, hi: specs[split.hi].values, t: split.t)
-            let settled = PanelPosition.isSettled(position, near: nearest)
+            // Close to a poster, or not moving at all: a carousel that came to rest a little off its poster (a
+            // sheet's keyboard laid the page out again) still takes the tap, for the title it reads as.
+            let settled = PanelPosition.isSettled(position, near: nearest) || !state.isCarouselMoving
             PanelRenderer(
                 vector: vector,
                 width: width,

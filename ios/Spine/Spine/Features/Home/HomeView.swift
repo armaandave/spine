@@ -764,6 +764,9 @@ struct HomeView: View {
                 HomeStatusBarFade(model: glow)
                 HomeRefreshIndicator(model: refresh)
             }
+            // A sheet's keyboard (a progress sheet's page field) must not lay Home out again underneath: that moved an
+            // open carousel off its last poster, and the panel's buttons ignored taps until it settled back.
+            .ignoresSafeArea(.keyboard)
             .background {
                 HomeDesign.Palette.pageBackground
                     .ignoresSafeArea()

@@ -283,6 +283,10 @@ struct TileCarousel: View {
             .scrollIndicators(.hidden)
             .scrollClipDisabled()
             .scrollDisabled(!isOpen)
+            .onScrollPhaseChange { _, phase in
+                let moving = phase.isScrolling
+                if state.isCarouselMoving != moving { state.isCarouselMoving = moving }
+            }
             .onScrollGeometryChange(for: Int.self) { geometry in
                 TileGeometry.focusIndex(
                     scrollX: geometry.contentOffset.x + geometry.contentInsets.leading,

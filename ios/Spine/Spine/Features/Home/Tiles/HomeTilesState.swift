@@ -56,6 +56,10 @@ final class HomeTilesState {
     /// the carousel on every scroll frame and read only by the In progress panel, so nothing else is invalidated by
     /// a scroll. Nil until the carousel reports after an open: a panel that appears first falls back to `focusIndex`.
     var scrollPosition: Double?
+    /// The open carousel is being dragged or is still gliding. Written by the carousel when its scroll phase changes
+    /// (not on every frame), and read by the In progress panel: still, its buttons act on the nearest title even when
+    /// the carousel has come to rest a little off a poster.
+    var isCarouselMoving = false
 
     /// The title each tile rests on, with its place in the list as last known. A tile that has never closed on a
     /// title has none and rests on its first.
