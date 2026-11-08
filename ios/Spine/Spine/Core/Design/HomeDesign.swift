@@ -11,7 +11,7 @@ nonisolated enum HomeDesign {
         /// A closed tile is as tall as its fan, its title and its count need: the space under the count's letters
         /// matches the 16 pt above the fan's front poster. It is no longer square: the square left a band of nothing
         /// under the text.
-        static let tileClosedHeight: CGFloat = 172
+        static let tileClosedHeight: CGFloat = 168
         static let tileCorner: CGFloat = 30
 
         /// 30% shorter than the mock's 164.

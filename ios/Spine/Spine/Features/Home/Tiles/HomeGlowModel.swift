@@ -92,7 +92,7 @@ enum GlowSpec {
     /// At rest the glow is fully black this far above the closed tiles' bottom edge.
     static let restGap: CGFloat = 6
     /// Where the closed tiles end on a 393-402 pt phone, until they have been measured.
-    static let estimatedTilesBottom: CGFloat = 326
+    static let estimatedTilesBottom: CGFloat = 322
     /// The shortest the glow gets, whatever is measured.
     static let minimumHeight: CGFloat = 200
 

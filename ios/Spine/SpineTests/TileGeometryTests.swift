@@ -12,10 +12,10 @@ final class TileGeometryTests: XCTestCase {
 
     func testTileSideAndContainerHeight() {
         XCTAssertEqual(TileGeometry.tileSide(contentWidth: 358), 173)
-        // A closed tile is 172 tall whatever its width: no longer square, no band of nothing under its text.
-        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 358, isOpen: false), 172)
+        // A closed tile is 168 tall whatever its width: no longer square, no band of nothing under its text.
+        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 358, isOpen: false), 168)
         XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 358, isOpen: true), 410)
-        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 370, isOpen: false), 172)
+        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 370, isOpen: false), 168)
         // The space under the count's letters matches the 16 above the front poster (the count's baseline is about
         // 11 below its line's top), and the front poster of the fan sits above the title.
         let countBaseline = TileGeometry.subtitleTop(isOpen: false) + 11
@@ -26,12 +26,12 @@ final class TileGeometryTests: XCTestCase {
     func testClosedFrames() {
         let left = TileGeometry.frame(tile: 0, open: nil, contentWidth: width)
         XCTAssertEqual(left, TileFrame(
-            left: 0, width: 173, height: 172, slide: 0, scale: 1, opacity: 1, z: 1, isOpen: false, hitTestable: true
+            left: 0, width: 173, height: 168, slide: 0, scale: 1, opacity: 1, z: 1, isOpen: false, hitTestable: true
         ))
         let right = TileGeometry.frame(tile: 1, open: nil, contentWidth: width)
         XCTAssertEqual(right.left, 185, "173 and a 12 pt gap")
         XCTAssertEqual(right.width, 173)
-        XCTAssertEqual(right.height, 172)
+        XCTAssertEqual(right.height, 168)
         XCTAssertTrue(right.hitTestable)
         XCTAssertEqual(TileGeometry.frame(tile: 1, open: nil, contentWidth: 370).left, 191)
     }
