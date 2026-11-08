@@ -221,10 +221,11 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertEqual(cg.width, 120)
         XCTAssertEqual(cg.height, 39)
         let pixels = rgbaPixels(cg)
-        // Both halves of the poster are on the card, top above bottom, and every edge stays opaque.
-        XCTAssertGreaterThan(pixels.red(60, 2), 200, "the poster's top is the card's top")
+        // Both halves of the poster are on the card, top above bottom, and every edge stays opaque. The card's art is
+        // darkened to 70%, so a full red or blue comes out near 178.
+        XCTAssertGreaterThan(pixels.red(60, 2), 160, "the poster's top is the card's top")
         XCTAssertLessThan(pixels.blue(60, 2), 60)
-        XCTAssertGreaterThan(pixels.blue(60, 36), 200, "the poster's bottom is the card's bottom")
+        XCTAssertGreaterThan(pixels.blue(60, 36), 160, "the poster's bottom is the card's bottom")
         XCTAssertLessThan(pixels.red(60, 36), 60)
         for (x, y) in [(0, 0), (119, 0), (0, 38), (119, 38)] {
             XCTAssertEqual(pixels.alpha(x, y), 255, "edge \(x),\(y)")
