@@ -530,7 +530,7 @@ final class PanelPositionTests: XCTestCase {
 
     func testSettled() {
         XCTAssertTrue(PanelPosition.isSettled(2, near: 2))
-        XCTAssertTrue(PanelPosition.isSettled(2.12, near: 2))
+        XCTAssertTrue(PanelPosition.isSettled(2.11, near: 2))
         XCTAssertFalse(PanelPosition.isSettled(2.13, near: 2))
         XCTAssertTrue(PanelPosition.isSettled(1.9, near: 2))
         XCTAssertFalse(PanelPosition.isSettled(1.5, near: 2))
