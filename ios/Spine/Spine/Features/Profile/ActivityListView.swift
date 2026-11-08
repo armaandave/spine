@@ -249,20 +249,34 @@ struct ActivityListRow: View {
             DiaryDateBadge(rawValue: activity.consumedAt ?? activity.createdAt, mediaType: mediaType)
 
             // Laid out at its real size: a larger poster shrunk with scaleEffect overflowed the row's layout.
-            MediaArtwork(
-                url: activity.media?.displayPosterURL,
-                title: activity.media?.title ?? "",
-                slot: .diaryEntry,
-                mediaType: mediaType,
-                orientation: activity.media?.posterOrientation
-            )
+            Group {
+                if let posters = PlanningWords.fanPosters(for: activity) {
+                    // A day of several Planning adds fans out its titles, as a series card does.
+                    PosterFan(urls: posters, title: PlanningWords.headline(for: activity), slot: .diaryEntry, mediaType: mediaType)
+                } else {
+                    MediaArtwork(
+                        url: activity.media?.displayPosterURL,
+                        title: activity.media?.title ?? "",
+                        slot: .diaryEntry,
+                        mediaType: mediaType,
+                        orientation: activity.media?.posterOrientation
+                    )
+                    .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+                }
+            }
             .frame(width: 42, height: 63)
-            .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(DiaryEntryRow.titleText(titleParts))
-                    .font(.system(size: 16, weight: .semibold))
-                    .lineLimit(2)
+                Group {
+                    // A day of Planning adds reads as its count, not as its first title.
+                    if activity.planning != nil {
+                        Text(PlanningWords.headline(for: activity))
+                    } else {
+                        Text(DiaryEntryRow.titleText(titleParts))
+                    }
+                }
+                .font(.system(size: 16, weight: .semibold))
+                .lineLimit(2)
 
                 detailLine
             }

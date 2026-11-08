@@ -50,6 +50,20 @@ enum PlanningWords {
         return count > 0 ? "Added \(count) \(noun) to Planning" : "Added titles to Planning"
     }
 
+    /// The titles under the count: "Band of Brothers, The Wire, Chernobyl", cut where the line ends. Nil when the
+    /// server sent no names (an older server), so the row then shows only its count.
+    static func names(for activity: ActivityItem) -> String? {
+        let names = (activity.object.titles ?? []).compactMap { ActivityFeedPresentation.clean($0) }
+        return names.isEmpty ? nil : names.joined(separator: ", ")
+    }
+
+    /// The posters a Planning row fans out: two or three. A single add, or an older server that sent none, keeps
+    /// the one poster the row already has.
+    static func fanPosters(for activity: ActivityItem) -> [String?]? {
+        guard activity.planning != nil, let posters = activity.object.posters, posters.count > 1 else { return nil }
+        return posters.prefix(3).map(Optional.some)
+    }
+
     private static func noun(for mediaType: String?, count: Int) -> String {
         let plural = count != 1
         switch mediaType {

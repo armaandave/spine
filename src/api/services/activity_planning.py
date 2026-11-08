@@ -25,6 +25,7 @@ from rest_framework.response import Response
 
 from api.permissions import can_view_user_profile
 from api.serializers.common import (
+    artwork_from_item,
     media_summary_from_item,
     prime_collection_items,
     user_summary,
@@ -62,6 +63,12 @@ def decode(planning_id):
     except ValueError as error:
         raise Http404 from error
     return planning_id >> ADDRESS_SHIFT, day
+
+
+# How many names a row carries: more than any row can show on one line.
+TITLE_NAMES = 20
+# How many posters a row fans out, as a series card does.
+FAN_POSTERS = 3
 
 
 @dataclass
@@ -186,6 +193,13 @@ def payload(row, actor, request):
             "label": None,
             "count": row.count,
             "media_type": row.media_type,
+            # Names under the count, oldest add first; the app shows what fits.
+            "titles": [item.title for item in row.titles[:TITLE_NAMES]],
+            "posters": [
+                url
+                for item in row.titles[:FAN_POSTERS]
+                if (url := artwork_from_item(item, request=request)["poster_url"])
+            ],
         },
         "viewer": {"can_view": True, "has_liked": False},
         "like_count": 0,
@@ -196,7 +210,7 @@ def payload(row, actor, request):
 def payloads(rows, request):
     """Return the items of these Planning rows, with their people loaded once."""
     actors = get_user_model().objects.in_bulk({row.actor_id for row in rows})
-    prime_curated_artwork([row.face for row in rows])
+    prime_curated_artwork([item for row in rows for item in row.titles[:FAN_POSTERS]])
     return [payload(row, actors[row.actor_id], request) for row in rows]
 
 

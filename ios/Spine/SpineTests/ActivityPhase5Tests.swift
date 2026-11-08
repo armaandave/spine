@@ -25,9 +25,13 @@ final class ActivityPhase5Tests: XCTestCase {
         count: Int? = 3,
         mediaType: String? = "tv",
         summary: String? = "added 3 shows to Planning",
-        day: String = "2026-11-06"
+        day: String = "2026-11-06",
+        titles: [String]? = ["Severance", "The Wire", "Chernobyl"],
+        posters: [String]? = nil
     ) throws -> ActivityItem {
         func json(_ value: String?) -> String { value.map { "\"\($0)\"" } ?? "null" }
+        let names = titles.map { "[" + $0.map { json($0) }.joined(separator: ", ") + "]" } ?? "null"
+        let covers = posters.map { "[" + $0.map { json($0) }.joined(separator: ", ") + "]" } ?? "null"
         return try decode(ActivityItem.self, """
         {
           "id": -17592186044420, "type": "planning_added", "created_at": "2026-11-06T16:00:00Z", "consumed_at": "\(day)",
@@ -36,7 +40,8 @@ final class ActivityPhase5Tests: XCTestCase {
                             "season_number": null, "episode_number": null}, "title": "Severance"},
           "person": null,
           "object": {"type": "planning", "id": 17592186044420, "summary": \(json(summary)), "label": null,
-                     "count": \(count.map(String.init) ?? "null"), "media_type": \(json(mediaType))},
+                     "count": \(count.map(String.init) ?? "null"), "media_type": \(json(mediaType)),
+                     "titles": \(names), "posters": \(covers)},
           "viewer": {"can_view": true, "has_liked": false}, "like_count": 0, "comment_count": 0
         }
         """)
@@ -90,7 +95,9 @@ final class ActivityPhase5Tests: XCTestCase {
         XCTAssertEqual(PlanningWords.headline(for: row), "Added 3 shows to Planning")
         XCTAssertEqual(ActivityFeedPresentation.actionText(for: row), "Added 3 shows to Planning")
         XCTAssertEqual(ActivityFeedPresentation.statusText(for: row), "Added 3 shows to Planning")
-        XCTAssertEqual(ActivityListPresentation.caption(for: row), "Added 3 shows to Planning")
+        // The count is the row's title, and the names sit under it.
+        XCTAssertEqual(PlanningWords.names(for: row), "Severance, The Wire, Chernobyl")
+        XCTAssertEqual(ActivityListPresentation.caption(for: row), "Severance, The Wire, Chernobyl")
         XCTAssertEqual(ActivityFeedPresentation.destinationHint(for: row), "Opens the titles added")
         XCTAssertEqual(ActivityDestination.resolve(row), .planning(PlanningRef(id: 17_592_186_044_420, mediaType: "tv")))
     }
@@ -106,6 +113,22 @@ final class ActivityPhase5Tests: XCTestCase {
         XCTAssertEqual(PlanningWords.headline(for: one), "Added 1 book to Planning")
         let unknown = try planningRow(count: nil, mediaType: nil, summary: nil)
         XCTAssertEqual(PlanningWords.headline(for: unknown), "Added titles to Planning")
+    }
+
+    func testSeveralPostersFanOutAndOneKeepsTheRowsOwnPoster() throws {
+        let three = try planningRow(posters: ["https://img/1.jpg", "https://img/2.jpg", "https://img/3.jpg"])
+        XCTAssertEqual(PlanningWords.fanPosters(for: three)?.count, 3)
+        let one = try planningRow(count: 1, posters: ["https://img/1.jpg"])
+        XCTAssertNil(PlanningWords.fanPosters(for: one), "A single add keeps its one poster")
+        XCTAssertNil(PlanningWords.fanPosters(for: try planningRow()), "An older server sends no posters")
+        XCTAssertNil(PlanningWords.fanPosters(for: try progressPage(viewer: #"{"can_view": true, "has_liked": false}"#)))
+    }
+
+    func testAnOlderServerSendsNoNamesSoTheRowShowsOnlyItsCount() throws {
+        let row = try planningRow(titles: nil)
+        XCTAssertNil(PlanningWords.names(for: row))
+        XCTAssertNil(ActivityListPresentation.caption(for: row))
+        XCTAssertEqual(PlanningWords.headline(for: row), "Added 3 shows to Planning")
     }
 
     func testAPlanningRowSitsInItsMonthOnTheList() throws {
