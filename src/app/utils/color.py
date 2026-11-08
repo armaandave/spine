@@ -159,6 +159,65 @@ def _fetch_image_bytes(url: str, *, prefer_small_tmdb: bool = False) -> bytes:
     raise ValueError(f"Unsupported image source: {url}")
 
 
+PALETTE_SIZE = 5
+# Colors closer than this in CIELAB, where distance matches how different colors look, count as one.
+PALETTE_MERGE_DISTANCE = 20
+
+
+def _lab(rgb: tuple[float, float, float]) -> tuple[float, float, float]:
+    def linear(value: float) -> float:
+        value /= 255
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+    def f(value: float) -> float:
+        return value ** (1 / 3) if value > 0.008856 else 7.787 * value + 16 / 116
+
+    r, g, b = (linear(v) for v in rgb)
+    x = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047)
+    y = f(0.2126 * r + 0.7152 * g + 0.0722 * b)
+    z = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883)
+    return (116 * y - 16, 500 * (x - y), 200 * (y - z))
+
+
+def extract_palette(image_bytes: bytes) -> list[dict]:
+    """Return the image's biggest colors, each with its share of the pixels, biggest first."""
+    with Image.open(BytesIO(image_bytes)) as img:
+        img.draft("RGB", (192, 192))
+        prepared = _fix_transparency(img)
+    prepared.thumbnail((96, 96))
+    quantized = prepared.quantize(colors=24, method=Image.Quantize.MEDIANCUT)
+    swatches = quantized.getpalette()
+    counts = sorted(quantized.getcolors(), reverse=True)
+    total = sum(count for count, _ in counts)
+
+    # Each group keeps its biggest swatch's color as its center, so groups don't drift.
+    groups = []
+    for count, index in counts:
+        rgb = tuple(swatches[index * 3 : index * 3 + 3])
+        lab = _lab(rgb)
+        for group in groups:
+            if sum((a - b) ** 2 for a, b in zip(group["lab"], lab)) ** 0.5 <= PALETTE_MERGE_DISTANCE:
+                group["count"] += count
+                group["sum"] = [s + c * count for s, c in zip(group["sum"], rgb)]
+                break
+        else:
+            groups.append({"lab": lab, "count": count, "sum": [c * count for c in rgb]})
+
+    groups.sort(key=lambda group: group["count"], reverse=True)
+    return [
+        {
+            "hex": _rgb_to_hex(tuple(round(s / group["count"]) for s in group["sum"])),
+            "share": round(group["count"] / total, 3),
+        }
+        for group in groups[:PALETTE_SIZE]
+    ]
+
+
+def poster_palette_from_url(url: str) -> list[dict]:
+    """Download a poster and return its palette (extract_palette)."""
+    return extract_palette(_fetch_image_bytes(url, prefer_small_tmdb=True))
+
+
 def get_poster_accent_from_url(url: Optional[str]) -> str:
     """Compute an accent colour directly from an image URL."""
 

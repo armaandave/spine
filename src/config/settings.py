@@ -390,6 +390,8 @@ ADMIN_ENABLED = config("ADMIN_ENABLED", default=False, cast=bool)
 TRACK_TIME = config("TRACK_TIME", default=True, cast=bool)
 
 MUSIC_ENABLED = config("MUSIC_ENABLED", default=DEBUG, cast=bool)
+# Media pages count a poster's colors in the background the first time it's shown. Off in tests, which never download.
+POSTER_PALETTE_COUNTING = True
 EXTERNAL_RATING_PERSON_PREPARATION_ENABLED = config(
     "EXTERNAL_RATING_PERSON_PREPARATION_ENABLED",
     default=False,

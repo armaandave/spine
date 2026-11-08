@@ -52,6 +52,22 @@ def refresh_all_media_search_candidate(media_type, query, page, source):
     )
 
 
+@shared_task(name="Store poster palette", ignore_result=True)
+def store_poster_palette(image_url):
+    """Count one poster's colors and save them, unless they're saved already."""
+    from app.models import PosterPalette
+    from app.utils.color import poster_palette_from_url
+
+    if PosterPalette.objects.filter(image_url=image_url).exists():
+        return
+    try:
+        colors = poster_palette_from_url(image_url)
+    except Exception as error:  # noqa: BLE001 - a broken image just gets no palette; the next page open retries
+        logger.warning("Poster palette failed url=%s type=%s", image_url, type(error).__name__)
+        return
+    PosterPalette.objects.get_or_create(image_url=image_url, defaults={"colors": colors})
+
+
 @shared_task(name="Refresh music search", ignore_result=True)
 def refresh_music_search(media_type, query, page, source, preserve_ranking_fields=False):
     """Refresh one stale music search entry."""
