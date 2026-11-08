@@ -7,8 +7,10 @@ import SwiftUI
 /// `HomeDesign.Metric.glowHeight` tall (`HomeGlowModel.height`). It scrolls away with the page and cross-fades
 /// between images.
 ///
-/// Nothing here is live: no blur, saturation, mask or opacity is applied on a frame, and no offscreen pass flattens
-/// the layers. The only per-frame work is the offset in `GlowScrollOffset`.
+/// It is the background of the scrolling content itself (`HomeView`), so the scroll view moves it with the content
+/// natively, in the same frame, with no state in between. Nothing here is live: no blur, saturation, mask or opacity
+/// is applied on a frame, and no offscreen pass flattens the layers. The only per-frame work is the one-line
+/// `GlowPlacement` effect, which runs in the render pass and re-evaluates no body.
 struct HomeGlow: View {
     let model: HomeGlowModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -46,12 +48,14 @@ struct HomeGlow: View {
                 )
             }
             .clipped()
-            .ignoresSafeArea(edges: .top)
-            .modifier(GlowScrollOffset(model: model))
+            .modifier(GlowPlacement(topInset: model.contentTopInset ?? GlowSpec.estimatedTopInset))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-            .onChange(of: model.art, initial: true) { _, art in
-                layers.show(art)
+            .onChange(of: model.art, initial: true) { old, art in
+                let first = layers.show(art)
+                // Coming back into the page (the content was rebuilt) with an image already chosen: it is simply there,
+                // not faded in from nothing. A first image that arrives later still fades in.
+                if first, old == art, let art { layers.fadeCompleted(of: art) }
             }
     }
 }
@@ -70,13 +74,21 @@ struct HomeGlowTilesAnchor: ViewModifier {
     }
 }
 
-/// Moves the glow with the page. A modifier of its own so that reading the scroll offset re-evaluates only this
-/// one line, not the glow's layers.
-private struct GlowScrollOffset: ViewModifier {
-    let model: HomeGlowModel
+/// Puts the glow at the top of the screen. The glow is a background of the scrolling content, so its layout top is the
+/// content's top and the scroll view moves it; this lifts it up under the status bar by the inset and the design's
+/// offset, and while the page is pulled past the top, lifts it by the pull so it stays at the top with no gap. It reads
+/// the glow's place in the render pass, so nothing is written to state and no body runs.
+private struct GlowPlacement: ViewModifier {
+    let topInset: CGFloat
 
     func body(content: Content) -> some View {
-        content.offset(y: GlowSpec.offset(scroll: model.scrollOffset))
+        let topInset = topInset
+        let topOffset = BackdropLayout.topOffset
+        content.visualEffect { content, proxy in
+            content.offset(y: GlowSpec.offset(
+                layoutTop: proxy.frame(in: .global).minY, topInset: topInset, topOffset: topOffset
+            ))
+        }
     }
 }
 

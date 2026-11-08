@@ -70,10 +70,14 @@ final class HomeSourceGuardrailTests: XCTestCase {
             for file in try swiftFiles(in: folder) {
                 let text = code(try String(contentsOf: file, encoding: .utf8))
                 for (name, pattern) in Self.banned {
-                    // The one deliberate exception: the panel's number blurs each digit a little while it cross-fades
-                    // into the next (a Canvas filter on at most ten small glyphs, only mid-change, in the single
-                    // panel). It is not a row that repeats.
-                    if name == "a live blur", file.lastPathComponent == "Odometer.swift" { continue }
+                    // The deliberate exceptions, both in the single open panel and not rows that repeat: the right-hand
+                    // number block blurs a little while it dissolves into the next one (Odometer.swift, a Canvas filter
+                    // on at most ten short strings, only mid-change), and the title blurs its letters while they change
+                    // in place along a swipe (TitleDissolve.swift, a Canvas filter on the few letters at the sweep's
+                    // front, in steps of 0.7 pt so there are only a handful of distinct filters).
+                    if name == "a live blur", ["Odometer.swift", "TitleDissolve.swift"].contains(file.lastPathComponent) {
+                        continue
+                    }
                     XCTAssertNil(
                         text.range(of: pattern, options: .regularExpression),
                         "\(folder)/\(file.lastPathComponent) uses \(name)"
@@ -121,10 +125,13 @@ final class HomeSourceGuardrailTests: XCTestCase {
         let hostPart = try XCTUnwrap(host.components(separatedBy: "// MARK: - Body").first)
         XCTAssertGreaterThan(host.count, hostPart.count, "The host and the body are separated by a MARK")
         XCTAssertFalse(code(hostPart).contains("scrollPosition"), "InProgressMorphPanel (the host) reads the scroll position")
-        // Nothing but the panel's body reads it.
+        // Nothing but the panel's body and the Trending title read it.
         for file in try swiftFiles(in: "Features/Home") {
             let name = file.lastPathComponent
-            guard !["InProgressMorphPanel.swift", "TileCarousel.swift", "HomeTilesState.swift"].contains(name) else {
+            // TitleDissolve.swift holds `SwipeTitle`, the Trending panel's title: a view of its own that reads the
+            // position, so a scroll frame redraws that title and not the panel around it.
+            guard !["InProgressMorphPanel.swift", "TileCarousel.swift", "HomeTilesState.swift", "TitleDissolve.swift"]
+                .contains(name) else {
                 continue
             }
             XCTAssertFalse(code(try String(contentsOf: file, encoding: .utf8)).contains("state.scrollPosition"), name)

@@ -143,6 +143,8 @@ struct MorphPanelBody: View {
                 vector: vector,
                 width: width,
                 spec: spec,
+                lo: specs[split.lo],
+                hi: specs[split.hi],
                 isBusy: busy.contains(spec.id) || running.contains(spec.id),
                 isSettled: settled,
                 sweepToken: sweepToken,
@@ -213,6 +215,10 @@ struct PanelRenderer: View, Animatable {
     let width: Double
     /// The title the panel reads as: its words, its buttons.
     let spec: PanelTitleSpec
+    /// The two titles a swipe is between (the same one at rest): the title row dissolves from `lo` to `hi` as the
+    /// vector's `t` goes from 0 to 1.
+    let lo: PanelTitleSpec
+    let hi: PanelTitleSpec
     let isBusy: Bool
     let isSettled: Bool
     let sweepToken: Int
@@ -231,7 +237,7 @@ struct PanelRenderer: View, Animatable {
         let _ = PerfCounters.bump(.panelBody)
         let layout = MorphLayout.resolve(vector)
         ZStack(alignment: .topLeading) {
-            PanelTitleRow(layout: layout, spec: spec)
+            PanelTitleRow(spec: spec, lo: lo, hi: hi, t: vector.t)
                 .frame(width: width, height: InProgressPanelMetrics.titleRowHeight, alignment: .topLeading)
             PanelMeterCanvas(layout: layout, width: width)
                 .offset(
@@ -260,61 +266,26 @@ struct PanelRenderer: View, Animatable {
 
 // MARK: - Title row
 
-/// The title on the left and where it stands on the right: prefix word, rolling number, joiner, rolling total,
-/// suffix word, with no spacing between them. Words swap in slots whose width is measured and animated; the numbers
-/// roll with the position.
+/// The title on the left and where it stands on the right. Neither slides: the title changes in place letter by
+/// letter (`TitleDissolve`), and the right-hand block ("S2 \u{00B7} 7 of 10 episodes") dissolves whole from the old
+/// place to the new one (`PlaceChange`). Both follow a swipe between two titles and play on their own when a title's
+/// data changes. The block's width animates and the title takes what is left of the row, so the row never jumps.
 struct PanelTitleRow: View {
-    let layout: MorphLayout
+    /// The title the panel reads as: what VoiceOver says.
     let spec: PanelTitleSpec
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The two titles a swipe is between, and how far (0 at rest, where `lo` is the title).
+    let lo: PanelTitleSpec
+    let hi: PanelTitleSpec
+    let t: Double
 
     var body: some View {
-        let place = spec.detail.place
-        let digit = PanelTextMetrics.digitWidth
-        let comma = PanelTextMetrics.commaWidth
-        let a = OdometerSlots.make(
-            x: reduceMotion ? layout.a.rounded() : layout.a, shown: layout.aShown, digitWidth: digit, commaWidth: comma
-        )
-        let b = OdometerSlots.make(
-            x: reduceMotion ? layout.b.rounded() : layout.b, shown: layout.bShown, digitWidth: digit, commaWidth: comma
-        )
-        let whereWidth = PanelTextMetrics.width(place.prefix, font: InProgressPanelMetrics.whereUIFont)
-            + a.width
-            + PanelTextMetrics.width(place.joiner, font: InProgressPanelMetrics.whereUIFont)
-            + b.width
-            + PanelTextMetrics.width(place.suffix, font: InProgressPanelMetrics.whereUIFont)
         HStack(spacing: 0) {
-            title
-                .padding(.trailing, whereWidth > 0.5 ? InProgressPanelMetrics.titleGap : 0)
-            HStack(spacing: 0) {
-                WordSlot(text: place.prefix)
-                OdometerView(slots: a, height: InProgressPanelMetrics.titleRowHeight)
-                WordSlot(text: place.joiner)
-                OdometerView(slots: b, height: InProgressPanelMetrics.titleRowHeight)
-                WordSlot(text: place.suffix)
-            }
-            .fixedSize()
-            .offset(y: InProgressPanelMetrics.whereOffsetY)
+            TitleDissolve(from: lo.detail.title, to: hi.detail.title, t: t, style: .inProgress)
+            PlaceChange(id: lo.id, lo: lo.detail.place, hi: hi.detail.place, t: t)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spec.detail.accessibilityLabel)
         .accessibilityAddTraits(.isHeader)
-    }
-
-    private var title: some View {
-        ZStack(alignment: .leading) {
-            Text(spec.detail.title)
-                .id(spec.id)
-                .transition(PanelMotion.wordSwap(reduceMotion: reduceMotion))
-        }
-        .font(InProgressPanelMetrics.titleFont)
-        .tracking(-0.3)
-        .foregroundStyle(.white)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .frame(maxWidth: .infinity, minHeight: InProgressPanelMetrics.titleRowHeight, alignment: .leading)
-        .animation(PanelMotion.slot(reduceMotion: reduceMotion), value: spec.id)
     }
 }
 

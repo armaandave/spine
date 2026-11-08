@@ -2,7 +2,7 @@ import XCTest
 @testable import Spine
 
 // The pure parts of the morphing In progress panel (board R4InProgress, variant A): where the buttons sit, which
-// words fit, the layouts of the five worked titles, the odometer's slots and the carousel position. Nothing here
+// words fit, the layouts of the five worked titles, the right-hand block's dissolve and the carousel position. Nothing here
 // needs a screen, a model or a network.
 
 // MARK: - Buttons
@@ -28,11 +28,13 @@ final class PanelButtonGeometryTests: XCTestCase {
         XCTAssertEqual(bar.updateX, 133.88, accuracy: 0.001)
         XCTAssertEqual(bar.updateWidth, 192.12, accuracy: 0.001)
 
+        // A long `+N` leaves a narrow `Update`: still one gap right of `+N` and out to the edge, not a circle parked
+        // at the right with a hole to its left.
         let long = make(260.96)
         XCTAssertEqual(long.quickWidth, 260.96, accuracy: 0.001)
         XCTAssertTrue(long.updateIsIcon)
-        XCTAssertEqual(long.updateX, 290)
-        XCTAssertEqual(long.updateWidth, 36)
+        XCTAssertEqual(long.updateX, 270.96, accuracy: 0.001)
+        XCTAssertEqual(long.updateWidth, 55.04, accuracy: 0.001)
 
         XCTAssertEqual(make(0).quickWidth, 36)
     }
@@ -48,7 +50,8 @@ final class PanelButtonGeometryTests: XCTestCase {
     func testOtherPhoneWidths() {
         let wide = make(270.56, width: 338)
         XCTAssertTrue(wide.updateIsIcon)
-        XCTAssertEqual(wide.updateX, 302)
+        XCTAssertEqual(wide.updateX, 280.56, accuracy: 0.001)
+        XCTAssertEqual(wide.updateWidth, 57.44, accuracy: 0.001)
         let narrow = make(216.8, width: 311)
         XCTAssertEqual(narrow.quickWidth, 216.8, accuracy: 0.001)
         XCTAssertEqual(narrow.updateX, 226.8, accuracy: 0.001)
@@ -62,10 +65,11 @@ final class PanelButtonGeometryTests: XCTestCase {
         XCTAssertTrue(make(326 - 86 + 0.01).updateIsIcon)
         let widest = make(10_000)
         XCTAssertEqual(widest.quickWidth, 326 - 46)
-        XCTAssertEqual(widest.updateX - widest.quickWidth, 10, "A 36 circle and the 10 gap are left")
+        XCTAssertEqual(widest.updateX - widest.quickWidth, 10, "The standard gap is left")
+        XCTAssertEqual(widest.updateWidth, 36, "and a 36 pt Update")
     }
 
-    func testInvariantsForManyLitEnds() {
+    func testUpdateAlwaysFillsTheRestOfTheRow() {
         var seed: UInt64 = 12345
         func next() -> Double {
             seed = seed &* 6364136223846793005 &+ 1442695040888963407
@@ -75,20 +79,43 @@ final class PanelButtonGeometryTests: XCTestCase {
             for _ in 0 ..< 1000 {
                 let result = make(next() * (width + 40), width: width)
                 XCTAssertGreaterThanOrEqual(result.quickWidth, 36)
-                XCTAssertGreaterThanOrEqual(result.updateX, result.quickWidth + 10 - 0.0001)
+                // Exactly one gap right of `+N`, out to the panel's edge: no hole, no overlap.
+                XCTAssertEqual(result.updateX, result.quickWidth + PanelButtonGeometry.gap, accuracy: 0.0001)
                 XCTAssertEqual(result.updateX + result.updateWidth, width, accuracy: 0.0001)
-                if result.updateIsIcon { XCTAssertEqual(result.updateWidth, 36, accuracy: 0.0001) }
-                else { XCTAssertGreaterThanOrEqual(result.updateWidth, 76 - 0.0001) }
+                XCTAssertGreaterThanOrEqual(result.updateWidth, 36 - 0.0001)
+                XCTAssertEqual(result.updateIsIcon, result.updateWidth < 76 - 0.0001)
             }
         }
     }
 
-    func testTheIconAndTheWordsCrossFadeOnTheWidth() {
+    func testUpdateOnlyShrinksAsQuickGrows() {
+        var previousWidth = Double.infinity
+        var litEnd = 0.0
+        while litEnd <= 330 {
+            let result = make(litEnd)
+            XCTAssertLessThanOrEqual(result.updateWidth, previousWidth + 1e-9, "a longer `+N` never widens Update")
+            previousWidth = result.updateWidth
+            litEnd += 1
+        }
+    }
+
+    func testTheIconAndTheWordsCrossFadeOnTheWidthWithoutGoingBlank() {
         XCTAssertEqual(PanelButtonGeometry.textOpacity(updateWidth: 70), 1)
-        XCTAssertEqual(PanelButtonGeometry.textOpacity(updateWidth: 50), 0)
+        XCTAssertEqual(PanelButtonGeometry.textOpacity(updateWidth: 52), 0)
+        XCTAssertEqual(PanelButtonGeometry.iconOpacity(updateWidth: 48), 1)
         XCTAssertEqual(PanelButtonGeometry.iconOpacity(updateWidth: 36), 1)
-        XCTAssertEqual(PanelButtonGeometry.iconOpacity(updateWidth: 60), 0)
+        XCTAssertEqual(PanelButtonGeometry.iconOpacity(updateWidth: 64), 0)
         XCTAssertEqual(PanelButtonGeometry.iconOpacity(updateWidth: 280), 0)
+        var width = 36.0
+        while width <= 300 {
+            let both = PanelButtonGeometry.textOpacity(updateWidth: width) + PanelButtonGeometry.iconOpacity(updateWidth: width)
+            XCTAssertGreaterThanOrEqual(both, 0.6, "the morph never goes blank at \(width)")
+            width += 0.5
+        }
+        XCTAssertEqual(PanelButtonGeometry.iconScale(updateWidth: 36), 1)
+        XCTAssertEqual(PanelButtonGeometry.iconScale(updateWidth: 80), 0.7, accuracy: 0.0001)
+        XCTAssertEqual(PanelButtonGeometry.textScale(updateWidth: 80), 1)
+        XCTAssertEqual(PanelButtonGeometry.textScale(updateWidth: 40), 0.88, accuracy: 0.0001)
     }
 }
 
@@ -409,123 +436,188 @@ final class MorphLayoutTests: XCTestCase {
     }
 }
 
-// MARK: - Odometer
+// MARK: - Place dissolve
 
-final class OdometerSlotsTests: XCTestCase {
-    private func make(_ x: Double, shown: Double = 1) -> OdometerSlots {
-        OdometerSlots.make(x: x, shown: shown, digitWidth: 8, commaWidth: 4)
+final class PlaceDissolveLayoutTests: XCTestCase {
+    private let digit = 8.0
+    private let comma = 4.0
+    private let word: (String) -> Double = { Double($0.count) * 7 }
+
+    private func make(_ from: TilePlace, _ to: TilePlace) -> PlaceDissolveLayout {
+        PlaceDissolveLayout.make(from: from, to: to, digitWidth: digit, commaWidth: comma, wordWidth: word)
     }
 
-    private func slot(_ slots: OdometerSlots, place: Int) -> OdometerSlots.Slot {
-        slots.slots.first { $0.place == place }!
+    private func place(_ value: Int?, of total: Int? = 10) -> TilePlace {
+        TilePlace(prefix: "S2 \u{00B7} ", value: value, joiner: total == nil ? "" : " of ", total: total, suffix: " episodes")
     }
 
-    func testASingleDigit() {
-        let s = make(7)
-        XCTAssertEqual(s.slots.map(\.place), [4, 3, 2, 1, 0])
-        XCTAssertEqual(s.slots.map(\.width), [0, 0, 0, 0, 8])
-        XCTAssertEqual(slot(s, place: 0).roll, 7)
-        XCTAssertEqual(s.width, 8)
-        XCTAssertEqual(s.commaWidth, 0)
+    func testTheSameWordsStaySolidAndOnlyTheNumberChanges() {
+        let layout = make(place(7), place(10))
+        XCTAssertEqual(layout.segments.map(\.changes), [false, true, false, false, false])
+        XCTAssertEqual(layout.segments.map(\.from), ["S2 \u{00B7} ", "7", " of ", "10", " episodes"])
+        XCTAssertEqual(layout.segments.map(\.to), ["S2 \u{00B7} ", "10", " of ", "10", " episodes"])
     }
 
-    func testATensDigitGrowsInAsTheNumberPassesNine() {
-        let s = make(9.5)
-        XCTAssertEqual(slot(s, place: 1).opacity, 0.5, accuracy: 0.0001)
-        XCTAssertEqual(slot(s, place: 1).width, 4, accuracy: 0.0001)
-        XCTAssertEqual(slot(s, place: 1).roll, 0.5, accuracy: 0.0001)
-        XCTAssertEqual(slot(s, place: 0).roll, 9.5, accuracy: 0.0001)
+    func testAJumpIsFromTheOldValueStraightToTheNewOne() {
+        // 7 to 1,089: the only strings the number ever has are the two ends, whatever the progress.
+        let layout = make(place(7), place(1089))
+        let number = layout.segments[1]
+        XCTAssertEqual(number.from, "7")
+        XCTAssertEqual(number.to, "1,089")
+        XCTAssertEqual(number.fromWidth, 8)
+        XCTAssertEqual(number.toWidth, 4 * 8 + 4)
+        XCTAssertEqual(layout.segments.filter(\.changes).count, 1, "only the number is not the same on both sides")
     }
 
-    func testAHundredsDigit() {
-        let s = make(99.5)
-        XCTAssertEqual(slot(s, place: 2).opacity, 0.5, accuracy: 0.0001)
-        XCTAssertEqual(slot(s, place: 2).roll, 0.95, accuracy: 0.0001)
-        XCTAssertEqual(slot(s, place: 1).opacity, 1)
-        XCTAssertEqual(slot(s, place: 1).roll, 9.5, accuracy: 0.0001)
-        XCTAssertEqual(slot(s, place: 0).roll, 9.5, accuracy: 0.0001)
+    func testTheBlockIsRightAlignedSoWhatSitsToItsRightDoesNotMove() {
+        let layout = make(place(7), place(10))
+        // Widths: 35 + 8 + 28 + 16 + 63 = 150 and 158.
+        XCTAssertEqual(layout.fromWidth, 150)
+        XCTAssertEqual(layout.toWidth, 158)
+        // Everything right of the changed number keeps its distance from the right edge.
+        XCTAssertEqual(layout.segments[2].fromEdge, layout.segments[2].toEdge)
+        XCTAssertEqual(layout.segments[3].fromEdge, layout.segments[3].toEdge)
+        XCTAssertEqual(layout.segments[4].fromEdge, layout.segments[4].toEdge)
+        XCTAssertEqual(layout.segments[4].fromEdge, 63)
+        // What sits to its left moves out by the width the block gained, gradually.
+        XCTAssertEqual(layout.segments[0].fromEdge, 150)
+        XCTAssertEqual(layout.segments[0].toEdge, 158)
+        XCTAssertEqual(layout.segments[0].edge(at: 0.5), 154)
+        XCTAssertEqual(layout.width(at: 0), 150)
+        XCTAssertEqual(layout.width(at: 0.5), 154)
+        XCTAssertEqual(layout.width(at: 1), 158)
     }
 
-    func testAThousandsDigitAndTheComma() {
-        let s = make(1089)
-        XCTAssertEqual(s.commaWidth, 4)
-        XCTAssertEqual(slot(s, place: 4).width, 0)
-        XCTAssertEqual(slot(s, place: 3).roll, 1)
-        XCTAssertEqual(slot(s, place: 2).roll, 0)
-        XCTAssertEqual(slot(s, place: 1).roll, 8)
-        XCTAssertEqual(slot(s, place: 0).roll, 9)
-        XCTAssertEqual(s.width, 4 * 8 + 4)
-        // The comma grows in with the thousands digit.
-        XCTAssertEqual(make(999.5).commaWidth, 2, accuracy: 0.0001)
-    }
-
-    func testZeroIsShownAndNothingShownHasNoWidth() {
-        let zero = make(0)
-        XCTAssertEqual(zero.width, 8)
-        XCTAssertEqual(slot(zero, place: 0).roll, 0)
-        XCTAssertEqual(make(1089, shown: 0).width, 0)
-        XCTAssertEqual(make(5, shown: 0.5).width, 4)
-    }
-
-    func testTheWholeNumberGrowsMonotonicallyAndNoSlotIsWiderThanADigit() {
-        var previous = 0.0
-        var x = 0.0
-        while x <= 20_000 {
-            let s = make(x)
-            XCTAssertGreaterThanOrEqual(s.width, previous - 1e-9, "x = \(x)")
-            XCTAssertTrue(s.slots.allSatisfy { $0.width <= 8 + 1e-9 })
-            previous = s.width
-            x += 0.5
+    func testTheBlockGrowsSmoothlyWithTheProgress() {
+        let layout = make(place(7, of: nil), place(1089))
+        var previous = layout.width(at: 0)
+        XCTAssertGreaterThan(layout.width(at: 1), previous)
+        for step in 1 ... 100 {
+            let width = layout.width(at: Double(step) / 100)
+            XCTAssertGreaterThanOrEqual(width, previous)
+            XCTAssertLessThan(width - previous, 2, "no step jumps by more than a couple of points")
+            previous = width
         }
     }
 
-    func testBeyondFivePlacesItClamps() {
-        XCTAssertEqual(make(250_000).width, make(99_999).width)
+    func testANumberThatIsNotThereIsEmptyAndHasNoWidth() {
+        let layout = make(place(nil, of: nil), place(5, of: nil))
+        XCTAssertEqual(layout.segments[1].from, "")
+        XCTAssertEqual(layout.segments[1].fromWidth, 0)
+        XCTAssertEqual(layout.segments[3].to, "")
+        XCTAssertEqual(layout.segments[3].toWidth, 0)
     }
 
-    // MARK: In-place change
-
-    func testADigitAtRestIsSolidAndAloneAndTheNextDigitIsNotShown() {
-        let rest = OdometerSlots.fade(roll: 7)
-        XCTAssertEqual(rest, OdometerSlots.Fade(base: 7, next: 8, amount: 0))
-        // The first and last stretch of a step hold the digit still.
-        XCTAssertEqual(OdometerSlots.fade(roll: 7.1).amount, 0)
-        XCTAssertEqual(OdometerSlots.fade(roll: 7.9).amount, 1)
+    func testANumberIsClampedToFivePlaces() {
+        let layout = make(place(250_000), place(-3))
+        XCTAssertEqual(layout.segments[1].from, "99,999")
+        XCTAssertEqual(layout.segments[1].to, "0")
     }
 
-    func testTheCrossFadeIsEasedAndHalfwayAtTheMiddleOfAStep() {
-        XCTAssertEqual(OdometerSlots.fade(roll: 7.5).amount, 0.5, accuracy: 0.0001)
+    func testTheSwipeProgressRestsAtTheEndsAndIsEasedAndMonotonic() {
+        XCTAssertEqual(PlaceDissolveLayout.scrub(0), 0)
+        XCTAssertEqual(PlaceDissolveLayout.scrub(0.08), 0)
+        XCTAssertEqual(PlaceDissolveLayout.scrub(0.92), 1, accuracy: 1e-9)
+        XCTAssertEqual(PlaceDissolveLayout.scrub(1), 1)
+        XCTAssertEqual(PlaceDissolveLayout.scrub(0.5), 0.5, accuracy: 0.0001)
         var previous = 0.0
-        var roll = 3.0
-        while roll < 4 {
-            let amount = OdometerSlots.fade(roll: roll).amount
-            XCTAssertGreaterThanOrEqual(amount, previous - 1e-12, "the next digit only ever fades in")
-            XCTAssertTrue((0 ... 1).contains(amount))
-            previous = amount
-            roll += 0.01
+        for step in 0 ... 100 {
+            let p = PlaceDissolveLayout.scrub(Double(step) / 100)
+            XCTAssertGreaterThanOrEqual(p, previous)
+            previous = p
         }
     }
 
-    func testNineFadesIntoZeroAndTheTensCarryFadesWithIt() {
-        let ones = OdometerSlots.fade(roll: 9.5)
-        XCTAssertEqual(ones.base, 9)
-        XCTAssertEqual(ones.next, 0)
-        // 19.5: the tens digit is on 1 and moves to 2 during the last unit, as the ones digit goes 9 to 0.
-        let s = OdometerSlots.make(x: 19.5, shown: 1, digitWidth: 8, commaWidth: 4)
-        let tens = OdometerSlots.fade(roll: s.slots.first { $0.place == 1 }!.roll)
-        XCTAssertEqual(tens.base, 1)
-        XCTAssertEqual(tens.next, 2)
-        XCTAssertEqual(tens.amount, 0.5, accuracy: 0.0001)
+    func testTheOldBlockBreathesOutAndTheNewOneBreathesIn() {
+        let start = PlaceDissolveLayout.look(progress: 0, reduceMotion: false)
+        XCTAssertEqual(start.oldAlpha, 1)
+        XCTAssertEqual(start.newAlpha, 0)
+        XCTAssertEqual(start.oldBlur, 0)
+        XCTAssertEqual(start.oldScale, 1)
+        XCTAssertEqual(start.newScale, 0.96, accuracy: 0.0001)
+        let end = PlaceDissolveLayout.look(progress: 1, reduceMotion: false)
+        XCTAssertEqual(end.oldAlpha, 0)
+        XCTAssertEqual(end.newAlpha, 1)
+        XCTAssertEqual(end.newBlur, 0)
+        XCTAssertEqual(end.newScale, 1, accuracy: 1e-9)
+        let middle = PlaceDissolveLayout.look(progress: 0.5, reduceMotion: false)
+        XCTAssertEqual(middle.oldAlpha + middle.newAlpha, 1, accuracy: 0.0001)
+        XCTAssertEqual(middle.oldBlur, middle.newBlur, accuracy: 0.0001)
+        XCTAssertGreaterThan(middle.oldBlur, 1)
+        XCTAssertLessThanOrEqual(middle.oldBlur, PlaceDissolveLayout.maxBlur)
+        // Reduce Motion: a plain cross-fade.
+        let reduced = PlaceDissolveLayout.look(progress: 0.5, reduceMotion: true)
+        XCTAssertEqual([reduced.oldBlur, reduced.newBlur, reduced.oldScale, reduced.newScale], [0, 0, 1, 1])
+        XCTAssertEqual(reduced.oldAlpha, 0.5)
     }
 
-    func testTheNumberNeverChangesWidthJustBecauseADigitIsFading() {
-        // Only a digit growing in changes the width; a digit fading into the next is the same width at every roll.
-        var roll = 4.0
-        let widths = Set((0 ..< 100).map { step -> Double in
-            roll = 4.0 + Double(step) / 100
-            return OdometerSlots.make(x: roll, shown: 1, digitWidth: 8, commaWidth: 4).width
-        })
-        XCTAssertEqual(widths, [8])
+    func testTheRealMeasuresGiveMonospacedDigits() {
+        let layout = PlaceDissolveLayout.make(from: place(7), to: place(8))
+        XCTAssertEqual(layout.fromWidth, layout.toWidth, "7 and 8 are the same width")
+        XCTAssertGreaterThan(layout.fromWidth, 40)
+    }
+}
+
+final class PlaceSlotsTests: XCTestCase {
+    private func place(_ value: Int) -> TilePlace {
+        TilePlace(prefix: "p. ", value: value, joiner: "", total: nil, suffix: "")
+    }
+
+    func testAtRestItShowsThePlaceAndNothingChanges() {
+        let slots = PlaceSlots(id: "a", place: place(7))
+        let shown = slots.shown(id: "a", lo: place(7), hi: place(9), t: 0)
+        XCTAssertEqual(shown.from, place(7))
+        XCTAssertEqual(shown.to, place(7))
+        XCTAssertEqual(shown.progress, 0)
+    }
+
+    func testAChangeOnItsOwnDissolvesFromTheOldPlaceToTheNewOne() {
+        let first = PlaceSlots(id: "a", place: place(7)).after(id: "a", place: place(10), swiping: false)
+        XCTAssertTrue(first.animated)
+        let shown = first.slots.shown(id: "a", lo: place(10), hi: place(11), t: 0)
+        XCTAssertEqual(shown.from, place(7))
+        XCTAssertEqual(shown.to, place(10))
+        XCTAssertEqual(shown.progress, 1, "the flag moved to 1: the dissolve plays from 0 to 1")
+        // A second change flips it back: the dissolve plays from 1 to 0, from the place that was showing to the new.
+        let second = first.slots.after(id: "a", place: place(12), swiping: false)
+        XCTAssertTrue(second.animated)
+        let again = second.slots.shown(id: "a", lo: place(12), hi: place(13), t: 0)
+        XCTAssertEqual(again.from, place(12))
+        XCTAssertEqual(again.to, place(10))
+        XCTAssertEqual(again.progress, 0)
+    }
+
+    func testTheSlotsOnlyEverHoldPlacesTheTitleHad() {
+        var slots = PlaceSlots(id: "a", place: place(1))
+        var seen: Set<TilePlace> = [place(1)]
+        for value in [4, 9, 10, 2] {
+            slots = slots.after(id: "a", place: place(value), swiping: false).slots
+            seen.insert(place(value))
+            XCTAssertTrue(seen.contains(slots.a) && seen.contains(slots.b))
+        }
+    }
+
+    func testAnotherTitleOrAChangeUnderAFingerResetsWithoutADissolve() {
+        let slots = PlaceSlots(id: "a", place: place(7))
+        let other = slots.after(id: "b", place: place(3), swiping: false)
+        XCTAssertFalse(other.animated)
+        XCTAssertEqual(other.slots, PlaceSlots(id: "b", place: place(3)))
+        let swiping = slots.after(id: "a", place: place(8), swiping: true)
+        XCTAssertFalse(swiping.animated)
+        XCTAssertEqual(swiping.slots, PlaceSlots(id: "a", place: place(8)))
+    }
+
+    func testASwipeShowsThePairAndAFreshTitleShowsItselfAtOnce() {
+        let slots = PlaceSlots(id: "a", place: place(7))
+        let swipe = slots.shown(id: "a", lo: place(7), hi: place(9), t: 0.5)
+        XCTAssertEqual(swipe.from, place(7))
+        XCTAssertEqual(swipe.to, place(9))
+        XCTAssertEqual(swipe.progress, 0.5, accuracy: 0.0001)
+        // The swipe ended on title b, and the slots are still a's: b shows as it is, solid.
+        let landed = slots.shown(id: "b", lo: place(3), hi: place(4), t: 0)
+        XCTAssertEqual(landed.from, place(3))
+        XCTAssertEqual(landed.to, place(3))
+        XCTAssertEqual(landed.progress, 1)
     }
 }
 

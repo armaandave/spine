@@ -52,7 +52,9 @@ struct TileDetailPanel: View {
                     detail: model.trendingDetail(for: title),
                     neighbors: model.trendingNeighbors(of: title),
                     store: model.railStore,
-                    actions: actions
+                    actions: actions,
+                    state: state,
+                    titles: model.trendingPosters.map { $0.media.displayTitle }
                 )
             }
         }

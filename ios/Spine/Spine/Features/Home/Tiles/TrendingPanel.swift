@@ -20,15 +20,18 @@ extension HomeDesign.Text {
 }
 
 /// The Trending tile's panel: the title and friends' faces, centered; and under them the media page's own Liquid Glass
-/// rail with Open in the middle. The title is keyed by the title and fades up on a swipe; the faces row and the rail are
-/// not, so the faces cross-fade from one set to the next and never blank, and the rail's glass never rebuilds while you
-/// browse and only its state slots change.
+/// rail with Open in the middle. The title changes in place letter by letter along the swipe (`SwipeTitle`); the faces
+/// row and the rail are not keyed, so the faces cross-fade from one set to the next and never blank, and the rail's
+/// glass never rebuilds while you browse and only its state slots change.
 struct TrendingPanel: View {
     let title: TrendingTitle
     let detail: TrendingTileDetail
     let neighbors: [TrendingTitle]
     let store: TrendingRailStore?
     let actions: HomeTilesActions
+    /// The carousel's state and every title's name in its order: the title block changes in place along the scroll.
+    let state: HomeTilesState
+    let titles: [String]
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
@@ -46,7 +49,7 @@ struct TrendingPanel: View {
                 TrendingOutsideTapLayer(onOutsideTap: collapsePicker)
             }
 
-            TrendingTitleBlock(titleKey: title.key, detail: detail, isHidden: pickerOpen)
+            TrendingTitleBlock(state: state, titles: titles, detail: detail, isHidden: pickerOpen)
                 .padding(.top, HomeDesign.Metric.trendingTitleTop)
                 .frame(maxHeight: .infinity, alignment: .top)
 
@@ -150,10 +153,11 @@ private struct TrendingOutsideTapLayer: View {
 
 // MARK: - The title block
 
-/// The centered title and, under it, the friends' faces. The title is keyed and fades up on a swipe; the faces row is
-/// one view that stays, so it is never empty between two titles.
+/// The centered title and, under it, the friends' faces. The title is drawn by the shared `SwipeTitle`, which follows
+/// the scroll and changes in place; the faces row is one view that stays, so it is never empty between two titles.
 private struct TrendingTitleBlock: View {
-    let titleKey: String
+    let state: HomeTilesState
+    let titles: [String]
     let detail: TrendingTileDetail
     let isHidden: Bool
 
@@ -161,25 +165,13 @@ private struct TrendingTitleBlock: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ZStack {
-                Text(detail.title)
-                    .font(HomeDesign.Text.trendingTitle)
-                    .tracking(-0.3)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity)
-                    .dynamicTypeSize(...HomeDesign.Text.maxCategory)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(detail.accessibilityLabel)
-                    .accessibilityAddTraits(.isHeader)
-                    .allowsHitTesting(false)
-                    .id(titleKey)
-                    .transition(.asymmetric(insertion: .offset(y: 6).combined(with: .opacity), removal: .identity))
-            }
-            .animation(HomeDesign.Motion.soft(duration: 0.4, reduceMotion: reduceMotion), value: titleKey)
-            .frame(height: HomeDesign.Metric.trendingTitleHeight)
+            SwipeTitle(titles: titles, state: state, style: .trending)
+                .frame(height: HomeDesign.Metric.trendingTitleHeight)
+                .dynamicTypeSize(...HomeDesign.Text.maxCategory)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(detail.accessibilityLabel)
+                .accessibilityAddTraits(.isHeader)
+                .allowsHitTesting(false)
 
             TrendingFacesRow(detail: detail)
                 .padding(.top, HomeDesign.Metric.trendingInfoGap)

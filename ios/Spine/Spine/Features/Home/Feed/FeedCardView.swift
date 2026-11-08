@@ -191,10 +191,14 @@ struct FeedCardView: View, Equatable {
                 if !starSymbols.isEmpty {
                     HStack(spacing: 1) {
                         ForEach(Array(starSymbols.enumerated()), id: \.offset) { _, symbol in
-                            Image(systemName: symbol)
+                            if let mark = FeedMark(starSymbol: symbol) {
+                                FeedMarkView(mark: mark, ink: ink)
+                            } else {
+                                Image(systemName: symbol)
+                                    .foregroundStyle(ink.star)
+                            }
                         }
                     }
-                    .foregroundStyle(ink.star)
                 }
                 if liked {
                     FeedMarkView(mark: .heart, ink: ink)

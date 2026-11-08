@@ -1,15 +1,28 @@
 import SwiftUI
 
-/// The two marks of a feed log card's headline: the heart for a loved log and the arrow for a rewatch. Each is the
-/// system symbol it always was, in its own color; `FeedMarkImages` gives it a soft glow.
+/// The marks of a feed log card's headline: the heart for a loved log, the arrow for a rewatch, and the whole and half
+/// star a rating is drawn with. Each is a system symbol in its own color; `FeedMarkImages` gives it a soft glow.
 nonisolated enum FeedMark: Equatable, Hashable, Sendable {
     case heart
     case rewatch
+    case star
+    case halfStar
+
+    /// The mark for one of a rating's star symbols ("star.fill", "star.leadinghalf.filled"); nil for any other name.
+    init?(starSymbol: String) {
+        switch starSymbol {
+        case "star.fill": self = .star
+        case "star.leadinghalf.filled": self = .halfStar
+        default: return nil
+        }
+    }
 
     var symbolName: String {
         switch self {
         case .heart: "heart.fill"
         case .rewatch: "arrow.clockwise"
+        case .star: "star.fill"
+        case .halfStar: "star.leadinghalf.filled"
         }
     }
 
@@ -17,14 +30,18 @@ nonisolated enum FeedMark: Equatable, Hashable, Sendable {
         switch self {
         case .heart: "heart"
         case .rewatch: "rewatch"
+        case .star: "star"
+        case .halfStar: "halfStar"
         }
     }
 
-    /// The pink heart, and the rewatch green (deeper on light art, where the bright one does not read).
+    /// The pink heart, the rewatch green (deeper on light art, where the bright one does not read), and the stars' gold
+    /// on dark art (the ink itself on light art, as the stars always were).
     func color(for ink: ArtInk) -> Color {
         switch self {
         case .heart: ink.heart
         case .rewatch: ink.rewatch
+        case .star, .halfStar: ink.star
         }
     }
 }

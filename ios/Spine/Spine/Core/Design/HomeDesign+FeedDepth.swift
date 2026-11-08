@@ -63,6 +63,12 @@ extension HomeDesign {
         /// White, 3 pt blur.
         static let lightHaloOpacity: Double = 0.30
 
+        // MARK: Mark glow
+
+        /// The baked glow behind the headline's heart, rewatch and stars, as a share of the strength it started with
+        /// (opacity and reach both): 25 % softer.
+        static let markGlowScale: Double = 0.75
+
         // MARK: Pill highlights
 
         static let pillHighlightDark: Double = 0.30

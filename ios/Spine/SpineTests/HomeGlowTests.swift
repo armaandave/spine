@@ -179,17 +179,36 @@ final class HomeGlowTests: XCTestCase {
 
     // MARK: Offset
 
-    func testTheGlowMovesOneToOneWithThePage() {
+    /// Where the glow's top lands on screen: its layout place (the top of the page's content) plus the offset.
+    private func glowTop(scroll: CGFloat, inset: CGFloat = 62) -> CGFloat {
+        let layoutTop = inset - scroll
+        return layoutTop + GlowSpec.offset(layoutTop: layoutTop, topInset: inset, topOffset: BackdropLayout.topOffset)
+    }
+
+    func testTheGlowSitsAtTheTopAtRestAndRidesWithTheContent() {
         let top = BackdropLayout.topOffset
-        XCTAssertEqual(GlowSpec.offset(scroll: -50), top, "pulled past the top it stays put")
-        XCTAssertEqual(GlowSpec.offset(scroll: 0), top)
-        XCTAssertEqual(GlowSpec.offset(scroll: 220), top - 220)
-        XCTAssertEqual(GlowSpec.offset(scroll: 600), top - 600)
+        XCTAssertEqual(glowTop(scroll: 0), top)
+        // The scroll view carries it: its top moves one to one with the page, whatever the inset.
+        XCTAssertEqual(glowTop(scroll: 220), top - 220)
+        XCTAssertEqual(glowTop(scroll: 600), top - 600)
+        XCTAssertEqual(glowTop(scroll: 220, inset: 47), top - 220)
+        // The offset itself is constant while scrolling down, so nothing is computed from a lagging value.
+        XCTAssertEqual(
+            GlowSpec.offset(layoutTop: 62 - 10, topInset: 62, topOffset: top),
+            GlowSpec.offset(layoutTop: 62 - 500, topInset: 62, topOffset: top)
+        )
+    }
+
+    func testPulledPastTheTopTheGlowStaysAtTheTopWithNoGap() {
+        let top = BackdropLayout.topOffset
+        for pull: CGFloat in [1, 30, 90, 240] {
+            XCTAssertEqual(glowTop(scroll: -pull), top, "pulled \(pull): the glow is not carried down, so nothing opens above it")
+        }
     }
 
     func testTheGlowIsOffScreenOnceItsHeightHasScrolled() {
         XCTAssertEqual(HomeDesign.Metric.glowHeight, 440)
-        let bottom = GlowSpec.offset(scroll: 440) + HomeDesign.Metric.glowHeight
+        let bottom = glowTop(scroll: 440) + HomeDesign.Metric.glowHeight
         XCTAssertLessThanOrEqual(bottom, 0)
     }
 
@@ -396,6 +415,26 @@ final class HomeGlowTests: XCTestCase {
         }
         let view = try String(contentsOf: tiles.appendingPathComponent("HomeGlow.swift"), encoding: .utf8)
         XCTAssertTrue(view.contains("PerfCounters.bump(.glowBody)"))
+    }
+
+    /// The glow trailed the content because a scroll offset written to state moved it a frame late. It is now part
+    /// of the scrolling content and placed by a render-time effect, so it must read no scroll state.
+    func testTheGlowIsPartOfTheScrollingContentAndReadsNoScrollState() throws {
+        let features = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Spine/Features/Home")
+        let glow = try String(contentsOf: features.appendingPathComponent("Tiles/HomeGlow.swift"), encoding: .utf8)
+        XCTAssertFalse(glow.contains("scrollOffset"))
+        XCTAssertTrue(glow.contains(".visualEffect"))
+
+        let home = try String(contentsOf: features.appendingPathComponent("HomeView.swift"), encoding: .utf8)
+        let scroll = try XCTUnwrap(home.range(of: "ScrollView(showsIndicators: false) {"))
+        let glowUse = try XCTUnwrap(home.range(of: "HomeGlow(model: glow)"))
+        let refresh = try XCTUnwrap(home.range(of: ".refreshable {"))
+        XCTAssertTrue(scroll.upperBound < glowUse.lowerBound && glowUse.upperBound < refresh.lowerBound,
+                      "HomeGlow sits inside the ScrollView's content, not behind it")
+        XCTAssertEqual(home.components(separatedBy: "HomeGlow(model:").count - 1, 1)
     }
 
     private func media(id: String, backdrop: String?, poster: String?) -> MediaSummary {

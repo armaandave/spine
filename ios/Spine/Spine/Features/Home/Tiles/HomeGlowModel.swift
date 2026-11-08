@@ -4,8 +4,8 @@ import Observation
 
 /// What Home's glow is showing: at rest, In progress's color on the left and Trending's on the right, meeting in the
 /// middle; while a tile's carousel is open, the poster it is on (`focused`) across the whole glow. Also how far the
-/// page has scrolled. The glow view is the only reader of `scrollOffset`, so scrolling redraws the glow's own small
-/// body and never the feed.
+/// page has scrolled. The glow itself does not read `scrollOffset` (it moves with the content); only the status bar
+/// fade and the back posters' fold do, so scrolling redraws their small bodies and never the feed.
 @MainActor
 @Observable
 final class HomeGlowModel {
@@ -83,10 +83,18 @@ enum GlowSpec {
         (1.0, 1.0),
     ]
 
-    /// The whole box moves one to one with the content and is off screen once the page has scrolled the glow's
-    /// height. There is no opacity tied to scroll: nothing to fade, so nothing to flatten.
-    static func offset(scroll: CGFloat) -> CGFloat {
-        BackdropLayout.topOffset - max(0, scroll)
+    /// Where the status bar's inset is until it has been measured.
+    static let estimatedTopInset: CGFloat = 62
+
+    /// How far to move the glow from its layout place, which is the top of the page's content (`layoutTop`, on
+    /// screen). Moved by the inset and the design's offset it sits at the screen's top at rest and rides up one to
+    /// one with the content, because the content carries it. Pulled past the top (`layoutTop` beyond `topInset`)
+    /// it is lifted by the pull and stays at the top, so no gap opens above it. There is no opacity tied to scroll:
+    /// nothing to fade, so nothing to flatten. Off screen once the page has scrolled the glow's height.
+    /// Pure and nonisolated: the effect that calls it runs off the main actor, so the design's offset
+    /// (`BackdropLayout.topOffset`) is passed in.
+    nonisolated static func offset(layoutTop: CGFloat, topInset: CGFloat, topOffset: CGFloat) -> CGFloat {
+        min(topOffset - topInset, topOffset - layoutTop)
     }
 
     /// At rest the glow is fully black this far above the closed tiles' bottom edge.

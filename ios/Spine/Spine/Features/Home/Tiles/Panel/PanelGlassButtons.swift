@@ -41,8 +41,8 @@ struct PanelOutline: View {
 }
 
 /// `+N` and `Update`: two 36 pt Liquid Glass capsules. `+N` ends on the meter's lit end; `Update` takes the rest of
-/// the row, or becomes an icon circle when `+N` is long. All of their numbers come from the blended layout, so
-/// they move with the finger.
+/// the row, one gap to its right, and turns into the pencil as it narrows. All of their numbers come from the blended
+/// layout, so they move with the finger.
 ///
 /// Both are `Button`s with the glass on the button itself and a content shape 4 pt taller on each side (a glass on
 /// the label swallowed taps). The container's spacing is 6, under the 10 pt gap they rest at: when `+N` collapses
@@ -154,6 +154,7 @@ struct PanelGlassButtons: View {
                     .lineLimit(1)
                     .fixedSize()
                     .opacity(textOpacity)
+                    .scaleEffect(PanelButtonGeometry.textScale(updateWidth: layout.updateWidth))
                     .frame(width: updateWidth, height: InProgressPanelMetrics.buttonHeight)
                 }
                 .overlay {
@@ -161,6 +162,7 @@ struct PanelGlassButtons: View {
                         .font(InProgressPanelMetrics.iconFont)
                         .foregroundStyle(.white)
                         .opacity(iconOpacity)
+                        .scaleEffect(PanelButtonGeometry.iconScale(updateWidth: layout.updateWidth))
                         .frame(width: updateWidth, height: InProgressPanelMetrics.buttonHeight)
                 }
                 .overlay { PanelOutline(crescent: 1 - iconOpacity) }

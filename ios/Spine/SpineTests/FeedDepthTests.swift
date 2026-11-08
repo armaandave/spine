@@ -44,6 +44,7 @@ final class FeedDepthTests: XCTestCase {
         XCTAssertEqual(D.lightHaloOpacity, 0.30)
         XCTAssertEqual(D.pillHighlightDark, 0.30)
         XCTAssertEqual(D.pillHighlightLight, 0.75)
+        XCTAssertEqual(D.markGlowScale, 0.75, "The marks' glow is a quarter softer than it was")
     }
 
     func testThePosterShadowStaysInsideTheCard() {
@@ -110,6 +111,52 @@ final class FeedDepthTests: XCTestCase {
         )
     }
 
+    func testTheGlowIsAQuarterSofterThanItWas() {
+        // The strengths before: dark 0.65 / 0.40 at 2.5 / 6 pt, light 0.40 / 0.28 at 1.5 / 3.5 pt.
+        let dark = FeedMarkImages.glowLayers(for: .dark)
+        XCTAssertEqual(dark[0].opacity, 0.4875, accuracy: 0.0001)
+        XCTAssertEqual(dark[1].opacity, 0.30, accuracy: 0.0001)
+        XCTAssertEqual(dark[0].radius, 1.875, accuracy: 0.001)
+        XCTAssertEqual(dark[1].radius, 4.5, accuracy: 0.001)
+        let light = FeedMarkImages.glowLayers(for: .light)
+        XCTAssertEqual(light[0].opacity, 0.30, accuracy: 0.0001)
+        XCTAssertEqual(light[1].opacity, 0.21, accuracy: 0.0001)
+        XCTAssertEqual(light[0].radius, 1.125, accuracy: 0.001)
+        XCTAssertEqual(light[1].radius, 2.625, accuracy: 0.001)
+        for ink in [ArtInk.dark, ArtInk.light] {
+            for (now, before) in zip(FeedMarkImages.glowLayers(for: ink), FeedMarkImages.fullGlowLayers(for: ink)) {
+                XCTAssertEqual(now.opacity, before.opacity * 0.75, accuracy: 0.0001)
+                XCTAssertEqual(now.radius, before.radius * 0.75, accuracy: 0.0001)
+            }
+        }
+    }
+
+    func testTheStarsAreTheRatingsSymbolsInTheStarColor() {
+        XCTAssertEqual(FeedMark(starSymbol: "star.fill"), .star)
+        XCTAssertEqual(FeedMark(starSymbol: "star.leadinghalf.filled"), .halfStar)
+        XCTAssertNil(FeedMark(starSymbol: "heart.fill"))
+        XCTAssertEqual(FeedMark.star.symbolName, "star.fill")
+        XCTAssertEqual(FeedMark.halfStar.symbolName, "star.leadinghalf.filled")
+        for ink in [ArtInk.dark, ArtInk.light] {
+            XCTAssertEqual(FeedMark.star.color(for: ink), ink.star)
+            XCTAssertEqual(FeedMark.halfStar.color(for: ink), ink.star)
+        }
+        XCTAssertEqual(FeedMark.star.color(for: .dark), HomeDesign.Palette.starGold)
+        XCTAssertEqual(Set(FeedMarkImages.warmSet.map(\.cacheName)).count, FeedMarkImages.warmSet.count, "Each mark has its own key")
+    }
+
+    func testAStarGlowsInItsOwnGoldAndTheHalfStarHasItsOwnImage() throws {
+        FeedMarkImages.reset()
+        let full = try XCTUnwrap(FeedMarkImages.image(.star, ink: .dark))
+        let half = try XCTUnwrap(FeedMarkImages.image(.halfStar, ink: .dark))
+        XCTAssertNotEqual(full.pngData(), half.pngData())
+        XCTAssertTrue(full === FeedMarkImages.image(.star, ink: .dark))
+        XCTAssertEqual(FeedMarkImages.cachedCount, 2)
+        // Just outside the star's left tip the glow is gold, not clear.
+        let padding = FeedMarkImages.padding(for: .dark)
+        XCTAssertGreaterThan(maxAlpha(inColumn: padding - 1, of: full), 0.01)
+    }
+
     func testABakedMarkIsTheSymbolPlusItsGlowRoomAndIsRememberedOnce() throws {
         FeedMarkImages.reset()
         let baked = try XCTUnwrap(FeedMarkImages.image(.heart, ink: .dark))
@@ -131,18 +178,19 @@ final class FeedDepthTests: XCTestCase {
             let padding = FeedMarkImages.padding(for: .dark)
             XCTAssertEqual(alpha(of: image, atX: 0.3, y: 0.3), 0, accuracy: 0.01, "The corner is clear")
             XCTAssertGreaterThan(
-                alpha(of: image, atX: padding - 1, y: image.size.height / 2), 0.01, "\(mark) glows just outside its box"
+                maxAlpha(inColumn: padding - 1, of: image), 0.01, "\(mark) glows just outside its box"
             )
         }
     }
 
-    func testWarmingMakesExactlyFourImages() {
+    func testWarmingMakesExactlyEightImages() {
+        // The heart, the rewatch mark, the star and the half star, each on dark and on light art.
         FeedMarkImages.reset()
         XCTAssertEqual(FeedMarkImages.cachedCount, 0)
         FeedMarkImages.warm()
-        XCTAssertEqual(FeedMarkImages.cachedCount, 4)
+        XCTAssertEqual(FeedMarkImages.cachedCount, 8)
         FeedMarkImages.warm()
-        XCTAssertEqual(FeedMarkImages.cachedCount, 4)
+        XCTAssertEqual(FeedMarkImages.cachedCount, 8)
     }
 
     func testAMarkViewTakesExactlyTheSymbolsSize() throws {
@@ -292,6 +340,12 @@ final class FeedDepthTests: XCTestCase {
         XCTAssertTrue(shadow.image === BakedShadow.capsule(height: 22, blur: 3, offsetY: 1, scale: 2).image)
         XCTAssertEqual(alpha(of: shadow.image, atX: shadow.image.size.width / 2, y: shadow.image.size.height / 2 + 1), 1, accuracy: 0.05)
         XCTAssertEqual(alpha(of: shadow.image, atX: 0, y: 0), 0, accuracy: 0.01)
+    }
+
+    /// The most opaque pixel in the one column of the image at `x` points.
+    private func maxAlpha(inColumn x: CGFloat, of image: UIImage) -> Double {
+        let step = 1 / image.scale
+        return stride(from: 0, to: image.size.height, by: step).map { alpha(of: image, atX: x, y: $0) }.max() ?? 0
     }
 
     private func alpha(of image: UIImage, atX x: CGFloat, y: CGFloat) -> Double {

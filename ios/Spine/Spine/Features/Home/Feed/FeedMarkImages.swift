@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
 
-/// The headline's heart and rewatch symbol with the soft glow of a lit tick in the In progress meter, drawn once each
-/// into a bitmap and reused by every card that shows one, so a card that scrolls in draws an image and no blur of its
-/// own. There are four: the heart and the rewatch mark, each on dark and on light art.
+/// The headline's heart, rewatch and star symbols with the soft glow of a lit tick in the In progress meter, drawn once
+/// each into a bitmap and reused by every card that shows one, so a card that scrolls in draws an image and no blur of
+/// its own. There are eight: the heart, the rewatch mark, the star and the half star, each on dark and on light art.
 @MainActor
 enum FeedMarkImages {
     /// One layer of the glow: the mark's own color at `opacity`, blurred by `radius`.
@@ -12,23 +12,31 @@ enum FeedMarkImages {
         let opacity: Double
     }
 
-    /// A tight layer under a wide one, as the meter's glow stacks four inflated shapes into a soft falloff. Dark art
-    /// takes the stronger glow, as the meter's lit ticks do; on light art it is a quiet halo.
-    static func glowLayers(for ink: ArtInk) -> [GlowLayer] {
+    /// The layers as they were before the glow was turned down by `HomeDesign.FeedDepth.markGlowScale`.
+    static func fullGlowLayers(for ink: ArtInk) -> [GlowLayer] {
         ink == .dark
             ? [GlowLayer(radius: 2.5, opacity: 0.65), GlowLayer(radius: 6, opacity: 0.40)]
             : [GlowLayer(radius: 1.5, opacity: 0.40), GlowLayer(radius: 3.5, opacity: 0.28)]
     }
 
+    /// A tight layer under a wide one, as the meter's glow stacks four inflated shapes into a soft falloff. Dark art
+    /// takes the stronger glow, as the meter's lit ticks do; on light art it is a quiet halo. Every mark shares them.
+    static func glowLayers(for ink: ArtInk) -> [GlowLayer] {
+        let scale = HomeDesign.FeedDepth.markGlowScale
+        return fullGlowLayers(for: ink).map {
+            GlowLayer(radius: $0.radius * CGFloat(scale), opacity: $0.opacity * scale)
+        }
+    }
+
     /// How far the glow is allowed to reach past the symbol on every side, so it is never cut.
     static func padding(for ink: ArtInk) -> CGFloat {
-        ink == .dark ? 12 : 8
+        ink == .dark ? 9 : 6
     }
 
     static let renderScale: CGFloat = 3
 
-    /// The four marks a card shows.
-    static let warmSet: [FeedMark] = [.heart, .rewatch]
+    /// The marks a card shows.
+    static let warmSet: [FeedMark] = [.heart, .rewatch, .star, .halfStar]
 
     private static var cache: [String: UIImage] = [:]
 
@@ -52,7 +60,7 @@ enum FeedMarkImages {
         return image
     }
 
-    /// Draws the four images, so the first card to scroll in does not pay for them.
+    /// Draws the eight images, so the first card to scroll in does not pay for them.
     static func warm() {
         for ink in [ArtInk.dark, ArtInk.light] {
             for mark in warmSet {

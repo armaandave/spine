@@ -642,8 +642,6 @@ struct HomeView: View {
         let glow = viewModel.glowModel
         NavigationStack {
             ZStack(alignment: .top) {
-                HomeGlow(model: glow)
-
                 ScrollView(showsIndicators: false) {
                     // One lazy stack, with the top of the page as one plain item and then one item per day header
                     // or card. A frozen Home was sampled looping in nested lazy stacks' placement of the activity
@@ -660,6 +658,11 @@ struct HomeView: View {
                     }
                     // Where the tiles sit in here does not change as the page scrolls; the glow ends by them.
                     .coordinateSpace(.named(HomeGlowModel.contentSpace))
+                    // The glow is part of the scrolling content, so the scroll view moves it with the page natively and
+                    // it never trails by a frame. It reaches up under the status bar by its own offset.
+                    .background(alignment: .top) {
+                        HomeGlow(model: glow)
+                    }
                     .padding(.bottom, 92)
                 }
                 .refreshable {

@@ -93,6 +93,14 @@ enum PanelMotion {
     /// How long a word or a number takes to change in place.
     static let changeDuration = 0.35
 
+    /// The right-hand block changing on its own (a tap on `+N`): old to new in one smooth ease-in-out, never through
+    /// the values in between.
+    static let numberDuration = 0.56
+
+    static func numberChange(reduceMotion: Bool) -> Animation {
+        reduceMotion ? HomeDesign.Motion.reduced : .easeInOut(duration: numberDuration)
+    }
+
     /// A word slot's width: the same 0.35 s, so the neighbors slide as the words dissolve.
     static func slot(reduceMotion: Bool) -> Animation {
         reduceMotion ? HomeDesign.Motion.reduced : .easeInOut(duration: changeDuration)
