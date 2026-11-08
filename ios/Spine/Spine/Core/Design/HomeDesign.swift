@@ -8,9 +8,10 @@ nonisolated enum HomeDesign {
         static let pageMargin: CGFloat = 16
         static let tileGap: CGFloat = 12
         static let tileOpenHeight: CGFloat = 410
-        /// A closed tile is as tall as its fan, its title and its count need, with a 10 pt margin under the count's
-        /// line (about 13 under its letters). It is no longer square: the square left a band of nothing under the text.
-        static let tileClosedHeight: CGFloat = 164
+        /// A closed tile is as tall as its fan, its title and its count need: the space under the count's letters
+        /// matches the 16 pt above the fan's front poster. It is no longer square: the square left a band of nothing
+        /// under the text.
+        static let tileClosedHeight: CGFloat = 172
         static let tileCorner: CGFloat = 30
 
         /// 30% shorter than the mock's 164.
@@ -129,12 +130,18 @@ nonisolated enum HomeDesign {
         static let transformDuration = 0.45
         static let panelRiseDuration = 0.5
         static let springDuration = 0.7
-        static let glowCrossfadeDuration = 0.7
+        static let glowCrossfadeDuration = 0.3
         /// What every animation becomes when Reduce Motion is on.
         static let reducedDuration = 0.1
 
         static let openStaggerMs = 45
-        static let closeStaggerMs = 22
+
+        // Closing a tile: the focused poster zooms into the fan's front place over `tileHeightDuration`, its two
+        // neighbors follow a beat later, and every other poster fades out quickly.
+        static let closeNeighborDelay = 0.1
+        static let closeNeighborDuration = 0.5
+        static let closeRestDuration = 0.4
+        static let closeFadeDuration = 0.18
 
         static func soft(duration: Double, reduceMotion: Bool) -> Animation {
             guard !reduceMotion else { return reduced }
@@ -173,7 +180,7 @@ nonisolated enum HomeDesign {
 
         static func glowCrossfade(reduceMotion: Bool) -> Animation {
             guard !reduceMotion else { return reduced }
-            return .easeInOut(duration: glowCrossfadeDuration)
+            return .easeOut(duration: glowCrossfadeDuration)
         }
 
         static var reduced: Animation {
@@ -183,11 +190,6 @@ nonisolated enum HomeDesign {
         /// Delay in seconds before poster `index` moves when a tile opens.
         static func openStagger(index: Int) -> Double {
             Double(index * openStaggerMs) / 1000
-        }
-
-        /// Delay in seconds before poster `index` of `count` moves when a tile closes: the last goes first.
-        static func closeStagger(index: Int, count: Int) -> Double {
-            Double(max(count - 1 - index, 0) * closeStaggerMs) / 1000
         }
     }
 }

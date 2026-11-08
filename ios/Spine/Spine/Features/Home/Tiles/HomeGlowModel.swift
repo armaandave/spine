@@ -13,12 +13,16 @@ final class HomeGlowModel {
     var idle: MediaSummary?
     /// The first Trending title: the right of the glow at rest.
     var trending: MediaSummary?
+    /// The poster in front of each closed tile's fan, set by the tiles: they take over the glow's two sides at rest from
+    /// `idle` and `trending`, which are what the page falls back on while a tile has none.
+    var restLeft: MediaSummary?
+    var restRight: MediaSummary?
     /// The poster a tile's carousel is on. Set by the tiles; nil puts the glow back to rest.
     var focused: MediaSummary?
     /// Points the page has scrolled down; negative while it is pulled past the top.
     var scrollOffset: CGFloat = 0
 
-    var active: MediaSummary? { focused ?? idle }
+    var active: MediaSummary? { focused ?? restLeft ?? idle }
 
     /// The image the glow shows for `active`: its backdrop, else its poster.
     var activeURL: URL? { HomeArtworkAtmosphereModel.url(for: active) }
@@ -43,10 +47,11 @@ final class HomeGlowModel {
     /// What the glow draws: the focused poster alone; at rest `idle` and `trending` side by side, or whichever of
     /// them there is when there is one, or both are the same image.
     var art: GlowArt? {
+        let rightSide = restRight ?? trending
         guard let left = activeURL else {
-            return HomeArtworkAtmosphereModel.url(for: trending).map { GlowArt(left: $0, right: nil) }
+            return HomeArtworkAtmosphereModel.url(for: rightSide).map { GlowArt(left: $0, right: nil) }
         }
-        guard focused == nil, let right = HomeArtworkAtmosphereModel.url(for: trending), right != left else {
+        guard focused == nil, let right = HomeArtworkAtmosphereModel.url(for: rightSide), right != left else {
             return GlowArt(left: left, right: nil)
         }
         return GlowArt(left: left, right: right)
@@ -87,7 +92,7 @@ enum GlowSpec {
     /// At rest the glow is fully black this far above the closed tiles' bottom edge.
     static let restGap: CGFloat = 6
     /// Where the closed tiles end on a 393-402 pt phone, until they have been measured.
-    static let estimatedTilesBottom: CGFloat = 318
+    static let estimatedTilesBottom: CGFloat = 326
     /// The shortest the glow gets, whatever is measured.
     static let minimumHeight: CGFloat = 200
 

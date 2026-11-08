@@ -55,7 +55,7 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.tileGap, 12)
         XCTAssertEqual(M.tileOpenHeight, 410)
         XCTAssertEqual(M.tileCorner, 30)
-        XCTAssertEqual(M.tileClosedHeight, 164)
+        XCTAssertEqual(M.tileClosedHeight, 172)
         XCTAssertEqual(M.cardHeight, 115)
         XCTAssertEqual(M.cardCorner, 20)
         XCTAssertEqual(M.cardInset, 12)
@@ -125,10 +125,13 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.transformDuration, 0.45)
         XCTAssertEqual(M.panelRiseDuration, 0.5)
         XCTAssertEqual(M.springDuration, 0.7)
-        XCTAssertEqual(M.glowCrossfadeDuration, 0.7)
+        XCTAssertEqual(M.glowCrossfadeDuration, 0.3)
         XCTAssertEqual(M.reducedDuration, 0.1)
         XCTAssertEqual(M.openStaggerMs, 45)
-        XCTAssertEqual(M.closeStaggerMs, 22)
+        XCTAssertEqual(M.closeNeighborDelay, 0.1)
+        XCTAssertEqual(M.closeNeighborDuration, 0.5)
+        XCTAssertEqual(M.closeRestDuration, 0.4)
+        XCTAssertEqual(M.closeFadeDuration, 0.18)
     }
 
     func testMotionCurvesAreTheDesigns() {
@@ -143,7 +146,7 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.panelRise(reduceMotion: false), .timingCurve(0.25, 1, 0.35, 1, duration: 0.5))
         XCTAssertEqual(M.spring(reduceMotion: false), .timingCurve(0.3, 1.2, 0.4, 1, duration: 0.7))
         XCTAssertEqual(M.pop(reduceMotion: false), .spring(response: 0.4, dampingFraction: 0.6))
-        XCTAssertEqual(M.glowCrossfade(reduceMotion: false), .easeInOut(duration: 0.7))
+        XCTAssertEqual(M.glowCrossfade(reduceMotion: false), .easeOut(duration: 0.3))
     }
 
     func testReduceMotionIsAShortEase() {
@@ -164,9 +167,6 @@ final class HomeDesignTests: XCTestCase {
         typealias M = HomeDesign.Motion
         XCTAssertEqual(M.openStagger(index: 0), 0)
         XCTAssertEqual(M.openStagger(index: 3), 0.135, accuracy: 0.0001)
-        XCTAssertEqual(M.closeStagger(index: 4, count: 5), 0)
-        XCTAssertEqual(M.closeStagger(index: 0, count: 5), 0.088, accuracy: 0.0001)
-        XCTAssertEqual(M.closeStagger(index: 9, count: 5), 0)
     }
 
     // MARK: Helpers

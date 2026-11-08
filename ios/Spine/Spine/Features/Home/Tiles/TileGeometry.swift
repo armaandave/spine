@@ -104,15 +104,64 @@ nonisolated enum TileGeometry {
         )
     }
 
-    // MARK: Poses
+    // MARK: Fan
 
-    /// Poster `index` in the fan on a closed tile: the `HomeDesign.Metric.fan` frame as a scale, a rotation and an
-    /// offset from the natural frame. Index 3 and up are the hidden ones (opacity 0).
-    static func fanPose(index: Int, contentWidth: CGFloat) -> PosterPose {
-        let fan = HomeDesign.Metric.fan(index: index, tileSide: tileSide(contentWidth: contentWidth))
+    /// Which place of the fan a poster has on a closed tile.
+    nonisolated enum FanRole: Equatable {
+        case front
+        case left
+        case right
+        /// Behind the front poster and invisible.
+        case hidden
+
+        /// The place in `HomeDesign.Metric.fan`.
+        var slot: Int {
+            switch self {
+            case .front: 0
+            case .left: 1
+            case .right: 2
+            case .hidden: 3
+            }
+        }
+
+        /// Whether the poster folds in behind the front one as the page scrolls.
+        var folds: Bool { self == .left || self == .right }
+    }
+
+    /// The posters a closed tile shows when it rests on `rest`: that title in front, the one before it in the left
+    /// back slot and the one after it in the right. At the first title the back slots are the second and third; at the
+    /// last, the two before it (the mirror image).
+    static func fanSlots(rest: Int, count: Int) -> (front: Int, left: Int?, right: Int?) {
+        guard count > 0 else { return (0, nil, nil) }
+        let front = min(max(rest, 0), count - 1)
+        let back: [Int]
+        if front == 0 {
+            back = [1, 2].filter { $0 < count }
+        } else if front == count - 1 {
+            back = [count - 3, count - 2].filter { $0 >= 0 }
+        } else {
+            back = [front - 1, front + 1]
+        }
+        return (front, back.first, back.count > 1 ? back[1] : nil)
+    }
+
+    static func fanRole(index: Int, rest: Int, count: Int) -> FanRole {
+        let slots = fanSlots(rest: rest, count: count)
+        if index == slots.front { return .front }
+        if index == slots.left { return .left }
+        if index == slots.right { return .right }
+        return .hidden
+    }
+
+    /// Poster `index` in the fan on a closed tile resting on `rest`: the `HomeDesign.Metric.fan` frame as a scale, a
+    /// rotation and an offset from the natural frame. A closed carousel sits scrolled to `rest`, so the natural frame
+    /// is that far to the left.
+    static func fanPose(index: Int, rest: Int, count: Int, contentWidth: CGFloat) -> PosterPose {
+        let role = fanRole(index: index, rest: rest, count: count)
+        let fan = HomeDesign.Metric.fan(index: role.slot, tileSide: tileSide(contentWidth: contentWidth))
         let natural = naturalCenter(index: index, contentWidth: contentWidth)
         return PosterPose(
-            offsetX: fan.x + fan.width / 2 - natural.x,
+            offsetX: fan.x + fan.width / 2 - natural.x + scrollX(forIndex: rest),
             offsetY: fan.y + fan.height / 2 - natural.y,
             scale: fan.width / posterSize.width,
             degrees: fan.degrees,
@@ -121,6 +170,13 @@ nonisolated enum TileGeometry {
             z: fan.z
         )
     }
+
+    /// The fan resting on the first title.
+    static func fanPose(index: Int, contentWidth: CGFloat) -> PosterPose {
+        fanPose(index: index, rest: 0, count: maxPosters, contentWidth: contentWidth)
+    }
+
+    // MARK: Poses
 
     /// Poster `index` in the open carousel with poster `focus` in the middle: no offset, full size and light for the
     /// focused one, 0.84 and half dark for the rest, the focused one on top.
@@ -137,8 +193,12 @@ nonisolated enum TileGeometry {
         )
     }
 
-    static func pose(index: Int, focus: Int, isOpen: Bool, contentWidth: CGFloat) -> PosterPose {
-        isOpen ? openPose(index: index, focus: focus) : fanPose(index: index, contentWidth: contentWidth)
+    static func pose(
+        index: Int, focus: Int, isOpen: Bool, rest: Int = 0, count: Int = maxPosters, contentWidth: CGFloat
+    ) -> PosterPose {
+        isOpen
+            ? openPose(index: index, focus: focus)
+            : fanPose(index: index, rest: rest, count: count, contentWidth: contentWidth)
     }
 
     /// The radius that reads as 12 pt once the poster is drawn at `scale`: the mock keeps 12 while it resizes.
@@ -161,24 +221,50 @@ nonisolated enum TileGeometry {
 
     // MARK: Motion
 
-    /// Seconds before poster `index` of `count` starts to move: opening goes first to last 45 ms apart, closing last
-    /// to first 22 ms apart.
-    static func staggerDelay(index: Int, count: Int, opening: Bool) -> Double {
-        opening
-            ? HomeDesign.Motion.openStagger(index: index)
-            : HomeDesign.Motion.closeStagger(index: index, count: count)
+    /// Seconds before poster `index` of `count` starts to move when the tile opens: the title it rests on first, the
+    /// others 45 ms apart by their distance from it.
+    static func openDelay(index: Int, rest: Int) -> Double {
+        HomeDesign.Motion.openStagger(index: abs(index - rest))
     }
 
     // MARK: Mounting
 
     /// A closed tile mounts only the fan's three posters; a tile that is opening, open or closing mounts all.
-    static func isMounted(index: Int, allMounted: Bool) -> Bool {
-        allMounted || index < fanMountedCount
+    static func isMounted(index: Int, rest: Int, count: Int, allMounted: Bool) -> Bool {
+        allMounted || fanRole(index: index, rest: rest, count: count) != .hidden
     }
 
-    /// The posters whose images to warm when a tile starts to open: the ones after the fan, up to the sixth.
-    static func openPrefetchIndexes(count: Int) -> Range<Int> {
-        fanMountedCount ..< max(fanMountedCount, min(count, fanMountedCount + 3))
+    /// The posters whose images to warm when a tile starts to open: the three nearest to the one it rests on that the
+    /// fan does not show, in list order.
+    static func openPrefetchIndexes(rest: Int, count: Int) -> [Int] {
+        let hidden = (0 ..< max(count, 0)).filter { fanRole(index: $0, rest: rest, count: count) == .hidden }
+        let nearest = hidden.sorted { (abs($0 - rest), $0) < (abs($1 - rest), $1) }
+        return Array(nearest.prefix(3)).sorted()
+    }
+
+    // MARK: Fold
+
+    /// How far the two back posters of a closed tile have folded behind the front one: 0 with the page at rest, 1
+    /// once the tile has left the top of the screen, one to one with the scroll in between.
+    static func foldProgress(scroll: CGFloat, tilesBottom: CGFloat?) -> CGFloat {
+        let end = tilesBottom ?? GlowSpec.estimatedTilesBottom
+        guard end > 0 else { return 0 }
+        return min(max(scroll / end, 0), 1)
+    }
+
+    /// A folded back poster is this much of its size, and this much darker.
+    static let foldScale: CGFloat = 0.82
+    static let foldDim: CGFloat = 0.45
+
+    /// Where a back poster's center has to move, in points, to sit centered behind the front poster.
+    static func foldSlide(role: FanRole, contentWidth: CGFloat) -> CGSize {
+        let side = tileSide(contentWidth: contentWidth)
+        let front = HomeDesign.Metric.fan(index: FanRole.front.slot, tileSide: side)
+        let back = HomeDesign.Metric.fan(index: role.slot, tileSide: side)
+        return CGSize(
+            width: front.x + front.width / 2 - (back.x + back.width / 2),
+            height: front.y + front.height / 2 - (back.y + back.height / 2)
+        )
     }
 
     // MARK: Label
@@ -300,10 +386,42 @@ enum TileMotion {
         reduceMotion ? HomeDesign.Motion.reduced : ease(0.5)
     }
 
-    /// A poster flying between the fan and the carousel: the spring, after its stagger.
+    /// A poster flying out of the fan into the carousel as the tile opens: the spring, after its stagger.
     static func flight(delay: Double, reduceMotion: Bool) -> Animation {
         guard !reduceMotion else { return HomeDesign.Motion.reduced }
         return HomeDesign.Motion.spring(reduceMotion: false).delay(delay)
+    }
+
+    /// The poster the tile closes on, zooming out into the fan's front place: the tile's own curve and length, so it
+    /// shrinks with the tile and lands as the tile does. The soft curve never overshoots the place.
+    static func closeFront(reduceMotion: Bool) -> Animation {
+        HomeDesign.Motion.tileHeight(reduceMotion: reduceMotion)
+    }
+
+    /// The posters beside it flying into the back places, a beat after the front one has started.
+    static func closeNeighbor(reduceMotion: Bool) -> Animation {
+        guard !reduceMotion else { return HomeDesign.Motion.reduced }
+        return HomeDesign.Motion.soft(duration: HomeDesign.Motion.closeNeighborDuration, reduceMotion: false)
+            .delay(HomeDesign.Motion.closeNeighborDelay)
+    }
+
+    /// The rest drawing in towards the fan while they fade.
+    static func closeRest(reduceMotion: Bool) -> Animation {
+        HomeDesign.Motion.soft(duration: HomeDesign.Motion.closeRestDuration, reduceMotion: reduceMotion)
+    }
+
+    /// A poster's opacity while the tile closes: the rest are gone in 0.18 s.
+    static func closeFade(reduceMotion: Bool) -> Animation {
+        reduceMotion ? HomeDesign.Motion.reduced : .easeOut(duration: HomeDesign.Motion.closeFadeDuration)
+    }
+
+    /// How a poster moves as its tile closes, by the place it ends in.
+    static func close(role: TileGeometry.FanRole, reduceMotion: Bool) -> Animation {
+        switch role {
+        case .front: closeFront(reduceMotion: reduceMotion)
+        case .left, .right: closeNeighbor(reduceMotion: reduceMotion)
+        case .hidden: closeRest(reduceMotion: reduceMotion)
+        }
     }
 
     /// A poster growing or shrinking as the focus passes: 0.45 s.
@@ -311,7 +429,7 @@ enum TileMotion {
         HomeDesign.Motion.transform(reduceMotion: reduceMotion)
     }
 
-    /// A poster's opacity while flying: 0.3 s after the stagger.
+    /// A poster's opacity while flying out as the tile opens: 0.3 s after the stagger.
     static func posterFade(delay: Double, reduceMotion: Bool) -> Animation {
         guard !reduceMotion else { return HomeDesign.Motion.reduced }
         return ease(0.3).delay(delay)
@@ -334,8 +452,8 @@ enum TileMotion {
         return HomeDesign.Motion.pop(reduceMotion: false).delay(0.3)
     }
 
-    /// How long a closed tile keeps all its posters mounted so the flight home can finish: 0.7 s of flight, the
-    /// longest stagger of ten posters and some slack.
+    /// How long a closed tile keeps all its posters mounted so the flight home can finish: the longest close (a beat
+    /// and 0.5 s for the neighbors, 0.62 s for the front poster) and some slack.
     static let unmountDelay: Duration = .milliseconds(1100)
     /// One frame or two, so posters mounted at the start of an open are on screen in the fan before they fly.
     static let mountLead: Duration = .milliseconds(24)
