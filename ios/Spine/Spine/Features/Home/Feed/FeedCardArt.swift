@@ -102,19 +102,33 @@ enum FeedCardArt {
 /// Planning day's posters arriving) is asked for again.
 @MainActor
 final class FeedCardPrefetcher {
-    static let shared = FeedCardPrefetcher { ArtworkPrefetch.prefetch($0) }
+    /// Also warms the poster colors a bar will take (`FeedMeterColors.countURL`), at low priority and once per poster
+    /// (the shared store keeps what it counted), so a card that scrolls in often has them on its first frame.
+    static let shared = FeedCardPrefetcher(
+        sink: { ArtworkPrefetch.prefetch($0) },
+        palettes: { url in
+            Task(priority: .utility) { _ = await PosterPaletteStore.shared.swatches(server: nil, url: url) }
+        }
+    )
 
     /// Bookkeeping is dropped past this many cards; Nuke dedupes whatever is asked for again.
     private static let rememberedLimit = 600
 
     private let lookahead: Int
     private let sink: ([ImageRequest]) -> Void
+    /// Starts counting a poster's colors; nothing in tests.
+    private let palettes: (URL) -> Void
     /// Card id to the art key last prefetched for it.
     private var prefetched: [Int: String] = [:]
 
-    init(lookahead: Int = FeedCardArt.lookahead, sink: @escaping ([ImageRequest]) -> Void) {
+    init(
+        lookahead: Int = FeedCardArt.lookahead,
+        sink: @escaping ([ImageRequest]) -> Void,
+        palettes: @escaping (URL) -> Void = { _ in }
+    ) {
         self.lookahead = lookahead
         self.sink = sink
+        self.palettes = palettes
     }
 
     /// The cards a card appearing at `index` would prefetch, nearest first, without prefetching them.
@@ -135,6 +149,7 @@ final class FeedCardPrefetcher {
         for card in cards {
             prefetched[card.id] = FeedCardArt.prefetchKey(for: card)
             requests.append(contentsOf: FeedCardArt.prefetchRequests(for: card))
+            if let url = FeedMeterColors.countURL(for: card) { palettes(url) }
         }
         if !requests.isEmpty { sink(requests) }
     }

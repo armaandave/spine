@@ -18,11 +18,23 @@ struct FeedCardView: View, Equatable {
     /// The brightness itself is the background's: a measurement that agrees with the guess changes nothing here, so
     /// a card whose art lands is drawn a second time only when its ink really changes.
     @State private var measuredInk: ArtInk?
+    /// The poster colors counted on this phone, with the poster they belong to. It starts as what the shared store
+    /// already knows, so a card scrolled back in has its bar's colors on its first frame; a count that finishes later
+    /// fades them in.
+    @State private var counted: CountedColors?
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    /// Colors counted for one poster.
+    private struct CountedColors {
+        let url: URL
+        let swatches: [PosterSwatch]
+    }
 
     init(model: FeedCardModel, onOpen: @escaping (Int) -> Void) {
         self.model = model
         self.onOpen = onOpen
         _measuredInk = State(initialValue: Self.settledInk(for: model))
+        _counted = State(initialValue: Self.knownColors(for: model))
     }
 
     static func == (lhs: FeedCardView, rhs: FeedCardView) -> Bool {
@@ -59,6 +71,29 @@ struct FeedCardView: View, Equatable {
             if measuredInk != remembered { measuredInk = remembered }
         }
         .onAppear { PerfCounters.bump(.feedCardAppear) }
+        // Counts the poster's colors for the bar once, off the main thread, at low priority, and only for a card that
+        // has a bar. The shared store counts a poster once however many cards ask, and the prefetcher usually has.
+        .task(id: FeedMeterColors.countURL(for: model), priority: .utility) { await countColors() }
+    }
+
+    /// What the store already knows for this card's bar, without any work.
+    private static func knownColors(for model: FeedCardModel) -> CountedColors? {
+        guard let url = FeedMeterColors.countURL(for: model),
+              let swatches = PosterPaletteStore.shared.known(server: nil, url: url)
+        else { return nil }
+        return CountedColors(url: url, swatches: swatches)
+    }
+
+    private func countColors() async {
+        guard let url = FeedMeterColors.countURL(for: model), counted?.url != url else { return }
+        if let known = Self.knownColors(for: model) {
+            counted = known
+            return
+        }
+        guard let swatches = await PosterPaletteStore.shared.swatches(server: nil, url: url), !Task.isCancelled else {
+            return
+        }
+        counted = CountedColors(url: url, swatches: swatches)
     }
 
     /// What was measured before for this card's art, as `measuredInk` keeps it.
@@ -100,7 +135,7 @@ struct FeedCardView: View, Equatable {
             FeedCardPoster(art: model.art, title: model.title)
             textColumn(ink: ink)
             if let meter = model.meter {
-                ProgressMeterView(model: meter, palette: palette(ink: ink))
+                meterView(meter, ink: ink)
                     .padding(.top, Self.meterTop(for: meter.kind))
                     .padding(.leading, textLeading)
                     .padding(.trailing, HomeDesign.Metric.cardTrailing + Self.countsReserve(for: model.engagement))
@@ -132,8 +167,28 @@ struct FeedCardView: View, Equatable {
             .joined(separator: ", ")
     }
 
-    private func palette(ink: ArtInk) -> MeterPalette {
-        MeterPalette(before: ink.before, rest: ink.rest, accent: ink.accent(posterAccentHex: model.art.accentHex))
+    /// The poster's colors for the bar, from the server's palette, else the count made here; nil keeps the plain bar.
+    private func meterTint(ink: ArtInk) -> MeterTint? {
+        let current = counted.flatMap { $0.url == FeedMeterColors.countURL(for: model) ? $0.swatches : nil }
+        return FeedMeterColors.tint(
+            server: model.art.posterPalette, counted: current, highContrast: contrast == .increased, ink: ink
+        )
+    }
+
+    /// The bar. The plain one is always there and the poster-colored one fades in over it in the card's 0.18 s, so
+    /// colors that arrive late never pop.
+    private func meterView(_ meter: ProgressMeterModel, ink: ArtInk) -> some View {
+        let accent = ink.accent(posterAccentHex: model.art.accentHex)
+        let tint = meterTint(ink: ink)
+        return ZStack(alignment: .topLeading) {
+            ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: nil))
+                .opacity(tint == nil ? 1 : 0)
+            if let tint {
+                ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: tint))
+                    .transition(.opacity)
+            }
+        }
+        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tint != nil)
     }
 
     // MARK: Text column
@@ -185,16 +240,17 @@ struct FeedCardView: View, Equatable {
     // MARK: Headline
 
     private func headlineRow(_ headline: FeedHeadline, ink: ArtInk) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: isMarks(headline) ? HomeDesign.FeedDepth.markGroupSpacing : 6) {
             switch headline {
             case let .marks(starSymbols, liked, rewatch, _):
                 if !starSymbols.isEmpty {
-                    HStack(spacing: 1) {
+                    HStack(spacing: HomeDesign.FeedDepth.markStarSpacing) {
                         ForEach(Array(starSymbols.enumerated()), id: \.offset) { _, symbol in
                             if let mark = FeedMark(starSymbol: symbol) {
                                 FeedMarkView(mark: mark, ink: ink)
                             } else {
                                 Image(systemName: symbol)
+                                    .font(HomeDesign.FeedDepth.markFont)
                                     .foregroundStyle(ink.star)
                             }
                         }

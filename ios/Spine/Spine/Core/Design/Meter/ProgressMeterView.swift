@@ -130,14 +130,23 @@ struct ProgressMeterView: View, Equatable {
                 cornerRadius: radius
             )
             switch model.tickState(at: index) {
-            case .before: before.addPath(tick)
+            case .before:
+                if palette.tint != nil {
+                    // A poster's colors run along the ticks, so each earlier tick has its own stretch of the ramp.
+                    context.fill(
+                        tick,
+                        with: shading(palette.beforeColor(index: index, count: count), size: size, fades: fades)
+                    )
+                } else {
+                    before.addPath(tick)
+                }
             case .today: today.addPath(tick)
             case .rest: rest.addPath(tick)
             }
         }
         context.fill(rest, with: shading(palette.rest, size: size, fades: fades))
         context.fill(before, with: shading(palette.before, size: size, fades: fades))
-        context.fill(today, with: shading(palette.accent, size: size, fades: fades))
+        context.fill(today, with: shading(palette.todayColor, size: size, fades: fades))
     }
 
     /// A flat color, or the color fading in from clear over the left of the drawing
@@ -178,7 +187,7 @@ struct ProgressMeterView: View, Equatable {
             width: markerWidth,
             height: ProgressMeterMetrics.markerHeight
         )
-        context.fill(Path(roundedRect: marker, cornerRadius: 1), with: .color(palette.accent))
+        context.fill(Path(roundedRect: marker, cornerRadius: 1), with: .color(palette.todayColor))
     }
 
     nonisolated private static func drawBar(
@@ -196,15 +205,27 @@ struct ProgressMeterView: View, Equatable {
         if beforeWidth > 0 {
             clipped.fill(
                 Path(CGRect(x: 0, y: 0, width: beforeWidth, height: track.height)),
-                with: .color(palette.before)
+                with: beforeShading(palette, width: size.width)
             )
         }
         if todayWidth > 0 {
             clipped.fill(
                 Path(CGRect(x: beforeWidth, y: 0, width: todayWidth, height: track.height)),
-                with: .color(palette.accent)
+                with: .color(palette.todayColor)
             )
         }
+    }
+
+    /// The earlier part of a bar: the palette's color, or a poster's ramp laid along the whole bar so a color sits
+    /// where the In progress panel's bar has it.
+    nonisolated private static func beforeShading(_ palette: MeterPalette, width: CGFloat) -> GraphicsContext.Shading {
+        guard let tint = palette.tint else { return .color(palette.before) }
+        let colors = tint.gradientColors.map { $0.opacity(palette.tintOpacity) }
+        return .linearGradient(
+            Gradient(colors: colors.count > 1 ? colors : colors + colors),
+            startPoint: .zero,
+            endPoint: CGPoint(x: width, y: 0)
+        )
     }
 }
 

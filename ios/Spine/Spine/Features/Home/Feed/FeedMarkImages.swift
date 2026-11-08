@@ -21,16 +21,20 @@ enum FeedMarkImages {
 
     /// A tight layer under a wide one, as the meter's glow stacks four inflated shapes into a soft falloff. Dark art
     /// takes the stronger glow, as the meter's lit ticks do; on light art it is a quiet halo. Every mark shares them.
+    /// The strength is turned down by `markGlowScale` and the reach shrinks with the mark (`markScale`), so the glow
+    /// looks the same around the smaller symbol.
     static func glowLayers(for ink: ArtInk) -> [GlowLayer] {
         let scale = HomeDesign.FeedDepth.markGlowScale
+        let reach = CGFloat(HomeDesign.FeedDepth.markScale)
         return fullGlowLayers(for: ink).map {
-            GlowLayer(radius: $0.radius * CGFloat(scale), opacity: $0.opacity * scale)
+            GlowLayer(radius: $0.radius * CGFloat(scale) * reach, opacity: $0.opacity * scale)
         }
     }
 
-    /// How far the glow is allowed to reach past the symbol on every side, so it is never cut.
+    /// How far the glow is allowed to reach past the symbol on every side, so it is never cut: 9 pt on dark art and
+    /// 6 pt on light art at full size, shrunk with the mark.
     static func padding(for ink: ArtInk) -> CGFloat {
-        ink == .dark ? 9 : 6
+        (ink == .dark ? 9 : 6) * CGFloat(HomeDesign.FeedDepth.markScale)
     }
 
     static let renderScale: CGFloat = 3
@@ -70,14 +74,14 @@ enum FeedMarkImages {
     }
 }
 
-/// The symbol as the headline draws it: the headline's size, bold, in the mark's color.
+/// The symbol as the headline draws it: 20 % smaller than the headline's text, bold, in the mark's color.
 struct FeedMarkSymbol: View {
     let mark: FeedMark
     let ink: ArtInk
 
     var body: some View {
         Image(systemName: mark.symbolName)
-            .font(HomeDesign.Text.headline.weight(.bold))
+            .font(HomeDesign.FeedDepth.markFont)
             .foregroundStyle(mark.color(for: ink))
     }
 }

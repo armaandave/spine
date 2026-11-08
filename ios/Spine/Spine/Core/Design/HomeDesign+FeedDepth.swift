@@ -69,6 +69,20 @@ extension HomeDesign {
         /// (opacity and reach both): 25 % softer.
         static let markGlowScale: Double = 0.75
 
+        // MARK: Marks
+
+        /// The marks (stars, heart, rewatch) are this share of the size they were: 20 % smaller. Their glow's reach, its
+        /// room and the gaps between them shrink with them, so a mark looks the same, only smaller.
+        static let markScale: Double = 0.8
+        /// The headline's size before the marks shrank (`HomeDesign.Text.headline`, 15 pt).
+        static let markFullSize: CGFloat = 15
+        /// What a mark is drawn at: 12 pt, bold.
+        static let markSymbolSize: CGFloat = markFullSize * CGFloat(markScale)
+        static let markFont = Font.system(size: markSymbolSize, weight: .bold)
+        /// Between one star and the next (1 pt before), and between the stars, the heart and the rewatch mark (6 pt before).
+        static let markStarSpacing: CGFloat = 1 * CGFloat(markScale)
+        static let markGroupSpacing: CGFloat = 6 * CGFloat(markScale)
+
         // MARK: Pill highlights
 
         static let pillHighlightDark: Double = 0.30

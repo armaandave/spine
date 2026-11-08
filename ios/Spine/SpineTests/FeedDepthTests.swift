@@ -45,6 +45,11 @@ final class FeedDepthTests: XCTestCase {
         XCTAssertEqual(D.pillHighlightDark, 0.30)
         XCTAssertEqual(D.pillHighlightLight, 0.75)
         XCTAssertEqual(D.markGlowScale, 0.75, "The marks' glow is a quarter softer than it was")
+        XCTAssertEqual(D.markScale, 0.8, "The marks are 20 % smaller than they were")
+        XCTAssertEqual(D.markFullSize, 15)
+        XCTAssertEqual(D.markSymbolSize, 12, accuracy: 0.0001)
+        XCTAssertEqual(D.markStarSpacing, 0.8, accuracy: 0.0001)
+        XCTAssertEqual(D.markGroupSpacing, 4.8, accuracy: 0.0001)
     }
 
     func testThePosterShadowStaysInsideTheCard() {
@@ -116,19 +121,46 @@ final class FeedDepthTests: XCTestCase {
         let dark = FeedMarkImages.glowLayers(for: .dark)
         XCTAssertEqual(dark[0].opacity, 0.4875, accuracy: 0.0001)
         XCTAssertEqual(dark[1].opacity, 0.30, accuracy: 0.0001)
-        XCTAssertEqual(dark[0].radius, 1.875, accuracy: 0.001)
-        XCTAssertEqual(dark[1].radius, 4.5, accuracy: 0.001)
+        // The reach is 0.75 (softer) x 0.8 (smaller marks) of the full radius.
+        XCTAssertEqual(dark[0].radius, 1.5, accuracy: 0.001)
+        XCTAssertEqual(dark[1].radius, 3.6, accuracy: 0.001)
         let light = FeedMarkImages.glowLayers(for: .light)
         XCTAssertEqual(light[0].opacity, 0.30, accuracy: 0.0001)
         XCTAssertEqual(light[1].opacity, 0.21, accuracy: 0.0001)
-        XCTAssertEqual(light[0].radius, 1.125, accuracy: 0.001)
-        XCTAssertEqual(light[1].radius, 2.625, accuracy: 0.001)
+        XCTAssertEqual(light[0].radius, 0.9, accuracy: 0.001)
+        XCTAssertEqual(light[1].radius, 2.1, accuracy: 0.001)
         for ink in [ArtInk.dark, ArtInk.light] {
             for (now, before) in zip(FeedMarkImages.glowLayers(for: ink), FeedMarkImages.fullGlowLayers(for: ink)) {
                 XCTAssertEqual(now.opacity, before.opacity * 0.75, accuracy: 0.0001)
-                XCTAssertEqual(now.radius, before.radius * 0.75, accuracy: 0.0001)
+                XCTAssertEqual(now.radius, before.radius * 0.75 * 0.8, accuracy: 0.0001)
             }
         }
+    }
+
+    func testTheMarksAreTwentyPercentSmallerAndTheirGlowRoomShrinksWithThem() {
+        // Before: a 15 pt symbol, 1 pt between stars, 6 pt between groups, 9 / 6 pt of glow room on dark / light art.
+        XCTAssertEqual(D.markSymbolSize, 15 * 0.8, accuracy: 0.0001)
+        XCTAssertEqual(FeedMarkImages.padding(for: .dark), 9 * 0.8, accuracy: 0.0001)
+        XCTAssertEqual(FeedMarkImages.padding(for: .light), 6 * 0.8, accuracy: 0.0001)
+        for ink in [ArtInk.dark, ArtInk.light] {
+            // The glow looks the same around the smaller mark: its reach is in the same proportion to the room.
+            for (now, before) in zip(FeedMarkImages.glowLayers(for: ink), FeedMarkImages.fullGlowLayers(for: ink)) {
+                XCTAssertEqual(
+                    now.radius / FeedMarkImages.padding(for: ink),
+                    before.radius * 0.75 / (ink == .dark ? 9 : 6),
+                    accuracy: 0.0001
+                )
+            }
+        }
+    }
+
+    func testAMarkIsDrawnTwelvePointsTall() throws {
+        let small = try XCTUnwrap(ImageRenderer(content: FeedMarkSymbol(mark: .star, ink: .dark)).uiImage)
+        let full = try XCTUnwrap(ImageRenderer(
+            content: Image(systemName: "star.fill").font(Font.system(size: 15, weight: .bold))
+        ).uiImage)
+        XCTAssertEqual(small.size.height, full.size.height * 0.8, accuracy: 1.0)
+        XCTAssertEqual(small.size.width, full.size.width * 0.8, accuracy: 1.0)
     }
 
     func testTheStarsAreTheRatingsSymbolsInTheStarColor() {

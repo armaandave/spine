@@ -46,6 +46,9 @@ nonisolated struct FeedCardArtSpec: Equatable, Sendable {
     let isSquare: Bool
     /// A Planning card's fan: up to three posters of the titles added, once they have loaded. Empty until then.
     let planningPosterURLs: [String]
+    /// The server's biggest colors of the poster, when the row's media carries them; the bar takes its colors from
+    /// these, else from the colors counted on the phone.
+    var posterPalette: [PosterSwatch]? = nil
 }
 
 /// Everything a feed card says, worked out once and compared by value so a row skips drawing when nothing visible

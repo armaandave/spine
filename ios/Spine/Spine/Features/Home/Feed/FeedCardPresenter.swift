@@ -219,7 +219,8 @@ enum FeedCardPresenter {
             accentHex: media.posterAccentColor,
             guessInk: ArtInk.guess(accentHex: media.posterAccentColor),
             isSquare: isSquare(media),
-            planningPosterURLs: []
+            planningPosterURLs: [],
+            posterPalette: media.posterPalette
         )
     }
 
