@@ -302,6 +302,60 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileGeometry.foldProgress(scroll: 100, tilesBottom: 0), 0, "nothing to divide by")
     }
 
+    func testTheOpenFoldGoesFromRestToFullyFoldedAsTheRowLeavesTheTop() {
+        XCTAssertEqual(TileGeometry.openFoldProgress(scroll: 0, rowBottom: 300), 0, "at rest")
+        XCTAssertEqual(TileGeometry.openFoldProgress(scroll: -30, rowBottom: 300), 0, "pulled past the top")
+        XCTAssertEqual(TileGeometry.openFoldProgress(scroll: 150, rowBottom: 300), 0.5, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.openFoldProgress(scroll: 300, rowBottom: 300), 1, "row bottom at the top")
+        XCTAssertEqual(TileGeometry.openFoldProgress(scroll: 450, rowBottom: 300), 1, "fully off")
+    }
+
+    func testTheOpenFoldMovesEveryPosterTowardTheFocusedOneAndNeverTheFocusedOne() {
+        let count = 5
+        for focus in 0 ..< count {
+            for index in 0 ..< count {
+                let slots = CGFloat(index - focus)
+                let offset = TileGeometry.openFoldOffset(slotsFromFocus: slots, progress: 1)
+                let weight = TileGeometry.openFoldWeight(slotsFromFocus: slots)
+                if index == focus {
+                    XCTAssertEqual(offset, 0, "the focused poster stays")
+                    XCTAssertEqual(weight, 0, "and is neither shrunk nor darkened")
+                } else {
+                    // Fully folded, it sits where the focused poster does.
+                    XCTAssertEqual(CGFloat(index - focus) * TileGeometry.step + offset, 0, accuracy: accuracy)
+                    XCTAssertEqual(weight, 1)
+                    XCTAssertEqual(offset > 0, index < focus, "left ones slide right, right ones slide left")
+                }
+                XCTAssertEqual(
+                    TileGeometry.openFoldOffset(slotsFromFocus: slots, progress: 0), 0, "nothing moves at rest"
+                )
+            }
+        }
+    }
+
+    func testOnlyTheSideWithNeighborsSlidesWhenTheFocusIsFirstOrLast() {
+        let count = 4
+        func moved(focus: Int) -> [Int] {
+            (0 ..< count).filter {
+                TileGeometry.openFoldOffset(slotsFromFocus: CGFloat($0 - focus), progress: 1) != 0
+            }
+        }
+        XCTAssertEqual(moved(focus: 0), [1, 2, 3], "all to the right of the first")
+        XCTAssertEqual(moved(focus: 3), [0, 1, 2], "all to the left of the last")
+        XCTAssertEqual(moved(focus: 1), [0, 2, 3])
+        // One neighbor: only that one.
+        XCTAssertEqual((0 ..< 2).filter {
+            TileGeometry.openFoldOffset(slotsFromFocus: CGFloat($0), progress: 1) != 0
+        }, [1])
+    }
+
+    func testTheOpenFoldWeightGrowsToOneStepAndNoFurther() {
+        XCTAssertEqual(TileGeometry.openFoldWeight(slotsFromFocus: 0.5), 0.5, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.openFoldWeight(slotsFromFocus: -0.5), 0.5, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.openFoldWeight(slotsFromFocus: -3), 1)
+        XCTAssertEqual(TileGeometry.openFoldOffset(slotsFromFocus: 2, progress: 0.5), -TileGeometry.step, accuracy: accuracy)
+    }
+
     func testABackPosterSlidesBehindTheFrontOne() {
         let side = TileGeometry.tileSide(contentWidth: width)
         let front = HomeDesign.Metric.fan(index: 0, tileSide: side)

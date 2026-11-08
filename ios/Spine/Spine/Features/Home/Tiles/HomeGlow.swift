@@ -74,8 +74,12 @@ struct HomeGlowTilesAnchor: ViewModifier {
         content.onGeometryChange(for: CGFloat.self) { proxy in
             proxy.frame(in: .named(HomeGlowModel.contentSpace)).minY.rounded()
         } action: { top in
-            // While a tile is open the header squeezes up and the tiles move with it: that is not where they rest.
-            if glow.focused == nil, glow.tilesTop != top { glow.tilesTop = top }
+            // While a tile is open the header squeezes up and the tiles move with it: that is not where they rest, so it is kept apart (`openTilesTop`).
+            if glow.focused == nil {
+                if glow.tilesTop != top { glow.tilesTop = top }
+            } else if glow.openTilesTop != top {
+                glow.openTilesTop = top
+            }
         }
     }
 }

@@ -93,6 +93,42 @@ struct PosterFold: ViewModifier, Animatable {
     }
 }
 
+/// Folds an open tile's other posters in behind the focused one as the page scrolls, the closed fold for the carousel:
+/// each slides along the row toward the focused poster's center, shrinks and darkens by the same numbers, and unfolds
+/// as you scroll back. How far a poster sits from the center is read in the render pass (`visualEffect`), so a swipe
+/// that changes the focus mid-fold moves nothing suddenly: the poster in the middle is the one that stays.
+///
+/// Its `gain` is 1 on an open tile and 0 on a closed one, and animates with the pose; at 0 it reads no scroll.
+struct PosterOpenFold: ViewModifier, Animatable {
+    var gain: CGFloat
+    let glow: HomeGlowModel
+    let contentWidth: CGFloat
+
+    var animatableData: CGFloat {
+        get { gain }
+        set { gain = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let progress = gain == 0
+            ? 0
+            : gain * TileGeometry.openFoldProgress(scroll: glow.scrollOffset, rowBottom: glow.openRowBottom)
+        let contentWidth = contentWidth
+        content.visualEffect { content, proxy in
+            // One chain whatever the progress (the closure has a single return type); at 0 every step below is the
+            // identity, and the frame is not even read.
+            let slots = progress > 0
+                ? (proxy.frame(in: .scrollView(axis: .horizontal)).midX - contentWidth / 2) / TileGeometry.step
+                : 0
+            let weight = TileGeometry.openFoldWeight(slotsFromFocus: slots) * progress
+            return content
+                .brightness(Double(-TileGeometry.foldDim * weight))
+                .scaleEffect(1 - (1 - TileGeometry.foldScale) * weight)
+                .offset(x: TileGeometry.openFoldOffset(slotsFromFocus: slots, progress: progress))
+        }
+    }
+}
+
 /// A button that adds no highlight of its own: a poster dims by pose, never by being pressed.
 private struct PosterButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -163,6 +199,7 @@ private struct TilePosterCell: View {
             anchor: foldAnchor,
             slide: TileGeometry.foldSlide(role: role, contentWidth: contentWidth)
         ))
+        .modifier(PosterOpenFold(gain: isOpen ? 1 : 0, glow: glow, contentWidth: contentWidth))
         // The innermost of these two that applies wins, so an open or a close (a flight) beats a change of focus
         // that happens in the same update. Opening zooms out of the fan and closing zooms back into it, on the same curve.
         .transaction(value: isOpen) { transaction in

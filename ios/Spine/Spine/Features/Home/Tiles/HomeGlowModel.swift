@@ -41,6 +41,17 @@ final class HomeGlowModel {
         return contentTopInset + tilesTop + TileGeometry.closedHeight
     }
 
+    /// Where the tiles start in the page's content while a tile is open (the header squeezed up), measured when it is.
+    var openTilesTop: CGFloat?
+
+    /// The open tile's poster row's bottom edge on screen with the page at rest: the open carousel's posters have
+    /// folded behind the focused one by the time the page has scrolled this far.
+    var openRowBottom: CGFloat {
+        guard let openTilesTop else { return GlowSpec.estimatedOpenRowBottom }
+        let inset = contentTopInset ?? GlowSpec.estimatedTopInset
+        return inset + openTilesTop + TileGeometry.top + TileGeometry.posterSize.height
+    }
+
     /// How tall the glow is: `GlowSpec.restHeight` at rest; while a tile is open, the full
     /// `HomeDesign.Metric.glowHeight`, so the open tile's posters sit in it.
     var height: CGFloat { GlowSpec.height(isOpen: focused != nil) }
@@ -92,6 +103,8 @@ enum GlowSpec {
 
     /// Where the closed tiles end on a 393-402 pt phone, until they have been measured.
     static let estimatedTilesBottom: CGFloat = 322
+    /// The open tile's poster row's bottom edge until the open tile has been measured.
+    static let estimatedOpenRowBottom: CGFloat = 360
     /// How tall the glow is at rest, behind the picture: down to where the closed tiles start.
     static let restHeight: CGFloat = 318
 

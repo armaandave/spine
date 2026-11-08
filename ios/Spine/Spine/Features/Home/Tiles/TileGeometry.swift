@@ -260,6 +260,24 @@ nonisolated enum TileGeometry {
         return min(max(scroll / end, 0), 1)
     }
 
+    /// How far the open carousel's posters have folded behind the focused one: 0 with the page at rest, 1 once the
+    /// poster row's bottom edge (`rowBottom`, on screen with the page at rest) has reached the top of the screen.
+    static func openFoldProgress(scroll: CGFloat, rowBottom: CGFloat) -> CGFloat {
+        foldProgress(scroll: scroll, tilesBottom: rowBottom)
+    }
+
+    /// How much of the fold a poster takes, by how far it sits from the focused one in poster steps (fractional while
+    /// a swipe is under way): none for the focused poster, all of it from one step out.
+    static func openFoldWeight(slotsFromFocus: CGFloat) -> CGFloat {
+        min(abs(slotsFromFocus), 1)
+    }
+
+    /// The horizontal move, in points, that takes a poster `slotsFromFocus` steps from the focused one toward it:
+    /// back by its whole distance at progress 1. Zero for the focused poster, and for a side with no posters.
+    static func openFoldOffset(slotsFromFocus: CGFloat, progress: CGFloat) -> CGFloat {
+        -slotsFromFocus * step * progress
+    }
+
     /// A folded back poster is this much of its size, and this much darker.
     static let foldScale: CGFloat = 0.82
     static let foldDim: CGFloat = 0.45
