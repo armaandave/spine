@@ -431,10 +431,46 @@ final class HomeGlowTests: XCTestCase {
         let home = try String(contentsOf: features.appendingPathComponent("HomeView.swift"), encoding: .utf8)
         let scroll = try XCTUnwrap(home.range(of: "ScrollView(showsIndicators: false) {"))
         let glowUse = try XCTUnwrap(home.range(of: "HomeGlow(model: glow)"))
-        let refresh = try XCTUnwrap(home.range(of: ".refreshable {"))
+        let refresh = try XCTUnwrap(home.range(of: ".modifier(HomePullToRefresh("))
         XCTAssertTrue(scroll.upperBound < glowUse.lowerBound && glowUse.upperBound < refresh.lowerBound,
                       "HomeGlow sits inside the ScrollView's content, not behind it")
         XCTAssertEqual(home.components(separatedBy: "HomeGlow(model:").count - 1, 1)
+    }
+
+    /// The system refresh control changed the scroll view's inset while it spun, which moved the glow and its height.
+    /// Home pulls to refresh from the scroll geometry instead, and never uses `.refreshable`.
+    func testHomeDoesNotUseTheSystemRefreshControl() throws {
+        let home = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("Spine/Features/Home/HomeView.swift"),
+            encoding: .utf8
+        )
+        XCTAssertFalse(home.contains(".refreshable"))
+    }
+
+    func testPullRefreshStartsOnlyPastTheThresholdAndOnce() {
+        let threshold = HomeRefreshModel.threshold
+        XCTAssertFalse(HomeRefreshModel.shouldRefresh(pull: threshold - 1, isRefreshing: false))
+        XCTAssertTrue(HomeRefreshModel.shouldRefresh(pull: threshold, isRefreshing: false))
+        XCTAssertFalse(HomeRefreshModel.shouldRefresh(pull: threshold + 40, isRefreshing: true))
+    }
+
+    func testSpinnerFadesInOverThePullAndStaysWhileReloading() {
+        XCTAssertEqual(HomeRefreshModel.spinnerOpacity(pull: 0, isRefreshing: false), 0)
+        XCTAssertEqual(HomeRefreshModel.spinnerOpacity(pull: HomeRefreshModel.threshold, isRefreshing: false), 1)
+        XCTAssertEqual(HomeRefreshModel.spinnerOpacity(pull: 0, isRefreshing: true), 1)
+        let middle = HomeRefreshModel.spinnerOpacity(pull: 40, isRefreshing: false)
+        XCTAssertTrue(middle > 0 && middle < 1)
+    }
+
+    @MainActor
+    func testRunReloadsOnceAndClearsRefreshing() async {
+        let model = HomeRefreshModel()
+        var count = 0
+        await model.run { count += 1; XCTAssertTrue(model.isRefreshing) }
+        XCTAssertEqual(count, 1)
+        XCTAssertFalse(model.isRefreshing)
     }
 
     private func media(id: String, backdrop: String?, poster: String?) -> MediaSummary {

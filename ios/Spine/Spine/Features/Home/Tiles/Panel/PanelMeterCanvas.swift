@@ -38,8 +38,8 @@ struct PanelMeterCanvas: View {
     nonisolated static func draw(_ layout: MorphLayout, width: Double, in context: inout GraphicsContext) {
         let height = InProgressPanelMetrics.meterHeight
         drawGlow(layout, height: height, in: context)
-        drawCells(layout, height: height, in: context)
         drawBar(layout, width: width, height: height, in: context)
+        drawCells(layout, height: height, in: context)
         drawLine(layout, width: width, in: context)
     }
 
@@ -60,11 +60,18 @@ struct PanelMeterCanvas: View {
         }
     }
 
+    /// The bar and the pool cross-fade: the bar at `bar`, the pool (drawn over it) at `1 - bar`. Drawn "over", the
+    /// two alphas combine to `1 - (1 - a * bar) * (1 - a * (1 - bar))`, never above `a`, so a half-transparent
+    /// part (the track, the days before) never brightens mid-swipe. Fading them on separate, overlapping
+    /// ramps (both full around the middle) stacked the two layers' white into a bright flash.
+    nonisolated static func barOpacity(_ layout: MorphLayout) -> Double { min(max(layout.bar, 0), 1) }
+    nonisolated static func poolOpacity(_ layout: MorphLayout) -> Double { 1 - barOpacity(layout) }
+
     nonisolated private static func drawCells(_ layout: MorphLayout, height: Double, in context: GraphicsContext) {
-        let poolOpacity = 1 - min(max(2 * layout.bar - 1, 0), 1)
-        guard poolOpacity > 0.004 else { return }
+        let fade = poolOpacity(layout)
+        guard fade > 0.004 else { return }
         var pool = context
-        pool.opacity = poolOpacity
+        pool.opacity = fade
         for cell in layout.cells {
             guard cell.w >= 0.05, cell.opacity >= 0.004 else { continue }
             let limit = min(cell.w / 2, InProgressPanelMetrics.barRadius)
@@ -87,10 +94,10 @@ struct PanelMeterCanvas: View {
     nonisolated private static func drawBar(
         _ layout: MorphLayout, width: Double, height: Double, in context: GraphicsContext
     ) {
-        let opacity = min(max(2 * layout.bar, 0), 1)
-        guard opacity > 0.004 else { return }
+        let fade = barOpacity(layout)
+        guard fade > 0.004 else { return }
         var bar = context
-        bar.opacity = opacity
+        bar.opacity = fade
         let track = CGRect(x: 0, y: 0, width: width, height: height)
         bar.clip(to: Path(roundedRect: track, cornerRadius: InProgressPanelMetrics.barRadius, style: .continuous))
         bar.fill(Path(track), with: .color(TileStyle.meterRest))

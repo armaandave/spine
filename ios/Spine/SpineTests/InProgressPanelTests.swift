@@ -697,3 +697,26 @@ final class InProgressPanelMetricsTests: XCTestCase {
         XCTAssertLessThan(InProgressPanelMetrics.hitSlop * 2, PanelButtonGeometry.gap, "The two hit areas never overlap")
     }
 }
+
+final class PanelMeterCrossFadeTests: XCTestCase {
+    /// Dashed to solid (either way): drawn "over", the bar and the pool never add up to more than the brightest
+    /// end, for a track (0.16) and for the days before (0.55).
+    func testTheBarAndPoolNeverBrightenMidSwipe() {
+        for step in 0 ... 20 {
+            var layout = MorphLayout()
+            layout.bar = Double(step) / 20
+            let bar = PanelMeterCanvas.barOpacity(layout)
+            let pool = PanelMeterCanvas.poolOpacity(layout)
+            for alpha in [0.16, 0.55] {
+                let combined = 1 - (1 - alpha * bar) * (1 - alpha * pool)
+                XCTAssertLessThanOrEqual(combined, alpha + 1e-9)
+            }
+        }
+        var solid = MorphLayout()
+        solid.bar = 1
+        XCTAssertEqual(PanelMeterCanvas.poolOpacity(solid), 0)
+        XCTAssertEqual(PanelMeterCanvas.barOpacity(solid), 1)
+        XCTAssertEqual(PanelMeterCanvas.poolOpacity(MorphLayout()), 1)
+        XCTAssertEqual(PanelMeterCanvas.barOpacity(MorphLayout()), 0)
+    }
+}

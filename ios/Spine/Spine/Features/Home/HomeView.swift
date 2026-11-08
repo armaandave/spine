@@ -571,6 +571,8 @@ struct HomeView: View {
     private static let scrollCap = HomeDesign.Metric.glowHeight + 60
 
     @State private var viewModel: HomeViewModel
+    /// How far the page is pulled and whether it is reloading; only the pull modifier and the spinner read it.
+    @State private var refresh = HomeRefreshModel()
     @State private var selectedRef: MediaRef?
     /// What the Trending rail left for the page to finish (a log composer, a sheet), when it opened the page.
     @State private var selectedHandoff: RailHandoff?
@@ -658,6 +660,9 @@ struct HomeView: View {
                     }
                     // Where the tiles sit in here does not change as the page scrolls; the glow ends by them.
                     .coordinateSpace(.named(HomeGlowModel.contentSpace))
+                    // Room for the spinner while reloading, drawn only: the glow below is laid out against the
+                    // unshifted page, so it stays where it is.
+                    .modifier(HomeRefreshShift(model: refresh))
                     // The glow is part of the scrolling content, so the scroll view moves it with the page natively and
                     // it never trails by a frame. It reaches up under the status bar by its own offset.
                     .background(alignment: .top) {
@@ -665,9 +670,9 @@ struct HomeView: View {
                     }
                     .padding(.bottom, 92)
                 }
-                .refreshable {
-                    await viewModel.reload()
-                }
+                // Pull to refresh without the system control: it changes the scroll view's inset while it spins, and
+                // the glow and its height were read from that inset (`HomeRefreshModel`).
+                .modifier(HomePullToRefresh(model: refresh) { await viewModel.reload() })
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
                     // How far the page has moved, without the inset that holds it below the status bar.
                     min(max(0, geometry.contentOffset.y + geometry.contentInsets.top), Self.scrollCap)
@@ -681,6 +686,7 @@ struct HomeView: View {
                 }
 
                 HomeStatusBarFade(model: glow)
+                HomeRefreshIndicator(model: refresh)
             }
             .background {
                 HomeDesign.Palette.pageBackground
@@ -955,6 +961,91 @@ private struct HomeStatusBarFade: View {
     var body: some View {
         DiaryTopSoftScrim()
             .opacity(min(1, model.scrollOffset / 40))
+    }
+}
+
+/// Home's pull to refresh. The page is pulled past its top by `pull` points; letting go beyond `threshold` reloads
+/// once, and the spinner shows until the reload is done.
+@MainActor
+@Observable
+final class HomeRefreshModel {
+    /// Points the page is pulled past its top; 0 anywhere else.
+    var pull: CGFloat = 0
+    private(set) var isRefreshing = false
+
+    /// How far to pull before letting go reloads.
+    nonisolated static let threshold: CGFloat = 70
+    /// The room the spinner takes above the page while it is reloading (and the most it takes while pulling).
+    nonisolated static let gap: CGFloat = 44
+
+    /// Letting go (the finger left the page) reloads when the pull is far enough and no reload is running.
+    nonisolated static func shouldRefresh(pull: CGFloat, isRefreshing: Bool) -> Bool {
+        !isRefreshing && pull >= threshold
+    }
+
+    /// The spinner's opacity: fading in over the pull, full while reloading.
+    nonisolated static func spinnerOpacity(pull: CGFloat, isRefreshing: Bool) -> Double {
+        guard !isRefreshing else { return 1 }
+        return Double(min(1, max(0, (pull - 10) / (threshold - 10))))
+    }
+
+    /// Runs `reload` once; the page opens `gap` for the spinner while it runs and closes it after.
+    func run(_ reload: @MainActor () async -> Void) async {
+        guard !isRefreshing else { return }
+        withAnimation(.smooth) { isRefreshing = true }
+        await reload()
+        withAnimation(.smooth) { isRefreshing = false }
+    }
+}
+
+/// Pull to refresh for the page's scroll view. It reads the pull from the scroll geometry and starts the reload when
+/// the finger lets go past the threshold. The scroll view's inset never changes, so the glow, which is pinned from that
+/// inset, has nothing to follow; the spinner's room is `HomeRefreshShift`, which changes no inset and no layout.
+private struct HomePullToRefresh: ViewModifier {
+    let model: HomeRefreshModel
+    let reload: @MainActor () async -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                max(0, -(geometry.contentOffset.y + geometry.contentInsets.top)).rounded()
+            } action: { _, pull in
+                if model.pull != pull { model.pull = pull }
+            }
+            .onScrollPhaseChange { old, new in
+                guard old == .interacting, new != .interacting,
+                      HomeRefreshModel.shouldRefresh(pull: model.pull, isRefreshing: model.isRefreshing)
+                else { return }
+                Task { await model.run(reload) }
+            }
+    }
+}
+
+/// Moves the page down by `gap` while it reloads, so the spinner has room. It is an offset, not a margin or padding:
+/// a content margin feeds the scroll view's inset, which is what moved the glow, and the glow's background is laid out
+/// against the unshifted page. Where the tiles sit is read in the page's own space, which moves with it.
+private struct HomeRefreshShift: ViewModifier {
+    let model: HomeRefreshModel
+
+    func body(content: Content) -> some View {
+        content.offset(y: model.isRefreshing ? HomeRefreshModel.gap : 0)
+    }
+}
+
+/// The plain system spinner above the page: it grows into the space the pull opens, then sits in the room the reload
+/// keeps. It reads the pull itself, so a pull redraws only this.
+private struct HomeRefreshIndicator: View {
+    let model: HomeRefreshModel
+
+    var body: some View {
+        ProgressView()
+            .tint(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: model.isRefreshing ? HomeRefreshModel.gap : min(model.pull, HomeRefreshModel.gap))
+            .opacity(HomeRefreshModel.spinnerOpacity(pull: model.pull, isRefreshing: model.isRefreshing))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
