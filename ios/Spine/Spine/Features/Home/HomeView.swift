@@ -174,11 +174,18 @@ final class HomeViewModel {
         }
         feedModel.onFeedChange = { [weak self] in self?.feedDidChange() }
         feedModel.onNextPage = { [weak self] in self?.standing.prepare(for: self?.feed.items ?? []) }
+        // Friends' standings (the meter and the "where" on their progress cards) come from their lists. A view model
+        // built to test the rail or the feed keeps none.
+        if loadsTileExtras {
+            feedModel.standing = FriendStandings(trackingRepository: trackingRepository, onUnauthorized: onUnauthorized)
+        }
     }
 
     // MARK: Loading
 
     func load() async {
+        // The feed's duotone marks are drawn once, before the first card needs one.
+        FeedMarkImages.warm()
         tiles.isLoadingTrending = tiles.trending.isEmpty
         guard await loadProfileAndInProgress() else { return }
         async let friendsLoad: Void = loadFriends()
@@ -417,7 +424,7 @@ final class HomeViewModel {
     /// The first page of the feed is in: friends' standings start loading, and Trending reads what it can now and
     /// fills in from your own activity and the fallback list as they arrive.
     private func feedDidLoad() {
-        standing.prepare(for: feed.items)
+        standing.reload(for: feed.items)
         friends.reorder(feed: feed.items)
         recomputeTrending()
         guard loadsTileExtras, let username = profile?.username else {

@@ -219,7 +219,60 @@ final class FeedCardRenderTests: XCTestCase {
             username: "ava", avatar: artURL("avatar", "7A5AAA"), title: "Past Lives", mediaFields: art("pl", "7A3A3A"),
             likes: 1204, comments: 38
         )))
+
+        // Depth (direction B): the duotone marks on each ink, the three status pills on each ink, both heart states.
+        add("27-marks-dark", "LOG · 4.5 STARS, LOVED, REWATCH · DUOTONE MARKS (DARK)", card(try FeedTestItems.log(
+            id: 27, rating: "4.5", liked: true, rewatch: true, review: "the second watch is the better one.",
+            title: "Sinners", mediaFields: art("sinners2", "2F2A4A"), username: "maya"
+        )))
+        add("28-marks-light", "LOG · 4.5 STARS, LOVED, REWATCH · DUOTONE MARKS (LIGHT)", card(try FeedTestItems.log(
+            id: 28, rating: "4.5", liked: true, rewatch: true, mediaType: "anime", source: "mal", title: "Frieren",
+            mediaFields: art("frieren2", "D8C27A"), username: "jules"
+        )))
+        add("29-paused-dark-bar", "BOOK · 86 PAGES, THEN PAUSED · BAR (DARK)", card(
+            try FeedTestItems.day(
+                id: 29, label: "86 pages", moves: ["paused"], unit: "pages", title: "Intermezzo",
+                mediaFields: art("int2", "2A3A5A"), username: "noor"
+            ),
+            standing: FeedStanding(unit: .pages, from: 126, to: 212, total: 448, whereText: "p. 212")
+        ))
+        add("30-picked-back-up-dark", "TV · PICKED BACK UP · TICKS (DARK)", card(
+            try FeedTestItems.day(
+                id: 30, moves: ["picked_back_up"], unit: "minutes", mediaType: "tv", source: "tmdb", title: "Pluribus",
+                mediaFields: art("plu2", "2B4A6A"), username: "maya"
+            ),
+            standing: FeedStanding(unit: .episodes, from: 5, to: 5, total: 9, whereText: "after E5")
+        ))
+        add("31-stopped-light-bar", "BOOK · STOPPED · BAR (LIGHT)", card(
+            try FeedTestItems.day(
+                id: 31, moves: ["stopped"], unit: "pages", title: "James",
+                mediaFields: art("james2", "D8C27A"), username: "sam"
+            ),
+            standing: FeedStanding(unit: .pages, from: 140, to: 140, total: 303, whereText: "at p. 140")
+        ))
+        add("32-counts-liked-dark", "COUNTS · LIKED HEART, 5 AND 25 (DARK)", withEngagement(card(try FeedTestItems.log(
+            id: 32, rating: "4", liked: true, title: "Past Lives", mediaFields: art("pl2", "2F2A4A"), username: "ava"
+        )), PostEngagement(hasLiked: true, likeCount: 5, commentCount: 25)))
+        add("33-counts-unliked-light", "COUNTS · UNLIKED HEART, 1,234 AND 6 (LIGHT)", withEngagement(card(try FeedTestItems.log(
+            id: 33, rating: "4", title: "Past Lives", mediaFields: art("pl3", "D8C27A"), username: "ava"
+        )), PostEngagement(hasLiked: false, likeCount: 1234, commentCount: 6)))
+        add("34-tv-dark-ticks-pill", "TV · 3 EPISODES TODAY · TICKS, THE LIKED PILL (DARK)", withEngagement(card(
+            try FeedTestItems.day(
+                id: 34, label: "3 episodes", unit: "minutes", mediaType: "tv", source: "tmdb", title: "Pluribus",
+                mediaFields: art("plu3", "2B4A6A"), username: "maya"
+            ),
+            standing: FeedStanding(unit: .episodes, from: 4, to: 7, total: 10, whereText: "7 of 10 episodes")
+        ), PostEngagement(hasLiked: true, likeCount: 12, commentCount: 3)))
         return list
+    }
+
+    private func withEngagement(_ model: FeedCardModel, _ engagement: PostEngagement) -> FeedCardModel {
+        FeedCardModel(
+            id: model.id, kind: model.kind, username: model.username, avatarURL: model.avatarURL,
+            dayLabel: model.dayLabel, title: model.title, tag: model.tag, headline: model.headline, details: model.details, meter: model.meter,
+            engagement: engagement, art: model.art, accessibilityLabel: model.accessibilityLabel,
+            accessibilityHint: model.accessibilityHint, destination: model.destination
+        )
     }
 
     // MARK: Rendering
@@ -309,10 +362,34 @@ final class FeedCardRenderTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(FeedCardView.meterTop(for: window) - 2, FeedDetailPlanner.rowsLimit(hasMeter: true))
     }
 
+    /// The glass is not touched by the card's depth: its art, base, sheen and edge keep their numbers.
+    func testTheGlassKeepsItsNumbers() throws {
+        XCTAssertEqual(FeedCardArt.artOpacity, 0.74)
+        XCTAssertEqual(FeedCardArt.baseOpacity, 0.45)
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Spine/Features/Home/Feed/FeedCardArt.swift")
+        let text = try String(contentsOf: source, encoding: .utf8)
+        func section(_ from: String, to end: String) throws -> String {
+            let start = try XCTUnwrap(text.range(of: from))
+            let stop = try XCTUnwrap(text.range(of: end, range: start.upperBound ..< text.endIndex))
+            return String(text[start.lowerBound ..< stop.lowerBound])
+        }
+        let sheen = try section("struct FeedCardSheen", to: "/// The part of the card's outline")
+        for stop in [".white.opacity(0.12), location: 0", ".white.opacity(0.03), location: 0.4",
+                     ".white.opacity(0), location: 0.7", ".white.opacity(0.03), location: 1"] {
+            XCTAssertTrue(sheen.contains(stop), "The sheen lost \(stop)")
+        }
+        let edge = try section("struct FeedCardEdge", to: "/// Light on the glass")
+        XCTAssertEqual(edge.components(separatedBy: "Color.white.opacity(0.28)").count - 1, 2)
+    }
+
     func testTheCountsReserveFollowsTheirDigits() {
         XCTAssertEqual(FeedCardView.countsReserve(for: nil), 0)
-        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: false, likeCount: 0, commentCount: 0)), 68)
-        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 12, commentCount: 3)), 76)
+        // 66 and 8 for each character.
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: false, likeCount: 0, commentCount: 0)), 82)
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 12, commentCount: 3)), 90)
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 1204, commentCount: 38)), 122, "The thousands comma takes room too")
     }
 
     func testTwoEqualModelsCompareEqual() throws {
