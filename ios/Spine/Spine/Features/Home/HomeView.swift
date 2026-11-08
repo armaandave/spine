@@ -83,6 +83,9 @@ final class HomeViewModel {
     @ObservationIgnored private(set) var todayRefresh: Task<Void, Never>?
     @ObservationIgnored private(set) var trendingFill: Task<Void, Never>?
     @ObservationIgnored private(set) var seasonRefresh: Task<Void, Never>?
+    /// The read `warmQuickAction` made last, and the titles it has been made for.
+    @ObservationIgnored private(set) var warmup: Task<Void, Never>?
+    @ObservationIgnored private(set) var warmedItemIDs: Set<String> = []
     /// The season read each show's `tiles.seasons` entry came from or is waiting for ("2|14": season, version), by
     /// item id. A show is read again only when its season or its version changes.
     @ObservationIgnored private var seasonReads: [String: String] = [:]
@@ -529,8 +532,15 @@ final class HomeViewModel {
         case .tickUpNext:
             tiles.busyItemIDs.insert(item.id)
             defer { tiles.busyItemIDs.remove(item.id) }
+            // The card shows the new count at once. The server's answer replaces it; a write that failed or asked a
+            // question leaves it as it was.
+            let optimistic = continueWatching.canQuickTick ? plan.optimisticTracking(item.tracking) : nil
+            if let optimistic { railItemDidChange(id: item.id, tracking: optimistic) }
             continueWatching.quickTick(for: item)
             await continueWatching.quickTickSettling?.value
+            if let optimistic, inProgressItems.first(where: { $0.id == item.id })?.tracking == optimistic {
+                railItemDidChange(id: item.id, tracking: item.tracking)
+            }
             let failed = item.media.ref.isAnime
                 ? continueWatching.closedAnimeEpisodes?.page.quickActionErrorMessage
                 : continueWatching.closedEpisodes?.season.quickActionErrorMessage
@@ -546,6 +556,22 @@ final class HomeViewModel {
             case let .failed(message):
                 writeFailure = message
                 return .failed(message)
+            }
+        }
+    }
+
+    /// A show or anime opened on its tile: reads what its first tick would otherwise wait for, once per title, so the
+    /// server has its episode listing fresh and the connection is open. Nothing waits on it and an error is ignored.
+    func warmQuickAction(forItemID id: String?) {
+        guard let id, let item = inProgressItems.first(where: { $0.id == id }),
+              let plan = QuickActionPlan.make(for: item), case let .tickUpNext(season, _) = plan,
+              warmedItemIDs.insert(id).inserted else { return }
+        let ref = item.media.ref
+        warmup = Task { [seasonPages, trackingRepository] in
+            if let season {
+                _ = try? await seasonPages.detail(ref: ContinueWatchingEpisodes.seasonRef(show: ref, seasonNumber: season))
+            } else {
+                _ = try? await trackingRepository.animeRows(ref: ref)
             }
         }
     }
@@ -741,6 +767,7 @@ struct HomeView: View {
             }
             .modifier(HomeRefreshTriggers(viewModel: viewModel, selectedTab: selectedTab))
             .modifier(HomeWriteFailureAlert(viewModel: viewModel))
+            .modifier(HomeQuickActionWarmup(viewModel: viewModel))
             .onChange(of: selectedRef) { oldValue, newValue in
                 if oldValue != nil, newValue == nil {
                     Task { await viewModel.loadInProgress(forceToday: true) }
@@ -1004,6 +1031,20 @@ private struct HomeWriteFailureAlert: ViewModifier {
                 Text(viewModel.writeFailure ?? "")
             }
             .sensoryFeedback(.error, trigger: viewModel.writeFailure) { _, message in message != nil }
+    }
+}
+
+/// Warms what a title's first quick increment would otherwise wait for, when its In progress tile opens or the focus
+/// moves to it. It reads the focus, so the page does not.
+private struct HomeQuickActionWarmup: ViewModifier {
+    let viewModel: HomeViewModel
+
+    func body(content: Content) -> some View {
+        let tiles = viewModel.tilesState
+        content
+            .onChange(of: tiles.open == .inProgress ? tiles.focusID : nil) { _, id in
+                viewModel.warmQuickAction(forItemID: id)
+            }
     }
 }
 

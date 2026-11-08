@@ -476,6 +476,9 @@ struct AnimeEpisodesSheet: View {
         let page = episodes.page
         let headerModel = episodes.tickModel
         let hasHeader = headerModel != nil
+        let isLoading = EpisodeSheetDetent.isLoadingHeader(
+            hasHeader: hasHeader, isLoaded: page.detail?.animeRows != nil, hasFailed: page.errorMessage != nil
+        )
         NavigationStack {
             VStack(spacing: 0) {
                 if let model = headerModel {
@@ -490,11 +493,13 @@ struct AnimeEpisodesSheet: View {
                     // The header is never squeezed by the list below it, and the list starts a little under it.
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 12)
+                } else if isLoading {
+                    EpisodeSheetHeaderPlaceholder(episodeCount: episodes.estimatedEpisodeCount)
                 }
                 AnimeEpisodeList(episodes: episodes, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
                     // The next title is a new list: its rows don't animate from the last title's ticks.
                     .id(episodes.ref.id)
-                    .episodeSheetListReveal(hasHeader: hasHeader, height: $listHeight)
+                    .episodeSheetListReveal(hasHeader: hasHeader, isLoading: isLoading, height: $listHeight)
             }
             .pinnedToEpisodeSheetTop()
             .navigationTitle(episodes.title)

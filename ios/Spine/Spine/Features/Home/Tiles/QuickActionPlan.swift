@@ -136,3 +136,23 @@ enum QuickActionPlan: Hashable {
         return plan
     }
 }
+
+extension QuickActionPlan {
+    /// The card's tracking as a show's or anime's tick leaves it, one more episode watched, for the tile to show at
+    /// once while the write is on its way. Nil for every other plan and for a card with no count. The count never
+    /// passes the aired episodes (the plan never reaches them), and the version and up next stay as the card has
+    /// them: the server's answer replaces this whole state.
+    func optimisticTracking(_ tracking: TrackingState) -> TrackingState? {
+        guard case .tickUpNext = self else { return nil }
+        var next = tracking
+        if let tv = tracking.tv, let watched = tv.watchedCount {
+            next.tv?.watchedCount = min(watched + 1, tv.airedCount ?? .max)
+            return next
+        }
+        if let anime = tracking.anime, let watched = anime.watchedCount {
+            next.anime?.watchedCount = min(watched + 1, anime.airedCount ?? anime.total ?? .max)
+            return next
+        }
+        return nil
+    }
+}

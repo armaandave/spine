@@ -163,6 +163,12 @@ final class ContinueWatchingTicks {
         episodes = sheet
     }
 
+    /// Whether a quick tick would write now: none is in flight and no earlier answer's question is waiting.
+    var canQuickTick: Bool {
+        !isQuickTicking && closedEpisodes?.season.tvFollowUp.isActive != true
+            && closedAnimeEpisodes?.page.tvFollowUp.isActive != true
+    }
+
     /// Ticks the card's up next once, with no sheet (the tile's primary button). The write goes through the same
     /// model and queue as a tick in the sheet, so the card is patched in place, the screen is told to reload, and
     /// what the write asks next (the earlier-episodes question, a finale's Log Season) or its failure shows over the
@@ -170,9 +176,7 @@ final class ContinueWatchingTicks {
     /// ignored.
     func quickTick(for item: LibraryItem) {
         // A tick whose write asked a question or opened Log Season on a card waits for that to be answered.
-        guard !isQuickTicking,
-              closedEpisodes?.season.tvFollowUp.isActive != true,
-              closedAnimeEpisodes?.page.tvFollowUp.isActive != true else { return }
+        guard canQuickTick else { return }
         let settled: () async -> Bool
         if item.media.ref.isAnime {
             guard let upNext = item.tracking.anime?.upNext?.tvPointer else { return }
@@ -583,6 +587,12 @@ nonisolated enum EpisodeSheetDetent {
         (episodeCount ?? 0) > EpisodeTickModel.stripLimit ? estimatedWindowHeader : estimatedHeader
     }
 
+    /// Whether the sheet is still waiting for the data its header is drawn from: no header yet, nothing loaded and no
+    /// failure. A failed load stops waiting, so the list (and the failure alert) shows as before.
+    static func isLoadingHeader(hasHeader: Bool, isLoaded: Bool, hasFailed: Bool) -> Bool {
+        !hasHeader && !isLoaded && !hasFailed
+    }
+
     /// The compact height for `header`: the header, or its estimate before it is measured, and the bars around it.
     static func compact(header: CGFloat, episodeCount: Int? = nil) -> PresentationDetent {
         let isWindow = (episodeCount ?? 0) > EpisodeTickModel.stripLimit
@@ -607,15 +617,28 @@ extension View {
         modifier(EpisodeSheetDetents(headerHeight: headerHeight, episodeCount: episodeCount))
     }
 
-    /// Hides an update sheet's list while the sheet is compact (`height` is the list's own height).
-    func episodeSheetListReveal(hasHeader: Bool, height: Binding<CGFloat>) -> some View {
-        let shown = !hasHeader || height.wrappedValue > EpisodeSheetDetent.listRevealHeight
+    /// Hides an update sheet's list while the sheet is compact (`height` is the list's own height), and while the
+    /// header is still on its way (`isLoading`), so the old single up-next row never shows ahead of the header.
+    func episodeSheetListReveal(hasHeader: Bool, isLoading: Bool = false, height: Binding<CGFloat>) -> some View {
+        let shown = !isLoading && (!hasHeader || height.wrappedValue > EpisodeSheetDetent.listRevealHeight)
         return self
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height.wrappedValue = $0 }
             .opacity(shown ? 1 : 0)
             .allowsHitTesting(shown)
             .accessibilityHidden(!shown)
             .animation(.easeOut(duration: 0.15), value: shown)
+    }
+}
+
+/// Stands where an update sheet's header will be while its data loads, at the header's estimated height.
+struct EpisodeSheetHeaderPlaceholder: View {
+    let episodeCount: Int?
+
+    var body: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .frame(height: EpisodeSheetDetent.estimate(episodeCount: episodeCount))
+            .padding(.bottom, 12)
     }
 }
 
@@ -770,6 +793,9 @@ private struct ContinueWatchingEpisodesSheet: View {
         let season = episodes.season
         let headerModel = episodes.tickModel
         let hasHeader = headerModel != nil
+        let isLoading = EpisodeSheetDetent.isLoadingHeader(
+            hasHeader: hasHeader, isLoaded: season.detail != nil, hasFailed: season.errorMessage != nil
+        )
         NavigationStack {
             VStack(spacing: 0) {
                 if let model = headerModel {
@@ -784,11 +810,13 @@ private struct ContinueWatchingEpisodesSheet: View {
                     // The header is never squeezed by the list below it, and the list starts a little under it.
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 12)
+                } else if isLoading {
+                    EpisodeSheetHeaderPlaceholder(episodeCount: episodes.estimatedEpisodeCount)
                 }
                 ContinueWatchingEpisodeList(episodes: episodes)
                     // A new season is a new list: its rows don't animate from the last season's ticks.
                     .id(episodes.seasonNumber)
-                    .episodeSheetListReveal(hasHeader: hasHeader, height: $listHeight)
+                    .episodeSheetListReveal(hasHeader: hasHeader, isLoading: isLoading, height: $listHeight)
             }
             .pinnedToEpisodeSheetTop()
             .navigationTitle(episodes.title)
