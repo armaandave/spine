@@ -117,7 +117,7 @@ nonisolated struct MeterTint: Equatable, Sendable {
             guard swatch.share >= minimumShare, let rgb = RGB(hex: swatch.hex) else { return nil }
             let lab = PosterPaletteExtractor.lab(red: rgb.red * 255, green: rgb.green * 255, blue: rgb.blue * 255)
             let chroma = (lab.1 * lab.1 + lab.2 * lab.2).squareRoot()
-            let nearBlack = lab.0 < 8 || (lab.0 < 20 && chroma < 8)
+            let nearBlack = lab.0 < 4 || (lab.0 < 20 && chroma < 8)
             let nearWhite = lab.0 > 93 && chroma < 12
             guard !nearBlack, !nearWhite else { return nil }
             return Candidate(rgb: rgb, score: swatch.share.squareRoot() * (1 + chroma / 40))

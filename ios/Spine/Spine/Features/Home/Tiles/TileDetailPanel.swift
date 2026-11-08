@@ -118,12 +118,7 @@ private struct InProgressPanel: View {
     @ViewBuilder
     private func meter(accent: Color) -> some View {
         if let model = TileGeometry.panelMeter(detail.meter) {
-            var palette = TileStyle.meterPalette(accent: accent)
-            if let swatches {
-                let highContrast = contrast == .increased
-                palette.tint = MeterTint.make(from: swatches, highContrast: highContrast)
-                if highContrast { palette.tintOpacity = 0.95 }
-            }
+            let palette = meterPalette(accent: accent)
             switch model.kind {
             case .bar:
                 ProgressMeterView.bar(model: model, palette: palette, height: TileStyle.tickHeight, radius: 4)
@@ -133,6 +128,16 @@ private struct InProgressPanel: View {
         } else {
             Color.clear.frame(height: TileStyle.tickHeight)
         }
+    }
+
+    private func meterPalette(accent: Color) -> MeterPalette {
+        var palette = TileStyle.meterPalette(accent: accent)
+        if let swatches {
+            let highContrast = contrast == .increased
+            palette.tint = MeterTint.make(from: swatches, highContrast: highContrast)
+            if highContrast { palette.tintOpacity = 0.95 }
+        }
+        return palette
     }
 
     // MARK: Buttons

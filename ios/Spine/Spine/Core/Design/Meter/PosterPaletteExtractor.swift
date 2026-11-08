@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Nuke
+import UIKit
 
 /// The same count the server makes (`extract_palette`): the poster at 96 px, median-cut down to 24 colors, colors
 /// closer than 20 apart in CIELAB merged, the biggest 5 kept with their shares. Pure pixel work, so it runs off the main

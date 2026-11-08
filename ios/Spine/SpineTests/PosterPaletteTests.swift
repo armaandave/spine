@@ -18,7 +18,7 @@ final class PosterPaletteTests: XCTestCase {
     }
 
     func testDetailDecodesAPalette() throws {
-        let detail = try decode(MediaDetail.self, detailJSON(palette: #"[{"hex": "#0B0B0B", "share": 0.83}, {"hex": "#C8102E", "share": 0.1}]"#))
+        let detail = try decode(MediaDetail.self, detailJSON(palette: ##"[{"hex": "#0B0B0B", "share": 0.83}, {"hex": "#C8102E", "share": 0.1}]"##))
         XCTAssertEqual(detail.posterPalette, [
             PosterSwatch(hex: "#0B0B0B", share: 0.83),
             PosterSwatch(hex: "#C8102E", share: 0.1),
