@@ -162,6 +162,8 @@ protocol TrackingRepository {
         watchedAt: Date?
     ) async throws -> TrackingState
     func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String) async throws -> TrackingState
+    /// The same save on the day the progress sheet's date row named (`progressed_on`, "YYYY-MM-DD"); nil is today.
+    func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String, progressedOn: String?) async throws -> TrackingState
     func completeBook(source: String, mediaId: String, completedAt: Date?) async throws -> TrackingState
     // The actions and deletes below return nil when the server answers 204 (the item is no longer tracked).
     func performBookAction(source: String, mediaId: String, action: String, request: BookActionRequest) async throws -> TrackingState?
@@ -170,6 +172,7 @@ protocol TrackingRepository {
     func deleteBookJourney(source: String, mediaId: String, journeyId: Int) async throws -> TrackingState?
     func completeBook(source: String, mediaId: String, request: BookCompletionWriteRequest) async throws -> BookCompletionResponse
     func updateSeriesProgress(ref: MediaRef, value: Int, mutationId: UUID) async throws -> TrackingState
+    func updateSeriesProgress(ref: MediaRef, value: Int, mutationId: UUID, progressedOn: String?) async throws -> TrackingState
     func performSeriesAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState?
     func updateSeriesAttempt(ref: MediaRef, attemptId: Int, request: BookJourneyWriteRequest) async throws -> TrackingState
     func deleteSeriesAttempt(ref: MediaRef, attemptId: Int) async throws -> TrackingState?
@@ -212,6 +215,13 @@ extension TrackingRepository {
     }
 
     func updateSeriesProgress(ref _: MediaRef, value _: Int, mutationId _: UUID) async throws -> TrackingState { fatalError("Not implemented") }
+    /// A repository that doesn't take a date saves on today, as before.
+    func updateSeriesProgress(ref: MediaRef, value: Int, mutationId: UUID, progressedOn _: String?) async throws -> TrackingState {
+        try await updateSeriesProgress(ref: ref, value: value, mutationId: mutationId)
+    }
+    func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String, progressedOn _: String?) async throws -> TrackingState {
+        try await updateBookProgress(source: source, mediaId: mediaId, progressType: progressType, value: value, notes: notes)
+    }
     func performSeriesAction(ref _: MediaRef, action _: String, request _: BookActionRequest) async throws -> TrackingState? { fatalError("Not implemented") }
     func updateSeriesAttempt(ref _: MediaRef, attemptId _: Int, request _: BookJourneyWriteRequest) async throws -> TrackingState { fatalError("Not implemented") }
     func deleteSeriesAttempt(ref _: MediaRef, attemptId _: Int) async throws -> TrackingState? { fatalError("Not implemented") }
@@ -310,6 +320,12 @@ protocol ActivityRepository {
     func feedPage(pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse
     /// A day's progress, as its own page reads it.
     func progressPost(id: Int) async throws -> ActivityItem
+    /// The titles a Planning row counted (AC-8). `mediaType` is the row's, so a filtered row opens what it counted.
+    func planningTitles(id: Int, mediaType: String?) async throws -> PlanningDay
+    /// Fixes an older row's number (AC-9). The row's page again, or nil when the fix left the day with no row.
+    func fixProgress(id: Int, request: ProgressEditRequest) async throws -> ActivityItem?
+    /// Takes back the newest row (AC-9).
+    func deleteProgress(id: Int) async throws
     func setLike(post: ActivityPostRef, liked: Bool) async throws -> LikeState
     /// All of a post's comments, oldest first.
     func comments(post: ActivityPostRef) async throws -> [PostComment]
@@ -329,6 +345,18 @@ extension ActivityRepository {
     }
 
     func progressPost(id _: Int) async throws -> ActivityItem {
+        fatalError("Not implemented")
+    }
+
+    func planningTitles(id _: Int, mediaType _: String?) async throws -> PlanningDay {
+        fatalError("Not implemented")
+    }
+
+    func fixProgress(id _: Int, request _: ProgressEditRequest) async throws -> ActivityItem? {
+        fatalError("Not implemented")
+    }
+
+    func deleteProgress(id _: Int) async throws {
         fatalError("Not implemented")
     }
 
@@ -1311,9 +1339,15 @@ struct APITrackingRepository: TrackingRepository {
     }
 
     func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String) async throws -> TrackingState {
+        try await updateBookProgress(
+            source: source, mediaId: mediaId, progressType: progressType, value: value, notes: notes, progressedOn: nil
+        )
+    }
+
+    func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String, progressedOn: String?) async throws -> TrackingState {
         try await client.post(
             "/tracking/\(source)/book/\(mediaId)/progress/",
-            body: BookProgressRequest(progressType: progressType, value: value, notes: notes),
+            body: BookProgressRequest(progressType: progressType, value: value, notes: notes, progressedOn: progressedOn),
             authenticated: true
         )
     }
@@ -1366,9 +1400,13 @@ struct APITrackingRepository: TrackingRepository {
     }
 
     func updateSeriesProgress(ref: MediaRef, value: Int, mutationId: UUID) async throws -> TrackingState {
+        try await updateSeriesProgress(ref: ref, value: value, mutationId: mutationId, progressedOn: nil)
+    }
+
+    func updateSeriesProgress(ref: MediaRef, value: Int, mutationId: UUID, progressedOn: String?) async throws -> TrackingState {
         try await client.post(
             "/tracking/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/progress/",
-            body: SeriesProgressRequest(value: value, mutationId: mutationId),
+            body: SeriesProgressRequest(value: value, mutationId: mutationId, progressedOn: progressedOn),
             authenticated: true
         )
     }
@@ -1590,6 +1628,10 @@ struct APIActivityRepository: ActivityRepository {
         cursorLink: String?
     ) async throws -> ActivityCursorResponse {
         var query = [URLQueryItem(name: "page_size", value: String(pageSize))] + filter.queryItems
+        // Only a plain list takes Planning rows; a list opened from a number always adds up to its number.
+        if filter.asksForPlanning {
+            query.append(URLQueryItem(name: "include", value: "planning"))
+        }
         if let cursor = Self.cursorValue(from: cursorLink) {
             query.append(URLQueryItem(name: "cursor", value: cursor))
         }
@@ -1597,7 +1639,11 @@ struct APIActivityRepository: ActivityRepository {
     }
 
     func feedPage(pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse {
-        var query = [URLQueryItem(name: "page_size", value: String(pageSize))]
+        // Only a build that asks gets a day of Planning adds (AC-8): older builds would print it as "shared activity".
+        var query = [
+            URLQueryItem(name: "page_size", value: String(pageSize)),
+            URLQueryItem(name: "include", value: "planning"),
+        ]
         if let cursor = Self.cursorValue(from: cursorLink) {
             query.append(URLQueryItem(name: "cursor", value: cursor))
         }
@@ -1606,6 +1652,22 @@ struct APIActivityRepository: ActivityRepository {
 
     func progressPost(id: Int) async throws -> ActivityItem {
         try await client.get("/progress/\(id)/", authenticated: true)
+    }
+
+    func planningTitles(id: Int, mediaType: String?) async throws -> PlanningDay {
+        var query: [URLQueryItem] = []
+        if let mediaType {
+            query.append(URLQueryItem(name: "media_type", value: mediaType))
+        }
+        return try await client.get("/planning/\(id)/", query: query, authenticated: true)
+    }
+
+    func fixProgress(id: Int, request: ProgressEditRequest) async throws -> ActivityItem? {
+        try await client.patch("/progress/\(id)/", body: request, authenticated: true)
+    }
+
+    func deleteProgress(id: Int) async throws {
+        let _: EmptyResponse = try await client.delete("/progress/\(id)/", authenticated: true)
     }
 
     func setLike(post: ActivityPostRef, liked: Bool) async throws -> LikeState {

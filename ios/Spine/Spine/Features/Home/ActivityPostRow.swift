@@ -20,14 +20,18 @@ struct ActivityPostRow: View {
 
                 // One element to VoiceOver, which opens the post from it.
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(activity.media?.displayTitle ?? "")
+                    // A day of Planning adds reads as its count, with the names under it, not as its first title.
+                    Text(activity.planning != nil ? PlanningWords.headline(for: activity) : activity.media?.displayTitle ?? "")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                     summaryLine
                     reviewLine
                     Spacer(minLength: 0)
-                    PostEngagementSummary(engagement: activity.engagement)
+                    // A day of Planning adds has no likes or comments to count.
+                    if activity.planning == nil {
+                        PostEngagementSummary(engagement: activity.engagement)
+                    }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)
@@ -66,7 +70,11 @@ struct ActivityPostRow: View {
     /// Directly under the title: a log's stars and marks, or in words what the post is when it has none.
     @ViewBuilder
     private var summaryLine: some View {
-        if let status = ActivityFeedPresentation.statusText(for: activity) {
+        if activity.planning != nil {
+            if let names = PlanningWords.names(for: activity) {
+                detailText(names)
+            }
+        } else if let status = ActivityFeedPresentation.statusText(for: activity) {
             detailText(status)
         } else {
             LogRatingMarks(
@@ -102,7 +110,23 @@ struct ActivityPostRow: View {
             .lineLimit(1)
     }
 
+    @ViewBuilder
     private var artwork: some View {
+        if let posters = PlanningWords.fanPosters(for: activity) {
+            // A day of several Planning adds fans out its titles, as a series card does.
+            PosterFan(
+                urls: posters,
+                title: PlanningWords.headline(for: activity),
+                slot: Self.artwork,
+                mediaType: activity.media?.ref.mediaType
+            )
+            .frame(width: Self.artwork.size.width, height: Self.artwork.size.height, alignment: .top)
+        } else {
+            singleArtwork
+        }
+    }
+
+    private var singleArtwork: some View {
         MediaArtwork(
             url: activity.media?.displayPosterURL,
             title: activity.media?.title ?? "",

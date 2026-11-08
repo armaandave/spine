@@ -602,12 +602,15 @@ def _save_place(user, item, place, progressed_on, *, mutation_id=None):
         # A retry after a lost answer: that save's log screen still opens (MC-100).
         row.opens_log = True
         return row
-    day = _sent_day(user, progressed_on or _today(user))
+    # The save's day is the one sent (the date picker), and the row keeps it (AC-2).
+    saved_on = day = _sent_day(user, progressed_on or _today(user))
     if day == _today(user):
         # Never refused: after a flight west today can be before the start or last save.
         day = max(filter(None, (day, attempt.start_date, attempt.progressed_on)))
     elif attempt.start_date and day < attempt.start_date:
         raise ValidationError("Progress updates can't be before the attempt's start date.")
+    elif attempt.progressed_on and day < attempt.progressed_on:
+        raise ValidationError("Pick a day on or after your last update.")
     previous = _attempt_progress(attempt, row.item)
     attempt.place = place
     attempt.progressed_on = day
@@ -621,7 +624,7 @@ def _save_place(user, item, place, progressed_on, *, mutation_id=None):
     _set_row_from_attempt(row, attempt)
     current = _attempt_progress(attempt, row.item)
     if previous != current:
-        _record_progress_change(user, item, previous, current)
+        _record_progress_change(user, item, previous, current, saved_on)
     row.opens_log = opens_log
     return row
 
@@ -1701,7 +1704,7 @@ def new_issue_out(item, *, start_date=None, previous_total=None):
 # Activity
 
 
-def _record_progress_change(user, item, previous, current):
+def _record_progress_change(user, item, previous, current, saved_on):
     from social.models import Activity
 
     change = ProgressChange.objects.create(
@@ -1709,7 +1712,7 @@ def _record_progress_change(user, item, previous, current):
         item=item,
         previous_progress=previous,
         current_progress=current,
-        saved_on=_today(user),
+        saved_on=saved_on,
     )
     Activity.objects.create(
         actor=user,
@@ -1772,6 +1775,7 @@ def _journey_payload(row, attempt, completed):
         "origin": attempt.origin,
         "start_date": _date_string(attempt.start_date),
         "end_date": _date_string(attempt.end_date),
+        "progressed_on": _date_string(attempt.progressed_on),
         "progress": _attempt_progress(attempt, row.item),
         "completion_diary_entry_id": attempt.completion_diary_entry_id,
         "is_reread": _is_reread(row, attempt, completed),

@@ -174,6 +174,8 @@ struct HomeView: View {
     @State private var selectedEpisodes: MediaBrowsingContext?
     @State private var selectedPerson: PersonRef?
     @State private var selectedPost: ActivityPostSelection?
+    /// A day of Planning adds, open on its titles.
+    @State private var selectedPlanning: ActivityItem?
     @State private var scrollPosition = HomeScrollPosition()
 
     private let mediaRepository: MediaRepository
@@ -361,12 +363,31 @@ struct HomeView: View {
             }
             .inProgressUpdatePresentations(
                 viewModel.progressUpdates,
-                screenOpenedOther: selectedRef != nil || selectedPerson != nil || selectedPost != nil,
+                screenOpenedOther: selectedRef != nil || selectedPerson != nil || selectedPost != nil || selectedPlanning != nil,
                 trackingRepository: trackingRepository,
                 diaryRepository: diaryRepository,
                 onUnauthorized: onUnauthorized
             ) { ref in
                 selectedRef = ref
+            }
+            .fullScreenCover(item: $selectedPlanning, onDismiss: { selectedPlanning = nil }) { activity in
+                if let planning = activity.planning {
+                    NavigationStack {
+                        PlanningTitlesView(
+                            activity: activity,
+                            planning: planning,
+                            activityRepository: activityRepository,
+                            diaryRepository: diaryRepository,
+                            mediaRepository: mediaRepository,
+                            trackingRepository: trackingRepository,
+                            currentUserId: currentUserId,
+                            selectedTab: selectedTab,
+                            onSelectTab: onSelectTab,
+                            onUnauthorized: onUnauthorized,
+                            onClose: { selectedPlanning = nil }
+                        )
+                    }
+                }
             }
             .fullScreenCover(item: $selectedPost, onDismiss: { selectedPost = nil }) { selection in
                 switch selection.post {
@@ -593,6 +614,8 @@ struct HomeView: View {
             selectedPost = ActivityPostSelection(post: .log(id))
         case let .progress(id):
             selectedPost = ActivityPostSelection(post: .progress(id))
+        case .planning:
+            selectedPlanning = activity
         case let .person(ref):
             selectedPerson = ref
         case let .media(ref):

@@ -302,6 +302,8 @@ struct GameProgressSheet: View {
     @State private var isClosing = false
     @State private var error: String?
     @State private var pending: PendingAction?
+    /// The day this save is on, today until the date row says otherwise.
+    @State private var date = Date()
 
     init(title: String, ref: MediaRef, playthrough: GamePlaythroughState,
          onSave: @escaping (GamePlaythroughWriteRequest) async -> Bool, onAction: @escaping (String) -> Void,
@@ -355,6 +357,7 @@ struct GameProgressSheet: View {
             finishTitle: playthrough.isUnfinished ? "Finished Playing" : nil,
             canSave: (newHours != nil || newPercent != nil) && validation == nil && !isClosing,
             isSaving: saving,
+            date: $date,
             onSave: save,
             onFinish: { finish() }
         ) {
@@ -400,7 +403,7 @@ struct GameProgressSheet: View {
 
     private func save() {
         guard validation == nil else { return }
-        var request = GamePlaythroughWriteRequest(progressedOn: CalendarDateCodec.string(from: Date()))
+        var request = GamePlaythroughWriteRequest(progressedOn: CalendarDateCodec.string(from: date))
         if let newHours {
             request.totalMinutes = newHours * 60
             request.includesMinutes = true

@@ -7,7 +7,7 @@ so a list adds up to the number that opened it and a fixed typo fixes the old ro
 
 ## AC-1: Activity is logs, each day's progress and status moves
 
-Three things are activity:
+These are activity:
 
 - **A diary log.** Imported logs are activity like any other log.
 - **A day's progress on a title.** All of a person's progress on one title in one
@@ -25,6 +25,14 @@ Three things are activity:
   again after finishing or dropping is, and says only "started" (decision 44 for a game:
   a new playthrough). Carrying on with a finished manga or comic isn't (Keep Reading, or a
   comic's new issue: MC-200, MC-202).
+- **Adding titles to Planning** (Phase 5): a person's day of adds is one row,
+  "Added 3 shows to Planning" (AC-8). It is recorded when a request from the person
+  says Planning and the title wasn't in Planning before: the app, the website and the
+  API (`social.ProgressChange` kind `planning`, `saved_on` the owner's calendar day).
+  An import never records one, even a watchlist that puts titles in Planning (SW-500),
+  and neither does a webhook or a job. Leaving Planning and coming back is a second
+  add. Heart, stars or a note that make a Planning row as a side effect aren't an add.
+  A Planning row adds nothing to any Stats number and isn't an active day.
 
 Nothing else is activity: not rating a title without a log, not marking something
 watched, read, played, or completed without a log (the eye, a heart, stars, Mark
@@ -51,8 +59,15 @@ hearts, follows, or adding to a list.
   row, and so does a reread, which opens over a finished read: deleting that log later
   can't change where it began. A pick-up with nothing before it to carry on from, a
   deleted attempt or an imported place, still isn't a start.
+- A title added to Planning is recorded the same way (AC-1), as a step of kind `planning`
+  with value 0 in previous and current, written by `ProgressChange.record_planning` from
+  the request that adds it. It is never a title's latest progress and no number reads it.
 - The day is the phone's date when the progress was saved, stored as `saved_on`, and it
-  never moves with the time zone of whoever reads it. A row from before that column
+  never moves with the time zone of whoever reads it. A save sent with a date (the date
+  picker, on books, manga, comics and games) is on that day, under BK-306's rules: a day
+  before the start is refused, a day after today too, and the fold reads saves in the
+  order they were made, so a save dated earlier than an earlier-made one adds its rise
+  on its own day. A row from before that column
   reads its moment on the server's zone.
 - Anime keeps its own rules (docs/anime-tracking-contract.md, AN-703): only ticks move
   its progress steps, and choosing Watching, a tick that puts it in Watching or starting
@@ -97,7 +112,8 @@ import is a row on its real date, so an old play sits in the past, not on top.
 - You see all of your own activity.
 - Others see your public logs, and followers-only logs if they follow you. Movie,
   album, book, and game logs are always public.
-- Progress is visible to anyone who can see the profile. A log a viewer can't see adds
+- Progress, and a day of Planning adds (AC-8), are visible to anyone who can see the
+  profile. A log a viewer can't see adds
   nothing and moves nothing for them, on the list, on Home, on post pages and in the
   numbers beside them.
 - A private profile shows nothing to someone who doesn't follow it. A block in
@@ -120,6 +136,73 @@ Wanting to get to a title doesn't count.
 - From three people, the section opens a page listing them all, under a chart of
   the ratings they show.
 
+## AC-8: The Planning row
+
+A person's titles added to Planning in one day (AC-1) are one row: "Added 3 shows to
+Planning", or "Added 6 titles to Planning" across types. Books, manga and comics say
+Planning too, not "To Read".
+
+- **One row per person per day**, on the owner's calendar day. A title added twice that
+  day counts once; leaving Planning and coming back on a later day is a new add on that
+  day. Only titles the server exposes and the person still tracks count: removing a title
+  deletes its Planning rows (AC-2's receiver) and the read checks it again, so the row
+  says 5, then 4 when one is removed.
+- **Its face** is the day's earliest add: that title's poster and name, so the row
+  doesn't change as more are added. On Home with a `media_type`, only that type's titles
+  count.
+- **Visibility** is progress's (AC-5). It has no likes or comments, so `like_count` and
+  `comment_count` are 0, there is no post page (`/api/v1/progress/<id>/` is 404 for its
+  id), and no push (AC-7).
+- **It is no number.** It is not in the calculation (`activity_rows`): no Stats number,
+  no active day, no pile and no row on a list opened from a number sees it. Marks still
+  never make a row.
+- **Only builds that ask get it.** `include=planning` on `/api/v1/feed/` and on
+  `/api/v1/users/<username>/activity/`. Without it both return exactly what they did
+  before, cursors included, because installed builds print an unknown row as "shared
+  activity". On a profile it is also ignored when the request names a number (a type,
+  dates, `counts`): a list always adds up to its number. The profile rail and the profile
+  row's `counts.activity` don't ask.
+- **Opening it:** `GET /api/v1/planning/<object.id>/` returns the titles added that day,
+  oldest add first: `{"actor", "consumed_at", "summary", "count", "results"}`, `results`
+  being media summaries. `media_type` narrows it to the type the row counted. It needs a
+  signed-in viewer who can see the profile, else 404.
+
+## AC-9: Fixing a row and taking one back
+
+On a person's own book, manga, comic or game progress row (decision 52): the page offers
+Edit, and a trash on the newest row only. A TV or anime row has neither (unticking fixes
+TV). They are for a read that is still going, reading or paused: a finished read's pages
+belong to its log, and a stopped read's rows are fixed by reading on. The server says
+what is offered (the post page's `viewer`, below); the app holds no rule of its own.
+
+- **Delete** (`DELETE /api/v1/progress/<id>/`, 204): the owner, or an admin (which writes
+  a `SocialAuditLog` row, `progress_delete`). Anyone else who can see the row gets 403,
+  someone who can't see it 404, a row with nothing to take back 400. It removes that
+  day's saves on the title and puts the place back to where it stood before them (a first
+  save goes back to nothing). The day's start and status moves stay, so a day that
+  started stays as "Started reading". The day's post, likes and comments go when the day
+  has no row left (AC-7). Only the newest row can be deleted: newest means nothing was
+  saved on the read after it, decided when the request arrives, so a save from another
+  device since the page loaded gives 409. Stats move at once (`bump_user`).
+- **Fix an older row** (`PATCH /api/v1/progress/<id>/` with `{"value": N, "unit"?}`;
+  200 with the row's page, or 204 when the fix left the day with no row): the owner only
+  (403 for anyone else, an admin too). The day's last save is rewritten in place, and the
+  next save's "from" with it, so nothing else moves and the place stays: 100, 120, 200
+  with the second fixed to 110 reads 100, 10, 90, still 200 (decision 58). `N` stays
+  between the saves either side (`edit.min` to `edit.max`, inclusive), else 400; equal
+  to the number before empties the day. Whole numbers for pages, counts and minutes; a
+  percent has up to two decimals. `unit` picks which number a game's day edits when it
+  saved both (`edit.unit`).
+- **Edit on the newest row** has no route of its own: the app opens the normal sheet with
+  `edit.value` and `edit.date` and saves the number again with that date. A drop comes
+  off the newest amounts first, which is that row. `PATCH` on it is 400.
+- **What the page says**, in `viewer` of `GET /api/v1/progress/<id>/` and nowhere else
+  (the feed and the lists never carry it), to the owner, and to an admin for
+  `can_delete`: `can_edit`, `can_delete` and `edit`, null when there is no Edit:
+  `{"mode": "save" | "number", "value", "unit", "kind", "date", "min", "max"}`. In `save`
+  mode `min` is null and `max` is the title's length, if it has one.
+- It adds nothing to the calculation: the rows are the saves, read as ever.
+
 ## Wire shape
 
 `/api/v1/users/<username>/activity/` and `/api/v1/feed/` return cursor pages in
@@ -141,6 +224,15 @@ the shape installed apps read. `consumed_at` is the item's calendar day
 - A log's `object` also has `amount`, `unit`, `time_label` and `label`, what the log
   added in the units it was told in with no plus sign ("200 pages", "3 episodes", "2h");
   movie and album logs send no `label`.
+- A day of Planning adds (AC-8), only when asked: `type` is `planning_added`, `id` is
+  negative like a progress day's, `media` is the day's earliest add, and `object` is
+  `{"type": "planning", "id", "summary", "label", "count", "media_type"}`: `summary`
+  "added 3 shows to Planning" (lower case, as the others), `label` null, `count` the
+  titles, `media_type` the one type they share or null. `id` is
+  `(person << 44) | day ordinal`, at or above 2^44, an address with no Item (no Item has
+  id 0), so it can't be a progress day's. `like_count` and `comment_count` are 0.
+- On a progress day's own page (`GET /api/v1/progress/<id>/`) the owner's `viewer` also
+  has `can_edit`, `can_delete` and `edit` (AC-9), and an admin's `can_delete`.
 - Both have `like_count`, `comment_count`, and `viewer.has_liked`. `object.liked` is
   the person's own heart on the title, which is not a like of the post.
 
@@ -170,6 +262,9 @@ log row carries no review text, and its `media` has `show_title` and `episode_ti
   rows (`weeks` lists the same rows as `days`). `episodes` keeps rows with episodes
   told. A plain measure gives every day's row.
 - `view=list` makes a plain request read as a list too.
+- `include=planning` adds the Planning row (AC-8) to a plain list only: it is ignored
+  when the request has a type, dates or `counts`, because a Planning row is no part of
+  any number.
 
 A signed-in viewer of a list with a type, dates or `counts` also gets, beside `results`:
 `top_line`, the number tapped in words ("360 pages", "5 books", "11 active days",
@@ -202,12 +297,17 @@ saved change keeps the lowest change id; any other day (TV, anime, or no change)
   day has a row again. Its likes and comments stay stored. Only a day with no row in the
   viewer-independent view (no log visible, so none moves a row) is deleted with its
   journey, attempt, playthrough or season.
+- A Planning row has no likes or comments (AC-8). Deleting the newest row (AC-9) deletes
+  its post, likes and comments, unless the day still has a row, such as a start.
 - Deleting a journey, attempt, playthrough or season's progress deletes the likes and
   comments of each day it leaves with no progress. Removing a title deletes all of that
   person's progress, likes and comments on it. Neither comes back on a later save that
   day, and each post removed writes a `SocialAuditLog` row.
 
 ## Review status
+
+AC-8, AC-9 and AC-1's Planning adds are provisional until the phone test of Activity's
+fifth phase accepts them.
 
 AC-2's status moves, `began_over` and `saved_on`, and AC-7's
 deletion of the likes and comments a removed journey, season or title leaves behind, are

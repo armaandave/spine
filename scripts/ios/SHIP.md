@@ -145,72 +145,58 @@ Run from the feature worktree unless a step says otherwise.
 Some ships carry a data step or a look that has to run once, around their deploy (Workflow A,
 step 8). Each one says which ship carries it.
 
-### Activity's Phase 4: the Activity screen
+### Activity's Phase 5: the Planning row, the date picker and row editing
 
-Home, a profile's Activity list and a day's post page read the calculation's rows, and the
-profile list takes `media_type`, `start_date`, `end_date` and `counts` for the Stats numbers
-that open it. No migration. **There is a TestFlight build:** the iPhone app changes
+The last phase. A day of titles added to Planning is one row ("Added 3 shows to Planning"),
+a book, manga or comic save can be put on the day it happened (games already could), and
+an older progress row can be fixed and the newest taken back from its own page. No
+migration, no data step. **There is a TestFlight build:** the iPhone app changes
 (`ios/Spine/Spine/`), so Xcode Cloud archives `Spine` after the push. Tag the commit behind
 the build and check "Me" has it (step 9).
 
-**It ships as one ship, after the phone test and two looks at production.** Both are
-read-only and run before "ship this" is asked:
-
-1. **Count 2, through the viewer-independent view.** `docker exec spine python manage.py
-   compare_activity_numbers` prints `count 2 class a` to `d` (posts, likes and comments by
-   class, plan 5.8), classed by the new standing view, so a TV post on a day with a tick and
-   no change row is class a. **Class b must be 0.** A viewer's-day post needs the re-key repair
-   before this ships, with its test first (plan 5.8): stop and bring Armaan the number. Classes
-   c and d need no step here: c has no rows left (the likes were already hidden), d hides
-   until the day has a row again. Report all four. The same run prints `count 3`: the biggest
-   Item and User ids against the limits a TV or anime day's address can name
-   (`item_limit=16777215`, `user_limit=524287`). If either biggest id is past its limit,
-   stop: addresses would collide.
-2. **Home's timing.** The same run's `user N feed:` lines time Home's walk for every account
-   that follows someone (`rows_for` of the people followed, plus the sort and the page). The
-   lines to hold, from plan 5.2: Home and its next page under 1 second, the list and the
-   profile rail under 500 milliseconds, a Stats miss under 1.5 seconds and under 2 times
-   today's. Run the speed gate on a throwaway Postgres 15 first (`activity_stress_pg.sh` in
-   the plan's folder, 4 production-shaped people, `ANALYZE` after seeding, median of 5) and
-   bring Armaan its numbers beside the production lines, before asking "ship this". If it
-   fails, the levers in order are: the `piles=False` fill filter (not built), matching moved
-   viewings once outside the correlated subqueries, a limit pushed into the movie and music
-   adapter, and last a versioned rows cache. Re-time when anyone follows more than 10 people.
-
-The comparison's other lines now read "number->list": the Stats reader's figure, then what the
-list's filter adds up to. They agree by design, so **a line with two different numbers is a
-stop**.
+Nothing in this ship touches production's data when it deploys, so there is no look at
+production first. Adds to Planning from before this ship can't show (nothing recorded
+them), and an import's watchlist never makes one. Installed builds (61 to 71) get exactly
+the pages they got: they don't ask for Planning rows, so they never print one as "shared
+activity".
 
 Its message (Workflow A, step 5) names these, which keep their type and change meaning, and
 which installed builds decode and never show as numbers:
 
-- `id` and `object.id` of a TV or anime day are no change id: they name the person, the show
-  and the day, a number at or above 2^44 (a signed 63-bit `id` when negative). An id from
-  before still opens its day.
-- `object.label` is null on a day with only a status move (paused, stopped, picked back up),
-  and the day is a row now: Home and the profile list show status-only days, and their pages
-  return 200 and take a like (decision 41). Before, they were not shown.
-- A TV day's amount and day come from its viewings, not from the change rows; a log's day on
-  Home is its owner's calendar day, as on their list.
-- A day with no row left for the viewer, because a fix emptied it, is not found (404) on its
-  page, like and comments until it has a row again. Its likes and comments stay stored.
-- A list row has no review text when the request asks for a list (any filter, or `view=list`);
-  Home keeps it.
-- The cursor gains a `title` key; a cursor from before still works.
-- New optional fields only: `amount`, `unit`, `moves`, `percent`, `time_label` on a day;
-  `amount`, `unit`, `time_label`, `label` on a log; `top_line`, `total`, `undated` on a list
-  opened from a number; `range` on the streak rows of Stats' header.
+- A book, manga or comic save sent with `progressed_on` is on that day: its row's day
+  (`saved_on`), so Stats and the Activity list read it there. Before, the date only moved
+  the journey's latest progress and the row stayed on the day it was made. Installed builds
+  never send it for those types, so nothing they do changes. A day before the previous
+  save is refused, as is one before the start (BK-306, decision 66), and the app's calendar
+  starts at the later of the two (`progressed_on`, new and optional on a journey).
+- `viewer` on a progress day's own page (`GET /api/v1/progress/<id>/`) gains `can_edit`,
+  `can_delete` and `edit`, for the owner, and `can_delete` for an admin. The feed and the
+  lists never carry them, and anyone else's page has the two keys it had.
+- `/api/v1/progress/<id>/` answers `PATCH` and `DELETE`, which were 405. `PATCH` is the
+  owner's only (403 for anyone who can see the row, an admin too); `DELETE` is the owner's
+  or an admin's, and an admin's writes a `SocialAuditLog` row (`progress_delete`). 400 for a
+  row with nothing to fix (TV, anime, a read that ended), 409 when the row isn't the newest
+  any more. Deleting calls `bump_user`, so Stats move at once.
+- New optional, only for a request that asks: `include=planning` on `/api/v1/feed/` and a
+  profile's plain `/api/v1/users/<username>/activity/` adds rows with `type`
+  `planning_added` and `object.type` `planning`, with `id` a negative address at or above
+  2^44 that opens no progress page, the titles' names (`object.titles`) and up to three
+  posters (`object.posters`), and `GET /api/v1/planning/<id>/` lists the titles. A
+  list opened from a number ignores it, and the profile row's `counts.activity` and the
+  rail don't ask.
 
-**The phone test comes first.** Serve the branch with `scripts/ios/test-backend.sh use 12`, then
-run `scripts/ios/seed-activity-checkpoint.sh seed-phase-4` (not `seed`) and work through the
-plan's Phase 4 sheet. Its Mac steps are `add-n`, `comment-on-my-row` and the friend's:
-`friend-day-order`, `friend-typo` then `friend-typo-fixed` (like the row between them),
-`friend-save-and-finish`, `friend-pause-stop-pick-up`, `friend-game-stops-then-plays`,
-`friend-ticks` then `friend-late-tick` (open Monday's row, like it and comment between
-them), `friend-import-last-week`, `friend-marks`, `friend-earlier-question` and
-`friend-private-season`. After a Mac step, pull to refresh on Home, Stats and the list.
+**The phone test comes first.** Serve the branch with `scripts/ios/test-backend.sh use 12`,
+then run `scripts/ios/seed-activity-checkpoint.sh seed-phase-5` (not `seed`) and work
+through the plan's Phase 5 sheet. Its Mac steps are `add-two-movies` (the website's Save),
+`letterboxd-watchlist` (print how many it added; it must be above 0),
+`friend-adds-three-movies` and `like-p-row` (a like on book P's Dec 20 row, before the
+trash). After a Mac step, pull to refresh on Home, Stats and the list. Dates on the sheet
+are last year's, so it works on any day, but the seed warns when today isn't in 2026.
 
-Remove this section once Phase 5 has shipped, or replace it with Phase 5's.
+Rolling back is a redeploy: old code ignores a planning row (it is never a latest progress
+change and adds nothing), and a dated save's row keeps its day.
+
+Remove this section once Phase 5 has shipped.
 
 ### The metadata fill, with the ship that adds `src/app/migrations/0091_itemcredit.py`
 

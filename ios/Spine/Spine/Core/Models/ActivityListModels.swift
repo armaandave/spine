@@ -24,6 +24,9 @@ struct ActivityListFilter: Hashable {
     /// The profile's own Activity row: every type, every day.
     static let everything = ActivityListFilter()
 
+    /// A plain list (no type, dates or number) is the one that can hold Planning rows.
+    var asksForPlanning: Bool { self == .everything }
+
     /// The list's request. `view=list` makes even a plain request read as the Diary does, with no review text.
     var queryItems: [URLQueryItem] {
         var items = [URLQueryItem(name: "view", value: "list")]
@@ -116,6 +119,10 @@ enum ActivityListPresentation {
     /// server's words ("Read 40 pages, paused"), a log what it added ("+200 pages"); either ends with its time
     /// ("2h 15m"). No Swift time formatter: the server's `time_label` is the only spelling.
     static func caption(for activity: ActivityItem) -> String? {
+        if activity.planning != nil {
+            // The count is the row's title; the names go under it.
+            return PlanningWords.names(for: activity)
+        }
         let words: String?
         switch activity.post {
         case .progress:
@@ -133,7 +140,7 @@ enum ActivityListPresentation {
     static func monthSections(from items: [ActivityItem]) -> [ActivityMonthSection] {
         var indexes: [String: Int] = [:]
         return items.reduce(into: []) { sections, item in
-            guard item.media != nil, item.post != nil else { return }
+            guard item.media != nil, item.post != nil || item.planning != nil else { return }
             let raw = item.consumedAt ?? item.createdAt
             let id = DiaryDateFormatter.monthID(from: raw) ?? "undated"
             if let index = indexes[id] {

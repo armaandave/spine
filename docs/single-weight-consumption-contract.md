@@ -461,7 +461,8 @@ so standalone rating rows are not shown.
   coming back leaves a film's or album's logs and All Time as they were: the row's date
   is its newest log's, which is already there.
 - An imported diary rating remains attached to its diary entry.
-- Imports do not emit social feed activity.
+- Imports do not emit social feed activity. A watchlist or plan-to-x row puts a title
+  in Planning and records no Planning add (AC-1): only a person's own request does.
 - Your own export coming back in overwrite mode leaves a book's All Time alone, except
   where one row per book can't say it: the pages of a read stopped under a later Read, and
   of an attempt a Restart closed, have no column to come back in, so All Time falls by
