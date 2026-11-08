@@ -338,6 +338,9 @@ struct ProfileBackdropSearchView: View {
     private let save: ((MediaRef, String) async throws -> Void)?
     private let title: String
     private let supportedTypes: [String]
+    /// A button under the search that undoes the pick (Home's "Use Daily Picture"); nil shows none.
+    private let resetTitle: String?
+    private let onReset: (() async -> Void)?
 
     init(
         mediaRepository: MediaRepository,
@@ -354,6 +357,8 @@ struct ProfileBackdropSearchView: View {
         save = nil
         title = "Profile Backdrop"
         supportedTypes = ["movie", "tv", "game"]
+        resetTitle = nil
+        onReset = nil
         _mediaLensStore = State(initialValue: MediaLensStore(
             defaults: UserDefaults(suiteName: "ProfileBackdropSearch") ?? .standard
         ))
@@ -366,6 +371,8 @@ struct ProfileBackdropSearchView: View {
         mediaRepository: MediaRepository,
         currentBackdropURL: String?,
         onUnauthorized: @escaping () -> Void,
+        resetTitle: String? = nil,
+        onReset: (() async -> Void)? = nil,
         save: @escaping (MediaRef, String) async throws -> Void
     ) {
         self.mediaRepository = mediaRepository
@@ -376,6 +383,8 @@ struct ProfileBackdropSearchView: View {
         self.save = save
         self.title = title
         supportedTypes = supportedMediaTypes
+        self.resetTitle = resetTitle
+        self.onReset = onReset
         _mediaLensStore = State(initialValue: MediaLensStore(
             defaults: UserDefaults(suiteName: "HomePictureSearch") ?? .standard
         ))
@@ -391,6 +400,24 @@ struct ProfileBackdropSearchView: View {
             onUnauthorized: onUnauthorized,
             onSelect: { selectedMedia = $0 }
         )
+        .safeAreaInset(edge: .bottom) {
+            if let resetTitle, let onReset {
+                Button(role: .destructive) {
+                    Task {
+                        await onReset()
+                        dismiss()
+                    }
+                } label: {
+                    Text(resetTitle)
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
+        }
         .fullScreenCover(item: $selectedMedia, onDismiss: { selectedMedia = nil }) { media in
             if let save {
                 BackdropPickerView(

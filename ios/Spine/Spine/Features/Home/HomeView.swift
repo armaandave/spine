@@ -607,7 +607,6 @@ struct HomeView: View {
     /// A day of Planning adds, open on its titles.
     @State private var selectedPlanning: ActivityItem?
     /// Only for the project owner: a long press on the picture offers to choose the site-wide one.
-    @State private var isHomePictureMenuPresented = false
     @State private var isHomePicturePickerPresented = false
 
     // The repositories and closures are the session's and the shell's own, so a shell that runs again does not run the
@@ -696,7 +695,7 @@ struct HomeView: View {
                                 .contentShape(Rectangle())
                                 .onLongPressGesture(minimumDuration: 0.5) {
                                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                    isHomePictureMenuPresented = true
+                                    isHomePicturePickerPresented = true
                                 }
                         }
                     }
@@ -809,25 +808,18 @@ struct HomeView: View {
             }
             // The book's and the game's progress sheets light all of today's part, as the tile does.
             .environment(\.progressSheetTodayPart, { [viewModel] ref in viewModel.todayPart(for: ref) })
-            .confirmationDialog("Home Picture", isPresented: $isHomePictureMenuPresented, titleVisibility: .visible) {
-                Button("Choose Home Picture") { isHomePicturePickerPresented = true }
-                if viewModel.topArt.hasSitePick {
-                    Button("Use daily picture", role: .destructive) {
-                        Task {
-                            guard let response = try? await mediaRepository.clearHomePicture() else { return }
-                            viewModel.topArt.applySitePicture(response)
-                        }
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
             .fullScreenCover(isPresented: $isHomePicturePickerPresented) {
                 ProfileBackdropSearchView(
                     title: "Home Picture",
                     supportedMediaTypes: Array(HomeTopArtPick.eligibleTypes).sorted(),
                     mediaRepository: mediaRepository,
                     currentBackdropURL: viewModel.topArt.art?.backdrop.absoluteString,
-                    onUnauthorized: onUnauthorized
+                    onUnauthorized: onUnauthorized,
+                    resetTitle: viewModel.topArt.hasSitePick ? "Use Daily Picture" : nil,
+                    onReset: { [mediaRepository, viewModel] in
+                        guard let response = try? await mediaRepository.clearHomePicture() else { return }
+                        viewModel.topArt.applySitePicture(response)
+                    }
                 ) { ref, url in
                     let response = try await mediaRepository.setHomePicture(ref: ref, backdropURL: url)
                     viewModel.topArt.applySitePicture(response)
