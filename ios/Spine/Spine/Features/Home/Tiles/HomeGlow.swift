@@ -3,19 +3,23 @@ import SwiftUI
 
 /// The colored glow at the top of Home, already blurred and saturated in the image cache, under a black gradient: at
 /// rest In progress's art on the left and Trending's on the right, meeting in the middle; the focused poster's art
-/// while a carousel is open. It is `HomeDesign.Metric.glowHeight` tall, scrolls away with the page, and cross-fades
-/// between them.
+/// while a carousel is open. At rest it ends just above the closed tiles' bottom edge; while a tile is open it is
+/// `HomeDesign.Metric.glowHeight` tall (`HomeGlowModel.height`). It scrolls away with the page and cross-fades
+/// between images.
 ///
 /// Nothing here is live: no blur, saturation, mask or opacity is applied on a frame, and no offscreen pass flattens
 /// the layers. The only per-frame work is the offset in `GlowScrollOffset`.
 struct HomeGlow: View {
     let model: HomeGlowModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var layers = GlowLayers<GlowArt>()
 
     var body: some View {
         let _ = PerfCounters.bump(.glowBody)
         Color.clear
-            .frame(height: HomeDesign.Metric.glowHeight)
+            .frame(height: model.height)
+            // It grows to its full height as a tile opens and back as it closes, with the tile.
+            .animation(TileMotion.frame(reduceMotion: reduceMotion), value: model.focused != nil)
             .overlay(alignment: .top) {
                 ZStack(alignment: .top) {
                     ForEach(layers.aliveLayers, id: \.token) { layer in
@@ -46,6 +50,20 @@ struct HomeGlow: View {
             .onChange(of: model.art, initial: true) { _, art in
                 layers.show(art)
             }
+    }
+}
+
+/// Tells the glow where the tiles start in the page's content, so at rest it ends just above their bottom edge. The
+/// place is read in the content's own space, which does not move as the page scrolls, so scrolling writes nothing.
+struct HomeGlowTilesAnchor: ViewModifier {
+    let glow: HomeGlowModel
+
+    func body(content: Content) -> some View {
+        content.onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.frame(in: .named(HomeGlowModel.contentSpace)).minY.rounded()
+        } action: { top in
+            if glow.tilesTop != top { glow.tilesTop = top }
+        }
     }
 }
 

@@ -39,7 +39,7 @@ struct HomeTop: View {
                 .transition(.opacity)
             case .loading:
                 Group {
-                    HomeTilesSkeletonHost()
+                    HomeTilesSkeletonHost(glow: viewModel.glowModel)
                     friendsRow
                     VStack(spacing: HomeDesign.Metric.cardGap) {
                         ForEach(0 ..< HomeTopSpec.skeletonCards, id: \.self) { _ in
@@ -270,10 +270,13 @@ struct HomeFeedStatus: View {
 
 /// The two tiles as placeholders for the first moments of Home. It measures its own width once.
 private struct HomeTilesSkeletonHost: View {
+    let glow: HomeGlowModel
     @State private var contentWidth = TileGeometry.referenceContentWidth
 
     var body: some View {
         HomeTilesSkeleton(contentWidth: contentWidth)
+            // The placeholders sit where the tiles will, so the glow ends in the same place before and after.
+            .modifier(HomeGlowTilesAnchor(glow: glow))
             .padding(.top, HomeTopSpec.headerToTiles)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.width

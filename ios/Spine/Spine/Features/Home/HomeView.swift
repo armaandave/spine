@@ -601,6 +601,8 @@ struct HomeView: View {
                         HomeFeedRows(model: viewModel.feedModel, onOpen: openCard)
                         HomeFeedFooter(feed: viewModel.feed)
                     }
+                    // Where the tiles sit in here does not change as the page scrolls; the glow ends by them.
+                    .coordinateSpace(.named(HomeGlowModel.contentSpace))
                     .padding(.bottom, 92)
                 }
                 .refreshable {
@@ -611,6 +613,11 @@ struct HomeView: View {
                     min(max(0, geometry.contentOffset.y + geometry.contentInsets.top), Self.scrollCap)
                 } action: { _, offset in
                     glow.scrollOffset = offset
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentInsets.top
+                } action: { _, top in
+                    if glow.contentTopInset != top { glow.contentTopInset = top }
                 }
 
                 HomeStatusBarFade(model: glow)

@@ -193,6 +193,34 @@ final class HomeGlowTests: XCTestCase {
         XCTAssertLessThanOrEqual(bottom, 0)
     }
 
+    // MARK: Height
+
+    func testAtRestTheGlowEndsJustAboveTheClosedTilesAndOpenItIsFull() {
+        // Tiles ending 318 down the screen: the box runs from -6 to 312, black 6 above their bottom edge.
+        XCTAssertEqual(GlowSpec.height(tilesBottom: 318, isOpen: false), 318)
+        XCTAssertEqual(BackdropLayout.topOffset + GlowSpec.height(tilesBottom: 318, isOpen: false), 318 - GlowSpec.restGap)
+        XCTAssertEqual(GlowSpec.height(tilesBottom: 318, isOpen: true), HomeDesign.Metric.glowHeight)
+        // Unmeasured: the estimate. Never shorter than the minimum or taller than the open glow.
+        XCTAssertEqual(GlowSpec.height(tilesBottom: nil, isOpen: false), GlowSpec.height(tilesBottom: 318, isOpen: false))
+        XCTAssertEqual(GlowSpec.height(tilesBottom: 40, isOpen: false), GlowSpec.minimumHeight)
+        XCTAssertEqual(GlowSpec.height(tilesBottom: 900, isOpen: false), HomeDesign.Metric.glowHeight)
+    }
+
+    func testTheModelPutsTheTilesBottomOnScreenFromWhatWasMeasured() {
+        let model = HomeGlowModel()
+        XCTAssertNil(model.tilesBottom)
+        XCTAssertEqual(model.height, GlowSpec.height(tilesBottom: nil, isOpen: false))
+        model.contentTopInset = 62
+        XCTAssertNil(model.tilesBottom, "Both are needed")
+        model.tilesTop = 92
+        XCTAssertEqual(model.tilesBottom, 62 + 92 + TileGeometry.closedHeight)
+        XCTAssertEqual(model.height, GlowSpec.height(tilesBottom: 318, isOpen: false))
+        model.focused = media(id: "open", backdrop: nil, poster: "https://example.com/open.jpg")
+        XCTAssertEqual(model.height, HomeDesign.Metric.glowHeight, "A tile is open")
+        model.scrollOffset = 200
+        XCTAssertEqual(model.tilesBottom, 318, "Scrolling moves nothing that was measured")
+    }
+
     func testTheGlowSpecIsTheDesign() {
         XCTAssertEqual(GlowSpec.imageOpacity, 0.95)
         XCTAssertEqual(GlowSpec.imageWidthRatio, 1.513, accuracy: 0.0005)

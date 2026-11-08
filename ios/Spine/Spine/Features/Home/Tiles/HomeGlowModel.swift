@@ -23,6 +23,23 @@ final class HomeGlowModel {
     /// The image the glow shows for `active`: its backdrop, else its poster.
     var activeURL: URL? { HomeArtworkAtmosphereModel.url(for: active) }
 
+    /// The page's coordinate space: the scrolling content, so a place measured in it does not move as the page scrolls.
+    static let contentSpace = "home.content"
+    /// The scroll view's top inset (the status bar's height), measured: the content starts this far down the screen.
+    var contentTopInset: CGFloat?
+    /// Where the tiles start in the page's content (`contentSpace`), measured.
+    var tilesTop: CGFloat?
+
+    /// The closed tiles' bottom edge on screen with the page at rest, once both are measured.
+    var tilesBottom: CGFloat? {
+        guard let contentTopInset, let tilesTop else { return nil }
+        return contentTopInset + tilesTop + TileGeometry.closedHeight
+    }
+
+    /// How tall the glow is: at rest it ends just above the closed tiles' bottom edge; while a tile is open, the full
+    /// `HomeDesign.Metric.glowHeight`, so the open tile's posters sit in it.
+    var height: CGFloat { GlowSpec.height(tilesBottom: tilesBottom, isOpen: focused != nil) }
+
     /// What the glow draws: the focused poster alone; at rest `idle` and `trending` side by side, or whichever of
     /// them there is when there is one, or both are the same image.
     var art: GlowArt? {
@@ -65,6 +82,22 @@ enum GlowSpec {
     /// height. There is no opacity tied to scroll: nothing to fade, so nothing to flatten.
     static func offset(scroll: CGFloat) -> CGFloat {
         BackdropLayout.topOffset - max(0, scroll)
+    }
+
+    /// At rest the glow is fully black this far above the closed tiles' bottom edge.
+    static let restGap: CGFloat = 6
+    /// Where the closed tiles end on a 393-402 pt phone, until they have been measured.
+    static let estimatedTilesBottom: CGFloat = 318
+    /// The shortest the glow gets, whatever is measured.
+    static let minimumHeight: CGFloat = 200
+
+    /// The glow's height: while a tile is open, `HomeDesign.Metric.glowHeight`; at rest, from its top (at
+    /// `BackdropLayout.topOffset`) to `restGap` above the tiles' bottom edge.
+    static func height(tilesBottom: CGFloat?, isOpen: Bool) -> CGFloat {
+        let full = HomeDesign.Metric.glowHeight
+        guard !isOpen else { return full }
+        let bottom = tilesBottom ?? estimatedTilesBottom
+        return min(full, max(minimumHeight, (bottom - BackdropLayout.topOffset - restGap).rounded()))
     }
 }
 

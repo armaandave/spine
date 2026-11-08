@@ -41,6 +41,7 @@ struct HomeTilesSection: View {
         } action: { width in
             if width > 0 { contentWidth = width }
         }
+        .modifier(HomeGlowTilesAnchor(glow: glow))
         .background {
             TilesSync(model: model, state: state, glow: glow)
         }
