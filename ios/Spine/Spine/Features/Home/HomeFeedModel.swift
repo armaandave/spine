@@ -15,7 +15,9 @@ final class HomeFeedModel {
     let feed: ActivityFeedViewModel
     let planning: FeedPlanningStore
     /// Where each friend stands on a title. A provider that loads something later calls `rebuild()` when it arrives.
-    @ObservationIgnored var standing: FeedStandingProviding
+    @ObservationIgnored var standing: FeedStandingProviding {
+        didSet { standing.setOnChange { [weak self] in self?.rebuild() } }
+    }
     /// Told after the entries were rebuilt because the feed's items changed (not for a Planning day or a standing),
     /// so what else is made from the items (Trending, the glow) can follow.
     @ObservationIgnored var onFeedChange: (() -> Void)?
@@ -43,6 +45,7 @@ final class HomeFeedModel {
             onFeedChange?()
         }
         planning.onChange = { [weak self] in self?.rebuild() }
+        self.standing.setOnChange { [weak self] in self?.rebuild() }
         rebuild()
     }
 

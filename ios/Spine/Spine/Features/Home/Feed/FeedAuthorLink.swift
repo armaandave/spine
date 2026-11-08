@@ -15,11 +15,12 @@ struct FeedAuthorLink: View {
             UserProfileDestination(username: username)
         } label: {
             HStack(spacing: 6) {
-                FeedAvatar(username: username, avatarURL: avatarURL)
+                FeedAvatar(username: username, avatarURL: avatarURL, ink: ink)
                 Text(username)
                     .font(HomeDesign.Text.username)
-                    .foregroundStyle(ink.text)
                     .lineLimit(1)
+                    .feedTextLift(ink)
+                    .foregroundStyle(ink.text)
             }
             .frame(height: Self.height)
             .contentShape(Rectangle())
@@ -36,6 +37,16 @@ struct FeedAvatar: View {
 
     let username: String
     let avatarURL: String?
+    let ink: ArtInk
+
+    /// The ring outside the 20 pt disc (22 pt in all, the author line's height) and the baked shadow under it.
+    private var ringColor: Color {
+        ink == .dark ? Color.white.opacity(0.35) : Color.white.opacity(0.7)
+    }
+
+    private var shadowColor: Color {
+        ink == .dark ? Color.black.opacity(0.45) : Color(red: 40 / 255, green: 30 / 255, blue: 0).opacity(0.30)
+    }
 
     var body: some View {
         SpineAsyncImage(
@@ -52,6 +63,18 @@ struct FeedAvatar: View {
         }
         .frame(width: Self.side, height: Self.side)
         .clipShape(Circle())
+        .background {
+            Circle().inset(by: -0.5).stroke(ringColor, lineWidth: 1)
+        }
+        .background {
+            BakedShadowView(
+                size: CGSize(width: Self.side, height: Self.side),
+                cornerRadius: Self.side / 2,
+                blur: 3,
+                offsetY: 1,
+                tint: shadowColor
+            )
+        }
         .accessibilityHidden(true)
     }
 

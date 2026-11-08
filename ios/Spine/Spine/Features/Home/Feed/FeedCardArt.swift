@@ -200,15 +200,18 @@ nonisolated enum FeedCardStack {
 // MARK: Views
 
 /// A card's poster at (12, 12): one poster, or up to three stacked posters for a Planning day once its titles
-/// have loaded. No shadow; a hairline keeps a dark cover's edge.
+/// have loaded. A single poster is lifted off the glass: a shadow in its own accent color, a small contact shadow, a
+/// soft gloss from the top left and a hairline rim inside and outside. The fan keeps its one hairline.
 struct FeedCardPoster: View {
     let art: FeedCardArtSpec
     let title: String
 
     private static let radius = PosterSlot.feedCard.cornerRadius
+    private typealias Depth = HomeDesign.FeedDepth
 
     var body: some View {
         if art.planningPosterURLs.isEmpty {
+            let size = FeedCardArt.posterSize(isSquare: art.isSquare)
             MediaArtwork(
                 url: art.posterURL,
                 title: title,
@@ -216,12 +219,67 @@ struct FeedCardPoster: View {
                 mediaType: nil,
                 orientation: FeedCardArt.orientation(isSquare: art.isSquare)
             )
-            .overlay { Self.hairline }
+            .overlay { gloss }
+            .overlay {
+                RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(Depth.posterInnerRim), lineWidth: 0.5)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
+                    .stroke(Color.white.opacity(Depth.posterOuterRim), lineWidth: 0.5)
+                    .padding(-0.25)
+            }
+            .background { shadows(size: size) }
             .padding(.leading, HomeDesign.Metric.cardInset)
             .padding(.top, HomeDesign.Metric.cardInset)
         } else {
             fan
         }
+    }
+
+    /// The poster's accent color, raw, or nil without one.
+    private var accent: Color? {
+        ArtHex.rgb(art.accentHex).map { Color(red: $0.red, green: $0.green, blue: $0.blue) }
+    }
+
+    /// Behind the poster: its accent color's shadow (the poster shrunk by 4, offset down and blurred, the CSS
+    /// `0 5px 9px -4px`), then the contact shadow right under its edge. Both are baked bitmaps.
+    private func shadows(size: CGSize) -> some View {
+        ZStack {
+            if let accent {
+                BakedShadowView(
+                    size: CGSize(
+                        width: size.width - 2 * Depth.posterShadowInset,
+                        height: size.height - 2 * Depth.posterShadowInset
+                    ),
+                    cornerRadius: max(2, Self.radius - Depth.posterShadowInset),
+                    blur: Depth.posterShadowBlur,
+                    offsetY: Depth.posterShadowOffsetY,
+                    tint: accent.opacity(Depth.posterShadowOpacity)
+                )
+            }
+            BakedShadowView(
+                size: size,
+                cornerRadius: Self.radius,
+                blur: Depth.posterContactBlur,
+                opacity: Depth.posterContactOpacity,
+                offsetY: Depth.posterContactOffsetY
+            )
+        }
+    }
+
+    /// A white sheen down the poster's 160-degree line, gone by 40 % of the way.
+    private var gloss: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .white.opacity(Depth.posterGlossTop), location: 0),
+                .init(color: .white.opacity(0), location: 0.4),
+            ],
+            startPoint: art.isSquare ? UnitPoint(x: 0.28, y: -0.10) : UnitPoint(x: 0.2, y: -0.05),
+            endPoint: art.isSquare ? UnitPoint(x: 0.72, y: 1.10) : UnitPoint(x: 0.8, y: 1.05)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .allowsHitTesting(false)
     }
 
     /// Back to front: the last poster is drawn first, so the first is on top.

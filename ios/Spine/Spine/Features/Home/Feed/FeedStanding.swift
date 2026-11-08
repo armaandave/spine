@@ -30,9 +30,19 @@ protocol FeedStandingProviding {
     func standing(for item: ActivityItem, isNewestOfTitle: Bool) -> FeedStanding?
     /// Called with the items about to be shown so a provider can start whatever it loads lazily.
     func prepare(for items: [ActivityItem])
+    /// The feed was loaded again (the first load, a pull to refresh): refresh whatever is wanted.
+    func reload(for items: [ActivityItem])
+    /// Told after new standings landed, so Home rebuilds its entries.
+    func setOnChange(_ onChange: (() -> Void)?)
 }
 
-/// No standings: cards show no meter and no "where". The default until the friend-standings work fills it.
+extension FeedStandingProviding {
+    func reload(for items: [ActivityItem]) { prepare(for: items) }
+    func setOnChange(_ onChange: (() -> Void)?) {}
+}
+
+/// No standings: cards show no meter and no "where". The default for a view model built to test the rail or the feed;
+/// Home itself plugs in `FriendStandings`.
 struct NoFeedStanding: FeedStandingProviding {
     func standing(for item: ActivityItem, isNewestOfTitle: Bool) -> FeedStanding? { nil }
     func prepare(for items: [ActivityItem]) {}

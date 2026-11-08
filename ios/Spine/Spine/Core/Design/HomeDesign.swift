@@ -30,7 +30,6 @@ nonisolated enum HomeDesign {
         static let meterBottom: CGFloat = 15
         /// A window meter's series line ends this far above the card's bottom.
         static let meterLineBottom: CGFloat = 17
-        static let countsBottom: CGFloat = 12
         static let dayHeaderTop: CGFloat = 20
         static let dayHeaderBottom: CGFloat = 10
 

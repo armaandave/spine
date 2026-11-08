@@ -88,6 +88,17 @@ final class HomeSourceGuardrailTests: XCTestCase {
         }
     }
 
+    func testFeedRowsUseNoLiveShadowExceptTheLightHaloAndTheBakedMarks() throws {
+        // A live shadow is an offscreen pass per row. The text lift's light halo is the one in a row that repeats
+        // (a few texts of the minority of cards on light art); the marks' glow is drawn once into a bitmap.
+        var uses: [String] = []
+        for file in try swiftFiles(in: "Features/Home/Feed") {
+            let text = code(try String(contentsOf: file, encoding: .utf8))
+            if text.contains(".shadow(") { uses.append(file.lastPathComponent) }
+        }
+        XCTAssertEqual(uses.sorted(), ["FeedMarkImages.swift", "FeedTextLift.swift"])
+    }
+
     func testTheOnlyGlassInTheTilesIsTheCloseButton() throws {
         var uses: [String] = []
         for file in try swiftFiles(in: "Features/Home/Tiles") + swiftFiles(in: "Features/Home/Feed") {
