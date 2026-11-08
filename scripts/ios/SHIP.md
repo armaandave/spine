@@ -56,8 +56,9 @@ Run from the feature worktree unless a step says otherwise.
    - `git fetch origin`, then `scripts/ios/feature-status.sh`. Merge
    `origin/myapp-main` into the branch if it has moved, and resolve conflicts.
 2. **Verify.**
-   - Run `scripts/check.sh` (the same checks as CI's Fast checks) and fix anything it
-     reports. Building only ran the tests for the changed area.
+   - Don't run `scripts/check.sh` here: the ship line (step 6) runs it on the merged
+     result, the feature's one full-suite run. Building only ran the tests for the
+     changed area.
    - If iOS changed, build it on the machine `scripts/ios/machine.sh` names: HomeMac's
      `ios` queue (`ios/AGENTS.md`) or the laptop (`LAPTOP.md`). Run the full `SpineTests`
      only if tested logic changed (models, decoding, view models, presentation helpers);

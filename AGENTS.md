@@ -63,7 +63,7 @@ Primary checks before handing off non-trivial changes:
 1. While building, run only the tests for the area you changed:
    - `cd src && uv run --locked python manage.py test <app_or_test_path>`
    - plus `uv run --locked ruff check src` and, if models changed, `makemigrations --check --dry-run`.
-2. The full suite (`scripts/check.sh`, the same as CI's Fast checks) runs once, when shipping (`scripts/ios/SHIP.md`), not after every change. CI runs it again before anything deploys.
+2. The full suite (`scripts/check.sh`, the same as CI's Fast checks) runs once per feature, inside the ship line (`scripts/ship-merge.sh`, `scripts/ios/SHIP.md`), not after every change. CI runs it again before anything deploys.
 3. For template/HTMX changes, verify:
    - Full-page load
    - Partial fragment response
