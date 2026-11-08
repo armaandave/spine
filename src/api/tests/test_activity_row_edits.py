@@ -246,7 +246,7 @@ class DeleteTests(RowEditBase):
         self.assertEqual(_place_book(item), 150)
 
     def test_a_save_dated_earlier_but_made_last_is_the_newest(self):
-        # Only games still take an earlier-dated save (decision 66 stops it for books, manga and comics).
+        # Only games still take an earlier-dated save (decision 66 stops the rest).
         family = FAMILIES["game"]
         item = self.sheet(family, ((200, DEC_27), (250, DEC_20)))
         rows = self.rows(item)
