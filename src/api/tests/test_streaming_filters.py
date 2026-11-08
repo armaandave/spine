@@ -143,7 +143,9 @@ class ServiceFilterTests(TestCase):
             TV(user=cls.user, item=cls.show, status=Status.IN_PROGRESS.value),
             TV(user=cls.user, item=cls.buy_show, status=Status.IN_PROGRESS.value),
         ])
-        Anime.objects.create(user=cls.user, item=cls.anime, status=Status.COMPLETED.value)
+        # A completed anime looks up its episode count; keep that off MyAnimeList.
+        with patch("app.models.providers.services.get_media_metadata", return_value={"max_progress": 12}):
+            Anime.objects.create(user=cls.user, item=cls.anime, status=Status.COMPLETED.value)
 
     def setUp(self):
         cache.clear()

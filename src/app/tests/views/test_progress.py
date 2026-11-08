@@ -17,6 +17,7 @@ from app.models import (
     UserMessage,
     UserMessageLevel,
 )
+from app.tests.anime_fixtures import FakeAnimeProvider
 from app.tests.tv_fixtures import FakeTVProvider
 
 
@@ -165,10 +166,14 @@ class ProgressEditAnime(TestCase):
 
     def test_progress_increase(self):
         """Test the increase of progress for an anime."""
-        with patch(
-            "app.models.providers.services.get_media_metadata",
-            return_value={"max_progress": 26},
+        with (
+            patch(
+                "app.models.providers.services.get_media_metadata",
+                return_value={"max_progress": 26},
+            ),
+            FakeAnimeProvider() as provider,
         ):
+            provider.add("1", title="Cowboy Bebop", total=26)
             self.client.post(
                 reverse(
                     "progress_edit",

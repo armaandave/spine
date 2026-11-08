@@ -1,6 +1,7 @@
 from fakeredis import FakeRedisConnection
 
 from .settings import *  # noqa: F403
+from .test_network import block_outside_connections
 
 CACHES = {
     "default": {
@@ -31,3 +32,6 @@ MUSIC_CATALOG_SOURCE = MUSIC_CATALOG_DEFAULT  # noqa: F405
 # Steam API key for testing
 STEAM_API_KEY = "test_steam_api_key"
 STEAMGRIDDB_API_KEY = "test_steamgriddb_api_key"
+
+# Tests never reach the internet: an unmocked provider call fails at once, naming the host.
+block_outside_connections()
