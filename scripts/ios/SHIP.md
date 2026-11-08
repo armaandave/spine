@@ -48,8 +48,8 @@ Run from the feature worktree unless a step says otherwise.
 1. **Machine first, then status.**
    - Before anything else: if the branch changes the iOS app
      (`git diff --name-only origin/myapp-main... -- ios/Spine`, or uncommitted changes
-     there) and `scripts/ios/machine.sh` prints `unset`, ask Armaan right away "Build on the
-     laptop or on HomeMac?", wait, and save the answer:
+     there) and `scripts/ios/machine.sh` prints `unset`, ask Armaan right away in the question
+     picker ("Build on the laptop or on HomeMac?", `LAPTOP.md` says how), wait, and save the answer:
      `scripts/ios/machine.sh set <laptop|homemac>`. Every iOS build and test below reads
      `scripts/ios/machine.sh`, never memory (`scripts/ios/LAPTOP.md`). Don't ask again later
      in the ship.
