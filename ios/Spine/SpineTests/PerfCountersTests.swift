@@ -53,7 +53,7 @@ final class PerfCountersTests: XCTestCase {
     func testRawNamesAreStable() {
         XCTAssertEqual(
             PerfCounter.allCases.map(\.rawValue),
-            ["homeBody", "feedCardBody", "feedCardAppear", "tilesBody", "glowBody"]
+            ["homeBody", "feedCardBody", "feedCardAppear", "tilesBody", "glowBody", "panelBody"]
         )
     }
 

@@ -3,7 +3,7 @@ import Foundation
 /// The counters the perf gates read. The raw names are written to the probe file and read by
 /// scripts/ios/perf/report.py and the tests, so they must not change.
 enum PerfCounter: String, CaseIterable {
-    case homeBody, feedCardBody, feedCardAppear, tilesBody, glowBody
+    case homeBody, feedCardBody, feedCardAppear, tilesBody, glowBody, panelBody
 }
 
 /// Debug-only view counters for the Home performance gates, so a gate can prove that rows do not re-render

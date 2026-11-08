@@ -2,6 +2,7 @@ import UIKit
 import XCTest
 @testable import Spine
 
+@MainActor
 final class PosterPaletteTests: XCTestCase {
     // MARK: Decoding
 
@@ -222,5 +223,43 @@ final class PosterPaletteTests: XCTestCase {
         XCTAssertNil(unreadable)
         _ = await store.swatches(server: nil, url: url)
         XCTAssertEqual(counter.count, 2, "a failed count is tried again later")
+    }
+
+    // MARK: In the panel's layout
+
+    private let panelTint = MeterTint.make(from: [
+        PosterSwatch(hex: "#C8102E", share: 0.5), PosterSwatch(hex: "#1E90FF", share: 0.4),
+    ])
+
+    private func panelLayout(tint: MeterTint?) -> MorphLayout {
+        let meter = ProgressMeterModel.make(unit: .episodes, from: 6, to: 7, total: 10)
+        return MorphLayout.make(
+            meter: meter, place: .none, accentHex: nil, hasQuick: true, width: 326, tint: tint
+        )
+    }
+
+    func testPanelWithoutAPaletteKeepsItsPlainColors() {
+        let plain = panelLayout(tint: nil)
+        XCTAssertEqual(plain.cells[0].r, 1)
+        XCTAssertEqual(plain.cells[0].a, 0.55, accuracy: 0.0001)
+        XCTAssertEqual(plain.cells[5].a, 0.55, accuracy: 0.0001)
+    }
+
+    func testPanelTicksRunAlongThePostersRampAndTodayIsItsBrightest() throws {
+        let tint = try XCTUnwrap(panelTint)
+        let l = panelLayout(tint: tint)
+        XCTAssertEqual(l.accentR, tint.today.red, accuracy: 0.0001)
+        XCTAssertEqual(l.accentB, tint.today.blue, accuracy: 0.0001)
+        XCTAssertEqual(l.cells[6].r, l.accentR, accuracy: 0.0001, "today's tick is the accent")
+        XCTAssertEqual(l.cells[0].a, 0.8, accuracy: 0.0001)
+        XCTAssertNotEqual(l.cells[0].r, l.cells[5].r, "earlier ticks differ along the ramp")
+        XCTAssertEqual(l.cells[7].a, 0.16, accuracy: 0.0001, "ticks still to come stay the plain track")
+    }
+
+    func testPanelColorsBlendWithTheScroll() throws {
+        let plain = panelLayout(tint: nil)
+        let colored = panelLayout(tint: try XCTUnwrap(panelTint))
+        let mid = MorphLayout.blend(plain, colored, 0.5)
+        XCTAssertEqual(mid.accentR, (plain.accentR + colored.accentR) / 2, accuracy: 0.01)
     }
 }

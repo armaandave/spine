@@ -366,6 +366,28 @@ final class HomePerfTests: XCTestCase {
         }
     }
 
+    // MARK: - f3) Tile: swipe the carousel only, 12 times (redesign only)
+
+    /// The morphing In progress panel follows every frame of a swipe. The tile is opened before the window and closed
+    /// after it, so the counters see swipes alone: the page, the cards and the tiles must not redraw (their deltas are
+    /// 0, report.py asserts it) while the panel does (`panelBody` > 0).
+    @MainActor
+    func testF3_TileSwipeOnly() throws {
+        let app = launchToHome()
+        XCTAssertTrue(tileButton(app).waitForExistence(timeout: 20), "No In progress tile (\(tileIdentifier)).")
+        measure(metrics: [XCTClockMetric()], options: options()) {
+            scrollToTop(app)
+            openTile(app)
+            settle(1.0)
+            begin()
+            // Twelve full-width drags, three at a time, each run in the direction that has room.
+            for _ in 0..<4 { swipeCarousel(app, times: 3) }
+            end()
+            collapseTile(app)
+            settle()
+        }
+    }
+
     // MARK: - f2) Tile: expand, then immediately fast-scroll the page (redesign only)
 
     @MainActor

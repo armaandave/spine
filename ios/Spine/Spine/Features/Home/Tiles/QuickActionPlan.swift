@@ -3,7 +3,7 @@ import Foundation
 /// The one thing the tile's main button does for a title. The plan is a decision, not a write: it says what to ask
 /// the page's model for, and `openSheet` means "do not write; open the progress UI", which every plan that would
 /// reach or pass the end of the title becomes, so finishing always goes through the screens that know how.
-enum QuickActionPlan: Equatable {
+enum QuickActionPlan: Hashable {
     /// Watch the show's or anime's up next episode. `season` is nil for an anime, which has none.
     case tickUpNext(season: Int?, episode: Int)
     /// Add pages to a book read in pages.
@@ -44,6 +44,21 @@ enum QuickActionPlan: Equatable {
             return "+\(count)h"
         case let .openSheet(label):
             return label
+        }
+    }
+
+    /// The words from longest to shortest, for a button that may be too narrow for `label`: the first is `label`
+    /// itself. The last is at most three characters, which a 36 pt circle holds.
+    var labelTiers: [String] {
+        switch self {
+        case .tickUpNext:
+            return [label, "+1 ep", "+1"]
+        case let .addPages(count):
+            return [label, "+\(count) pg", "+\(count)"]
+        case let .addChapters(count, unit):
+            return [label, "+\(count) \(unit == "issue" ? "iss" : "ch")", "+\(count)"]
+        case .addPercent, .addHours, .openSheet:
+            return [label, label, label]
         }
     }
 

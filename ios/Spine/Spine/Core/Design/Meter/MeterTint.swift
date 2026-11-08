@@ -85,6 +85,18 @@ nonisolated struct MeterTint: Equatable, Sendable {
         return ramp[lower].mixed(toward: ramp[lower + 1], by: position - Double(lower)).color
     }
 
+    /// The ramp's color at `fraction` as plain components, for drawing code that works on numbers.
+    func components(at fraction: Double) -> (red: Double, green: Double, blue: Double) {
+        guard ramp.count > 1 else {
+            let only = ramp.first ?? today
+            return (only.red, only.green, only.blue)
+        }
+        let position = min(max(fraction, 0), 1) * Double(ramp.count - 1)
+        let lower = min(Int(position), ramp.count - 2)
+        let mixed = ramp[lower].mixed(toward: ramp[lower + 1], by: position - Double(lower))
+        return (mixed.red, mixed.green, mixed.blue)
+    }
+
     /// The ramp as gradient stops, for the bar's earlier part.
     var gradientColors: [Color] { ramp.map(\.color) }
 

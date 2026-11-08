@@ -21,7 +21,7 @@ struct HomeTilesActions {
 }
 
 /// The panel at the foot of an open tile: the focused title's name and where it stands, its meter, and two buttons.
-/// It reads the focused id here and nowhere above, so swiping redraws this panel and the posters, not the page.
+/// Trending reads the focused id here and nowhere above, so swiping redraws this panel and the posters, not the page.
 struct TileDetailPanel: View {
     let tile: HomeTileID
     let model: HomeTilesModel
@@ -31,15 +31,15 @@ struct TileDetailPanel: View {
     var body: some View {
         switch tile {
         case .inProgress:
-            if let id = state.focusID, let item = model.item(id: id) {
-                InProgressPanel(
-                    item: item,
-                    detail: model.detail(for: item),
-                    busy: model.busyItemIDs.contains(item.id),
-                    actions: actions
-                )
-                .id(item.id)
-            }
+            // One panel for the whole tile: it follows the carousel's scroll and morphs between titles, so it has no
+            // identity per title and never reads the focus here.
+            InProgressMorphPanel(
+                model: model,
+                state: state,
+                actions: actions,
+                quickID: "in-progress.quick",
+                updateID: "in-progress.update"
+            )
         case .trending:
             if let id = state.focusID, let title = model.trendingTitle(id: id) {
                 TrendingPanel(
@@ -50,146 +50,6 @@ struct TileDetailPanel: View {
                 )
                 .id(title.id)
             }
-        }
-    }
-}
-
-// MARK: - In progress
-
-private struct InProgressPanel: View {
-    let item: LibraryItem
-    let detail: TileDetailModel
-    let busy: Bool
-    let actions: HomeTilesActions
-
-    @State private var updateTicks = 0
-    @State private var successTicks = 0
-    @State private var failureTicks = 0
-    @State private var isRunning = false
-    /// The poster's colors: the server's when this payload has them, else the ones counted on the device (shown at
-    /// once when already counted, faded in when they arrive).
-    @State private var swatches: [PosterSwatch]?
-    @Environment(\.colorSchemeContrast) private var contrast
-
-    private var posterURL: URL? {
-        item.media.displayPosterURL.flatMap { URL(string: $0) }
-    }
-
-    init(item: LibraryItem, detail: TileDetailModel, busy: Bool, actions: HomeTilesActions) {
-        self.item = item
-        self.detail = detail
-        self.busy = busy
-        self.actions = actions
-        _swatches = State(initialValue: PosterPaletteStore.shared.known(
-            server: item.media.posterPalette,
-            url: item.media.displayPosterURL.flatMap { URL(string: $0) }
-        ))
-    }
-
-    var body: some View {
-        let accent = ArtAccent.pastel(fromHex: detail.accentHex)
-        VStack(alignment: .leading, spacing: 0) {
-            // Where the title stands now. Today's part is the meter's lit stretch, not a "+6 chapters" that reads as a
-            // random number when the last update was days ago.
-            TilePanelTitleRow(title: detail.title, accessibilityLabel: detail.accessibilityLabel) {
-                if !detail.whereText.isEmpty {
-                    Text(detail.whereText)
-                }
-            }
-            meter(accent: accent)
-                .padding(.top, 16)
-                .frame(height: TileGeometry.panelMeterBlock, alignment: .top)
-            buttons
-                .padding(.top, 12)
-        }
-        .sensoryFeedback(.impact, trigger: updateTicks)
-        .sensoryFeedback(.success, trigger: successTicks)
-        .sensoryFeedback(.error, trigger: failureTicks)
-        .task(id: posterURL) {
-            guard swatches == nil else { return }
-            let found = await PosterPaletteStore.shared.swatches(server: item.media.posterPalette, url: posterURL)
-            guard !Task.isCancelled, let found else { return }
-            swatches = found
-        }
-    }
-
-    // MARK: Meter
-
-    @ViewBuilder
-    private func meter(accent: Color) -> some View {
-        if let model = TileGeometry.panelMeter(detail.meter) {
-            let palette = meterPalette(accent: accent)
-            switch model.kind {
-            case .bar:
-                ProgressMeterView.bar(model: model, palette: palette, height: TileStyle.tickHeight, radius: 4)
-            case .ticks, .window:
-                TilePanelTicks(model: model, palette: palette)
-            }
-        } else {
-            Color.clear.frame(height: TileStyle.tickHeight)
-        }
-    }
-
-    private func meterPalette(accent: Color) -> MeterPalette {
-        var palette = TileStyle.meterPalette(accent: accent)
-        if let swatches {
-            let highContrast = contrast == .increased
-            palette.tint = MeterTint.make(from: swatches, highContrast: highContrast)
-            if highContrast { palette.tintOpacity = 0.95 }
-        }
-        return palette
-    }
-
-    // MARK: Buttons
-
-    /// A plan that only opens the progress UI and a secondary button with the same words would be two buttons for
-    /// one thing: they become one.
-    private var primaryIsRedundant: Bool {
-        if case let .openSheet(label)? = detail.primary { return label == detail.secondaryTitle }
-        return false
-    }
-
-    @ViewBuilder
-    private var buttons: some View {
-        HStack(spacing: 10) {
-            if let primary = detail.primary {
-                TilePillButton(
-                    title: primary.label,
-                    style: .primary,
-                    identifier: primaryIsRedundant ? "in-progress.update" : "in-progress.quick",
-                    isDisabled: busy || isRunning
-                ) {
-                    primaryTapped(primary)
-                }
-            }
-            if !primaryIsRedundant {
-                TilePillButton(
-                    title: detail.secondaryTitle,
-                    style: detail.primary == nil ? .primary : .secondary,
-                    identifier: "in-progress.update",
-                    isDisabled: false
-                ) {
-                    updateTicks += 1
-                    actions.onUpdate(item)
-                }
-            }
-        }
-    }
-
-    private func primaryTapped(_ plan: QuickActionPlan) {
-        guard plan.writes else {
-            updateTicks += 1
-            actions.onUpdate(item)
-            return
-        }
-        guard !isRunning else { return }
-        isRunning = true
-        let item = item
-        let run = actions.onQuickAction
-        Task {
-            let saved = await run(item)
-            if saved { successTicks += 1 } else { failureTicks += 1 }
-            isRunning = false
         }
     }
 }
@@ -334,49 +194,6 @@ private struct TilePanelTitleRow<Aside: View>: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(.isHeader)
-    }
-}
-
-/// Ten-point ticks for a short run of episodes, chapters or issues, or a 20-tick window of a long series with its
-/// left edge fading out. Display only: a tick colors when the number moves, over 0.3 s.
-private struct TilePanelTicks: View, Equatable {
-    let model: ProgressMeterModel
-    let palette: MeterPalette
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    static func == (lhs: TilePanelTicks, rhs: TilePanelTicks) -> Bool {
-        lhs.model == rhs.model && lhs.palette == rhs.palette
-    }
-
-    var body: some View {
-        let count = model.tickCount
-        let fades = isWindow
-        HStack(spacing: TileStyle.tickGap) {
-            ForEach(0 ..< count, id: \.self) { index in
-                RoundedRectangle(cornerRadius: TileStyle.tickRadius, style: .continuous)
-                    .fill(color(for: model.tickState(at: index), index: index, count: count))
-                    .opacity(fades ? TileGeometry.windowFade(index: index, count: count) : 1)
-            }
-        }
-        .frame(height: TileStyle.tickHeight)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: model)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: palette)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(model.accessibilityLabel)
-        .accessibilityAddTraits(.isImage)
-    }
-
-    private var isWindow: Bool {
-        if case .window = model.kind { true } else { false }
-    }
-
-    private func color(for state: MeterTickState, index: Int, count: Int) -> Color {
-        switch state {
-        case .before: palette.beforeColor(index: index, count: count)
-        case .today: palette.todayColor
-        case .rest: palette.rest
-        }
     }
 }
 

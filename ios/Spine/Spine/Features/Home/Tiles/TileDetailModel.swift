@@ -44,15 +44,39 @@ struct TileSeason: Equatable {
     }
 }
 
+/// Where a title stands, in the parts the panel draws separately: the number that rolls, the words around it.
+/// `text` is the one-line string the panel used before it had parts, so nothing drifts between the two.
+nonisolated struct TilePlace: Hashable {
+    /// "S2 \u{00B7} ", "p. ", "", or the whole text when `value` is nil ("Season 2", "14h", "2h 30m").
+    var prefix: String
+    /// The rolling number; nil for a text-only place.
+    var value: Int?
+    /// " of " when `total` is known, else "".
+    var joiner: String
+    var total: Int?
+    /// " episodes", " chapter", ".5%", "%", "".
+    var suffix: String
+
+    static let none = TilePlace(prefix: "", value: nil, joiner: "", total: nil, suffix: "")
+
+    var text: String {
+        var text = prefix
+        if let value { text += InProgressTilePresenter.grouped(value) }
+        text += joiner
+        if let total { text += InProgressTilePresenter.grouped(total) }
+        return text + suffix
+    }
+}
+
 /// Everything the In progress panel shows and decides for one title.
 struct TileDetailModel: Equatable {
     let title: String
     /// "+2 ep", "+20 pages", "+3%", "+1h". Nil when nothing was done today. Not drawn (the meter's lit part shows
     /// today, and a number of days ago reads as random); VoiceOver says it.
     let todayText: String?
-    /// "S2 · 7 of 10 episodes", "p. 212 of 400", "47%", "41 of 90 chapters", "14h": where the title stands now.
-    /// Empty when the title's place is not known.
-    let whereText: String
+    /// "S2 · 7 of 10 episodes", "p. 212 of 400", "47%", "41 of 90 chapters", "14h": where the title stands now, in
+    /// parts. `.none` when the title's place is not known.
+    let place: TilePlace
     /// Nil when there is nothing honest to draw: no known end, or a game counted in hours.
     let meter: ProgressMeterModel?
     /// The poster's accent color; the view falls back to white when the server sent none.
@@ -62,6 +86,9 @@ struct TileDetailModel: Equatable {
     /// "Update" when the title has its own progress UI, else "Open".
     let secondaryTitle: String
     let accessibilityLabel: String
+
+    /// `place` as one line.
+    var whereText: String { place.text }
 }
 
 enum InProgressTilePresenter {
@@ -81,7 +108,7 @@ enum InProgressTilePresenter {
 
         var todayAmount = 0.0
         var meter: ProgressMeterModel?
-        var whereText = ""
+        var place = TilePlace.none
         var spokenWhere = ""
         if let position {
             todayAmount = TileTodayMath.today(
@@ -92,15 +119,15 @@ enum InProgressTilePresenter {
                 total: position.pagesTotal ?? position.total
             )
             if let seasonNumber = currentSeasonNumber(for: item) {
-                let place = seasonPlace(
+                let counted = seasonPlace(
                     number: seasonNumber,
                     season: season,
                     showWatched: wholeNumber(position.current),
                     today: todayAmount
                 )
-                meter = place.meter
-                whereText = place.text
-                spokenWhere = place.spoken
+                meter = counted.meter
+                place = counted.place
+                spokenWhere = counted.spoken
             } else {
                 meter = ProgressMeterModel.make(
                     unit: meterUnit(for: position.unit),
@@ -108,8 +135,9 @@ enum InProgressTilePresenter {
                     to: wholeNumber(position.current),
                     total: position.total.map(wholeNumber)
                 )
-                whereText = placeText(position)
-                spokenWhere = whereText.hasPrefix("p. ") ? "page " + whereText.dropFirst(3) : whereText
+                place = placeParts(position)
+                let text = place.text
+                spokenWhere = text.hasPrefix("p. ") ? "page " + text.dropFirst(3) : text
             }
         }
         let todayText = position.flatMap { text(forToday: todayAmount, unit: $0.unit) }
@@ -117,7 +145,7 @@ enum InProgressTilePresenter {
         return TileDetailModel(
             title: title,
             todayText: todayText,
-            whereText: whereText,
+            place: place,
             meter: meter,
             accentHex: item.media.posterAccentColor,
             primary: QuickActionPlan.make(for: item),
@@ -142,16 +170,19 @@ enum InProgressTilePresenter {
         season: TileSeason?,
         showWatched: Int,
         today: Double
-    ) -> (text: String, spoken: String, meter: ProgressMeterModel?) {
+    ) -> (place: TilePlace, spoken: String, meter: ProgressMeterModel?) {
         let name = "Season \(number)"
-        guard let season, season.seasonNumber == number else { return (name, name, nil) }
+        let unread = TilePlace(prefix: name, value: nil, joiner: "", total: nil, suffix: "")
+        guard let season, season.seasonNumber == number else { return (unread, name, nil) }
         var watched = max(0, season.watched + showWatched - season.showWatchedAtRead)
         if let total = season.total { watched = min(watched, total) }
-        let episodes = counted(watched, of: season.total, noun: "episode")
-        guard !episodes.isEmpty else { return (name, name, nil) }
+        var place = countedPlace(watched, of: season.total, noun: "episode")
+        guard place != .none else { return (unread, name, nil) }
         let lit = min(wholeNumber(today), watched)
         let meter = ProgressMeterModel.make(unit: .episodes, from: watched - lit, to: watched, total: season.total)
-        return ("S\(number) \u{00B7} \(episodes)", "\(name), \(episodes)", meter)
+        let episodes = place.text
+        place.prefix = "S\(number) \u{00B7} "
+        return (place, "\(name), \(episodes)", meter)
     }
 
     /// "5 titles", "1 title".
@@ -248,33 +279,48 @@ enum InProgressTilePresenter {
 
     // MARK: Text
 
-    private static func placeText(_ position: TilePosition) -> String {
+    private static func placeParts(_ position: TilePosition) -> TilePlace {
         let current = wholeNumber(position.current)
         let total = position.total.map(wholeNumber)
         switch position.unit {
         case .episodes:
-            return counted(current, of: total, noun: "episode")
+            return countedPlace(current, of: total, noun: "episode")
         case .chapters:
-            return counted(current, of: total, noun: "chapter")
+            return countedPlace(current, of: total, noun: "chapter")
         case .issues:
-            return counted(current, of: total, noun: "issue")
+            return countedPlace(current, of: total, noun: "issue")
         case .pages:
-            guard current > 0 || total != nil else { return "" }
-            return total.map { "p. \(grouped(current)) of \(grouped($0))" } ?? "p. \(grouped(current))"
+            guard current > 0 || total != nil else { return .none }
+            return TilePlace(
+                prefix: "p. ", value: current, joiner: total == nil ? "" : " of ", total: total, suffix: ""
+            )
         case .percent:
-            return "\(number(position.current))%"
+            // Only the whole part rolls; the decimals ride in the suffix.
+            let text = number(position.current)
+            let parts = text.split(separator: ".", maxSplits: 1)
+            let decimals = parts.count > 1 ? "." + parts[1] : ""
+            return TilePlace(
+                prefix: "", value: Int(parts[0]) ?? 0, joiner: "", total: nil, suffix: decimals + "%"
+            )
         case .minutes:
-            return position.current > 0 ? GameProgressValues.timeLabel(current) : ""
+            guard position.current > 0 else { return .none }
+            return TilePlace(
+                prefix: GameProgressValues.timeLabel(current), value: nil, joiner: "", total: nil, suffix: ""
+            )
         }
     }
 
-    /// "9 of 62 episodes", or "7 episodes" when the end is not known. Nothing for nothing yet.
-    private static func counted(_ current: Int, of total: Int?, noun: String) -> String {
+    /// "9 of 62 episodes", or "7 episodes" when the end is not known, in parts. Nothing for nothing yet.
+    private static func countedPlace(_ current: Int, of total: Int?, noun: String) -> TilePlace {
         if let total {
-            return "\(grouped(current)) of \(grouped(total)) \(total == 1 ? noun : noun + "s")"
+            return TilePlace(
+                prefix: "", value: current, joiner: " of ", total: total, suffix: " " + (total == 1 ? noun : noun + "s")
+            )
         }
-        guard current > 0 else { return "" }
-        return "\(grouped(current)) \(current == 1 ? noun : noun + "s")"
+        guard current > 0 else { return .none }
+        return TilePlace(
+            prefix: "", value: current, joiner: "", total: nil, suffix: " " + (current == 1 ? noun : noun + "s")
+        )
     }
 
     private static func text(forToday amount: Double, unit: TodayUnit) -> String? {
@@ -313,7 +359,7 @@ enum InProgressTilePresenter {
     }
 
     /// "212", or "1,089": the grouping the page shows.
-    static func grouped(_ value: Int) -> String {
+    nonisolated static func grouped(_ value: Int) -> String {
         let digits = Array(String(abs(value)))
         var result = ""
         for (index, digit) in digits.enumerated() {
