@@ -238,6 +238,10 @@ Implementation notes:
 
 No XCTest required for every change; required for non-trivial decoding/network logic.
 
+- **When to run them:** only when a change touches tested logic (models, decoding, view models, presentation helpers). While iterating, run just the affected classes (`-only-testing:SpineTests/<Class>`). The full `SpineTests` run happens once, at ship.
+- **View-only changes** (layout, styling, wording) get no new tests and no test run: build the app and check it on the phone or simulator.
+- Don't write tests that read source files as text or assert exact on-screen wording.
+
 Run them under the cleanup wrapper, in the `ios` queue (heavy iOS work on this Mac takes turns, one at a time), on a scratch simulator it creates and deletes afterwards (the stock "iPhone 17" simulator on this Mac can wedge on boot, and never borrow another session's). Run it in the background: it may wait for its turn first.
 
 ```sh
