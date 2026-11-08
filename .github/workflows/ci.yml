@@ -77,7 +77,11 @@ jobs:
         with:
           python-version: "3.12"
       # Tests don't need crash safety: skip waiting for the disk on every commit. Test-only
-      # settings for this throwaway server, not production's.
+      # settings for this throwaway server, not production's. Autovacuum off too: halfway
+      # through a run it gathered table statistics from earlier tests' data, and with them
+      # Postgres planned one TV Activity query so badly that a test taking 5 seconds on its
+      # own ran past 20 minutes (ManyMovedTests, 2026-11-08). Without them every test gets
+      # the same plan it gets alone.
       - name: Make Postgres fast for tests
         env:
           PGPASSWORD: spine-ci
@@ -86,8 +90,9 @@ jobs:
             -c "ALTER SYSTEM SET fsync = off" \
             -c "ALTER SYSTEM SET synchronous_commit = off" \
             -c "ALTER SYSTEM SET full_page_writes = off" \
+            -c "ALTER SYSTEM SET autovacuum = off" \
             -c "SELECT pg_reload_conf()"
-          psql -h 127.0.0.1 -U spine -d spine -Atc "SHOW fsync; SHOW synchronous_commit; SHOW full_page_writes"
+          psql -h 127.0.0.1 -U spine -d spine -Atc "SHOW fsync; SHOW synchronous_commit; SHOW full_page_writes; SHOW autovacuum"
       # What every deploy does when the new container starts (entrypoint.sh).
       - name: Apply every migration to an empty database
         run: uv run --locked python manage.py migrate --noinput

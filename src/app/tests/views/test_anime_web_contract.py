@@ -263,6 +263,9 @@ class AnimeHistoryPageTests(AnimeTestCase):
 
     def timeline(self, item):
         url = reverse("history_modal", kwargs={"source": item.source, "media_type": "anime", "media_id": item.media_id})
+        # Log in on the clock the request reads: a session made on the fixed start day
+        # expires 14 days later by the real clock (it did on 2026-11-08).
+        self.client.force_login(self.user)
         response = self.client.get(f"{url}?return_url=/home")
         self.assertEqual(response.status_code, 200)
         return response.context["timeline"]
