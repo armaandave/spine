@@ -150,4 +150,12 @@ nonisolated struct MeterTint: Equatable, Sendable {
         let today = brightest.mixed(toward: .white, by: highContrast ? 0.6 : 0.4)
         return MeterTint(ramp: ramp, today: today)
     }
+
+    /// The tint a title draws: the server's palette when it gives colors worth drawing, else the colors counted on
+    /// this device. A server palette of only black, white and specks is not an answer: the store used to hand it back
+    /// as the title's palette, so the poster was never counted and the meter stayed plain for good.
+    static func choose(server: [PosterSwatch]?, counted: [PosterSwatch]?, highContrast: Bool = false) -> MeterTint? {
+        if let server, let tint = make(from: server, highContrast: highContrast) { return tint }
+        return counted.flatMap { make(from: $0, highContrast: highContrast) }
+    }
 }

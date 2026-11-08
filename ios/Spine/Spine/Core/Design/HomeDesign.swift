@@ -133,16 +133,36 @@ nonisolated enum HomeDesign {
 
         static let openStaggerMs = 45
 
-        // Closing a tile: the focused poster zooms into the fan's front place over `tileHeightDuration`, its two
-        // neighbors follow a beat later, and every other poster fades out quickly.
-        static let closeNeighborDelay = 0.1
-        static let closeNeighborDuration = 0.5
-        static let closeRestDuration = 0.4
-        static let closeFadeDuration = 0.18
+        /// The design's cubic-bezier(.25, 1, .35, 1) is front-loaded: nearly all of a poster's flight happens in the
+        /// first quarter of its time, which is why the old close read as a whip. The close uses this gentler curve
+        /// instead: it still settles without overshoot (no control point leaves 0...1) but spreads the travel over
+        /// the whole duration, so each poster's path is easy to follow.
+        static let closeCurve = (c1x: 0.33, c1y: 0.55, c2x: 0.2, c2y: 1.0)
+
+        // Closing a tile runs about 1.4 times as long as opening it. Everything that moves does so on `closeCurve`
+        // and together: the tile's frame, the page below it, the front poster and its two neighbors share one
+        // duration and start at the same moment (no stagger), so they travel in step.
+        static let closeFrameDuration = 0.86
+        /// The other tile coming back in: its slide and shrink (0.5 s on the open) and its fade (0.32 s).
+        static let closeSlideDuration = 0.7
+        static let closeTileFadeDuration = 0.45
+        /// The blurred art fading back in (0.5 s on the open).
+        static let closeArtDuration = 0.7
+        static let closeNeighborDelay = 0.0
+        static let closeNeighborDuration = 0.86
+        /// The posters that end hidden behind the front one draw in while they fade.
+        static let closeRestDuration = 0.6
+        static let closeFadeDuration = 0.3
 
         static func soft(duration: Double, reduceMotion: Bool) -> Animation {
             guard !reduceMotion else { return reduced }
             return .timingCurve(softCurve.c1x, softCurve.c1y, softCurve.c2x, softCurve.c2y, duration: duration)
+        }
+
+        /// A tile closing: `closeCurve` over `duration`.
+        static func closing(duration: Double, reduceMotion: Bool) -> Animation {
+            guard !reduceMotion else { return reduced }
+            return .timingCurve(closeCurve.c1x, closeCurve.c1y, closeCurve.c2x, closeCurve.c2y, duration: duration)
         }
 
         static func tileHeight(reduceMotion: Bool) -> Animation {

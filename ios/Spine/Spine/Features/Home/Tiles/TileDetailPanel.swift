@@ -10,7 +10,7 @@ struct HomeTilesActions {
     /// success or the error haptic. A plan that would reach the end of the title never gets here: the section opens
     /// the progress UI for it through `onUpdate`.
     var onQuickAction: (LibraryItem) async -> Bool = { _ in true }
-    /// A poster in the Trending carousel was tapped, or the rail's Open or the faces: the title's page.
+    /// A poster in the Trending carousel was tapped, or the rail's Open: the title's page. (A face opens that person's profile by its own link.)
     var onOpenTrending: (TrendingTitle) -> Void = { _ in }
     /// A Trending rail tap that needs the title's own screen (a log composer, a sheet): the page opens and finishes it.
     var onRailHandoff: (TrendingTitle, RailHandoff) -> Void = { _, _ in }

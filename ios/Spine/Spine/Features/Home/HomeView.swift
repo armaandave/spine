@@ -177,14 +177,16 @@ final class HomeViewModel {
         // Friends' standings (the meter and the "where" on their progress cards) come from their lists. A view model
         // built to test the rail or the feed keeps none.
         if loadsTileExtras {
-            feedModel.standing = FriendStandings(trackingRepository: trackingRepository, onUnauthorized: onUnauthorized)
+            feedModel.standing = FriendStandings(
+                trackingRepository: trackingRepository, seasonPages: seasonPages, onUnauthorized: onUnauthorized
+            )
         }
     }
 
     // MARK: Loading
 
     func load() async {
-        // The feed's duotone marks are drawn once, before the first card needs one.
+        // The feed's glowing heart and rewatch marks are drawn once, before the first card needs one.
         FeedMarkImages.warm()
         tiles.isLoadingTrending = tiles.trending.isEmpty
         guard await loadProfileAndInProgress() else { return }

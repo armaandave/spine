@@ -3,7 +3,7 @@ import UIKit
 import XCTest
 @testable import Spine
 
-/// The feed card's depth (direction B): its tokens, the marks' geometry and palettes, the baked images, the pills.
+/// The feed card's depth (direction B): its tokens, the marks' geometry and glow, the baked images, the pills.
 @MainActor
 final class FeedDepthTests: XCTestCase {
     private typealias D = HomeDesign.FeedDepth
@@ -13,12 +13,13 @@ final class FeedDepthTests: XCTestCase {
     func testTheTokensAreTheDesignsNumbers() {
         XCTAssertEqual(D.countsPillHeight, 22)
         XCTAssertEqual(D.countsPillHPad, 9)
-        XCTAssertEqual(D.countsPillGap, 8)
-        XCTAssertEqual(D.countsPairGap, 4)
+        XCTAssertEqual(D.countsPillGap, 5)
+        XCTAssertEqual(D.countsPairGap, 3)
         XCTAssertEqual(D.countsIcon, 13)
+        XCTAssertEqual(D.countsRim, 1.1)
         XCTAssertEqual(D.countsTrailing, 10)
         XCTAssertEqual(D.countsBottom, 8)
-        XCTAssertEqual(D.countsReserveBase, 66)
+        XCTAssertEqual(D.countsReserveBase, 61)
         XCTAssertEqual(D.countsReservePerDigit, 8)
 
         XCTAssertEqual(D.statusPillHeight, 19)
@@ -27,10 +28,6 @@ final class FeedDepthTests: XCTestCase {
         XCTAssertEqual(D.statusGap, 4)
         XCTAssertEqual(D.statusDot, 5)
         XCTAssertEqual(D.statusDotMargin, 1)
-
-        XCTAssertEqual(D.heartSize, 18)
-        XCTAssertEqual(D.rewatchSize, 22)
-        XCTAssertEqual(D.markMargin, -1)
 
         XCTAssertEqual(D.posterShadowBlur, 9)
         XCTAssertEqual(D.posterShadowOffsetY, 5)
@@ -57,129 +54,105 @@ final class FeedDepthTests: XCTestCase {
         XCTAssertGreaterThan(leftmost, 0)
     }
 
-    func testTheCountsReserveIs66AndEightACharacter() {
+    func testTheCountsReserveIs61AndEightACharacter() {
         XCTAssertEqual(FeedCountsPill.reserve(for: nil), 0)
         for (likes, comments) in [(0, 0), (12, 3), (1204, 38), (999_999, 999_999)] {
             let engagement = PostEngagement(hasLiked: false, likeCount: likes, commentCount: comments)
             let digits = likes.formatted().count + comments.formatted().count
-            XCTAssertEqual(FeedCountsPill.reserve(for: engagement), 66 + 8 * CGFloat(digits))
+            XCTAssertEqual(FeedCountsPill.reserve(for: engagement), 61 + 8 * CGFloat(digits))
             XCTAssertEqual(FeedCardView.countsReserve(for: engagement), FeedCountsPill.reserve(for: engagement))
         }
     }
 
     // MARK: Marks
 
-    func testTheHeartFillsItsBoxAsDesigned() {
+    func testTheHeartFillsTheWidthOfItsRectAndSitsInTheMiddle() {
         let box = HeartShape().path(in: CGRect(x: 0, y: 0, width: 24, height: 24)).boundingRect
-        XCTAssertEqual(box.minX, 3, accuracy: 0.01)
-        XCTAssertEqual(box.minY, 4.4, accuracy: 0.01)
-        XCTAssertEqual(box.width, 18, accuracy: 0.01)
-        XCTAssertEqual(box.height, 16, accuracy: 0.01)
+        XCTAssertEqual(box.minX, 0, accuracy: 0.01)
+        XCTAssertEqual(box.width, 24, accuracy: 0.01)
+        XCTAssertEqual(box.height, 24 * 16 / 18, accuracy: 0.01, "The board's heart is 18 wide and 16 tall")
+        XCTAssertEqual(box.midY, 12, accuracy: 0.01)
     }
 
-    func testTheRewatchMarkStaysInsideItsBox() {
-        let box = RewatchShape().path(in: CGRect(x: 0, y: 0, width: 24, height: 24)).boundingRect
-        XCTAssertGreaterThanOrEqual(box.minX, 0)
-        XCTAssertGreaterThanOrEqual(box.minY, 0)
-        XCTAssertLessThanOrEqual(box.maxX, 24)
-        XCTAssertLessThanOrEqual(box.maxY, 24)
-        XCTAssertGreaterThan(box.width, 12)
+    func testTheHeartScalesLinearly() {
+        let small = HeartShape().path(in: CGRect(x: 0, y: 0, width: 12, height: 12)).boundingRect
+        let large = HeartShape().path(in: CGRect(x: 0, y: 0, width: 24, height: 24)).boundingRect
+        XCTAssertFalse(small.isEmpty)
+        XCTAssertEqual(large.width, small.width * 2, accuracy: 0.01)
+        XCTAssertEqual(large.height, small.height * 2, accuracy: 0.01)
+        XCTAssertEqual(large.minY, small.minY * 2, accuracy: 0.01)
     }
 
-    func testTheMarksAreNotEmptyAndScaleLinearly() {
-        for mark in [FeedMark.heart, FeedMark.rewatch] {
-            let small = mark.path(in: CGRect(x: 0, y: 0, width: 12, height: 12)).boundingRect
-            let large = mark.path(in: CGRect(x: 0, y: 0, width: 24, height: 24)).boundingRect
-            XCTAssertFalse(small.isEmpty)
-            XCTAssertEqual(large.width, small.width * 2, accuracy: 0.01)
-            XCTAssertEqual(large.height, small.height * 2, accuracy: 0.01)
-            XCTAssertEqual(large.minX, small.minX * 2, accuracy: 0.01)
-            XCTAssertEqual(large.minY, small.minY * 2, accuracy: 0.01)
+    func testTheMarksAreTheSystemSymbolsTheyWereInTheirColors() {
+        XCTAssertEqual(FeedMark.heart.symbolName, "heart.fill")
+        XCTAssertEqual(FeedMark.rewatch.symbolName, "arrow.clockwise")
+        for ink in [ArtInk.dark, ArtInk.light] {
+            XCTAssertEqual(FeedMark.heart.color(for: ink), HomeDesign.Palette.heart)
+            XCTAssertEqual(FeedMark.rewatch.color(for: ink), ink.rewatch)
         }
+        XCTAssertEqual(FeedMark.rewatch.color(for: .dark), HomeDesign.Palette.rewatchGreen)
+        XCTAssertEqual(FeedMark.rewatch.color(for: .light), HomeDesign.Palette.rewatchGreenDeep)
     }
 
-    func testTheHeartsGradientPointsAreTheBoardsSvgDefaults() {
-        let units = MarkGradientUnits.units(for: .heart)
-        XCTAssertEqual(units.center.x, 0.5, accuracy: 0.01)
-        XCTAssertEqual(units.center.y, 0.437, accuracy: 0.01)
-        XCTAssertEqual(units.radiusFraction, 0.465, accuracy: 0.01)
-        XCTAssertEqual(units.lineStart.x, 0.275, accuracy: 0.01)
-        XCTAssertEqual(units.lineStart.y, 0.183, accuracy: 0.01)
-        XCTAssertEqual(units.lineEnd.x, 0.65, accuracy: 0.01)
-        XCTAssertEqual(units.lineEnd.y, 0.85, accuracy: 0.01)
-    }
+    // MARK: Glow
 
-    func testThePalettesAreTheDesignsFourRows() {
-        func close(_ rgb: ArtHex.RGB, _ hex: UInt32, _ label: String, line: UInt = #line) {
-            let tolerance = 1.0 / 255
-            XCTAssertEqual(rgb.red, Double((hex >> 16) & 0xFF) / 255, accuracy: tolerance, label, line: line)
-            XCTAssertEqual(rgb.green, Double((hex >> 8) & 0xFF) / 255, accuracy: tolerance, label, line: line)
-            XCTAssertEqual(rgb.blue, Double(hex & 0xFF) / 255, accuracy: tolerance, label, line: line)
+    func testTheGlowIsStrongerOnDarkArtAndNeverReachesPastItsPadding() {
+        for ink in [ArtInk.dark, ArtInk.light] {
+            let layers = FeedMarkImages.glowLayers(for: ink)
+            XCTAssertEqual(layers.count, 2)
+            for layer in layers {
+                XCTAssertLessThanOrEqual(layer.radius * 2, FeedMarkImages.padding(for: ink), "A glow is never cut")
+            }
         }
-        let heartDark = MarkPalette.palette(for: .heart, ink: .dark)
-        close(heartDark.hi, 0xFFA3B8, "heart dark hi")
-        close(heartDark.mid, 0xFF4F7F, "heart dark mid")
-        close(heartDark.lo, 0xE01E56, "heart dark lo")
-        close(heartDark.glow, 0xFF4C78, "heart dark glow")
-        close(heartDark.deep, 0x6E0028, "heart dark deep")
-        XCTAssertEqual(heartDark.bodyCenterAlpha, 0.52)
-        XCTAssertEqual(heartDark.bodyRimAlpha, 0.16)
-
-        let heartLight = MarkPalette.palette(for: .heart, ink: .light)
-        close(heartLight.hi, 0xFF5F95, "heart light hi")
-        close(heartLight.mid, 0xE0145E, "heart light mid")
-        close(heartLight.lo, 0xA3093F, "heart light lo")
-        close(heartLight.glow, 0xC81450, "heart light glow")
-        close(heartLight.deep, 0x5A001E, "heart light deep")
-        XCTAssertEqual(heartLight.bodyCenterAlpha, 0.62)
-        XCTAssertEqual(heartLight.bodyRimAlpha, 0.30)
-
-        let rewatchDark = MarkPalette.palette(for: .rewatch, ink: .dark)
-        close(rewatchDark.hi, 0xB8FBD0, "rewatch dark hi")
-        close(rewatchDark.mid, 0x34D07A, "rewatch dark mid")
-        close(rewatchDark.lo, 0x0E9E4B, "rewatch dark lo")
-        close(rewatchDark.glow, 0x34D17A, "rewatch dark glow")
-        close(rewatchDark.deep, 0x00461E, "rewatch dark deep")
-
-        let rewatchLight = MarkPalette.palette(for: .rewatch, ink: .light)
-        close(rewatchLight.hi, 0x2DBE72, "rewatch light hi")
-        close(rewatchLight.mid, 0x0C8F47, "rewatch light mid")
-        close(rewatchLight.lo, 0x055E2D, "rewatch light lo")
-        close(rewatchLight.glow, 0x0A823C, "rewatch light glow")
-        close(rewatchLight.deep, 0x003214, "rewatch light deep")
+        XCTAssertGreaterThan(
+            FeedMarkImages.glowLayers(for: .dark).map(\.opacity).max() ?? 0,
+            FeedMarkImages.glowLayers(for: .light).map(\.opacity).max() ?? 0
+        )
     }
 
-    // MARK: Baked marks
-
-    func testABakedMarkIsAnImageOfItsSizeAndGlowAndIsRememberedOnce() throws {
+    func testABakedMarkIsTheSymbolPlusItsGlowRoomAndIsRememberedOnce() throws {
         FeedMarkImages.reset()
-        let first = try XCTUnwrap(FeedMarkImages.image(.heart, ink: .dark, size: 18))
-        // 18 pt and 8 pt of room on each side, at 3x.
-        XCTAssertEqual(first.cgImage?.width, (18 + 16) * 3)
-        XCTAssertEqual(first.cgImage?.height, (18 + 16) * 3)
-        XCTAssertTrue(first === FeedMarkImages.image(.heart, ink: .dark, size: 18))
+        let baked = try XCTUnwrap(FeedMarkImages.image(.heart, ink: .dark))
+        let symbol = try XCTUnwrap(ImageRenderer(content: FeedMarkSymbol(mark: .heart, ink: .dark)).uiImage)
+        let padding = FeedMarkImages.padding(for: .dark)
+        XCTAssertEqual(baked.size.width, symbol.size.width + 2 * padding, accuracy: 1.5)
+        XCTAssertEqual(baked.size.height, symbol.size.height + 2 * padding, accuracy: 1.5)
+        XCTAssertTrue(baked === FeedMarkImages.image(.heart, ink: .dark))
 
-        let light = try XCTUnwrap(FeedMarkImages.image(.heart, ink: .light, size: 18))
-        XCTAssertEqual(light.cgImage?.width, (18 + 6) * 3, "The light ink's halo is tighter")
-        XCTAssertNotEqual(first.pngData(), light.pngData())
+        let light = try XCTUnwrap(FeedMarkImages.image(.heart, ink: .light))
+        XCTAssertLessThan(light.size.width, baked.size.width, "The light ink's halo is tighter")
+        XCTAssertNotEqual(baked.pngData(), light.pngData())
     }
 
-    func testWarmingMakesExactlySixImages() {
+    func testTheGlowFadesOutIntoNothingBeforeTheImageEdge() throws {
+        FeedMarkImages.reset()
+        for mark in FeedMarkImages.warmSet {
+            let image = try XCTUnwrap(FeedMarkImages.image(mark, ink: .dark))
+            let padding = FeedMarkImages.padding(for: .dark)
+            XCTAssertEqual(alpha(of: image, atX: 0.3, y: 0.3), 0, accuracy: 0.01, "The corner is clear")
+            XCTAssertGreaterThan(
+                alpha(of: image, atX: padding - 1, y: image.size.height / 2), 0.01, "\(mark) glows just outside its box"
+            )
+        }
+    }
+
+    func testWarmingMakesExactlyFourImages() {
         FeedMarkImages.reset()
         XCTAssertEqual(FeedMarkImages.cachedCount, 0)
         FeedMarkImages.warm()
-        XCTAssertEqual(FeedMarkImages.cachedCount, 6)
+        XCTAssertEqual(FeedMarkImages.cachedCount, 4)
         FeedMarkImages.warm()
-        XCTAssertEqual(FeedMarkImages.cachedCount, 6)
+        XCTAssertEqual(FeedMarkImages.cachedCount, 4)
     }
 
-    func testAMarkViewTakesExactlyItsSize() throws {
-        for (mark, size) in [(FeedMark.heart, 18.0), (.heart, 13), (.rewatch, 22)] {
+    func testAMarkViewTakesExactlyTheSymbolsSize() throws {
+        for mark in FeedMarkImages.warmSet {
             for ink in [ArtInk.dark, ArtInk.light] {
-                // The baked glow reaches past the box, but the layout box is the mark's own size.
-                let image = try XCTUnwrap(ImageRenderer(content: FeedMarkView(mark: mark, ink: ink, size: size)).uiImage)
-                XCTAssertEqual(image.size.width, size, accuracy: 0.01)
-                XCTAssertEqual(image.size.height, size, accuracy: 0.01)
+                // The baked glow reaches past the box, but the layout box is the symbol's own.
+                let withGlow = try XCTUnwrap(ImageRenderer(content: FeedMarkView(mark: mark, ink: ink)).uiImage)
+                let plain = try XCTUnwrap(ImageRenderer(content: FeedMarkSymbol(mark: mark, ink: ink)).uiImage)
+                XCTAssertEqual(withGlow.size.width, plain.size.width, accuracy: 0.01)
+                XCTAssertEqual(withGlow.size.height, plain.size.height, accuracy: 0.01)
             }
         }
     }
@@ -234,6 +207,44 @@ final class FeedDepthTests: XCTestCase {
             XCTAssertNotEqual(likedImage.pngData(), unlikedImage.pngData())
             XCTAssertEqual(likedImage.size.height, 22)
         }
+    }
+
+    func testTheHeartAndTheBubbleAreDrawnTheSameSize() {
+        let side = FeedCountsPill.outlineSide
+        let rect = CGRect(x: 0, y: 0, width: side, height: side)
+        let heart = HeartShape().path(in: rect).boundingRect
+        let bubble = CommentBubbleShape().path(in: rect).boundingRect
+        XCTAssertEqual(heart.width, side, accuracy: 0.2, "The heart fills the width of its box")
+        XCTAssertEqual(bubble.width, side, accuracy: 0.2, "The bubble fills the width of its box")
+        XCTAssertEqual(heart.width, bubble.width, accuracy: 0.2)
+        XCTAssertEqual(heart.midX, bubble.midX, accuracy: 0.2)
+        XCTAssertEqual(heart.midY, bubble.midY, accuracy: 0.2, "Centered on the same line")
+        // A heart is wider than it is tall, so it is a little shorter than the round bubble, but not by much.
+        XCTAssertEqual(heart.height, bubble.height, accuracy: 1.6)
+        // Both are stroked with the same rim, which reaches half its width past the outline: the icon's box exactly.
+        XCTAssertEqual(side + D.countsRim, D.countsIcon, accuracy: 0.001)
+    }
+
+    func testAHeartAndABubbleTakeTheSameBoxWhetherLikedOrNot() throws {
+        for ink in [ArtInk.dark, ArtInk.light] {
+            let pill = { (liked: Bool) in
+                FeedCountsPill(engagement: PostEngagement(hasLiked: liked, likeCount: 5, commentCount: 2), ink: ink)
+            }
+            let liked = try XCTUnwrap(ImageRenderer(content: pill(true)).uiImage)
+            let unliked = try XCTUnwrap(ImageRenderer(content: pill(false)).uiImage)
+            XCTAssertEqual(liked.size, unliked.size)
+        }
+    }
+
+    func testThePillIsTighterThanItWas() throws {
+        // 2 x 9 of padding, two 13 pt icons, 3 pt from each icon to its number, 5 pt between the pairs, and two digits.
+        let pill = try XCTUnwrap(ImageRenderer(content: FeedCountsPill(
+            engagement: PostEngagement(hasLiked: false, likeCount: 5, commentCount: 2), ink: .dark
+        )).uiImage)
+        let fixed = 2 * D.countsPillHPad + 2 * (D.countsIcon + D.countsPairGap) + D.countsPillGap
+        XCTAssertEqual(fixed, 55)
+        XCTAssertGreaterThan(pill.size.width, fixed)
+        XCTAssertLessThan(pill.size.width, fixed + 2 * 9, "Two digits take under 9 pt each")
     }
 
     func testAZeroCountStillReadsItsNumber() {

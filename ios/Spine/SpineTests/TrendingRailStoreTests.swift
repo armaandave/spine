@@ -354,8 +354,11 @@ final class TrendingRailStoreTests: XCTestCase {
         await waitUntil { self.isReady(store, a) }
         store.entry(for: a.key)?.picker.open()
         XCTAssertEqual(store.entry(for: a.key)?.picker.isPresented, true)
+        store.entry(for: a.key)?.picker.draftHalfSteps = 3
         store.dismissPicker(for: a.key)
         XCTAssertEqual(store.entry(for: a.key)?.picker.isPresented, false)
+        XCTAssertEqual(store.entry(for: a.key)?.picker.draftHalfSteps, store.entry(for: a.key)?.picker.confirmedHalfSteps,
+                       "Closing the stars from outside leaves the rating as it was")
 
         store.tileClosed()
         await gate.open()

@@ -101,6 +101,32 @@ final class StandingsRepository: TrackingRepository {
     func completeBook(source: String, mediaId: String, completedAt: Date?) async throws -> TrackingState { fatalError("Not used") }
 }
 
+/// Season pages by the season ref's id; anything else is an empty page.
+@MainActor
+final class StandingsSeasonPages: MediaRepository {
+    var details: [String: MediaDetail] = [:]
+    var error: Error?
+    var gate: RefreshGate?
+    private(set) var detailRequests: [MediaRef] = []
+
+    func detail(ref: MediaRef) async throws -> MediaDetail {
+        detailRequests.append(ref)
+        await gate?.wait()
+        if let error { throw error }
+        return details[ref.id] ?? MediaDetail(ref: ref, title: "Fixture")
+    }
+
+    func reviews(ref: MediaRef) async throws -> [MediaReview] { [] }
+    func meta() async throws -> MetaResponse { throw URLError(.notConnectedToInternet) }
+    func search(query: String, mediaType: String) async throws -> [MediaSummary] { fatalError("Not used") }
+    func posters(ref: MediaRef) async throws -> [PosterOption] { fatalError("Not used") }
+    func savePoster(ref: MediaRef, posterURL: String) async throws -> PosterSaveResponse { fatalError("Not used") }
+    func backdrops(ref: MediaRef) async throws -> [PosterOption] { fatalError("Not used") }
+    func saveBackdrop(ref: MediaRef, backdropURL: String) async throws -> BackdropSaveResponse { fatalError("Not used") }
+    func logos(ref: MediaRef) async throws -> [LogoOption] { fatalError("Not used") }
+    func saveLogo(ref: MediaRef, logoURL: String) async throws -> LogoSaveResponse { fatalError("Not used") }
+}
+
 // MARK: Tests
 
 @MainActor
@@ -123,10 +149,12 @@ final class FriendStandingsTests: XCTestCase {
     private func provider(
         maxInFlight: Int = 3,
         maxPages: Int = 3,
-        notifyDelay: Duration = .milliseconds(5)
+        notifyDelay: Duration = .milliseconds(5),
+        seasons: MediaRepository? = nil
     ) -> FriendStandings {
         let provider = FriendStandings(
             trackingRepository: StandingsRepository(root: root),
+            seasonPages: seasons,
             onUnauthorized: { [unowned self] in unauthorized += 1 },
             now: { [unowned self] in clock },
             maxInFlight: maxInFlight,
@@ -621,6 +649,191 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertEqual(tail, "p. 212")
         XCTAssertNil(after.first { $0.id == 2 }?.meter)
         XCTAssertEqual(after.first { $0.id == -30 }?.kind, .planning)
+    }
+
+    // MARK: 12. A show is counted by its season
+
+    private func seasonShowRow(
+        _ id: String,
+        watched: Int = 3,
+        aired: Int = 24,
+        upNext: (season: Int, episode: Int)? = nil,
+        airing: TVAiring? = nil
+    ) -> Spine.LibraryItem {
+        row(ref("tv", "tmdb", id), InProgressUpdatesTests.tracking(tv: TVShowState(
+            inLibrary: true,
+            status: "In progress",
+            watchedCount: watched,
+            airedCount: aired,
+            upNext: upNext.map { TVEpisodePointer(seasonNumber: $0.season, episodeNumber: $0.episode) },
+            nextAiring: airing
+        )))
+    }
+
+    private func serveSeason(_ media: StandingsSeasonPages, show id: String, season: Int, episodes: Int) {
+        let seasonRef = ContinueWatchingEpisodes.seasonRef(show: ref("tv", "tmdb", id), seasonNumber: season)
+        media.details[seasonRef.id] = MediaDetail(
+            ref: seasonRef,
+            title: "Season \(season)",
+            episodes: (0 ..< episodes).map {
+                EpisodeSummary(
+                    episodeNumber: $0 + 1, title: "Episode \($0 + 1)", overview: nil, airDate: nil, runtime: nil,
+                    imageUrl: nil, rating: nil
+                )
+            }
+        )
+    }
+
+    func testTheSeasonAFriendIsInComesFromTheEpisodeUpNext() {
+        func place(_ row: Spine.LibraryItem) -> FriendStandings.SeasonPlace? { FriendStandings.seasonPlace(for: row) }
+        let midSeason = place(seasonShowRow("5", upNext: (1, 4)))
+        XCTAssertEqual(midSeason?.number, 1)
+        XCTAssertEqual(midSeason?.watched, 3, "Every episode before the one up next is watched")
+        XCTAssertEqual(place(seasonShowRow("5", upNext: (3, 7)))?.watched, 6)
+
+        let started = place(seasonShowRow("5", watched: 0, upNext: (1, 1)))
+        XCTAssertEqual(started?.number, 1)
+        XCTAssertEqual(started?.watched, 0)
+
+        // Up next is the first episode of a later season: they have just finished the one before.
+        let finished = place(seasonShowRow("5", upNext: (2, 1)))
+        XCTAssertEqual(finished?.number, 1)
+        XCTAssertNil(finished?.watched, "Complete")
+    }
+
+    func testACaughtUpFriendIsInTheSeasonOfTheNextEpisodeToAir() {
+        let airing = TVAiring(seasonNumber: 2, episodeNumber: 5, airDate: nil)
+        let place = FriendStandings.seasonPlace(for: seasonShowRow("5", airing: airing))
+        XCTAssertEqual(place?.number, 2)
+        XCTAssertEqual(place?.watched, 4)
+        let premiere = FriendStandings.seasonPlace(for: seasonShowRow("5", airing: TVAiring(seasonNumber: 3, episodeNumber: 1)))
+        XCTAssertEqual(premiere?.number, 2)
+        XCTAssertNil(premiere?.watched)
+    }
+
+    func testAShowWhoseSeasonCannotBeKnownHasNoPlace() {
+        XCTAssertNil(FriendStandings.seasonPlace(for: seasonShowRow("5")))
+        XCTAssertNil(FriendStandings.seasonPlace(for: seasonShowRow("5", airing: TVAiring(seasonNumber: 2, episodeNumber: nil))))
+        XCTAssertNil(FriendStandings.seasonPlace(for: bookRow("7", page: 10)), "Only shows are counted by a season")
+    }
+
+    func testASeasonCountIsTheSeasonsLitTicksAndWords() throws {
+        let standing = try XCTUnwrap(FeedStandingMath.seasonStanding(
+            season: 1, watched: 3, total: 12, told: TodayPart(unit: .episodes, amount: 3)
+        ))
+        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 0, to: 3, total: 12, whereText: "S1 \u{00B7} 3 of 12 episodes"))
+
+        let later = try XCTUnwrap(FeedStandingMath.seasonStanding(
+            season: 2, watched: 7, total: 10, told: TodayPart(unit: .episodes, amount: 2)
+        ))
+        XCTAssertEqual(later.from, 5)
+        XCTAssertEqual(later.to, 7)
+
+        let bigDay = try XCTUnwrap(FeedStandingMath.seasonStanding(
+            season: 1, watched: 2, total: 12, told: TodayPart(unit: .episodes, amount: 5)
+        ))
+        XCTAssertEqual(bigDay.from, 0, "Never more lit than the season has watched")
+
+        let complete = try XCTUnwrap(FeedStandingMath.seasonStanding(season: 1, watched: nil, total: 8, told: nil))
+        XCTAssertEqual(complete.to, 8)
+        XCTAssertNil(complete.from)
+        XCTAssertEqual(complete.whereText, "S1 \u{00B7} 8 of 8 episodes")
+
+        XCTAssertNil(FeedStandingMath.seasonStanding(season: 1, watched: 3, total: 0, told: nil), "No end, no meter")
+    }
+
+    func testTheSeasonsWordsNameSpecialsAndKeepASingular() {
+        XCTAssertEqual(FeedStandingText.seasonText(season: 1, current: 3, total: 12), "S1 \u{00B7} 3 of 12 episodes")
+        XCTAssertEqual(FeedStandingText.seasonText(season: 2, current: 1, total: 1), "S2 \u{00B7} 1 of 1 episode")
+        XCTAssertEqual(FeedStandingText.seasonText(season: 0, current: 1, total: 4), "Specials \u{00B7} 1 of 4 episodes")
+    }
+
+    func testAFriendsShowCardCountsTheSeasonNotTheWholeShow() async throws {
+        // Andor: 3 watched of the 24 aired in all, three episodes into a season of 12.
+        root.set("a", "tv", rows: [seasonShowRow("5", watched: 3, aired: 24, upNext: (1, 4))])
+        let media = StandingsSeasonPages()
+        serveSeason(media, show: "5", season: 1, episodes: 12)
+        let item = try day(1, "3 episodes", type: "tv", source: "tmdb", title: "5")
+        let provider = provider(seasons: media)
+        provider.prepare(for: [item])
+        await until(provider.standing(for: item, isNewestOfTitle: true) != nil)
+
+        let standing = try XCTUnwrap(provider.standing(for: item, isNewestOfTitle: true))
+        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 0, to: 3, total: 12, whereText: "S1 \u{00B7} 3 of 12 episodes"))
+        XCTAssertFalse(standing.whereText?.contains("24") ?? true, "Never the whole show's numbers")
+        XCTAssertEqual(media.detailRequests.map(\.mediaType), ["season"])
+        XCTAssertEqual(media.detailRequests.first?.seasonNumber, 1)
+
+        let card = FeedCardPresenter.model(for: item, standing: standing, isNewestOfTitle: true)
+        XCTAssertNotNil(card.meter)
+        guard case let .progress(amount, tail, _) = card.headline else { return XCTFail("A progress headline") }
+        XCTAssertEqual(amount, "+3 episodes")
+        XCTAssertEqual(tail, "S1 \u{00B7} 3 of 12 episodes")
+    }
+
+    func testUntilTheSeasonIsKnownTheCardHasNoMeterAndNoWords() async throws {
+        root.set("a", "tv", rows: [seasonShowRow("5", upNext: (1, 4))])
+        let media = StandingsSeasonPages()
+        serveSeason(media, show: "5", season: 1, episodes: 12)
+        let gate = RefreshGate()
+        media.gate = gate
+        let item = try day(1, "3 episodes", type: "tv", source: "tmdb", title: "5")
+        let provider = provider(seasons: media)
+        provider.prepare(for: [item])
+        await until(media.detailRequests.count == 1)
+        XCTAssertNil(provider.standing(for: item, isNewestOfTitle: true), "Nothing of the whole show is drawn meanwhile")
+        await gate.open()
+        await until(provider.standing(for: item, isNewestOfTitle: true) != nil)
+    }
+
+    func testWithoutSeasonPagesAShowGetsNothing() async throws {
+        root.set("a", "tv", rows: [seasonShowRow("5", upNext: (1, 4))])
+        let item = try day(1, "3 episodes", type: "tv", source: "tmdb", title: "5")
+        let provider = provider()
+        provider.prepare(for: [item])
+        await landed(provider)
+        XCTAssertNil(provider.standing(for: item, isNewestOfTitle: true))
+    }
+
+    func testASeasonIsReadOnceHoweverManyFriendsAreInIt() async throws {
+        root.set("a", "tv", rows: [seasonShowRow("5", upNext: (1, 4))])
+        root.set("b", "tv", rows: [seasonShowRow("5", watched: 7, upNext: (1, 8))])
+        let media = StandingsSeasonPages()
+        serveSeason(media, show: "5", season: 1, episodes: 12)
+        let first = try day(1, "3 episodes", type: "tv", source: "tmdb", title: "5")
+        let second = try day(2, "2 episodes", type: "tv", source: "tmdb", title: "5", user: "b", actor: 4)
+        let provider = provider(seasons: media)
+        provider.prepare(for: [first, second])
+        await until(
+            provider.standing(for: first, isNewestOfTitle: true) != nil
+                && provider.standing(for: second, isNewestOfTitle: true) != nil
+        )
+        XCTAssertEqual(media.detailRequests.count, 1)
+        XCTAssertEqual(provider.standing(for: second, isNewestOfTitle: true)?.to, 7)
+        XCTAssertEqual(provider.standing(for: second, isNewestOfTitle: true)?.whereText, "S1 \u{00B7} 7 of 12 episodes")
+    }
+
+    func testAFailedSeasonReadIsLeftAloneForAMinuteThenAskedAgain() async throws {
+        root.set("a", "tv", rows: [seasonShowRow("5", upNext: (1, 4))])
+        let media = StandingsSeasonPages()
+        media.error = URLError(.notConnectedToInternet)
+        let item = try day(1, "3 episodes", type: "tv", source: "tmdb", title: "5")
+        let provider = provider(seasons: media)
+        provider.prepare(for: [item])
+        await until(media.detailRequests.count == 1)
+        await landed(provider)
+        XCTAssertNil(provider.standing(for: item, isNewestOfTitle: true))
+
+        provider.prepare(for: [item])
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(media.detailRequests.count, 1, "Left alone within the minute")
+
+        clock = clock.addingTimeInterval(FriendStandings.retryAfterFailure + 1)
+        media.error = nil
+        serveSeason(media, show: "5", season: 1, episodes: 12)
+        provider.prepare(for: [item])
+        await until(provider.standing(for: item, isNewestOfTitle: true) != nil)
+        XCTAssertEqual(media.detailRequests.count, 2)
     }
 
     // MARK: Wiring

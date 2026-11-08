@@ -16,6 +16,8 @@ struct RailCenterButton {
     let systemName: String
     let label: String
     let identifier: String
+    /// The icon's color. Nil is white.
+    var tint: Color? = nil
     let action: () -> Void
 }
 
@@ -57,6 +59,17 @@ struct ActionRail: View {
     /// 29 is a capsule at the rail's 58 pt height; the open picker's corners are 26.
     static func cornerRadius(pickerPresented: Bool) -> CGFloat { pickerPresented ? 26 : 29 }
 
+    /// Whether giving a heart opens the rating picker: only on a page that wants it, for a title not yet liked, while
+    /// the picker is closed. Giving a heart on the page opens the stars; Home's Trending panel never does.
+    static func likeOpensRatingPicker(
+        isLiked: Bool,
+        offersRatingAfterBaseAction: Bool,
+        pickerPresented: Bool,
+        allowed: Bool
+    ) -> Bool {
+        allowed && !isLiked && offersRatingAfterBaseAction && !pickerPresented
+    }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isPressing = false
     @State private var pressHaptics = UIImpactFeedbackGenerator(style: .light)
@@ -67,6 +80,8 @@ struct ActionRail: View {
     var showsEye = true
     var showsRating = false
     var offersRatingAfterBaseAction = false
+    /// The page's heart opens the stars after a like; Home's Trending panel turns that off.
+    var likeOpensRatingPicker = true
     var trackLabel: String?
     var eyeLabel: String?
     /// What the eye does, for VoiceOver. Without one, an eye that opens the rating picker says so.
@@ -157,7 +172,7 @@ struct ActionRail: View {
             if let center {
                 railButton(
                     content: .symbol(name: center.systemName, size: 16),
-                    tint: .white,
+                    tint: center.tint ?? .white,
                     label: center.label,
                     identifier: center.identifier,
                     action: { handleCenter(center) }
@@ -256,7 +271,12 @@ struct ActionRail: View {
     }
 
     private func handleLike() {
-        if !isLiked, offersRatingAfterBaseAction, !ratingPicker.isPresented {
+        if Self.likeOpensRatingPicker(
+            isLiked: isLiked,
+            offersRatingAfterBaseAction: offersRatingAfterBaseAction,
+            pickerPresented: ratingPicker.isPresented,
+            allowed: likeOpensRatingPicker
+        ) {
             animate { ratingPicker.open() }
         } else {
             dismissRatingPickerIfNeeded()

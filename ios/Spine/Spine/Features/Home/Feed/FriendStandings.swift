@@ -29,6 +29,27 @@ enum FeedStandingMath {
         )
     }
 
+    /// A friend's show, counted by the season they are in: "S1 · 3 of 12 episodes" and that season's ticks, the card's
+    /// day lit (never more than the season has watched). A show is always partway through a season, never through
+    /// the whole show, so this never reads the show's own counts.
+    /// - Parameters:
+    ///   - watched: episodes watched in the season; nil when the season is complete.
+    ///   - total: the season's episodes. Without a positive total nothing is drawn.
+    ///   - told: the card's day, in episodes. Nil for a status-only day.
+    static func seasonStanding(season: Int, watched: Int?, total: Int, told: TodayPart?) -> FeedStanding? {
+        guard total > 0 else { return nil }
+        let done = min(max(0, watched ?? total), total)
+        let position = TilePosition(unit: .episodes, current: Double(done), total: Double(total), pagesTotal: nil)
+        guard let counted = standing(position: position, told: told) else { return nil }
+        return FeedStanding(
+            unit: counted.unit,
+            from: counted.from,
+            to: counted.to,
+            total: counted.total,
+            whereText: FeedStandingText.seasonText(season: season, current: done, total: total)
+        )
+    }
+
     private static func whole(_ value: Double) -> Int {
         Int(max(0, value).rounded())
     }
@@ -36,8 +57,10 @@ enum FeedStandingMath {
 
 /// Where each friend stands on the titles their newest feed cards are about, loaded from the lists the profile's In
 /// progress rail already reads (`GET /users/<username>/tracking/`), one request per friend, type and status however many
-/// cards, a few at a time, after the feed's first page is in. A card whose standing is not there yet is drawn without
-/// one and gets it when it lands; a card without a meter is a complete card, so a failure shows nothing.
+/// cards, a few at a time, after the feed's first page is in. A show is counted by the season the friend is in, whose
+/// episode count comes from the season's public page (one request per show and season). A card whose standing is not
+/// there yet is drawn without one and gets it when it lands; a card without a meter is a complete card, so a failure
+/// shows nothing.
 @MainActor
 final class FriendStandings: FeedStandingProviding {
     /// One list request: a friend's titles of a type in a status.
@@ -64,9 +87,27 @@ final class FriendStandings: FeedStandingProviding {
         case failed(Date)
     }
 
+    /// The season a friend is in on a show: the show, the season and how many of its episodes they have watched
+    /// (nil when they have finished it).
+    struct SeasonPlace: Equatable {
+        let show: MediaRef
+        let number: Int
+        let watched: Int?
+
+        var seasonRef: MediaRef { ContinueWatchingEpisodes.seasonRef(show: show, seasonNumber: number) }
+        var key: String { "\(show.source)|\(show.mediaId)|\(number)" }
+    }
+
+    private struct SeasonTotal {
+        let total: Int
+        let at: Date
+    }
+
     private struct Entry {
         /// By title key. Kept while the pair loads again, so a refresh never blanks a meter that was showing.
         var positions: [String: TilePosition] = [:]
+        /// A show's season by title key. Shows have no position of their own here: they are counted by their season.
+        var seasons: [String: SeasonPlace] = [:]
         var phase: Phase = .idle
         var loadedAt: Date?
         /// The latest request's number: a result carrying any other is dropped.
@@ -79,7 +120,7 @@ final class FriendStandings: FeedStandingProviding {
     }
 
     private enum Outcome {
-        case loaded([String: TilePosition])
+        case loaded(positions: [String: TilePosition], seasons: [String: SeasonPlace])
         case unavailable
         case unauthorized
         case failed
@@ -93,11 +134,14 @@ final class FriendStandings: FeedStandingProviding {
     static let types: Set<String> = ["tv", "anime", "book", "manga", "comic", "game"]
 
     private let trackingRepository: TrackingRepository
+    /// Reads a season's page for its episode count. Without it a show is drawn with no meter and no "where".
+    private let seasonPages: MediaRepository?
     private let onUnauthorized: () -> Void
     private let now: () -> Date
     private let maxInFlight: Int
     private let maxPages: Int
     private let notifyDelay: Duration
+    private let maxSeasonsInFlight = 2
 
     private var entries: [Pair: Entry] = [:]
     private var queue: [Job] = []
@@ -105,11 +149,18 @@ final class FriendStandings: FeedStandingProviding {
     private var tasks: [Pair: Task<Void, Never>] = [:]
     private var onChange: (() -> Void)?
     private var reportedUnauthorized = false
+    /// Seasons' episode counts by `SeasonPlace.key`, and the reads on their way or waiting.
+    private var seasonTotals: [String: SeasonTotal] = [:]
+    private var seasonFailedAt: [String: Date] = [:]
+    private var seasonLoading: Set<String> = []
+    private var seasonQueue: [SeasonPlace] = []
+    private var seasonsInFlight = 0
     /// The coalescing wait on its way, so a test can wait for the one `onChange` it ends in.
     private(set) var notifyTask: Task<Void, Never>?
 
     init(
         trackingRepository: TrackingRepository,
+        seasonPages: MediaRepository? = nil,
         onUnauthorized: @escaping () -> Void,
         now: @escaping () -> Date = Date.init,
         maxInFlight: Int = 3,
@@ -117,6 +168,7 @@ final class FriendStandings: FeedStandingProviding {
         notifyDelay: Duration = .milliseconds(120)
     ) {
         self.trackingRepository = trackingRepository
+        self.seasonPages = seasonPages
         self.onUnauthorized = onUnauthorized
         self.now = now
         self.maxInFlight = maxInFlight
@@ -168,6 +220,31 @@ final class FriendStandings: FeedStandingProviding {
         return isAnime ? "anime" : (ref.isTVFamily ? "tv" : ref.mediaType)
     }
 
+    /// The season a friend's show row is in, or nil when it cannot be known (and so nothing is drawn). The season of
+    /// the episode up next, with every episode before it watched; caught up, the season of the next episode to air. A
+    /// show whose next episode is the first of a season after the first has just finished the season before, which is
+    /// the one it is counted by, complete.
+    static func seasonPlace(for row: LibraryItem) -> SeasonPlace? {
+        guard row.media.ref.mediaType == "tv", let tv = row.tracking.tv else { return nil }
+        let season: Int
+        let episode: Int
+        if let next = tv.upNext {
+            season = next.seasonNumber
+            episode = next.episodeNumber
+        } else if let airing = tv.nextAiring, let number = airing.episodeNumber {
+            season = airing.seasonNumber
+            episode = number
+        } else {
+            return nil
+        }
+        guard episode >= 1 else { return nil }
+        if episode == 1 {
+            guard season > 1 else { return SeasonPlace(show: row.media.ref, number: season, watched: 0) }
+            return SeasonPlace(show: row.media.ref, number: season - 1, watched: nil)
+        }
+        return SeasonPlace(show: row.media.ref, number: season, watched: episode - 1)
+    }
+
     /// The newest progress card of each person's title that can have a standing, in feed order (the same rule as
     /// `FeedEntries.make`: the first card per person and title, even when it is a start).
     static func wants(in items: [ActivityItem]) -> [Want] {
@@ -184,8 +261,15 @@ final class FriendStandings: FeedStandingProviding {
     // MARK: FeedStandingProviding
 
     func standing(for item: ActivityItem, isNewestOfTitle: Bool) -> FeedStanding? {
-        guard isNewestOfTitle, let want = Self.want(for: item),
-              let position = entries[want.pair]?.positions[want.titleKey] else { return nil }
+        guard isNewestOfTitle, let want = Self.want(for: item), let entry = entries[want.pair] else { return nil }
+        if want.pair.mediaType == "tv" {
+            // Counted by the season the friend is in; until that season's episodes are known, nothing is drawn.
+            guard let place = entry.seasons[want.titleKey], let known = seasonTotals[place.key] else { return nil }
+            return FeedStandingMath.seasonStanding(
+                season: place.number, watched: place.watched, total: known.total, told: want.told
+            )
+        }
+        guard let position = entry.positions[want.titleKey] else { return nil }
         return FeedStandingMath.standing(position: position, told: want.told)
     }
 
@@ -213,6 +297,8 @@ final class FriendStandings: FeedStandingProviding {
         for pair in order {
             let entry = entries[pair] ?? Entry()
             let wanted = keys[pair] ?? []
+            // A pair already loaded can have shows whose season has not been read.
+            loadSeasons(pair: pair, titleKeys: wanted)
             if reloading {
                 // The person asked again: every pair is loaded again, a failed or unavailable one included. One
                 // already loading is replaced, since its answer may be older than the refresh.
@@ -254,6 +340,7 @@ final class FriendStandings: FeedStandingProviding {
 
     private func run(_ job: Job, token: Int) async {
         var found: [String: TilePosition] = [:]
+        var places: [String: SeasonPlace] = [:]
         var outcome: Outcome
         do {
             let repository = trackingRepository.owned(by: job.pair.username)
@@ -266,13 +353,17 @@ final class FriendStandings: FeedStandingProviding {
                 for row in response.results {
                     let key = FeedEntries.titleKey(for: row.media.ref)
                     seen.insert(key)
-                    if let position = InProgressTilePresenter.position(for: row) { found[key] = position }
+                    if row.media.ref.mediaType == "tv" {
+                        if let place = Self.seasonPlace(for: row) { places[key] = place }
+                    } else if let position = InProgressTilePresenter.position(for: row) {
+                        found[key] = position
+                    }
                 }
                 if job.titleKeys.isSubset(of: seen) { break }
                 guard let next = APIPageCursor.nextPage(from: response.next) else { break }
                 page = next
             }
-            outcome = .loaded(found)
+            outcome = .loaded(positions: found, seasons: places)
         } catch is CancellationError {
             outcome = .cancelled
         } catch APIError.unauthorized {
@@ -282,23 +373,25 @@ final class FriendStandings: FeedStandingProviding {
         } catch {
             outcome = Task.isCancelled ? .cancelled : .failed
         }
-        finish(job.pair, token: token, outcome: outcome)
+        finish(job.pair, token: token, outcome: outcome, titleKeys: job.titleKeys)
     }
 
-    private func finish(_ pair: Pair, token: Int, outcome: Outcome) {
+    private func finish(_ pair: Pair, token: Int, outcome: Outcome, titleKeys: Set<String>) {
         inFlight -= 1
         defer { pump() }
         guard var entry = entries[pair], entry.token == token else { return }
         tasks[pair] = nil
         switch outcome {
-        case let .loaded(positions):
+        case let .loaded(positions, seasons):
             entry.positions = positions
+            entry.seasons = seasons
             entry.phase = .loaded
             entry.loadedAt = now()
             reportedUnauthorized = false
         case .unavailable:
             // Private to the viewer now: nothing of theirs is shown, and nothing is retried until the next reload.
             entry.positions = [:]
+            entry.seasons = [:]
             entry.phase = .unavailable
         case .unauthorized:
             entry.phase = .failed(now())
@@ -313,6 +406,60 @@ final class FriendStandings: FeedStandingProviding {
         }
         entries[pair] = entry
         if case .cancelled = outcome { return }
+        loadSeasons(pair: pair, titleKeys: titleKeys)
+        scheduleNotify()
+    }
+
+    // MARK: Seasons
+
+    /// Asks for the episode count of each wanted show's season that is not known (or not fresh), a few at a time. A
+    /// failed read is left alone for a minute. Home is told as each lands.
+    private func loadSeasons(pair: Pair, titleKeys: Set<String>) {
+        guard seasonPages != nil, let entry = entries[pair] else { return }
+        for titleKey in titleKeys.sorted() {
+            guard let place = entry.seasons[titleKey], !seasonLoading.contains(place.key) else { continue }
+            if let known = seasonTotals[place.key], now().timeIntervalSince(known.at) < Self.freshFor { continue }
+            if let failed = seasonFailedAt[place.key], now().timeIntervalSince(failed) < Self.retryAfterFailure { continue }
+            seasonLoading.insert(place.key)
+            seasonQueue.append(place)
+        }
+        pumpSeasons()
+    }
+
+    private func pumpSeasons() {
+        guard seasonPages != nil else { return }
+        while seasonsInFlight < maxSeasonsInFlight, !seasonQueue.isEmpty {
+            let place = seasonQueue.removeFirst()
+            seasonsInFlight += 1
+            Task { [weak self] in
+                await self?.readSeason(place)
+            }
+        }
+    }
+
+    private func readSeason(_ place: SeasonPlace) async {
+        guard let pages = seasonPages else { return }
+        var total: Int?
+        var expired = false
+        do {
+            let count = try await pages.detail(ref: place.seasonRef).episodes?.count ?? 0
+            total = count > 0 ? count : nil
+        } catch APIError.unauthorized {
+            expired = true
+        } catch {}
+        seasonsInFlight -= 1
+        seasonLoading.remove(place.key)
+        defer { pumpSeasons() }
+        if expired, !reportedUnauthorized {
+            reportedUnauthorized = true
+            onUnauthorized()
+        }
+        guard let total else {
+            seasonFailedAt[place.key] = now()
+            return
+        }
+        seasonFailedAt[place.key] = nil
+        seasonTotals[place.key] = SeasonTotal(total: total, at: now())
         scheduleNotify()
     }
 

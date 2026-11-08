@@ -90,19 +90,21 @@ enum PanelMotion {
         HomeDesign.Motion.soft(duration: 0.65, reduceMotion: reduceMotion)
     }
 
-    /// A word slot's width: 0.5 s.
+    /// How long a word or a number takes to change in place.
+    static let changeDuration = 0.35
+
+    /// A word slot's width: the same 0.35 s, so the neighbors slide as the words dissolve.
     static func slot(reduceMotion: Bool) -> Animation {
-        HomeDesign.Motion.soft(duration: 0.5, reduceMotion: reduceMotion)
+        reduceMotion ? HomeDesign.Motion.reduced : .easeInOut(duration: changeDuration)
     }
 
-    /// Words entering and leaving: blur-replace, 0.5 s in and 0.3 s out. Reduce Motion: opacity only.
+    /// Words entering and leaving: the system's blur-replace, which dissolves in place without travel, 0.35 s both
+    /// ways. Reduce Motion: opacity only.
     static func wordSwap(reduceMotion: Bool) -> AnyTransition {
         if reduceMotion { return .opacity.animation(HomeDesign.Motion.reduced) }
-        let blur = AnyTransition(BlurReplaceTransition(configuration: .upUp))
-        return .asymmetric(
-            insertion: blur.animation(HomeDesign.Motion.soft(duration: 0.5, reduceMotion: false)),
-            removal: blur.animation(ease(0.3))
-        )
+        let blur = AnyTransition(BlurReplaceTransition(configuration: .downUp))
+        let change = Animation.easeInOut(duration: changeDuration)
+        return .asymmetric(insertion: blur.animation(change), removal: blur.animation(change))
     }
 
     /// The bright sweep after a tap: 0.85 s.

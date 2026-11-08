@@ -87,8 +87,7 @@ struct FeedCardView: View, Equatable {
     }
 
     /// Room kept at the right of the detail rows and the meter for the counts pill, from its digits rather than
-    /// measured: 64 and 7 a digit (the pill is 18 + two 17 pt pairs + 8 + about 7 a digit wide). A card without counts
-    /// (a Planning day) keeps none.
+    /// measured (`FeedCountsPill.reserve`). A card without counts (a Planning day) keeps none.
     static func countsReserve(for engagement: PostEngagement?) -> CGFloat {
         FeedCountsPill.reserve(for: engagement)
     }
@@ -198,12 +197,10 @@ struct FeedCardView: View, Equatable {
                     .foregroundStyle(ink.star)
                 }
                 if liked {
-                    FeedMarkView(mark: .heart, ink: ink, size: HomeDesign.FeedDepth.heartSize)
-                        .padding(.horizontal, HomeDesign.FeedDepth.markMargin)
+                    FeedMarkView(mark: .heart, ink: ink)
                 }
                 if rewatch {
-                    FeedMarkView(mark: .rewatch, ink: ink, size: HomeDesign.FeedDepth.rewatchSize)
-                        .padding(.horizontal, HomeDesign.FeedDepth.markMargin)
+                    FeedMarkView(mark: .rewatch, ink: ink)
                 }
             case let .progress(amount, tail, pills):
                 Text(amount)

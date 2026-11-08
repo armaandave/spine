@@ -482,6 +482,51 @@ final class OdometerSlotsTests: XCTestCase {
     func testBeyondFivePlacesItClamps() {
         XCTAssertEqual(make(250_000).width, make(99_999).width)
     }
+
+    // MARK: In-place change
+
+    func testADigitAtRestIsSolidAndAloneAndTheNextDigitIsNotShown() {
+        let rest = OdometerSlots.fade(roll: 7)
+        XCTAssertEqual(rest, OdometerSlots.Fade(base: 7, next: 8, amount: 0))
+        // The first and last stretch of a step hold the digit still.
+        XCTAssertEqual(OdometerSlots.fade(roll: 7.1).amount, 0)
+        XCTAssertEqual(OdometerSlots.fade(roll: 7.9).amount, 1)
+    }
+
+    func testTheCrossFadeIsEasedAndHalfwayAtTheMiddleOfAStep() {
+        XCTAssertEqual(OdometerSlots.fade(roll: 7.5).amount, 0.5, accuracy: 0.0001)
+        var previous = 0.0
+        var roll = 3.0
+        while roll < 4 {
+            let amount = OdometerSlots.fade(roll: roll).amount
+            XCTAssertGreaterThanOrEqual(amount, previous - 1e-12, "the next digit only ever fades in")
+            XCTAssertTrue((0 ... 1).contains(amount))
+            previous = amount
+            roll += 0.01
+        }
+    }
+
+    func testNineFadesIntoZeroAndTheTensCarryFadesWithIt() {
+        let ones = OdometerSlots.fade(roll: 9.5)
+        XCTAssertEqual(ones.base, 9)
+        XCTAssertEqual(ones.next, 0)
+        // 19.5: the tens digit is on 1 and moves to 2 during the last unit, as the ones digit goes 9 to 0.
+        let s = OdometerSlots.make(x: 19.5, shown: 1, digitWidth: 8, commaWidth: 4)
+        let tens = OdometerSlots.fade(roll: s.slots.first { $0.place == 1 }!.roll)
+        XCTAssertEqual(tens.base, 1)
+        XCTAssertEqual(tens.next, 2)
+        XCTAssertEqual(tens.amount, 0.5, accuracy: 0.0001)
+    }
+
+    func testTheNumberNeverChangesWidthJustBecauseADigitIsFading() {
+        // Only a digit growing in changes the width; a digit fading into the next is the same width at every roll.
+        var roll = 4.0
+        let widths = Set((0 ..< 100).map { step -> Double in
+            roll = 4.0 + Double(step) / 100
+            return OdometerSlots.make(x: roll, shown: 1, digitWidth: 8, commaWidth: 4).width
+        })
+        XCTAssertEqual(widths, [8])
+    }
 }
 
 // MARK: - Position

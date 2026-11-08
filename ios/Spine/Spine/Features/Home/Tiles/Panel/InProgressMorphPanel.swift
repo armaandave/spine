@@ -29,10 +29,12 @@ struct InProgressMorphPanel: View {
         item.media.displayPosterURL.flatMap { URL(string: $0) }
     }
 
+    /// The server's palette if it gives colors, else the count made here, whether by this view or by an earlier panel.
     private func tint(for item: LibraryItem) -> MeterTint? {
-        let swatches = counted[item.id]
-            ?? PosterPaletteStore.shared.known(server: item.media.posterPalette, url: Self.posterURL(item))
-        return swatches.flatMap { MeterTint.make(from: $0, highContrast: contrast == .increased) }
+        let swatches = counted[item.id] ?? PosterPaletteStore.shared.known(server: nil, url: Self.posterURL(item))
+        return MeterTint.choose(
+            server: item.media.posterPalette, counted: swatches, highContrast: contrast == .increased
+        )
     }
 
     var body: some View {
@@ -65,15 +67,35 @@ struct InProgressMorphPanel: View {
 }
 
 extension InProgressMorphPanel {
-    /// Counts the colors of every poster that has none yet, one at a time, off the main thread.
+    /// Counts the colors of every poster that has none yet, all at once and off the main thread, so one slow download
+    /// no longer holds the others back and the title in view has its colors within a moment of the tile opening. A
+    /// count that fails (the image was not there yet) is tried once more after a pause.
     private func countPosters(of items: [LibraryItem]) async {
+        // Posters an earlier panel counted need no work, but this view has not read them yet.
+        var wanted: [(id: String, url: URL)] = []
         for item in items {
-            guard !Task.isCancelled else { return }
-            let url = Self.posterURL(item)
-            guard PosterPaletteStore.shared.known(server: item.media.posterPalette, url: url) == nil,
-                  let found = await PosterPaletteStore.shared.swatches(server: item.media.posterPalette, url: url)
+            guard let url = Self.posterURL(item), MeterTint.choose(server: item.media.posterPalette, counted: nil) == nil
             else { continue }
-            counted[item.id] = found
+            if let known = PosterPaletteStore.shared.known(server: nil, url: url) {
+                counted[item.id] = known
+            } else {
+                wanted.append((item.id, url))
+            }
+        }
+        await withTaskGroup(of: (String, [PosterSwatch]?).self) { group in
+            for (id, url) in wanted {
+                group.addTask {
+                    var found = await PosterPaletteStore.shared.swatches(server: nil, url: url)
+                    if found == nil {
+                        try? await Task.sleep(for: .seconds(2))
+                        if !Task.isCancelled { found = await PosterPaletteStore.shared.swatches(server: nil, url: url) }
+                    }
+                    return (id, found)
+                }
+            }
+            for await (id, found) in group {
+                if let found { counted[id] = found }
+            }
         }
     }
 }

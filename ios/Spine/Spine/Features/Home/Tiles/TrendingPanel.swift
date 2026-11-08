@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 extension HomeDesign.Metric {
@@ -18,9 +19,10 @@ extension HomeDesign.Text {
     static let trendingInfo = Font.system(size: 13.5, weight: .bold)
 }
 
-/// The Trending tile's panel: the title, the average and friends' faces, centered; and under them the media page's own
-/// Liquid Glass rail with Open in the middle. The title block and the info row are keyed by the title and fade up on a
-/// swipe; the rail is not, so its glass never rebuilds while you browse and only its state slots change.
+/// The Trending tile's panel: the title and friends' faces, centered; and under them the media page's own Liquid Glass
+/// rail with Open in the middle. The title is keyed by the title and fades up on a swipe; the faces row and the rail are
+/// not, so the faces cross-fade from one set to the next and never blank, and the rail's glass never rebuilds while you
+/// browse and only its state slots change.
 struct TrendingPanel: View {
     let title: TrendingTitle
     let detail: TrendingTileDetail
@@ -29,26 +31,27 @@ struct TrendingPanel: View {
     let actions: HomeTilesActions
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+    /// Posters' colors counted on this device, by title key; the server's, or ones counted earlier, need no waiting.
+    @State private var counted: [String: [PosterSwatch]] = [:]
 
     var body: some View {
         let entry = store?.entry(for: title.key)
         let pickerOpen = entry?.picker.isPresented == true
         ZStack(alignment: .top) {
-            ZStack(alignment: .top) {
-                TrendingTitleBlock(
-                    detail: detail,
-                    isHidden: pickerOpen,
-                    onOpenFaces: { actions.onOpenTrending(title) }
-                )
-                .id(title.key)
-                .transition(.asymmetric(insertion: .offset(y: 6).combined(with: .opacity), removal: .identity))
+            // Behind everything, so the rail and the faces keep their own taps: a tap (or a drag) anywhere else on the
+            // tile closes the open stars without changing the rating. The band over the posters is left out so the
+            // carousel still swipes and opens; swiping it closes the stars through the title changing.
+            if pickerOpen {
+                TrendingOutsideTapLayer(onOutsideTap: collapsePicker)
             }
-            .animation(HomeDesign.Motion.soft(duration: 0.4, reduceMotion: reduceMotion), value: title.key)
-            .padding(.top, HomeDesign.Metric.trendingTitleTop)
-            .frame(maxHeight: .infinity, alignment: .top)
+
+            TrendingTitleBlock(titleKey: title.key, detail: detail, isHidden: pickerOpen)
+                .padding(.top, HomeDesign.Metric.trendingTitleTop)
+                .frame(maxHeight: .infinity, alignment: .top)
 
             if let store {
-                TrendingRailHost(title: title, entry: entry, store: store, actions: actions)
+                TrendingRailHost(title: title, entry: entry, store: store, actions: actions, openTint: openTint)
                     .padding(.bottom, HomeDesign.Metric.trendingRailBottom)
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
@@ -56,44 +59,129 @@ struct TrendingPanel: View {
         .task(id: title.key) {
             store?.focus(title, neighbors: neighbors)
         }
+        .task(id: avatarURLs) {
+            // The faces of the titles on either side are decoded before you swipe to them.
+            ArtworkPrefetch.prefetch(avatarURLs.compactMap {
+                SpineImagePipeline.request(url: URL(string: $0), thumbnailSize: TileAvatar.thumbnailSize)
+            })
+        }
+        .task(id: title.key) {
+            await countPoster()
+        }
         .onChange(of: title.key) { old, _ in
             store?.dismissPicker(for: old)
+        }
+        .onDisappear {
+            // A tile that closes with the stars open opens next time without them.
+            store?.dismissPicker(for: title.key)
         }
         .onChange(of: store?.pendingMessages ?? [], initial: true) { _, messages in
             guard !messages.isEmpty, let store else { return }
             for message in store.takeMessages() { actions.onRailMessage(message) }
         }
     }
+
+    private func collapsePicker() {
+        guard let store, store.entry(for: title.key)?.picker.isPresented == true else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.84)) {
+            store.dismissPicker(for: title.key)
+        }
+    }
+
+    // MARK: Faces
+
+    /// The faces' pictures for this title and the two beside it.
+    private var avatarURLs: [String] {
+        ([title] + neighbors).flatMap { $0.friends.prefix(TrendingTileDetail.maxFaces).compactMap(\.avatarUrl) }
+    }
+
+    // MARK: The Open icon's color
+
+    private var posterURL: URL? {
+        title.media.displayPosterURL.flatMap { URL(string: $0) }
+    }
+
+    /// The poster's color for the Open icon: its first color that reads on the dark glass, else its second, else white.
+    private var openTint: Color? {
+        let swatches = counted[title.key]
+            ?? PosterPaletteStore.shared.known(server: title.media.posterPalette, url: posterURL)
+        return TrendingOpenTint.color(from: swatches, highContrast: contrast == .increased)
+    }
+
+    /// Counts the poster's colors when the server sent none and none were counted before.
+    private func countPoster() async {
+        let key = title.key
+        let server = title.media.posterPalette
+        let url = posterURL
+        guard PosterPaletteStore.shared.known(server: server, url: url) == nil,
+              let found = await PosterPaletteStore.shared.swatches(server: server, url: url)
+        else { return }
+        counted[key] = found
+    }
+}
+
+// MARK: - Outside taps
+
+/// Two clear bands over the tile, above and below the posters, that close the open rating stars when tapped or dragged
+/// on. The posters' own band is left alone.
+private struct TrendingOutsideTapLayer: View {
+    let onOutsideTap: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            band
+                .frame(height: TileGeometry.top)
+            Color.clear
+                .frame(height: TileGeometry.posterSize.height)
+                .allowsHitTesting(false)
+            band
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .accessibilityHidden(true)
+    }
+
+    private var band: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOutsideTap)
+            .simultaneousGesture(DragGesture(minimumDistance: 10).onChanged { _ in onOutsideTap() })
+    }
 }
 
 // MARK: - The title block
 
-/// The centered title and, under it, the info row. Everything here is display except the faces, which open the title.
+/// The centered title and, under it, the friends' faces. The title is keyed and fades up on a swipe; the faces row is
+/// one view that stays, so it is never empty between two titles.
 private struct TrendingTitleBlock: View {
+    let titleKey: String
     let detail: TrendingTileDetail
     let isHidden: Bool
-    let onOpenFaces: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(detail.title)
-                .font(HomeDesign.Text.trendingTitle)
-                .tracking(-0.3)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.horizontal, 16)
-                .frame(maxWidth: .infinity)
-                .frame(height: HomeDesign.Metric.trendingTitleHeight)
-                .dynamicTypeSize(...HomeDesign.Text.maxCategory)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(detail.accessibilityLabel)
-                .accessibilityAddTraits(.isHeader)
-                .allowsHitTesting(false)
+            ZStack {
+                Text(detail.title)
+                    .font(HomeDesign.Text.trendingTitle)
+                    .tracking(-0.3)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
+                    .dynamicTypeSize(...HomeDesign.Text.maxCategory)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(detail.accessibilityLabel)
+                    .accessibilityAddTraits(.isHeader)
+                    .allowsHitTesting(false)
+                    .id(titleKey)
+                    .transition(.asymmetric(insertion: .offset(y: 6).combined(with: .opacity), removal: .identity))
+            }
+            .animation(HomeDesign.Motion.soft(duration: 0.4, reduceMotion: reduceMotion), value: titleKey)
+            .frame(height: HomeDesign.Metric.trendingTitleHeight)
 
-            TrendingInfoRow(detail: detail, onOpenFaces: onOpenFaces)
+            TrendingFacesRow(detail: detail)
                 .padding(.top, HomeDesign.Metric.trendingInfoGap)
                 .frame(height: HomeDesign.Metric.trendingInfoHeight)
                 .opacity(isHidden ? 0 : 1)
@@ -104,64 +192,47 @@ private struct TrendingTitleBlock: View {
     }
 }
 
-/// The average, then the friends' faces; neither has a word beside it except "avg". A title nobody has logged and
-/// nobody has rated says "Popular this week", so the row is never empty.
-private struct TrendingInfoRow: View {
+/// The friends' faces, each opening that person's profile; nothing else is ever in the row. When the title changes the
+/// old faces stay until the new ones fade in over them (no gap), and a title nobody has logged shows an empty row.
+private struct TrendingFacesRow: View {
     let detail: TrendingTileDetail
-    let onOpenFaces: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 10) {
-            if let average = detail.averageText {
-                HStack(spacing: 4) {
-                    Text("\u{2605}")
-                        .foregroundStyle(HomeDesign.Palette.starGold)
-                    Text(average)
-                        .foregroundStyle(.white)
-                    Text("avg")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white.opacity(0.7))
-                }
-                .font(HomeDesign.Text.trendingInfo)
-                .lineLimit(1)
-                .accessibilityHidden(true)
-            }
+        ZStack {
             if !detail.avatars.isEmpty {
-                Button(action: onOpenFaces) {
-                    faces
-                        .padding(.vertical, 9)
-                        .padding(.horizontal, 12)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.vertical, -9)
-                .padding(.horizontal, -6)
-                .accessibilityLabel(detail.facesLabel)
-                .accessibilityHint("Opens the title")
-                .accessibilityIdentifier("trending.faces")
-            }
-            if detail.isPopularFallback {
-                Text("Popular this week")
-                    .font(HomeDesign.Text.trendingInfo)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white.opacity(0.7))
-                    .lineLimit(1)
-                    .accessibilityHidden(true)
+                faces
+                    .id(detail.facesKey)
+                    .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: detail.facesKey)
         .dynamicTypeSize(...HomeDesign.Text.maxCategory)
     }
 
     private var faces: some View {
         HStack(spacing: -HomeDesign.Metric.trendingFaceOverlap) {
-            ForEach(Array(detail.avatars.enumerated()), id: \.offset) { _, avatar in
-                TileAvatar(avatar: avatar, size: HomeDesign.Metric.trendingFaceSize)
+            ForEach(Array(detail.avatars.enumerated()), id: \.offset) { index, avatar in
+                NavigationLink {
+                    UserProfileDestination(username: avatar.username)
+                } label: {
+                    TileAvatar(avatar: avatar, size: HomeDesign.Metric.trendingFaceSize)
+                        .padding(.vertical, 9)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, -9)
+                .accessibilityLabel(avatar.name)
+                .accessibilityHint("Opens profile")
+                .accessibilityIdentifier("trending.face.\(index)")
             }
             if detail.moreCount > 0 {
                 TileMoreChip(count: detail.moreCount, size: HomeDesign.Metric.trendingFaceSize)
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -170,6 +241,9 @@ private struct TrendingInfoRow: View {
 /// A person's picture, decoded at its size, with a dark ring so overlapping faces read apart. Without a picture, their
 /// initial on a pastel that stays the same for the same letter.
 struct TileAvatar: View {
+    /// The faces' decode size, which the panel's prefetch uses too so a prefetched face is the one cached.
+    static let thumbnailSize = CGSize(width: HomeDesign.Metric.trendingFaceSize, height: HomeDesign.Metric.trendingFaceSize)
+
     let avatar: TrendingTileDetail.Avatar
     let size: CGFloat
 

@@ -43,20 +43,26 @@ final class HomeFriendsModel {
     }
 }
 
-/// The Friends heading and the faces beside it. The faces are as tall as the heading's capital letters.
+/// The Friends heading and the faces beside it. The faces are a quarter taller than the heading's capital letters,
+/// centered on the heading, with the spacing grown by the same quarter.
 enum HomeFriendsSpec {
     static let headingSize: CGFloat = 22
+    /// How much bigger a face is than the heading's capital letters (and the spacing than it was at their height).
+    static let faceScale: CGFloat = 1.25
     /// Between the heading and the first face.
-    static let headingGap: CGFloat = 12
+    static let headingGap: CGFloat = 12 * faceScale
     /// Between faces.
-    static let gap: CGFloat = 6
+    static let gap: CGFloat = 6 * faceScale
     /// A face is easy to hit without being any taller to look at.
     static let touchPadding: CGFloat = 10
     /// How far a soft edge reaches into the strip where more faces lie beyond it.
     static let fade: CGFloat = 18
 
     /// The height of the heading's capital letters (about 15.5 pt at 22 pt heavy), to the half point.
-    static let faceSide: CGFloat = (UIFont.systemFont(ofSize: headingSize, weight: .heavy).capHeight * 2).rounded() / 2
+    static let capHeight: CGFloat = (UIFont.systemFont(ofSize: headingSize, weight: .heavy).capHeight * 2).rounded() / 2
+
+    /// A face's width and height: the capital letters' height and a quarter more (about 19.5 pt), to the half point.
+    static let faceSide: CGFloat = (capHeight * faceScale * 2).rounded() / 2
 }
 
 /// The faces of the people you follow in a sideways strip. Nothing shows until there are some, so the heading does not
@@ -141,7 +147,7 @@ private struct HomeFriendAvatar: View {
                 ZStack {
                     FeedAvatar.discColor(for: face.username)
                     Text(FeedAvatar.initial(of: face.username))
-                        .font(.system(size: 8, weight: .heavy))
+                        .font(.system(size: 8 * HomeFriendsSpec.faceScale, weight: .heavy))
                         .foregroundStyle(HomeDesign.Palette.avatarInk)
                 }
             }

@@ -29,10 +29,16 @@ nonisolated final class PosterPaletteStore: @unchecked Sendable {
     /// The server's colors if it sent any (nothing is counted), else the on-device count for `url`, started once per
     /// URL however many panels ask. Nil when there is no poster or its image can't be read.
     func swatches(server: [PosterSwatch]?, url: URL?) async -> [PosterSwatch]? {
-        if let known = known(server: server, url: url) { return known }
+        if let server, !server.isEmpty { return server }
         guard let url else { return nil }
         let task: Task<[PosterSwatch]?, Never>
+        // One critical section for "already counted?" and "already counting?": a count that finishes between two
+        // separate sections would be started a second time.
         lock.lock()
+        if let done = counted[url] {
+            lock.unlock()
+            return done
+        }
         if let existing = running[url] {
             task = existing
         } else {

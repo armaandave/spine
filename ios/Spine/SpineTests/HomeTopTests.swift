@@ -298,6 +298,29 @@ final class HomeTopTests: XCTestCase {
 
     // MARK: The page top, as the source says it
 
+    func testTheFacesAreAQuarterBiggerWithTheSpacingGrownAlongAndTheRowKeepsItsHeight() {
+        typealias S = HomeFriendsSpec
+        XCTAssertEqual(S.faceScale, 1.25)
+        XCTAssertEqual(S.faceSide, (S.capHeight * 1.25 * 2).rounded() / 2)
+        XCTAssertEqual(S.faceSide / S.capHeight, 1.25, accuracy: 0.05)
+        XCTAssertEqual(S.gap, 7.5)
+        XCTAssertEqual(S.headingGap, 15)
+        // Still shorter than the heading's line, so the row is no taller and the faces sit on its center line.
+        let line = UIFont.systemFont(ofSize: S.headingSize, weight: .heavy).lineHeight
+        XCTAssertLessThan(S.faceSide, line)
+    }
+
+    func testTheRoomUnderFriendsIsTheRoomAboveIt() throws {
+        let sources = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Spine/Features/Home", isDirectory: true)
+        let top = try String(contentsOf: sources.appendingPathComponent("HomeTop.swift"), encoding: .utf8)
+        XCTAssertTrue(top.contains("static let friendsToFeed: CGFloat = tilesToFriends"), "one number for both gaps")
+        XCTAssertTrue(top.contains(".padding(.bottom, HomeTopSpec.friendsToFeed)"))
+        XCTAssertTrue(top.contains(".padding(.top, HomeTopSpec.tilesToFriends)"))
+    }
+
     func testTheHeaderSqueezeReadsOnlyTheOpenTileAndAnimatesWithTheTilesCurve() throws {
         let sources = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -305,7 +328,7 @@ final class HomeTopTests: XCTestCase {
             .appendingPathComponent("Spine/Features/Home", isDirectory: true)
         let top = try String(contentsOf: sources.appendingPathComponent("HomeTop.swift"), encoding: .utf8)
         XCTAssertTrue(top.contains("HomeHeaderSqueeze(state: viewModel.tilesState)"), "The header squeezes with the open tile")
-        XCTAssertTrue(top.contains("TileMotion.frame(reduceMotion: reduceMotion)"), "...under the tile's own curve")
+        XCTAssertTrue(top.contains("TileMotion.frame(closing: !squeezed, reduceMotion: reduceMotion)"), "...under the tile's own curve, opening and closing")
         XCTAssertTrue(top.contains("anchor: .topLeading"), "...from its top-leading corner")
         // HomeTop's own body does not read the open tile, or opening one would redraw the whole page top.
         let body = try XCTUnwrap(top.range(of: "var body: some View {"))

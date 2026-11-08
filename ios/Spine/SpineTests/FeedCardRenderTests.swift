@@ -220,12 +220,12 @@ final class FeedCardRenderTests: XCTestCase {
             likes: 1204, comments: 38
         )))
 
-        // Depth (direction B): the duotone marks on each ink, the three status pills on each ink, both heart states.
-        add("27-marks-dark", "LOG · 4.5 STARS, LOVED, REWATCH · DUOTONE MARKS (DARK)", card(try FeedTestItems.log(
+        // Depth (direction B): the glowing heart and rewatch marks on each ink, the three status pills on each ink, both heart states.
+        add("27-marks-dark", "LOG · 4.5 STARS, LOVED, REWATCH · GLOWING MARKS (DARK)", card(try FeedTestItems.log(
             id: 27, rating: "4.5", liked: true, rewatch: true, review: "the second watch is the better one.",
             title: "Sinners", mediaFields: art("sinners2", "2F2A4A"), username: "maya"
         )))
-        add("28-marks-light", "LOG · 4.5 STARS, LOVED, REWATCH · DUOTONE MARKS (LIGHT)", card(try FeedTestItems.log(
+        add("28-marks-light", "LOG · 4.5 STARS, LOVED, REWATCH · GLOWING MARKS (LIGHT)", card(try FeedTestItems.log(
             id: 28, rating: "4.5", liked: true, rewatch: true, mediaType: "anime", source: "mal", title: "Frieren",
             mediaFields: art("frieren2", "D8C27A"), username: "jules"
         )))
@@ -386,10 +386,10 @@ final class FeedCardRenderTests: XCTestCase {
 
     func testTheCountsReserveFollowsTheirDigits() {
         XCTAssertEqual(FeedCardView.countsReserve(for: nil), 0)
-        // 66 and 8 for each character.
-        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: false, likeCount: 0, commentCount: 0)), 82)
-        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 12, commentCount: 3)), 90)
-        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 1204, commentCount: 38)), 122, "The thousands comma takes room too")
+        // 61 and 8 for each character.
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: false, likeCount: 0, commentCount: 0)), 77)
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 12, commentCount: 3)), 85)
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 1204, commentCount: 38)), 117, "The thousands comma takes room too")
     }
 
     func testTwoEqualModelsCompareEqual() throws {

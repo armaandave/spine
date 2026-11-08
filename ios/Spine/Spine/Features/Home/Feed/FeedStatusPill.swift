@@ -140,11 +140,8 @@ struct FeedStatusPill: View {
                     (Color(red: 255 / 255, green: 176 / 255, blue: 40 / 255), dark ? 0.85 : 0.55)
                 )
             case .pickedBackUp:
-                let green = MarkPalette.palette(for: .rewatch, ink: ink)
-                return (
-                    dark ? Color(hex: 0x34D07A) : Color(hex: 0x0C8F47),
-                    (MarkPalette.color(green.glow), dark ? 0.85 : 0.55)
-                )
+                let green = dark ? Color(hex: 0x34D07A) : Color(hex: 0x0C8F47)
+                return (green, (green, dark ? 0.85 : 0.55))
             case .stopped:
                 return (
                     dark ? Color(hex: 0xFF6B6B) : Color(hex: 0xC0392B),

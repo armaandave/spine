@@ -12,6 +12,8 @@ struct TrendingRailHost: View {
     let entry: TrendingRailStore.Entry?
     let store: TrendingRailStore
     let actions: HomeTilesActions
+    /// The title's poster color for the Open icon; nil keeps it white.
+    var openTint: Color?
 
     var body: some View {
         let viewModel = entry?.viewModel
@@ -41,6 +43,8 @@ struct TrendingRailHost: View {
             showsEye: true,
             showsRating: true,
             offersRatingAfterBaseAction: config?.offersRatingAfterBaseAction ?? false,
+            // Liking here never opens the stars; the star button does.
+            likeOpensRatingPicker: false,
             trackLabel: config?.leadLabel ?? "Plan \(name)",
             eyeLabel: config?.eyeLabel,
             eyeHint: config?.eyeHint,
@@ -54,6 +58,7 @@ struct TrendingRailHost: View {
                 systemName: "arrow.up.forward",
                 label: "Open \(name)",
                 identifier: "trending.rail.open",
+                tint: openTint,
                 action: { actions.onOpenTrending(title) }
             ),
             isLoadingState: config == nil && phase != .failed,

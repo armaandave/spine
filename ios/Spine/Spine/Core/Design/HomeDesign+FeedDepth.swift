@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension HomeDesign {
-    /// The numbers of the feed card's depth (direction B, "Duotone"): the counts pill, the status pill, the marks, the
-    /// poster's lift, the text lift. They sit in their own file so the tiles' tokens in `HomeDesign.swift` stay theirs.
+    /// The numbers of the feed card's depth (direction B): the counts pill, the status pill, the poster's lift, the
+    /// text lift. They sit in their own file so the tiles' tokens in `HomeDesign.swift` stay theirs.
     /// Points unless noted.
     nonisolated enum FeedDepth {
         // MARK: Counts pill
@@ -10,19 +10,23 @@ extension HomeDesign {
         static let countsPillHeight: CGFloat = 22
         static let countsPillHPad: CGFloat = 9
         /// Between the heart pair and the bubble pair.
-        static let countsPillGap: CGFloat = 8
+        static let countsPillGap: CGFloat = 5
         /// Icon to number.
-        static let countsPairGap: CGFloat = 4
+        static let countsPairGap: CGFloat = 3
+        /// The box the heart and the bubble are each drawn to fill, rim included.
         static let countsIcon: CGFloat = 13
+        /// The rim of both icons.
+        static let countsRim: CGFloat = 1.1
         /// Used with `.monospacedDigit()`.
         static let countsFont = Font.system(size: 12, weight: .bold)
         /// The pill's right edge to the card's right edge.
         static let countsTrailing: CGFloat = 10
         /// The pill's bottom edge to the card's bottom edge.
         static let countsBottom: CGFloat = 8
-        /// Room kept left of the pill for detail rows and the meter: 66 + 8 per character of the counts (a bold 12 pt
-        /// monospaced digit measures 8, not the board's 7.2), which keeps at least 6 pt between them.
-        static let countsReserveBase: CGFloat = 66
+        /// Room kept left of the pill for detail rows and the meter: 61 + 8 per character of the counts (a bold 12 pt
+        /// monospaced digit measures 8, not the board's 7.2), which keeps at least 6 pt between them. The pill itself is
+        /// 2 x 9 + 2 x (13 + 3) + 5 = 55 plus the characters.
+        static let countsReserveBase: CGFloat = 61
         static let countsReservePerDigit: CGFloat = 8
 
         // MARK: Status pill
@@ -34,13 +38,6 @@ extension HomeDesign {
         static let statusGap: CGFloat = 4
         static let statusDot: CGFloat = 5
         static let statusDotMargin: CGFloat = 1
-
-        // MARK: Marks (the box a mark is designed in)
-
-        static let heartSize: CGFloat = 18
-        static let rewatchSize: CGFloat = 22
-        /// Horizontal, each side, in the headline row.
-        static let markMargin: CGFloat = -1
 
         // MARK: Poster
 

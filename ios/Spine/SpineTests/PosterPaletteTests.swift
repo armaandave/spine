@@ -256,6 +256,53 @@ final class PosterPaletteTests: XCTestCase {
         XCTAssertEqual(l.cells[7].a, 0.16, accuracy: 0.0001, "ticks still to come stay the plain track")
     }
 
+    // MARK: Which palette the panel colors with
+
+    private let blackAndWhite = [
+        PosterSwatch(hex: "#050505", share: 0.7), PosterSwatch(hex: "#FAFAFA", share: 0.3),
+    ]
+    private let vivid = [PosterSwatch(hex: "#1E90FF", share: 0.6), PosterSwatch(hex: "#FFB000", share: 0.3)]
+
+    func testAServerPaletteWithNoUsableColorsDoesNotStopThePosterFromBeingCounted() async throws {
+        // The cause of "the colors never show": the store hands back any non-empty server palette as the answer, and
+        // a palette of only black and white gives no tint, so the poster was never counted and the meter stayed
+        // plain. The panel now asks the store with no server palette, and chooses between the two.
+        let counter = Counter()
+        let store = PosterPaletteStore { [vivid] _ in counter.bump(); return vivid }
+        XCTAssertNil(MeterTint.make(from: blackAndWhite), "the server's palette gives nothing to draw")
+        let stuck = await store.swatches(server: blackAndWhite, url: url)
+        XCTAssertEqual(stuck, blackAndWhite, "asking with the server's palette never counts")
+        XCTAssertEqual(counter.count, 0)
+
+        let counted = await store.swatches(server: nil, url: url)
+        XCTAssertEqual(counter.count, 1)
+        let tint = try XCTUnwrap(MeterTint.choose(server: blackAndWhite, counted: counted))
+        XCTAssertEqual(tint, MeterTint.make(from: vivid), "the panel draws the counted colors")
+    }
+
+    func testTheServersColorsWinWhenTheyGiveATintAndTheCountIsTheFallback() throws {
+        let server = [PosterSwatch(hex: "#C8102E", share: 0.5)]
+        let fromServer = try XCTUnwrap(MeterTint.choose(server: server, counted: vivid))
+        XCTAssertEqual(fromServer, MeterTint.make(from: server))
+        XCTAssertEqual(MeterTint.choose(server: nil, counted: vivid), MeterTint.make(from: vivid))
+        XCTAssertEqual(MeterTint.choose(server: [], counted: vivid), MeterTint.make(from: vivid))
+        XCTAssertNil(MeterTint.choose(server: nil, counted: nil))
+        XCTAssertNil(MeterTint.choose(server: blackAndWhite, counted: blackAndWhite))
+    }
+
+    func testPostersCountedTogetherAreEachCountedOnce() async {
+        let counter = Counter()
+        let store = PosterPaletteStore { [vivid] _ in counter.bump(); return vivid }
+        let urls = (0 ..< 6).compactMap { URL(string: "https://example.com/\($0).jpg") }
+        await withTaskGroup(of: Void.self) { group in
+            for url in urls + urls {
+                group.addTask { _ = await store.swatches(server: nil, url: url) }
+            }
+        }
+        XCTAssertEqual(counter.count, 6)
+        for url in urls { XCTAssertEqual(store.known(server: nil, url: url), vivid) }
+    }
+
     func testPanelColorsBlendWithTheScroll() throws {
         let plain = panelLayout(tint: nil)
         let colored = panelLayout(tint: try XCTUnwrap(panelTint))

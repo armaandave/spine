@@ -3,15 +3,19 @@ import SwiftUI
 /// The outline of the open tile's language on top of a button's glass: a 0.5 pt ring and a 1 pt crescent along the
 /// top. One Canvas of solid colors, no path boolean (the shapes change size on every frame of a swipe).
 struct PanelOutline: View {
+    /// How much of the top crescent shows, 0 to 1: the ring alone is the whole outline of an icon circle.
+    var crescent: Double = 1
+
     var body: some View {
+        let crescent = crescent
         Canvas { context, size in
-            Self.draw(in: context, size: size)
+            Self.draw(in: context, size: size, crescent: crescent)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    nonisolated private static func draw(in context: GraphicsContext, size: CGSize) {
+    nonisolated private static func draw(in context: GraphicsContext, size: CGSize, crescent strength: Double) {
         let rect = CGRect(origin: .zero, size: size)
         guard rect.width > 2, rect.height > 2 else { return }
         let ring = rect.insetBy(dx: TileStyle.strokeWidth / 2, dy: TileStyle.strokeWidth / 2)
@@ -20,9 +24,11 @@ struct PanelOutline: View {
             with: .color(TileStyle.stroke),
             lineWidth: TileStyle.strokeWidth
         )
+        guard strength > 0.004 else { return }
         // The top highlight is the capsule minus the same capsule moved down by 1 pt: an even-odd fill of both,
         // clipped to the first, is exactly its top crescent.
         var clipped = context
+        clipped.opacity = strength
         clipped.clip(to: Path(roundedRect: rect, cornerRadius: rect.height / 2, style: .continuous))
         var crescent = Path(roundedRect: rect, cornerRadius: rect.height / 2, style: .continuous)
         crescent.addPath(Path(
@@ -73,23 +79,27 @@ struct PanelGlassButtons: View {
         let quickWidth = max(layout.quickWidth, 1)
         let live = spec.hasQuick && layout.quickOn > 0.5 && isSettled
         return Button(action: onQuick) {
-            ZStack {
-                Capsule().fill(PanelStyle.primaryTint)
-                ZStack {
-                    Text(spec.quickLabel)
-                        .id(spec.quickLabel)
-                        .transition(PanelMotion.wordSwap(reduceMotion: reduceMotion))
+            // The button is exactly this big: its label, tint and outline are overlays, so a word wider than the
+            // button (it shrinks to a circle while it morphs) can never make the outline or tint wider than the glass.
+            Color.clear
+                .frame(width: quickWidth, height: InProgressPanelMetrics.buttonHeight)
+                .overlay { Capsule().fill(PanelStyle.primaryTint) }
+                .overlay {
+                    ZStack {
+                        Text(spec.quickLabel)
+                            .id(spec.quickLabel)
+                            .transition(PanelMotion.wordSwap(reduceMotion: reduceMotion))
+                    }
+                    .animation(PanelMotion.slot(reduceMotion: reduceMotion), value: spec.quickLabel)
+                    .font(InProgressPanelMetrics.labelFont)
+                    .tracking(InProgressPanelMetrics.labelTracking)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .opacity(isBusy ? 0.5 : 1)
+                    .frame(width: quickWidth, height: InProgressPanelMetrics.buttonHeight)
                 }
-                .animation(PanelMotion.slot(reduceMotion: reduceMotion), value: spec.quickLabel)
-                .font(InProgressPanelMetrics.labelFont)
-                .tracking(InProgressPanelMetrics.labelTracking)
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .fixedSize()
-                .opacity(isBusy ? 0.5 : 1)
-                PanelOutline()
-            }
-            .frame(width: quickWidth, height: InProgressPanelMetrics.buttonHeight)
+                .overlay { PanelOutline() }
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .capsule)
@@ -123,28 +133,37 @@ struct PanelGlassButtons: View {
         let textOpacity = PanelButtonGeometry.textOpacity(updateWidth: layout.updateWidth)
         let iconOpacity = PanelButtonGeometry.iconOpacity(updateWidth: layout.updateWidth)
         let title = spec.detail.secondaryTitle
+        let updateWidth = max(layout.updateWidth, 1)
         return Button(action: onUpdate) {
-            ZStack {
-                Capsule().fill(PanelStyle.primaryTint).opacity(layout.updatePrimary)
-                ZStack {
-                    Text(title)
-                        .id(title)
-                        .transition(PanelMotion.wordSwap(reduceMotion: reduceMotion))
-                }
-                .animation(PanelMotion.slot(reduceMotion: reduceMotion), value: title)
-                .font(InProgressPanelMetrics.labelFont)
-                .tracking(InProgressPanelMetrics.labelTracking)
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .fixedSize()
-                .opacity(textOpacity)
-                Image(systemName: title == "Open" ? "arrow.up.right" : "pencil")
-                    .font(InProgressPanelMetrics.iconFont)
+            // One shape, the size of the glass: when `Update` shrinks to its icon, "Update" is still laid out at its
+            // own width, and inside a plain ZStack that width stretched the outline and the tint past the 36 pt
+            // circle, drawing a second, larger ring around it.
+            Color.clear
+                .frame(width: updateWidth, height: InProgressPanelMetrics.buttonHeight)
+                .overlay { Capsule().fill(PanelStyle.primaryTint).opacity(layout.updatePrimary) }
+                .overlay {
+                    ZStack {
+                        Text(title)
+                            .id(title)
+                            .transition(PanelMotion.wordSwap(reduceMotion: reduceMotion))
+                    }
+                    .animation(PanelMotion.slot(reduceMotion: reduceMotion), value: title)
+                    .font(InProgressPanelMetrics.labelFont)
+                    .tracking(InProgressPanelMetrics.labelTracking)
                     .foregroundStyle(.white)
-                    .opacity(iconOpacity)
-                PanelOutline()
-            }
-            .frame(width: max(layout.updateWidth, 1), height: InProgressPanelMetrics.buttonHeight)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .opacity(textOpacity)
+                    .frame(width: updateWidth, height: InProgressPanelMetrics.buttonHeight)
+                }
+                .overlay {
+                    Image(systemName: title == "Open" ? "arrow.up.right" : "pencil")
+                        .font(InProgressPanelMetrics.iconFont)
+                        .foregroundStyle(.white)
+                        .opacity(iconOpacity)
+                        .frame(width: updateWidth, height: InProgressPanelMetrics.buttonHeight)
+                }
+                .overlay { PanelOutline(crescent: 1 - iconOpacity) }
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .capsule)

@@ -124,10 +124,34 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.glowCrossfadeDuration, 0.3)
         XCTAssertEqual(M.reducedDuration, 0.1)
         XCTAssertEqual(M.openStaggerMs, 45)
-        XCTAssertEqual(M.closeNeighborDelay, 0.1)
-        XCTAssertEqual(M.closeNeighborDuration, 0.5)
-        XCTAssertEqual(M.closeRestDuration, 0.4)
-        XCTAssertEqual(M.closeFadeDuration, 0.18)
+        XCTAssertEqual(M.closeFrameDuration, 0.86)
+        XCTAssertEqual(M.closeSlideDuration, 0.7)
+        XCTAssertEqual(M.closeTileFadeDuration, 0.45)
+        XCTAssertEqual(M.closeArtDuration, 0.7)
+        XCTAssertEqual(M.closeNeighborDelay, 0)
+        XCTAssertEqual(M.closeNeighborDuration, 0.86)
+        XCTAssertEqual(M.closeRestDuration, 0.6)
+        XCTAssertEqual(M.closeFadeDuration, 0.3)
+    }
+
+    func testClosingIsSlowerThanOpeningAndNeverWhips() {
+        typealias M = HomeDesign.Motion
+        // About 1.3 to 1.5 times the open.
+        XCTAssertEqual(M.closeFrameDuration / M.tileHeightDuration, 1.4, accuracy: 0.1)
+        XCTAssertEqual(M.closeSlideDuration / 0.5, 1.4, accuracy: 0.1)
+        // The three posters that stay visible start together and take as long as the tile.
+        XCTAssertEqual(M.closeNeighborDelay, 0, "no stagger between the posters")
+        XCTAssertEqual(M.closeNeighborDuration, M.closeFrameDuration)
+        // No control point leaves 0...1, so the curve cannot overshoot the fan's places.
+        let curve = M.closeCurve
+        for value in [curve.c1x, curve.c1y, curve.c2x, curve.c2y] {
+            XCTAssertTrue((0.0 ... 1.0).contains(value))
+        }
+        XCTAssertEqual(
+            M.closing(duration: 0.86, reduceMotion: false),
+            .timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.86)
+        )
+        XCTAssertEqual(M.closing(duration: 0.86, reduceMotion: true), M.reduced)
     }
 
     func testMotionCurvesAreTheDesigns() {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The slots of a rolling number: five places and a comma after the thousands. A pure function of the number being
+/// The slots of a changing number: five places and a comma after the thousands. A pure function of the number being
 /// shown `x` (fractional only while a swipe or an animation is between two values) and how much of it exists
 /// (`shown`, 0 to 1), so a digit grows in as the number passes 10, 100, 1,000 and the neighbors slide to make room.
 nonisolated struct OdometerSlots: Equatable {
@@ -10,7 +10,7 @@ nonisolated struct OdometerSlots: Equatable {
         var width: Double
         /// How much of the slot exists, 0 to 1: also its opacity.
         var opacity: Double
-        /// Which glyph is centered: 7.5 is halfway from a 7 to an 8.
+        /// Which glyph is showing: 7.5 is halfway from a 7 to an 8 (see `OdometerSlots.fade(roll:)`).
         var roll: Double
     }
 
@@ -48,26 +48,55 @@ nonisolated struct OdometerSlots: Equatable {
     }
 }
 
-/// Draws a rolling number in one Canvas: each visible slot is clipped to its box and shows the glyph for its roll
-/// and the next one rising behind it, each with an alpha that falls off toward the box's edge (a per-glyph alpha
-/// where the board has a vertical mask: masks are offscreen passes).
+extension OdometerSlots {
+    /// A slot's glyph at `roll` (7.5 is halfway from a 7 to an 8) as an in-place cross-fade: the digit it is on, the
+    /// next one, and how much of the next is showing. Nothing travels: both sit in the middle of the slot. The
+    /// fade is eased and takes the middle of each step, so a digit rests solid before and after it changes.
+    nonisolated struct Fade: Equatable {
+        var base: Int
+        var next: Int
+        /// 0 is all `base`, 1 is all `next`.
+        var amount: Double
+    }
+
+    /// The share of a step that the digits rest solid at each end.
+    nonisolated static let fadeRest = 0.15
+    /// The blur a glyph has at the middle of its fade, in points.
+    nonisolated static let fadeBlur = 3.0
+
+    nonisolated static func fade(roll: Double) -> Fade {
+        let whole = roll.rounded(.down)
+        let step = roll - whole
+        let t = min(max((step - fadeRest) / (1 - 2 * fadeRest), 0), 1)
+        let digit = ((Int(whole) % 10) + 10) % 10
+        return Fade(base: digit, next: (digit + 1) % 10, amount: t * t * (3 - 2 * t))
+    }
+}
+
+/// Draws a changing number in one Canvas: each visible slot shows its digit and the next one cross-faded in place,
+/// each a little blurred while it comes or goes. No glyph moves up or down, so a number only dissolves into the
+/// next. The canvas reaches `pad` past the number on every side so a blur is not cut off; the padding is taken back
+/// so layout sees the number's own size.
 struct OdometerView: View {
     let slots: OdometerSlots
     let height: Double
 
     static let rowHeight = InProgressPanelMetrics.titleRowHeight
+    private static let pad = 6.0
 
     var body: some View {
         let slots = slots
+        let pad = Self.pad
         Canvas { context, size in
-            Self.draw(slots, in: context, size: size)
+            Self.draw(slots, in: context, size: size, pad: pad)
         } symbols: {
             ForEach(0 ..< 10, id: \.self) { digit in
                 glyph(String(digit)).tag(digit)
             }
             glyph(",").tag(10)
         }
-        .frame(width: slots.width, height: height)
+        .frame(width: slots.width + 2 * pad, height: height + 2 * pad)
+        .padding(-pad)
         .accessibilityHidden(true)
         .allowsHitTesting(false)
     }
@@ -79,42 +108,38 @@ struct OdometerView: View {
             .fixedSize()
     }
 
-    /// How opaque a glyph centered `distance` from the middle of the box is: solid in the middle third, a third
-    /// left at the edge.
-    nonisolated static func edge(distance: Double) -> Double {
-        min(max(1 - (distance - 5) / 10, 0), 1)
-    }
-
-    nonisolated private static func draw(_ slots: OdometerSlots, in context: GraphicsContext, size: CGSize) {
-        let row = Double(size.height)
-        var x = 0.0
+    nonisolated private static func draw(_ slots: OdometerSlots, in context: GraphicsContext, size: CGSize, pad: Double) {
+        let row = Double(size.height) - 2 * pad
+        var x = pad
         for slot in slots.slots {
             if slot.place == 2, slots.commaWidth > 0.01 {
-                drawComma(width: slots.commaWidth, at: x, in: context, row: row)
+                drawComma(width: slots.commaWidth, at: x, in: context, row: row, pad: pad)
                 x += slots.commaWidth
             }
             guard slot.width > 0.01, slot.opacity > 0.004 else { continue }
-            var clipped = context
-            clipped.clip(to: Path(CGRect(x: x, y: 0, width: slot.width, height: row)))
-            let base = slot.roll.rounded(.down)
-            for k in [base, base + 1] {
-                let y = row / 2 + row * (k - slot.roll)
-                let alpha = slot.opacity * edge(distance: abs(y - row / 2))
-                guard alpha > 0.004 else { continue }
-                let digit = ((Int(k) % 10) + 10) % 10
-                guard let glyph = clipped.resolveSymbol(id: digit) else { continue }
-                var layer = clipped
-                layer.opacity = alpha
-                layer.draw(glyph, at: CGPoint(x: x + slot.width / 2, y: y), anchor: .center)
+            let fade = OdometerSlots.fade(roll: slot.roll)
+            let layers = [
+                (digit: fade.base, share: 1 - fade.amount, blur: OdometerSlots.fadeBlur * fade.amount),
+                (digit: fade.next, share: fade.amount, blur: OdometerSlots.fadeBlur * (1 - fade.amount)),
+            ]
+            for layer in layers {
+                let alpha = slot.opacity * layer.share
+                guard alpha > 0.004, let glyph = context.resolveSymbol(id: layer.digit) else { continue }
+                var drawing = context
+                drawing.opacity = alpha
+                if layer.blur > 0.25 { drawing.addFilter(.blur(radius: layer.blur)) }
+                drawing.draw(glyph, at: CGPoint(x: x + slot.width / 2, y: pad + row / 2), anchor: .center)
             }
             x += slot.width
         }
     }
 
-    nonisolated private static func drawComma(width: Double, at x: Double, in context: GraphicsContext, row: Double) {
+    nonisolated private static func drawComma(
+        width: Double, at x: Double, in context: GraphicsContext, row: Double, pad: Double
+    ) {
         guard let glyph = context.resolveSymbol(id: 10) else { return }
         var layer = context
-        layer.clip(to: Path(CGRect(x: x, y: 0, width: width, height: row)))
-        layer.draw(glyph, at: CGPoint(x: x + width / 2, y: row / 2), anchor: .center)
+        layer.clip(to: Path(CGRect(x: x, y: pad, width: width, height: row)))
+        layer.draw(glyph, at: CGPoint(x: x + width / 2, y: pad + row / 2), anchor: .center)
     }
 }

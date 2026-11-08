@@ -479,6 +479,38 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileMotion.dim(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.panelRise(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.closePop(reduceMotion: true), reduced)
+        for role in [TileGeometry.FanRole.front, .left, .right, .hidden] {
+            XCTAssertEqual(TileMotion.close(role: role, reduceMotion: true), reduced)
+        }
+        XCTAssertEqual(TileMotion.closeFade(reduceMotion: true), reduced)
+        XCTAssertEqual(TileMotion.frame(closing: true, reduceMotion: true), reduced)
+        XCTAssertEqual(TileMotion.slide(closing: true, reduceMotion: true), reduced)
+        XCTAssertEqual(TileMotion.fade(closing: true, reduceMotion: true), reduced)
+        XCTAssertEqual(TileMotion.art(closing: true, reduceMotion: true), reduced)
+    }
+
+    @MainActor
+    func testOpeningKeepsItsAnimationsAndClosingIsSlowerOnTheGentlerCurve() {
+        // Opening is unchanged whichever way it is asked for.
+        XCTAssertEqual(TileMotion.frame(closing: false, reduceMotion: false), TileMotion.frame(reduceMotion: false))
+        XCTAssertEqual(TileMotion.slide(closing: false, reduceMotion: false), TileMotion.slide(reduceMotion: false))
+        XCTAssertEqual(TileMotion.fade(closing: false, reduceMotion: false), TileMotion.fade(reduceMotion: false))
+        XCTAssertEqual(TileMotion.art(closing: false, reduceMotion: false), TileMotion.art(reduceMotion: false))
+
+        let curve = HomeDesign.Motion.closeCurve
+        let closeFrame = Animation.timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.86)
+        XCTAssertEqual(TileMotion.frame(closing: true, reduceMotion: false), closeFrame)
+        // The poster the tile closes on lands with the tile, and its neighbors travel with it, with no delay.
+        XCTAssertEqual(TileMotion.close(role: .front, reduceMotion: false), closeFrame)
+        XCTAssertEqual(TileMotion.close(role: .left, reduceMotion: false), closeFrame.delay(0))
+        XCTAssertEqual(TileMotion.close(role: .right, reduceMotion: false), closeFrame.delay(0))
+        XCTAssertEqual(
+            TileMotion.close(role: .hidden, reduceMotion: false),
+            .timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.6)
+        )
+        XCTAssertEqual(TileMotion.closeFade(reduceMotion: false), .easeOut(duration: 0.3))
+        // The mounted posters are kept until the longest close is over.
+        XCTAssertGreaterThan(TileMotion.unmountDelay, .seconds(0.86))
     }
 
     @MainActor

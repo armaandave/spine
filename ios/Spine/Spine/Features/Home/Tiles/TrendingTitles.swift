@@ -226,58 +226,59 @@ enum TrendingAggregator {
     }
 }
 
-/// What the Trending tile's panel shows for the title in focus.
+/// What the Trending tile's panel shows for the title in focus: its name and the friends who logged it. Never a score.
 struct TrendingTileDetail: Equatable {
     struct Avatar: Equatable {
         let url: String?
         /// The first letter of the name, for a person with no picture.
         let initial: String
         let name: String
+        /// Whose profile the face opens.
+        let username: String
     }
 
-    /// The most faces beside the average; the rest are a "+N" chip.
+    /// The most faces shown; the rest are a "+N" chip.
     static let maxFaces = 4
 
     let title: String
-    /// "4.4", nil without an average. The panel adds the star and "avg".
-    let averageText: String?
-    /// Friends who logged it, most recent first, up to four.
+    /// Friends who logged it, most recent first, up to four. With none, the row shows nothing.
     let avatars: [Avatar]
     /// Friends past the four faces.
     let moreCount: Int
-    /// No friends and no average: the row says "Popular this week" so it is never empty.
-    let isPopularFallback: Bool
-    /// "Severance, average 4.4 out of 5, 2 friends logged or finished it".
+    /// "Severance, 2 friends logged or finished it".
     let accessibilityLabel: String
     /// "Maya, Theo and 2 more logged or finished it".
     let facesLabel: String
+
+    /// Who the row shows and how many more: the same key is the same faces, so the row only cross-fades when it changes.
+    var facesKey: String {
+        avatars.map(\.username).joined(separator: ",") + "+\(moreCount)"
+    }
 }
 
 enum TrendingTileModel {
     static func detail(for title: TrendingTitle) -> TrendingTileDetail {
         let name = title.media.displayTitle
-        let average = title.averageRating.map { String(format: "%.1f", ($0 * 10).rounded() / 10) }
         let friends = title.friends
         let avatars = friends.prefix(TrendingTileDetail.maxFaces).map { person in
             let shown = displayName(person)
-            return TrendingTileDetail.Avatar(url: person.avatarUrl, initial: String(shown.prefix(1)).uppercased(), name: shown)
+            return TrendingTileDetail.Avatar(
+                url: person.avatarUrl,
+                initial: String(shown.prefix(1)).uppercased(),
+                name: shown,
+                username: person.username
+            )
         }
         let more = max(0, friends.count - TrendingTileDetail.maxFaces)
-        let isFallback = friends.isEmpty && average == nil
 
         var parts = [name]
-        if let average { parts.append("average \(average) out of 5") }
         if !friends.isEmpty {
             parts.append("\(friends.count) \(friends.count == 1 ? "friend" : "friends") logged or finished it")
-        } else if isFallback {
-            parts.append("Popular this week")
         }
         return TrendingTileDetail(
             title: name,
-            averageText: average,
             avatars: Array(avatars),
             moreCount: more,
-            isPopularFallback: isFallback,
             accessibilityLabel: parts.joined(separator: ", "),
             facesLabel: facesLabel(for: friends.map(displayName))
         )

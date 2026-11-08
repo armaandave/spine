@@ -19,7 +19,10 @@ struct HomeGlow: View {
         Color.clear
             .frame(height: model.height)
             // It grows to its full height as a tile opens and back as it closes, with the tile.
-            .animation(TileMotion.frame(reduceMotion: reduceMotion), value: model.focused != nil)
+            .animation(
+                TileMotion.frame(closing: model.focused == nil, reduceMotion: reduceMotion),
+                value: model.focused != nil
+            )
             .overlay(alignment: .top) {
                 ZStack(alignment: .top) {
                     ForEach(layers.aliveLayers, id: \.token) { layer in

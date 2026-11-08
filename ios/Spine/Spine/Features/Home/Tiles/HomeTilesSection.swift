@@ -36,7 +36,7 @@ struct HomeTilesSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(height: height, alignment: .top)
-        .animation(TileMotion.frame(reduceMotion: reduceMotion), value: height)
+        .animation(TileMotion.frame(closing: state.open == nil, reduceMotion: reduceMotion), value: height)
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
         } action: { width in
@@ -87,7 +87,7 @@ struct HomeTilesSection: View {
     }
 
     private func closeTile() {
-        state.requestClose(animation: TileMotion.frame(reduceMotion: reduceMotion))
+        state.requestClose(animation: TileMotion.frame(closing: true, reduceMotion: reduceMotion))
     }
 }
 
@@ -126,7 +126,7 @@ private struct TilesSync: View {
     /// A list that empties under an open tile collapses it, which moves the page, so that runs animated too.
     private func sync(_ ids: [String], for tile: HomeTileID) {
         if ids.isEmpty, state.open == tile {
-            withAnimation(TileMotion.frame(reduceMotion: reduceMotion)) { state.sync(ids, for: tile) }
+            withAnimation(TileMotion.frame(closing: true, reduceMotion: reduceMotion)) { state.sync(ids, for: tile) }
         } else {
             state.sync(ids, for: tile)
         }
@@ -149,6 +149,8 @@ private struct HomeTile: View {
 
     var body: some View {
         let isOpen = state.open == tile
+        // Nothing open: the tiles are closing (or at rest), and everything that moves does so at the close's pace.
+        let closing = state.open == nil
         let frame = TileGeometry.frame(tile: tile.index, open: state.open?.index, contentWidth: contentWidth)
         let face = model.face(for: tile)
         let posters = model.posters(for: tile)
@@ -174,14 +176,14 @@ private struct HomeTile: View {
             .clipShape(shape)
             .overlay { TileOutline(shape: shape) }
             .overlay { tapTarget(face: face, shape: shape) }
-            .animation(TileMotion.frame(reduceMotion: reduceMotion), value: [frame.width, frame.height])
+            .animation(TileMotion.frame(closing: closing, reduceMotion: reduceMotion), value: [frame.width, frame.height])
             .scaleEffect(frame.scale)
             .offset(x: frame.slide)
-            .animation(TileMotion.slide(reduceMotion: reduceMotion), value: frame.scale)
+            .animation(TileMotion.slide(closing: closing, reduceMotion: reduceMotion), value: frame.scale)
             .opacity(frame.opacity)
-            .animation(TileMotion.fade(reduceMotion: reduceMotion), value: frame.opacity)
+            .animation(TileMotion.fade(closing: closing, reduceMotion: reduceMotion), value: frame.opacity)
             .offset(x: frame.left)
-            .animation(TileMotion.frame(reduceMotion: reduceMotion), value: frame.left)
+            .animation(TileMotion.frame(closing: closing, reduceMotion: reduceMotion), value: frame.left)
             .zIndex(frame.z)
             .allowsHitTesting(frame.hitTestable)
             // The escape action goes on a container. On a plain view it stretches its child buttons' accessibility
@@ -387,9 +389,9 @@ private struct TileArt: View {
             y: isOpen ? HomeDesign.Metric.tileOpenHeight / height : 1,
             anchor: .topLeading
         )
-        .animation(TileMotion.frame(reduceMotion: reduceMotion), value: isOpen)
+        .animation(TileMotion.frame(closing: !isOpen, reduceMotion: reduceMotion), value: isOpen)
         .opacity(isOpen ? 0 : 1)
-        .animation(TileMotion.art(reduceMotion: reduceMotion), value: isOpen)
+        .animation(TileMotion.art(closing: !isOpen, reduceMotion: reduceMotion), value: isOpen)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -424,7 +426,7 @@ private struct TileLabel: View {
                 .frame(maxWidth: closedWidth, alignment: .leading)
                 .offset(x: TileGeometry.labelLeading, y: TileGeometry.subtitleTop(isOpen: isOpen))
         }
-        .animation(TileMotion.frame(reduceMotion: reduceMotion), value: isOpen)
+        .animation(TileMotion.frame(closing: !isOpen, reduceMotion: reduceMotion), value: isOpen)
         .dynamicTypeSize(...HomeDesign.Text.maxCategory)
         .allowsHitTesting(false)
         .accessibilityHidden(!isOpen)

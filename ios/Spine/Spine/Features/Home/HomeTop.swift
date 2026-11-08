@@ -50,7 +50,6 @@ struct HomeTop: View {
                             FeedCardSkeleton()
                         }
                     }
-                    .padding(.top, HomeTopSpec.skeletonTop)
                 }
                 .transition(.opacity)
             case .content:
@@ -87,6 +86,9 @@ struct HomeTop: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, HomeTopSpec.tilesToFriends)
+        // The same room under the heading as above it. The first card, or the skeleton or message that stands in for
+        // it, starts right under this.
+        .padding(.bottom, HomeTopSpec.friendsToFeed)
     }
 
     /// What the page top shows: the profile's failure, the first load, or the page.
@@ -113,7 +115,8 @@ private enum HomeTopSpec {
     static let squeezedScale: CGFloat = 0.7
     static let headerToTiles: CGFloat = 22
     static let tilesToFriends: CGFloat = 30
-    static let skeletonTop: CGFloat = 14
+    /// Under the Friends row, to the first card: as much as above it.
+    static let friendsToFeed: CGFloat = tilesToFriends
     /// Four 115 pt cards fill about the height three of the old 164 pt ones did.
     static let skeletonCards = 4
     static let dateFont = Font.system(size: 13, weight: .semibold)
@@ -179,7 +182,7 @@ private struct HomeHeaderSqueeze<Content: View>: View {
         SqueezeLayout(scale: scale) {
             content().scaleEffect(scale, anchor: .topLeading)
         }
-        .animation(TileMotion.frame(reduceMotion: reduceMotion), value: squeezed)
+        .animation(TileMotion.frame(closing: !squeezed, reduceMotion: reduceMotion), value: squeezed)
     }
 }
 
@@ -267,7 +270,6 @@ struct HomeFeedStatus: View {
                         FeedCardSkeleton()
                     }
                 }
-                .padding(.top, HomeTopSpec.skeletonTop)
                 .transition(.opacity)
             case let .failed(message):
                 HomeInlineState(
@@ -278,7 +280,6 @@ struct HomeFeedStatus: View {
                 ) {
                     Task { await viewModel.loadActivity() }
                 }
-                .padding(.top, 8)
                 .transition(.opacity)
             case .followNobody:
                 HomeInlineState(
@@ -288,7 +289,6 @@ struct HomeFeedStatus: View {
                     actionTitle: "Find People",
                     action: onFindPeople
                 )
-                .padding(.top, 8)
                 .transition(.opacity)
             case .quiet:
                 HomeInlineState(
@@ -296,7 +296,6 @@ struct HomeFeedStatus: View {
                     systemImage: "clock.arrow.circlepath",
                     message: "Logs and progress from people you follow will appear here."
                 )
-                .padding(.top, 8)
                 .transition(.opacity)
             }
         }

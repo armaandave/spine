@@ -25,6 +25,12 @@ enum FeedStandingText {
         }
     }
 
+    /// A show's place in the season a friend is in: "S2 · 7 of 10 episodes" ("Specials" for season 0).
+    static func seasonText(season: Int, current: Int, total: Int) -> String {
+        let name = season == 0 ? "Specials" : "S\(season)"
+        return "\(name) \u{00B7} " + (counted(current, of: total, noun: "episode") ?? "")
+    }
+
     /// "63 of 70 episodes", or "9 episodes" when the end is not known. Nothing for nothing yet.
     private static func counted(_ current: Int, of total: Int?, noun: String) -> String? {
         if let total {

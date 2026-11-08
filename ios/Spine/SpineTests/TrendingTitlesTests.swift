@@ -288,7 +288,7 @@ final class TrendingTitlesTests: XCTestCase {
         XCTAssertEqual(shared.friends.map(\.id), [2], "The faces are friends only")
         let mine = try XCTUnwrap(result(feed: [], own: [try log(5, "mine", by: 1)], you: you).titles.first)
         XCTAssertTrue(mine.friends.isEmpty)
-        XCTAssertTrue(TrendingTileModel.detail(for: mine).isPopularFallback, "No faces and no average")
+        XCTAssertTrue(TrendingTileModel.detail(for: mine).avatars.isEmpty, "No friends, no faces")
     }
 
     // MARK: Fallback
@@ -342,46 +342,52 @@ final class TrendingTitlesTests: XCTestCase {
         let friends = [friend(2, "Maya"), friend(3, "Theo"), friend(4, "Noor"), friend(5, "Sam"), friend(6, "Jules"), friend(7, "Ana")]
         let detail = TrendingTileModel.detail(for: title(friends: friends, average: 4.4))
         XCTAssertEqual(detail.title, "Severance")
-        XCTAssertEqual(detail.averageText, "4.4")
         XCTAssertEqual(detail.avatars.map(\.name), ["Maya", "Theo", "Noor", "Sam"], "Four faces at most, newest first")
         XCTAssertEqual(detail.avatars.first?.initial, "M")
         XCTAssertEqual(detail.moreCount, 2)
-        XCTAssertFalse(detail.isPopularFallback)
-        XCTAssertEqual(detail.accessibilityLabel, "Severance, average 4.4 out of 5, 6 friends logged or finished it")
+        XCTAssertEqual(detail.accessibilityLabel, "Severance, 6 friends logged or finished it", "The average is never shown or spoken")
         XCTAssertEqual(detail.facesLabel, "Maya, Theo and 4 more logged or finished it")
     }
 
-    func testTheAverageIsOneDecimalWithTheSameRounding() throws {
-        XCTAssertEqual(TrendingTileModel.detail(for: title(friends: [], average: 4.25)).averageText, "4.3")
-        XCTAssertEqual(TrendingTileModel.detail(for: title(friends: [], average: 4)).averageText, "4.0")
-        let feed = [
-            try log(1, "a", by: 2, rating: "4"), try log(2, "a", by: 3, rating: "4.5"), try log(3, "b"), try log(4, "c"),
-        ]
-        let popular = try XCTUnwrap(result(feed: feed).titles.first)
-        XCTAssertEqual(TrendingTileModel.detail(for: popular).averageText, "4.3")
+    func testEachFaceKnowsWhoseProfileItOpens() throws {
+        let detail = TrendingTileModel.detail(for: title(friends: [friend(2, "Maya"), friend(3, "Theo")]))
+        XCTAssertEqual(detail.avatars.map(\.username), ["user2", "user3"])
     }
 
-    func testNoFacesAndNoAverageIsThePopularFallbackAndSpeaksIt() throws {
+    func testTheAverageNeverReachesThePanel() throws {
+        let rated = TrendingTileModel.detail(for: title(friends: [], average: 4.25))
+        XCTAssertTrue(rated.avatars.isEmpty, "An average does not fill the row")
+        XCTAssertEqual(rated.accessibilityLabel, "Severance")
+        XCTAssertEqual(rated.facesLabel, "")
+    }
+
+    func testNoFacesIsAnEmptyRowWithNoWordsAtAll() throws {
         let detail = TrendingTileModel.detail(for: title(friends: []))
-        XCTAssertTrue(detail.isPopularFallback)
         XCTAssertTrue(detail.avatars.isEmpty)
         XCTAssertEqual(detail.moreCount, 0)
-        XCTAssertEqual(detail.accessibilityLabel, "Severance, Popular this week")
+        XCTAssertEqual(detail.accessibilityLabel, "Severance")
         XCTAssertEqual(detail.facesLabel, "")
     }
 
-    func testFacesWithoutAnAverageAndAnAverageWithoutFaces() throws {
+    func testFacesWithoutAnAverage() throws {
         let faces = TrendingTileModel.detail(for: title(friends: [friend(2, "Maya")]))
-        XCTAssertNil(faces.averageText)
-        XCTAssertFalse(faces.isPopularFallback)
         XCTAssertEqual(faces.accessibilityLabel, "Severance, 1 friend logged or finished it")
         XCTAssertEqual(faces.facesLabel, "Maya logged or finished it")
         XCTAssertEqual(TrendingTileModel.detail(for: title(friends: [friend(2, "Maya"), friend(3, "Theo")])).facesLabel,
                        "Maya and Theo logged or finished it")
-        let average = TrendingTileModel.detail(for: title(friends: [], average: 3.5))
-        XCTAssertEqual(average.averageText, "3.5")
-        XCTAssertFalse(average.isPopularFallback, "An average fills the row")
-        XCTAssertEqual(average.accessibilityLabel, "Severance, average 3.5 out of 5")
+    }
+
+    func testTheFacesKeyChangesOnlyWhenThePeopleDo() throws {
+        let maya = TrendingTileModel.detail(for: title(friends: [friend(2, "Maya")]))
+        let sameFaces = TrendingTileModel.detail(for: title(friends: [friend(2, "Maya")], name: "Other"))
+        let theo = TrendingTileModel.detail(for: title(friends: [friend(3, "Theo")]))
+        let mayaAndMore = TrendingTileModel.detail(for: title(friends: [
+            friend(2, "Maya"), friend(3, "Theo"), friend(4, "Noor"), friend(5, "Sam"), friend(6, "Jules"),
+        ]))
+        XCTAssertEqual(maya.facesKey, sameFaces.facesKey, "A different title with the same friends keeps the row")
+        XCTAssertNotEqual(maya.facesKey, theo.facesKey)
+        XCTAssertNotEqual(maya.facesKey, mayaAndMore.facesKey)
+        XCTAssertTrue(mayaAndMore.facesKey.hasSuffix("+1"))
     }
 
     func testAPersonWithNoNameIsSpokenByUsername() throws {
