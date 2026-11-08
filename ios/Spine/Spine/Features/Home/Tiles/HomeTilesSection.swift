@@ -49,6 +49,12 @@ struct HomeTilesSection: View {
         // The tiles are dark art whatever the phone is set to.
         .environment(\.colorScheme, .dark)
         .sensoryFeedback(.impact(weight: .light), trigger: openTicks)
+        .onChange(of: state.open) { old, new in
+            if new == nil, let old {
+                model.railStore?.tileClosed()
+                actions.onTileClosed(old)
+            }
+        }
         .task(id: state.open) {
             // A tile that has closed keeps all its posters mounted until they have flown home.
             guard state.open == nil else { return }
@@ -65,6 +71,10 @@ struct HomeTilesSection: View {
         let posters = model.posters(for: tile)
         let rest = state.restIndex(tile)
         HomeGlow.prefetch(HomeGlow.neighbors(of: rest, in: posters.map(\.media)))
+        if tile == .trending, rest < posters.count, let first = model.trendingTitle(id: posters[rest].id) {
+            // The rail's state for the title the tile opens on and the next, fetched while the tile opens.
+            model.railStore?.focus(first, neighbors: model.trendingNeighbors(of: first), neighborDelay: .zero)
+        }
         if posters.count > TileGeometry.fanMountedCount {
             TilePosterArt.prefetch(posters, at: TileGeometry.openPrefetchIndexes(rest: rest, count: posters.count))
         }
@@ -221,9 +231,7 @@ private struct HomeTile: View {
             )
             if isOpen {
                 TileDetailPanel(tile: tile, model: model, state: state, actions: actions)
-                    .frame(width: contentWidth - 2 * TileGeometry.panelInset)
-                    .padding(.leading, TileGeometry.panelInset)
-                    .padding(.top, TileGeometry.panelTop)
+                    .modifier(TilePanelPlacement(tile: tile, contentWidth: contentWidth))
                     .transition(.asymmetric(
                         insertion: .offset(y: 12).combined(with: .opacity)
                             .animation(TileMotion.panelRise(reduceMotion: reduceMotion)),

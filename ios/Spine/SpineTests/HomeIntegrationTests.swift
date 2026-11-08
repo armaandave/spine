@@ -266,6 +266,32 @@ final class HomeIntegrationTests: XCTestCase {
         XCTAssertEqual(activity.listRequests.count, 3)
     }
 
+    func testARailWriteDoesNotReloadHomeButMarksTheRailForTheTileClosing() async throws {
+        tracking.items["book"] = [book("b1", pages: 212)]
+        let home = makeHome()
+        await home.load()
+        let loads = tracking.listCalls
+
+        // A write from the Trending panel's rail: nothing reloads under the open tile.
+        let railOrigin = UUID()
+        home.railStore.changeOrigins.insert(railOrigin)
+        await home.mediaStateDidChange(origin: railOrigin)
+        XCTAssertEqual(tracking.listCalls, loads, "In progress did not reload")
+        XCTAssertTrue(home.inProgressNeedsReload, "It re-sorts on the tile closing")
+
+        await home.trendingTileDidClose()
+        XCTAssertEqual(tracking.listCalls, loads + 1)
+        XCTAssertFalse(home.inProgressNeedsReload)
+        await home.trendingTileDidClose()
+        XCTAssertEqual(tracking.listCalls, loads + 1, "Once")
+
+        // Any other origin still reloads it.
+        await home.mediaStateDidChange(origin: UUID())
+        XCTAssertEqual(tracking.listCalls, loads + 2)
+        await home.mediaStateDidChange(origin: nil)
+        XCTAssertEqual(tracking.listCalls, loads + 3, "No origin is not ours")
+    }
+
     func testBaselinesAreTakenWhenTheRailLoadsAndTheGainSinceThenIsLit() async throws {
         tracking.items["book"] = [book("b1", pages: 212)]
         tracking.bookResult = InProgressUpdatesTests.bookTracking(status: "In progress", pages: 232)
@@ -385,37 +411,6 @@ final class HomeIntegrationTests: XCTestCase {
 
         XCTAssertEqual(Set(home.tiles.trending.map(\.media.title)), ["One", "Two"])
         XCTAssertTrue(activity.pageRequests.isEmpty, "Nothing beyond the feed without the extras")
-    }
-
-    func testPlanToWatchShowsPlannedAtOnceAndGoesBackWhenTheWriteFails() async throws {
-        let media = MediaSummary(
-            ref: MediaRef(itemId: nil, source: "tmdb", mediaType: "movie", mediaId: "550", seasonNumber: nil, episodeNumber: nil),
-            title: "Fight Club", posterUrl: "https://p/fc.jpg", posterOrientation: .portrait
-        )
-        let title = TrendingTitle(key: "tmdb:movie:550", media: media, people: [], includesYou: false, averageRating: nil, lastDay: nil)
-        let home = makeHome()
-
-        let write = home.planToWatch(title)
-        XCTAssertTrue(home.tiles.plannedIDs.contains(title.key), "Planned the moment it is tapped")
-        XCTAssertTrue(home.tiles.busyItemIDs.contains(title.key))
-        await write.value
-        XCTAssertEqual(tracking.updateCalls.map(\.status), ["Planning"])
-        XCTAssertTrue(home.tiles.plannedIDs.contains(title.key))
-        XCTAssertFalse(home.tiles.busyItemIDs.contains(title.key))
-        XCTAssertNil(home.writeFailure)
-
-        // The same title again writes nothing.
-        await home.planToWatch(title).value
-        XCTAssertEqual(tracking.updateCalls.count, 1)
-
-        let other = TrendingTitle(
-            key: "tmdb:movie:551", media: media, people: [], includesYou: false, averageRating: nil, lastDay: nil
-        )
-        let failure = APIError.httpStatus(500, nil)
-        tracking.updateError = failure
-        await home.planToWatch(other).value
-        XCTAssertFalse(home.tiles.plannedIDs.contains(other.key), "A failed write takes the check back")
-        XCTAssertEqual(home.writeFailure, failure.localizedDescription)
     }
 
     // MARK: Quick actions

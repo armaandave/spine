@@ -347,11 +347,6 @@ nonisolated enum TileStyle {
     static let secondaryInk = Color.white
     static let buttonFont = Font.system(size: 15, weight: .bold)
 
-    // The Trending panel's friends row.
-    static let avatarSize: CGFloat = 22
-    static let avatarOverlap: CGFloat = 6
-    static let avatarRing = Color.black.opacity(0.35)
-    static let friendsFont = Font.system(size: 13, weight: .semibold)
     static let panelAside = Font.system(size: 13, weight: .bold)
 
     static func meterPalette(accent: Color) -> MeterPalette {

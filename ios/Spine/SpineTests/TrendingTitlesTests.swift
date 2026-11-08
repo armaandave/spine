@@ -121,7 +121,7 @@ final class TrendingTitlesTests: XCTestCase {
     func testOnePersonLoggingTwiceIsOnePerson() throws {
         let feed = [
             try log(1, "a", by: 2),
-            try progress(2, "a", by: 2, type: "movie"),
+            try log(2, "a", by: 2, day: "2026-11-06"),
             try log(3, "b", by: 2),
             try log(4, "c", by: 2),
         ]
@@ -129,13 +129,16 @@ final class TrendingTitlesTests: XCTestCase {
         XCTAssertEqual(titles.titles.first { $0.media.ref.mediaId == "a" }?.people.count, 1)
     }
 
-    func testOnlyLogsProgressAndStartsCount() throws {
+    func testOnlyALogCountsAsAPersonOnATitle() throws {
         let feed = [
             try log(1, "log"),
+            // A person qualifies only through a log: a day of progress (an amount, a start, a status move) does not, and
+            // the wire's progress_day object carries no "finished" to tell a day that reached the end.
             try progress(2, "progress"),
             try progress(3, "start", label: "Started"),
             try progress(4, "status-only", label: nil, moves: "paused"),
-            try log(5, "no-poster", poster: false),
+            try progress(5, "amount-day", label: "230 pages", type: "book"),
+            try log(6, "no-poster", poster: false),
             try FeedTestItems.planningRow(),
             try FeedTestItems.item(id: 7, type: "diary_deleted", objectID: 70, mediaID: "deleted",
                                    mediaFields: "\"poster_url\": \"https://p/d.jpg\""),
@@ -143,7 +146,14 @@ final class TrendingTitlesTests: XCTestCase {
                                    mediaFields: "\"poster_url\": \"https://p/r.jpg\""),
             try FeedTestItems.item(id: 9, objectType: "diary", objectID: 90, mediaID: "no-media", withMedia: false),
         ]
-        XCTAssertEqual(Set(ids(result(feed: feed))), ["log", "progress", "start"])
+        XCTAssertEqual(ids(result(feed: feed)), ["log"])
+    }
+
+    func testATitleOnlyFriendsAreDoingFallsOutOfThePeopleList() throws {
+        let feed = [try progress(1, "partway", by: 2, type: "movie"), try log(2, "finished", by: 3)]
+        let titles = result(feed: feed, fallback: [summary("partway")])
+        XCTAssertEqual(ids(titles), ["finished", "partway"], "It can come back through the fallback, with no faces")
+        XCTAssertTrue(titles.titles[1].people.isEmpty)
     }
 
     func testALogEditedLaterIsOneRowNotTwo() throws {
@@ -161,7 +171,7 @@ final class TrendingTitlesTests: XCTestCase {
                     mediaFields: "\"show_title\": \"The Show\""),
             try log(2, "100", by: 3, type: "season", season: 1, title: "Season 1",
                     mediaFields: "\"show_title\": \"The Show\""),
-            try progress(3, "100", by: 4, type: "tv"),
+            try log(3, "100", by: 4, type: "tv"),
             try log(4, "200", by: 2), try log(5, "300", by: 2),
         ]
         let titles = result(feed: feed)
@@ -269,6 +279,18 @@ final class TrendingTitlesTests: XCTestCase {
         XCTAssertEqual(titles.titles.first { $0.media.ref.mediaId == "a" }?.people.count, 1)
     }
 
+    func testFriendsExcludeYouWhilePeopleAndIncludesYouStillCountYou() throws {
+        let feed = [try log(1, "a", by: 2), try log(2, "b", by: 3), try log(3, "c", by: 4)]
+        let own = [try log(4, "a", by: 1)]
+        let shared = try XCTUnwrap(result(feed: feed, own: own, you: you).titles.first { $0.media.ref.mediaId == "a" })
+        XCTAssertEqual(shared.people.map(\.id), [1, 2], "Ranking and includesYou keep you")
+        XCTAssertTrue(shared.includesYou)
+        XCTAssertEqual(shared.friends.map(\.id), [2], "The faces are friends only")
+        let mine = try XCTUnwrap(result(feed: [], own: [try log(5, "mine", by: 1)], you: you).titles.first)
+        XCTAssertTrue(mine.friends.isEmpty)
+        XCTAssertTrue(TrendingTileModel.detail(for: mine).isPopularFallback, "No faces and no average")
+    }
+
     // MARK: Fallback
 
     func testTheFallbackFillsToFiveWithoutDuplicatesOrPostlessTitles() throws {
@@ -301,52 +323,70 @@ final class TrendingTitlesTests: XCTestCase {
 
     // MARK: The panel
 
-    func testThePanelForAPopularTitle() throws {
-        let feed = [
-            try log(1, "a", by: 2, rating: "4"), try log(2, "a", by: 3, rating: "4.5"),
-            try log(3, "a", by: 4), try log(4, "a", by: 5), try log(5, "b"), try log(6, "c"),
-        ]
-        let title = try XCTUnwrap(result(feed: feed).titles.first)
-        let detail = TrendingTileModel.detail(for: title, planned: false)
-        XCTAssertEqual(detail.title, "Title a")
-        XCTAssertEqual(detail.averageText, "\u{2605} 4.3")
-        XCTAssertEqual(detail.avatars.count, 3, "Three avatars at most")
-        XCTAssertEqual(detail.avatars.first?.initial, "U")
-        XCTAssertEqual(detail.whoLine, "4 logged it")
-        XCTAssertEqual(detail.primaryTitle, "Plan to watch")
-        XCTAssertFalse(detail.isPlanned)
-        XCTAssertEqual(detail.secondaryTitle, "Open")
-        XCTAssertEqual(detail.accessibilityLabel, "Title a, average 4.3 stars, 4 logged it, Plan to watch")
+    private func friend(_ id: Int, _ name: String) -> UserSummary {
+        UserSummary(id: id, username: "user\(id)", displayName: name, avatarUrl: nil)
     }
 
-    func testAPlannedTitleSaysPlanned() throws {
-        let title = try XCTUnwrap(result(feed: [try log(1, "a")]).titles.first)
-        let detail = TrendingTileModel.detail(for: title, planned: true)
-        XCTAssertEqual(detail.primaryTitle, "Planned")
-        XCTAssertTrue(detail.isPlanned)
-        XCTAssertNil(detail.averageText, "One log has no average")
-        XCTAssertEqual(detail.whoLine, "1 logged it")
-    }
-
-    func testYouAloneAndNobodyRead() throws {
-        let mine = try XCTUnwrap(result(feed: [], own: [try log(1, "a", by: 1)], you: you).titles.first)
-        XCTAssertEqual(TrendingTileModel.detail(for: mine, planned: false).whoLine, "You logged it")
-        let popular = try XCTUnwrap(result(feed: [], fallback: [summary("f1")]).titles.first)
-        let detail = TrendingTileModel.detail(for: popular, planned: false)
-        XCTAssertEqual(detail.whoLine, "Popular this week")
-        XCTAssertTrue(detail.avatars.isEmpty)
-        XCTAssertEqual(detail.accessibilityLabel, "Popular f1, Popular this week, Plan to watch")
-    }
-
-    func testPlanningWordsFollowTheType() throws {
-        let book = TrendingTitle(
-            key: "k",
+    private func title(friends: [UserSummary], average: Double? = nil, name: String = "Severance") -> TrendingTitle {
+        TrendingTitle(
+            key: "tmdb:tv:1",
             media: MediaSummary(
-                ref: MediaRef(itemId: nil, source: "hardcover", mediaType: "book", mediaId: "1", seasonNumber: nil, episodeNumber: nil),
-                title: "A Book", posterUrl: "https://p/b.jpg", posterOrientation: .portrait
+                ref: MediaRef(itemId: nil, source: "tmdb", mediaType: "tv", mediaId: "1", seasonNumber: nil, episodeNumber: nil),
+                title: name, posterUrl: "https://p/1.jpg", posterOrientation: .portrait
             ),
-            people: [], includesYou: false, averageRating: nil, lastDay: nil
+            people: friends, includesYou: false, averageRating: average, lastDay: "2026-11-07"
         )
-        XCTAssertEqual(TrendingTileModel.detail(for: book, planned: false).primaryTitle, "Plan to read")
+    }
+
+    func testThePanelForAPopularTitleHasFourFacesAndAMoreChip() throws {
+        let friends = [friend(2, "Maya"), friend(3, "Theo"), friend(4, "Noor"), friend(5, "Sam"), friend(6, "Jules"), friend(7, "Ana")]
+        let detail = TrendingTileModel.detail(for: title(friends: friends, average: 4.4))
+        XCTAssertEqual(detail.title, "Severance")
+        XCTAssertEqual(detail.averageText, "4.4")
+        XCTAssertEqual(detail.avatars.map(\.name), ["Maya", "Theo", "Noor", "Sam"], "Four faces at most, newest first")
+        XCTAssertEqual(detail.avatars.first?.initial, "M")
+        XCTAssertEqual(detail.moreCount, 2)
+        XCTAssertFalse(detail.isPopularFallback)
+        XCTAssertEqual(detail.accessibilityLabel, "Severance, average 4.4 out of 5, 6 friends logged or finished it")
+        XCTAssertEqual(detail.facesLabel, "Maya, Theo and 4 more logged or finished it")
+    }
+
+    func testTheAverageIsOneDecimalWithTheSameRounding() throws {
+        XCTAssertEqual(TrendingTileModel.detail(for: title(friends: [], average: 4.25)).averageText, "4.3")
+        XCTAssertEqual(TrendingTileModel.detail(for: title(friends: [], average: 4)).averageText, "4.0")
+        let feed = [
+            try log(1, "a", by: 2, rating: "4"), try log(2, "a", by: 3, rating: "4.5"), try log(3, "b"), try log(4, "c"),
+        ]
+        let popular = try XCTUnwrap(result(feed: feed).titles.first)
+        XCTAssertEqual(TrendingTileModel.detail(for: popular).averageText, "4.3")
+    }
+
+    func testNoFacesAndNoAverageIsThePopularFallbackAndSpeaksIt() throws {
+        let detail = TrendingTileModel.detail(for: title(friends: []))
+        XCTAssertTrue(detail.isPopularFallback)
+        XCTAssertTrue(detail.avatars.isEmpty)
+        XCTAssertEqual(detail.moreCount, 0)
+        XCTAssertEqual(detail.accessibilityLabel, "Severance, Popular this week")
+        XCTAssertEqual(detail.facesLabel, "")
+    }
+
+    func testFacesWithoutAnAverageAndAnAverageWithoutFaces() throws {
+        let faces = TrendingTileModel.detail(for: title(friends: [friend(2, "Maya")]))
+        XCTAssertNil(faces.averageText)
+        XCTAssertFalse(faces.isPopularFallback)
+        XCTAssertEqual(faces.accessibilityLabel, "Severance, 1 friend logged or finished it")
+        XCTAssertEqual(faces.facesLabel, "Maya logged or finished it")
+        XCTAssertEqual(TrendingTileModel.detail(for: title(friends: [friend(2, "Maya"), friend(3, "Theo")])).facesLabel,
+                       "Maya and Theo logged or finished it")
+        let average = TrendingTileModel.detail(for: title(friends: [], average: 3.5))
+        XCTAssertEqual(average.averageText, "3.5")
+        XCTAssertFalse(average.isPopularFallback, "An average fills the row")
+        XCTAssertEqual(average.accessibilityLabel, "Severance, average 3.5 out of 5")
+    }
+
+    func testAPersonWithNoNameIsSpokenByUsername() throws {
+        let detail = TrendingTileModel.detail(for: title(friends: [UserSummary(id: 9, username: "zed", displayName: "", avatarUrl: nil)]))
+        XCTAssertEqual(detail.avatars.first?.name, "zed")
+        XCTAssertEqual(detail.avatars.first?.initial, "Z")
     }
 }

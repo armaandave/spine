@@ -97,6 +97,38 @@ final class HomeSourceGuardrailTests: XCTestCase {
         XCTAssertEqual(uses, ["HomeTilesSection.swift"], "Glass belongs on the tile's Close button alone")
     }
 
+    func testTheTrendingRailIsTheSharedActionRail() throws {
+        // The rail's glass lives in the shared file, outside the guarded folders; the Tiles folder only calls it, from
+        // the one host view, and the shared file has exactly one glass surface.
+        var callers: [String] = []
+        for file in try swiftFiles(in: "Features/Home/Tiles") {
+            let text = code(try String(contentsOf: file, encoding: .utf8))
+            if text.contains("ActionRail(") { callers.append(file.lastPathComponent) }
+        }
+        XCTAssertEqual(callers, ["TrendingRailHost.swift"])
+        let rail = code(try read("Features/MediaDetail/MediaActionRail.swift"))
+        XCTAssertEqual(rail.components(separatedBy: ".glassEffect(").count - 1, 1, "One glass surface for the whole rail")
+    }
+
+    func testTheMediaPageNoLongerDefinesTheRail() throws {
+        let page = code(try read("Features/MediaDetail/MediaDetailView.swift"))
+        XCTAssertFalse(page.contains("struct ActionRail"))
+        XCTAssertFalse(page.contains("struct StarRatingPill"))
+        XCTAssertTrue(page.contains("ActionRail("), "The page still draws it")
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: Self.sources.appendingPathComponent("Features/Home/TrendingPlanWriter.swift").path),
+            "Planning goes through the title's page model now"
+        )
+    }
+
+    func testTheTrendingPanelDrawsNoGlassBlurOrShadowOfItsOwn() throws {
+        for path in ["Features/Home/Tiles/TrendingPanel.swift", "Features/Home/Tiles/TrendingRailHost.swift"] {
+            let text = code(try read(path))
+            XCTAssertFalse(text.contains(".glassEffect"), path)
+            XCTAssertFalse(text.contains(".shadow("), path)
+        }
+    }
+
     func testTheTileSectionDrawsNoGradient() throws {
         // A gradient stroke or fill on a tile is rasterized by Core Graphics on the main thread every frame the tile's
         // size changes (the open and the close). The outline is solid colors.
