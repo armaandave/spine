@@ -96,7 +96,8 @@ struct PanelMeterCanvas: View {
         bar.fill(Path(track), with: .color(TileStyle.meterRest))
         if layout.litStart > 0.01 {
             bar.fill(
-                Path(CGRect(x: 0, y: 0, width: layout.litStart, height: height)), with: .color(TileStyle.meterBefore)
+                Path(CGRect(x: 0, y: 0, width: layout.litStart, height: height)),
+                with: beforeShading(layout, width: width)
             )
         }
         if layout.litEnd - layout.litStart > 0.01 {
@@ -105,6 +106,26 @@ struct PanelMeterCanvas: View {
                 with: .color(accent(layout))
             )
         }
+    }
+
+    /// The earlier part of the bar: flat white, or, with a poster palette, a gradient through the colors of the cells
+    /// that lie in it (the cells carry the blended colors, so it follows a swipe like the ticks do).
+    nonisolated private static func beforeShading(_ layout: MorphLayout, width: Double) -> GraphicsContext.Shading {
+        let stops: [Gradient.Stop] = layout.cells.compactMap { cell in
+            let center = cell.x + cell.w / 2
+            guard cell.w >= 0.05, center < layout.litStart, width > 0 else { return nil }
+            return Gradient.Stop(
+                color: Color(.sRGB, red: cell.r, green: cell.g, blue: cell.b, opacity: cell.a),
+                location: min(max(center / width, 0), 1)
+            )
+        }
+        let plain = Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 0.55)
+        guard stops.count > 1, stops.contains(where: { $0.color != plain }) else { return .color(TileStyle.meterBefore) }
+        var ordered = [Gradient.Stop]()
+        for stop in stops {
+            ordered.append(Gradient.Stop(color: stop.color, location: max(stop.location, ordered.last?.location ?? 0)))
+        }
+        return .linearGradient(Gradient(stops: ordered), startPoint: .zero, endPoint: CGPoint(x: width, y: 0))
     }
 
     /// A window's line for the whole series: the track, how much is done, and a marker on the lit end.

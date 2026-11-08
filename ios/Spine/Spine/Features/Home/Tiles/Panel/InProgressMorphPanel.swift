@@ -20,16 +20,34 @@ struct InProgressMorphPanel: View {
     /// The panel's width: the section's content width less the panel's inset on both sides (326 on a 390 pt phone),
     /// until it has been measured.
     @State private var width = Double(TileGeometry.referenceContentWidth - 2 * TileGeometry.panelInset)
+    /// Posters' colors counted on this device, by item id; the server's, or ones counted earlier, need no waiting.
+    /// A title with none draws the plain meter, and its colors fade in when they arrive.
+    @State private var counted: [String: [PosterSwatch]] = [:]
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private static func posterURL(_ item: LibraryItem) -> URL? {
+        item.media.displayPosterURL.flatMap { URL(string: $0) }
+    }
+
+    private func tint(for item: LibraryItem) -> MeterTint? {
+        let swatches = counted[item.id]
+            ?? PosterPaletteStore.shared.known(server: item.media.posterPalette, url: Self.posterURL(item))
+        return swatches.flatMap { MeterTint.make(from: $0, highContrast: contrast == .increased) }
+    }
 
     var body: some View {
-        let specs = model.inProgress.prefix(TileGeometry.maxPosters).map { item in
-            PanelTitleSpec.make(item: item, detail: model.detail(for: item), width: width)
+        let items = Array(model.inProgress.prefix(TileGeometry.maxPosters))
+        let specs = items.map { item in
+            PanelTitleSpec.make(item: item, detail: model.detail(for: item), width: width, tint: tint(for: item))
         }
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: InProgressPanelMetrics.height)
             .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { measured in
                 if measured > 0, abs(measured - width) > 0.01 { width = measured }
+            }
+            .task(id: items.map { "\($0.id)|\($0.media.displayPosterURL ?? "")" }) {
+                await countPosters(of: items)
             }
             .overlay(alignment: .topLeading) {
                 MorphPanelBody(
@@ -43,6 +61,20 @@ struct InProgressMorphPanel: View {
                     updateID: updateID
                 )
             }
+    }
+}
+
+extension InProgressMorphPanel {
+    /// Counts the colors of every poster that has none yet, one at a time, off the main thread.
+    private func countPosters(of items: [LibraryItem]) async {
+        for item in items {
+            guard !Task.isCancelled else { return }
+            let url = Self.posterURL(item)
+            guard PosterPaletteStore.shared.known(server: item.media.posterPalette, url: url) == nil,
+                  let found = await PosterPaletteStore.shared.swatches(server: item.media.posterPalette, url: url)
+            else { continue }
+            counted[item.id] = found
+        }
     }
 }
 

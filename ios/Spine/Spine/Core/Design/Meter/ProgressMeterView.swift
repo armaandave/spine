@@ -8,6 +8,19 @@ nonisolated struct MeterPalette: Equatable, Sendable {
     var rest: Color
     /// Today's part.
     var accent: Color
+    /// The title's poster colors, for the In progress panel's meter. Nil draws the plain colors above.
+    var tint: MeterTint? = nil
+    /// How strong the earlier part is drawn with a tint (Increase Contrast draws it fuller).
+    var tintOpacity: Double = 0.8
+
+    /// An earlier tick, `index` of `count`: its stretch of the poster's ramp, or the plain color.
+    func beforeColor(index: Int, count: Int) -> Color {
+        guard let tint else { return before }
+        return tint.color(at: count > 1 ? Double(index) / Double(count - 1) : 0).opacity(tintOpacity)
+    }
+
+    /// Today's part: the poster's brightest color, or the accent.
+    var todayColor: Color { tint?.today.color ?? accent }
 }
 
 /// Sizes of the compact (feed card) drawing.
@@ -212,8 +225,18 @@ struct ProgressMeterBarView: View, Equatable {
 
     var body: some View {
         MeterSegmentsLayout(before: model.beforeFraction, today: model.todayFraction) {
-            Rectangle().fill(palette.before)
-            Rectangle().fill(palette.accent)
+            if let tint = palette.tint {
+                Rectangle()
+                    .fill(LinearGradient(
+                        colors: tint.gradientColors.count > 1 ? tint.gradientColors : tint.gradientColors + tint.gradientColors,
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ))
+                    .opacity(palette.tintOpacity)
+            } else {
+                Rectangle().fill(palette.before)
+            }
+            Rectangle().fill(palette.todayColor)
         }
         .frame(height: height)
         .background(palette.rest)
@@ -222,6 +245,7 @@ struct ProgressMeterBarView: View, Equatable {
             reduceMotion ? nil : .easeInOut(duration: 0.3),
             value: [model.beforeFraction, model.todayFraction]
         )
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: palette)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(model.accessibilityLabel)
         .accessibilityAddTraits(.isImage)

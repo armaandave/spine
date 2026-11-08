@@ -34,14 +34,17 @@ struct PanelTitleSpec: Identifiable {
         var tickWidth: Double
     }
 
-    static func make(item: LibraryItem, detail: TileDetailModel, width: Double) -> PanelTitleSpec {
+    static func make(
+        item: LibraryItem, detail: TileDetailModel, width: Double, tint: MeterTint? = nil
+    ) -> PanelTitleSpec {
         let plan = detail.primary.flatMap { $0.writes ? $0 : nil }
         let layout = MorphLayout.make(
             meter: detail.meter,
             place: detail.place,
             accentHex: detail.accentHex,
             hasQuick: plan != nil,
-            width: width
+            width: width,
+            tint: tint
         )
         var tier = 0
         if let plan {
@@ -67,6 +70,8 @@ struct PanelTitleSpec: Identifiable {
         hasher.combine(detail.place)
         hasher.combine(detail.meter)
         hasher.combine(detail.accentHex)
+        hasher.combine(tint?.ramp.map { [$0.red, $0.green, $0.blue] })
+        hasher.combine(tint.map { [$0.today.red, $0.today.green, $0.today.blue] })
         hasher.combine(detail.primary)
         hasher.combine(detail.secondaryTitle)
         return PanelTitleSpec(

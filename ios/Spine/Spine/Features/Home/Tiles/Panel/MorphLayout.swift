@@ -65,6 +65,9 @@ nonisolated struct MorphLayout: Equatable {
     var accentG = 0.97
     var accentB = 0.97
     var cells: [MorphCell] = Array(repeating: MorphCell(), count: MorphLayout.cellCount)
+    /// The poster's colors this layout was made with. Only at rest: it is not part of the flat form, the colors
+    /// themselves are (the cells' and the accent), so they blend with the scroll like everything else.
+    var tint: MeterTint?
 
     // MARK: Flat form
 
@@ -117,11 +120,18 @@ nonisolated struct MorphLayout: Equatable {
         place: TilePlace,
         accentHex: String?,
         hasQuick: Bool,
-        width W: Double
+        width W: Double,
+        tint: MeterTint? = nil
     ) -> MorphLayout {
         var layout = MorphLayout()
-        let hsb = ArtAccent.pastelHSB(fromHex: accentHex)
-        (layout.accentR, layout.accentG, layout.accentB) = rgb(hue: hsb.hue, saturation: hsb.saturation, brightness: hsb.brightness)
+        if let tint {
+            // The poster's colors: today's part is its brightest, the days before run along its ramp.
+            (layout.accentR, layout.accentG, layout.accentB) = (tint.today.red, tint.today.green, tint.today.blue)
+            layout.tint = tint
+        } else {
+            let hsb = ArtAccent.pastelHSB(fromHex: accentHex)
+            (layout.accentR, layout.accentG, layout.accentB) = rgb(hue: hsb.hue, saturation: hsb.saturation, brightness: hsb.brightness)
+        }
 
         for j in 0 ..< cellCount { layout.cells[j] = hidden(j, width: W) }
 
@@ -165,6 +175,14 @@ nonisolated struct MorphLayout: Equatable {
         return cell
     }
 
+    /// An earlier day's color `fraction` of the way along the meter: white at 55% without a poster palette, else the
+    /// palette's ramp at 80%.
+    private func beforeColor(at fraction: Double) -> (Double, Double, Double, Double) {
+        guard let tint else { return Self.before }
+        let c = tint.components(at: fraction)
+        return (c.red, c.green, c.blue, 0.8)
+    }
+
     private mutating func fillTicks(_ model: ProgressMeterModel, width W: Double) {
         let n = min(model.tickCount, Self.cellCount)
         guard n > 0 else { return }
@@ -183,7 +201,7 @@ nonisolated struct MorphLayout: Equatable {
             cell.radiusTrailing = InProgressPanelMetrics.meterRadius
             switch model.tickState(at: j) {
             case .before:
-                (cell.r, cell.g, cell.b, cell.a) = Self.before
+                (cell.r, cell.g, cell.b, cell.a) = beforeColor(at: Double(j) / Double(max(n - 1, 1)))
                 beforeCount += 1
                 litCount += 1
             case .today:
@@ -209,7 +227,7 @@ nonisolated struct MorphLayout: Equatable {
             cell.opacity = 1
             let c = (Double(j) + 0.5) / count
             if c < model.beforeFraction {
-                (cell.r, cell.g, cell.b, cell.a) = Self.before
+                (cell.r, cell.g, cell.b, cell.a) = beforeColor(at: c)
             } else if c < model.endFraction {
                 (cell.r, cell.g, cell.b, cell.a) = (accentR, accentG, accentB, 1)
             } else {
