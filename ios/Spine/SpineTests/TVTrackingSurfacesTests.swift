@@ -558,8 +558,9 @@ final class TVTrackingSurfacesTests: XCTestCase {
         let states = sheet.rows.compactMap { sheet.season.tvEpisodeState($0.tv) }
         XCTAssertEqual(states.count, 10)
         XCTAssertTrue(states.allSatisfy { sheet.season.tvIsWatched($0) }, "Every tick filled")
-        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "Caught up · S3 on Mar 12",
-                       "The card reads as its Library card until Home loads again")
+        // A show the tick caught up is not on the server's In progress list either, so its card leaves the rail now
+        // instead of reading as its Library card until Home loads again.
+        XCTAssertTrue(viewModel.inProgressItems.isEmpty)
     }
 
     func testTV107TheSheetsTickAsksTheEarlierEpisodesQuestionFirstAndItsYesReachesTheCard() async throws {

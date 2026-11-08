@@ -22,7 +22,11 @@ struct HomeTop: View {
             error: viewModel.profileErrorMessage
         )
         VStack(alignment: .leading, spacing: 0) {
-            HomeTopHeader(viewModel: viewModel, onOpenProfile: onOpenProfile)
+            // It squeezes up as a tile opens, with the tile; its top and left stay where they are.
+            HomeHeaderSqueeze(state: viewModel.tilesState) {
+                HomeTopHeader(viewModel: viewModel, onOpenProfile: onOpenProfile)
+            }
+            .padding(.top, HomeTopSpec.headerTop)
 
             switch phase {
             case let .failed(message):
@@ -68,16 +72,21 @@ struct HomeTop: View {
         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: phase)
     }
 
+    /// "Friends" and, beside it, the faces of the people you follow, as tall as its capital letters.
     private var friendsRow: some View {
-        Text("Friends")
-            .font(HomeTopSpec.friendsFont)
-            .tracking(HomeTopSpec.friendsTracking)
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, HomeTopSpec.tilesToFriends)
-            .dynamicTypeSize(...HomeDesign.Text.maxCategory)
-            .accessibilityAddTraits(.isHeader)
+        HStack(spacing: HomeFriendsSpec.headingGap) {
+            Text("Friends")
+                .font(HomeTopSpec.friendsFont)
+                .tracking(HomeTopSpec.friendsTracking)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .dynamicTypeSize(...HomeDesign.Text.maxCategory)
+                .accessibilityAddTraits(.isHeader)
+            HomeFriendsStrip(model: viewModel.friends)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, HomeTopSpec.tilesToFriends)
     }
 
     /// What the page top shows: the profile's failure, the first load, or the page.
@@ -100,6 +109,8 @@ private enum HomeTopSpec {
     static let headerGap: CGFloat = 12
     /// Below the status bar. The mock's 64 less a 47 pt safe area.
     static let headerTop: CGFloat = 17
+    /// How small the header gets while a tile is open.
+    static let squeezedScale: CGFloat = 0.7
     static let headerToTiles: CGFloat = 22
     static let tilesToFriends: CGFloat = 30
     static let skeletonTop: CGFloat = 14
@@ -108,7 +119,7 @@ private enum HomeTopSpec {
     static let dateFont = Font.system(size: 13, weight: .semibold)
     static let titleFont = Font.system(size: 32, weight: .heavy)
     static let titleTracking: CGFloat = -0.6
-    static let friendsFont = Font.system(size: 22, weight: .heavy)
+    static let friendsFont = Font.system(size: HomeFriendsSpec.headingSize, weight: .heavy)
     static let friendsTracking: CGFloat = -0.4
     /// The mock's placeholder for an avatar with no picture.
     static let avatarDisc = Color(red: 0xED / 255, green: 0xED / 255, blue: 0xED / 255)
@@ -147,10 +158,53 @@ private struct HomeTopHeader: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.top, HomeTopSpec.headerTop)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
             today = Date()
         }
+    }
+}
+
+/// Shrinks the header while a tile is open: about 0.7, anchored at its top-leading corner so its top and left stay put,
+/// and its layout height shrinks with it so the open tile rides up into the room. Both run under the tile's own curve,
+/// started by the same change that opens or closes the tile, and nothing here runs while the page scrolls.
+private struct HomeHeaderSqueeze<Content: View>: View {
+    let state: HomeTilesState
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let squeezed = state.open != nil
+        let scale = squeezed ? HomeTopSpec.squeezedScale : 1
+        SqueezeLayout(scale: scale) {
+            content().scaleEffect(scale, anchor: .topLeading)
+        }
+        .animation(TileMotion.frame(reduceMotion: reduceMotion), value: squeezed)
+    }
+}
+
+/// Lays its one child out at the width it is offered and its natural height, and is `scale` times that tall. The
+/// child's own `scaleEffect` shrinks what is drawn to match. `scale` is animatable, so the height eases with it.
+private struct SqueezeLayout: Layout {
+    var scale: CGFloat
+
+    var animatableData: CGFloat {
+        get { scale }
+        set { scale = newValue }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        let size = child.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: proposal.width ?? size.width, height: size.height * scale)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: nil)
+        )
     }
 }
 

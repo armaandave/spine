@@ -172,8 +172,11 @@ private struct TrendingPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TilePanelTitleRow(title: detail.title, accessibilityLabel: detail.accessibilityLabel) {
-                Text(detail.averageText.map { "\($0) avg" } ?? "")
+            TilePanelTitleRow(title: detail.title, accessibilityLabel: detail.accessibilityLabel, centered: true) {
+                // No words, no gap: an empty one would push the title off the middle.
+                if let average = detail.averageText {
+                    Text("\(average) avg")
+                }
             }
             friends
                 .padding(.top, 8)
@@ -205,7 +208,8 @@ private struct TrendingPanel: View {
         .sensoryFeedback(.impact, trigger: openTicks)
     }
 
-    /// Up to three faces overlapping by 6 pt, and who they are: "2 logged it", "You logged it".
+    /// Up to three faces overlapping by 6 pt, and who they are: "2 logged it", "You logged it". Centered under the
+    /// posters, like the title above it.
     private var friends: some View {
         HStack(spacing: 10) {
             HStack(spacing: -TileStyle.avatarOverlap) {
@@ -218,6 +222,7 @@ private struct TrendingPanel: View {
                 .foregroundStyle(TileStyle.panelSecondary)
                 .lineLimit(1)
         }
+        .frame(maxWidth: .infinity)
         .frame(height: 26)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(detail.whoLine)
@@ -265,10 +270,13 @@ private struct TileAvatar: View {
 
 // MARK: - Shared pieces
 
-/// The panel's top row: the title at 19, and the right-hand words at 13, on one baseline. The title gives way first.
+/// The panel's top row: the title at 19, and the other words at 13, on one baseline. The title gives way first. In
+/// progress's has its title at the left and its words at the right; Trending's is `centered`, the title and its words
+/// together in the middle.
 private struct TilePanelTitleRow<Aside: View>: View {
     let title: String
     let accessibilityLabel: String
+    var centered = false
     @ViewBuilder let aside: () -> Aside
 
     var body: some View {
@@ -278,7 +286,7 @@ private struct TilePanelTitleRow<Aside: View>: View {
                 .tracking(-0.3)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: centered ? nil : .infinity, alignment: .leading)
             aside()
                 .font(TileStyle.panelAside)
                 .foregroundStyle(TileStyle.panelSecondary)
@@ -286,6 +294,7 @@ private struct TilePanelTitleRow<Aside: View>: View {
                 .fixedSize()
                 .layoutPriority(1)
         }
+        .frame(maxWidth: .infinity)
         .dynamicTypeSize(...HomeDesign.Text.maxCategory)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
