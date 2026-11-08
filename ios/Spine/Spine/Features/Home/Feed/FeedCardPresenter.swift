@@ -11,10 +11,11 @@ enum FeedCardPresenter {
         for item: ActivityItem,
         standing: FeedStanding? = nil,
         isNewestOfTitle: Bool,
-        planning: PlanningDay? = nil
+        planning: PlanningDay? = nil,
+        dayLabel: String? = nil
     ) -> FeedCardModel {
         if item.planning != nil {
-            return planningModel(for: item, day: planning)
+            return planningModel(for: item, day: planning, dayLabel: dayLabel)
         }
 
         let (title, tag) = titleAndTag(for: item)
@@ -54,6 +55,7 @@ enum FeedCardPresenter {
             kind: kind,
             username: item.actor.username,
             avatarURL: item.actor.avatarUrl,
+            dayLabel: dayLabel,
             title: title,
             tag: tag,
             headline: headline,
@@ -63,6 +65,7 @@ enum FeedCardPresenter {
             art: art(for: item),
             accessibilityLabel: accessibilityLabel(
                 username: item.actor.username,
+                dayLabel: dayLabel,
                 title: title,
                 tag: tag,
                 headlineWords: headlineWords(headline, item: item),
@@ -226,7 +229,7 @@ enum FeedCardPresenter {
 
     // MARK: Planning
 
-    private static func planningModel(for item: ActivityItem, day: PlanningDay?) -> FeedCardModel {
+    private static func planningModel(for item: ActivityItem, day: PlanningDay?, dayLabel: String?) -> FeedCardModel {
         let count = item.object.count ?? day?.count
         let title = count.map { "\($0) \(planningNoun(for: item.object.mediaType, count: $0))" } ?? "Titles"
         let posters = (day?.results ?? []).compactMap(\.displayPosterURL).prefix(3)
@@ -257,6 +260,7 @@ enum FeedCardPresenter {
             kind: .planning,
             username: item.actor.username,
             avatarURL: item.actor.avatarUrl,
+            dayLabel: dayLabel,
             title: title,
             tag: "Planning",
             headline: nil,
@@ -266,6 +270,7 @@ enum FeedCardPresenter {
             art: spec,
             accessibilityLabel: accessibilityLabel(
                 username: item.actor.username,
+                dayLabel: dayLabel,
                 title: title,
                 tag: "Planning",
                 headlineWords: nil,
@@ -323,13 +328,14 @@ enum FeedCardPresenter {
 
     private static func accessibilityLabel(
         username: String,
+        dayLabel: String?,
         title: String,
         tag: String?,
         headlineWords: String?,
         details: [FeedDetailRow],
         engagement: PostEngagement?
     ) -> String {
-        let parts: [String?] = [username, title, tag, headlineWords]
+        let parts: [String?] = [username, dayLabel, title, tag, headlineWords]
             + details.map { $0.accessibilityText }
             + [engagement.map(PostEngagementSummary.accessibilityText(for:))]
         return parts.compactMap { part in

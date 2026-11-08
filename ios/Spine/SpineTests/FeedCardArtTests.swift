@@ -29,13 +29,8 @@ final class FeedCardArtTests: XCTestCase {
         return FeedCardPresenter.model(for: item, isNewestOfTitle: true)
     }
 
-    private func entries(cards: Int, headersEvery: Int = 4) throws -> [FeedListEntry] {
-        var result: [FeedListEntry] = []
-        for index in 0 ..< cards {
-            if index % headersEvery == 0 { result.append(.day(id: "day-\(index)", title: "Day \(index)")) }
-            result.append(.card(try card(id: index + 1)))
-        }
-        return result
+    private func entries(cards: Int) throws -> [FeedCardModel] {
+        try (0 ..< cards).map { try card(id: $0 + 1) }
     }
 
     private func ids(_ models: [FeedCardModel]) -> [Int] {
@@ -178,13 +173,13 @@ final class FeedCardArtTests: XCTestCase {
         }
     }
 
-    func testTheWindowIsTheNextElevenCardsAndSkipsHeaders() throws {
+    func testTheWindowIsTheNextElevenCards() throws {
         XCTAssertEqual(FeedCardArt.lookahead, 11)
         let list = try entries(cards: 30)
         let prefetcher = FeedCardPrefetcher(sink: { _ in })
-        // Entry 0 is a day header; the cards after it are 1, 2, 3, 4 and then a header and 5, 6, 7, 8 ...
-        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 0, in: list)), Array(1 ... 11))
-        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 1, in: list)), Array(2 ... 12))
+        // Entry 0 is card 1; the window after it is cards 2 to 12.
+        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 0, in: list)), Array(2 ... 12))
+        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 1, in: list)), Array(3 ... 13))
     }
 
     func testEachAppearanceExtendsTheWindowByTheCardsNotYetAsked() throws {
@@ -193,16 +188,16 @@ final class FeedCardArtTests: XCTestCase {
         let prefetcher = FeedCardPrefetcher(sink: recorder.sink)
 
         prefetcher.entryAppeared(at: 0, in: list)
-        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), Set(1 ... 11))
+        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), Set(2 ... 12))
 
         // The next card on screen only adds the one card that came into the window.
         recorder.batches.removeAll()
         prefetcher.entryAppeared(at: 1, in: list)
-        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), [12])
+        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), [13])
 
         recorder.batches.removeAll()
         prefetcher.entryAppeared(at: 2, in: list)
-        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), [13])
+        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), [14])
     }
 
     func testAFastFlingExtendsFromWhereItLands() throws {
@@ -212,12 +207,12 @@ final class FeedCardArtTests: XCTestCase {
         prefetcher.entryAppeared(at: 0, in: list)
         recorder.batches.removeAll()
 
-        // Landing on entry 40 (card 32 or so): the 11 cards after it, nothing before.
+        // Landing on entry 40 (card 41): the 11 cards after it, nothing before.
         prefetcher.entryAppeared(at: 40, in: list)
         let landed = Set(prefetchedCardIDs(recorder))
         XCTAssertEqual(landed.count, 11)
         XCTAssertTrue(landed.allSatisfy { id in
-            list.firstIndex(where: { $0.id == "card-\(id)" }).map { $0 > 40 } ?? false
+            list.firstIndex(where: { $0.id == id }).map { $0 > 40 } ?? false
         })
     }
 
@@ -239,7 +234,7 @@ final class FeedCardArtTests: XCTestCase {
         // Each card appears twice in the requests (poster and art), never more.
         let counts = Dictionary(grouping: posterIDs, by: { $0 }).mapValues(\.count)
         XCTAssertTrue(counts.values.allSatisfy { $0 == 2 }, "\(counts)")
-        XCTAssertEqual(counts.count, 40, "Every card was asked for")
+        XCTAssertEqual(counts.count, 39, "Every card after the first was asked for; the first loads itself")
     }
 
     func testTheWindowStopsAtTheEndOfTheList() throws {
@@ -247,7 +242,7 @@ final class FeedCardArtTests: XCTestCase {
         let prefetcher = FeedCardPrefetcher(sink: { _ in })
         XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: list.count - 1, in: list)), [])
         XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: -1, in: list)), [])
-        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 0, in: list)), [1, 2, 3, 4, 5])
+        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 0, in: list)), [2, 3, 4, 5])
     }
 
     func testACardWhoseArtChangedIsAskedForAgain() throws {
@@ -255,16 +250,16 @@ final class FeedCardArtTests: XCTestCase {
         let bare = FeedCardPresenter.model(for: row, isNewestOfTitle: true)
         let day = try FeedTestItems.planningDay(titles: [("A", "https://p/a.jpg"), ("B", "https://p/b.jpg")], count: 2)
         let fanned = FeedCardPresenter.model(for: row, isNewestOfTitle: true, planning: day)
-        let header = FeedListEntry.day(id: "day-1", title: "Today")
 
         let recorder = Recorder()
         let prefetcher = FeedCardPrefetcher(sink: recorder.sink)
-        prefetcher.entryAppeared(at: 0, in: [header, .card(bare)])
+        let lead = try card(id: 1)
+        prefetcher.entryAppeared(at: 0, in: [lead, bare])
         let first = recorder.batches.count
         XCTAssertEqual(first, 1)
-        prefetcher.entryAppeared(at: 0, in: [header, .card(bare)])
+        prefetcher.entryAppeared(at: 0, in: [lead, bare])
         XCTAssertEqual(recorder.batches.count, first, "Unchanged art is not asked for again")
-        prefetcher.entryAppeared(at: 0, in: [header, .card(fanned)])
+        prefetcher.entryAppeared(at: 0, in: [lead, fanned])
         XCTAssertEqual(recorder.batches.count, first + 1, "The fan's posters are new requests")
     }
 
@@ -280,7 +275,7 @@ final class FeedCardArtTests: XCTestCase {
         let folder = Self.feedFolder
         let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "swift" }
-        XCTAssertGreaterThanOrEqual(files.count, 11)
+        XCTAssertGreaterThanOrEqual(files.count, 10)
         let banned = ["Geometry" + "Reader", ".blur" + "(", "Mate" + "rial", "View" + "ThatFits"]
         for file in files {
             let text = try String(contentsOf: file, encoding: .utf8)
@@ -323,7 +318,7 @@ final class FeedCardArtTests: XCTestCase {
         XCTAssertTrue(link.contains("thumbnailSize: FeedCardArt.avatarSize"))
     }
 
-    // MARK: Avatar and header
+    // MARK: Avatar and author line
 
     func testTheInitialDiscIsStablePerName() {
         XCTAssertEqual(FeedAvatar.initial(of: "perf-ava"), "P")
@@ -334,8 +329,9 @@ final class FeedCardArtTests: XCTestCase {
         XCTAssertTrue((0 ... 1).contains(FeedAvatar.hue(for: "maximiliano.rodriguez")))
     }
 
-    func testTheDayHeaderHasAFixedHeight() {
-        XCTAssertEqual(FeedDayHeaderView.height, 45)
-        XCTAssertEqual(FeedDayHeaderView.height, 20 + FeedDayHeaderView.textHeight + 10)
+    func testTheDayNeverTruncatesAndTheAuthorLineKeepsItsHeight() throws {
+        let link = try String(contentsOf: Self.feedFolder.appendingPathComponent("FeedAuthorLink.swift"), encoding: .utf8)
+        XCTAssertTrue(link.contains(".fixedSize(horizontal: true, vertical: false)"), "The day keeps its width")
+        XCTAssertEqual(FeedAuthorLink.height, 22)
     }
 }

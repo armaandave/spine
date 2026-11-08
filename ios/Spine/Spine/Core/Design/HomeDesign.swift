@@ -31,8 +31,6 @@ nonisolated enum HomeDesign {
         /// A window meter's series line ends this far above the card's bottom.
         static let meterLineBottom: CGFloat = 17
         static let countsBottom: CGFloat = 12
-        static let dayHeaderTop: CGFloat = 20
-        static let dayHeaderBottom: CGFloat = 10
 
         static let glowHeight: CGFloat = 440
 
@@ -81,6 +79,9 @@ nonisolated enum HomeDesign {
     nonisolated enum Palette {
         static let starGold = Color(red: 0xFF / 255, green: 0xD4 / 255, blue: 0x5C / 255)
         static let heart = Color(red: 0xFF / 255, green: 0x6B / 255, blue: 0x8A / 255)
+        /// The rewatch glyph on dark-ink cards, and the deeper green that still reads on light-ink cards.
+        static let rewatchGreen = Color(red: 0x4A / 255, green: 0xDE / 255, blue: 0x80 / 255)
+        static let rewatchGreenDeep = Color(red: 0x0F / 255, green: 0x7A / 255, blue: 0x3B / 255)
         /// Text on light art.
         static let lightInk = Color(red: 0x0D / 255, green: 0x1A / 255, blue: 0x1F / 255)
         /// Initials on an avatar disc.
@@ -101,15 +102,12 @@ nonisolated enum HomeDesign {
         static let quiet = Font.system(size: 13.5, weight: .semibold)
         static let counts = Font.system(size: 12.5, weight: .bold)
         static let pill = Font.system(size: 12.5, weight: .bold)
-        static let dayHeader = Font.system(size: 12, weight: .bold)
+        /// The day after a card's username.
+        static let day = Font.system(size: 12, weight: .medium)
         static let tileTitle = Font.system(size: 16, weight: .heavy)
         static let tileTitleOpen = Font.system(size: 24, weight: .heavy)
         static let tileSubtitle = Font.system(size: 12, weight: .semibold)
         static let panelTitle = Font.system(size: 19, weight: .heavy)
-
-        /// Day headers are uppercase with 0.08 em of tracking: 0.96 pt at 12 pt.
-        static let dayHeaderTrackingEm: CGFloat = 0.08
-        static let dayHeaderTracking: CGFloat = 12 * dayHeaderTrackingEm
 
         /// Every fixed-size row clamps its Dynamic Type with this.
         static let maxCategory = DynamicTypeSize.xxLarge

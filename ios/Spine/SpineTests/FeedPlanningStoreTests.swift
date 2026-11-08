@@ -234,7 +234,7 @@ final class FeedPlanningStoreTests: XCTestCase {
         XCTAssertEqual(byID[31]?.results.count, 3)
         // And it is the shape the entries take: the Planning card names the titles.
         let entries = FeedEntries.make(items: [first], planning: byID)
-        guard case let .card(model) = entries.last else { return XCTFail("Expected a card") }
+        guard let model = entries.last else { return XCTFail("Expected a card") }
         XCTAssertEqual(model.art.planningPosterURLs.count, 3)
     }
 
