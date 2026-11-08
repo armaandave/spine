@@ -50,9 +50,9 @@ enum RailHandoff: Equatable {
 /// gives the page exactly the rail it had.
 struct ActionRail: View {
     static let buttonSize: CGFloat = 48
-    /// The glass pill's width for `buttonCount` buttons; the open rating picker is at least 183 wide.
-    static func surfaceWidth(buttonCount: Int, pickerPresented: Bool) -> CGFloat {
-        let railWidth = CGFloat(buttonCount) * buttonSize + 10
+    /// The glass pill's width for `buttonCount` buttons `slotWidth` apart; the open rating picker is at least 183 wide.
+    static func surfaceWidth(buttonCount: Int, pickerPresented: Bool, slotWidth: CGFloat = buttonSize) -> CGFloat {
+        let railWidth = CGFloat(buttonCount) * slotWidth + 10
         return pickerPresented ? max(railWidth, 183) : railWidth
     }
 
@@ -106,6 +106,9 @@ struct ActionRail: View {
     var stateFailed = false
     /// Nil is the media page's "media-detail"; Home passes "trending.rail".
     var identifierPrefix: String?
+    /// How far apart the buttons are, center to center. The page's are `buttonSize` apart; Home's Trending rail sits
+    /// closer. Each button stays `buttonSize` tall.
+    var slotWidth: CGFloat = ActionRail.buttonSize
     let onTrack: () -> Void
     let onLike: () -> Void
     var onEye: () -> Void = {}
@@ -136,7 +139,7 @@ struct ActionRail: View {
     }
 
     private var surfaceWidth: CGFloat {
-        Self.surfaceWidth(buttonCount: buttonCount, pickerPresented: ratingPicker.isPresented)
+        Self.surfaceWidth(buttonCount: buttonCount, pickerPresented: ratingPicker.isPresented, slotWidth: slotWidth)
     }
 
     private var glassShape: RoundedRectangle {
@@ -348,7 +351,7 @@ struct ActionRail: View {
                 }
                 .spineContentTransition(value: isLoading)
             }
-            .frame(width: Self.buttonSize, height: Self.buttonSize)
+            .frame(width: slotWidth, height: Self.buttonSize)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

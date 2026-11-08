@@ -30,6 +30,12 @@ final class ActionRailMetricsTests: XCTestCase {
     func testEachRailSlotIsFortyEightPoints() {
         XCTAssertEqual(ActionRail.buttonSize, 48)
     }
+
+    func testHomesTrendingRailIsAQuarterTighter() {
+        XCTAssertEqual(TrendingRailHost.slotWidth, 36)
+        XCTAssertEqual(ActionRail.surfaceWidth(buttonCount: 5, pickerPresented: false, slotWidth: 36), 190)
+        XCTAssertEqual(ActionRail.surfaceWidth(buttonCount: 5, pickerPresented: true, slotWidth: 36), 190)
+    }
 }
 
 /// A tap Home's rail leaves for the page: each value runs exactly one of the page's four functions.

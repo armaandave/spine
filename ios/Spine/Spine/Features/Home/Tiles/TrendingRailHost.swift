@@ -8,6 +8,9 @@ import SwiftUI
 /// page calls. Where the page would open a screen (a log composer, a sheet), the tap goes to the title's page with
 /// that intent attached (`RailHandoff`), and the page finishes it with its own UI.
 struct TrendingRailHost: View {
+    /// The buttons sit a quarter closer than on the media page (48 apart there).
+    static let slotWidth: CGFloat = ActionRail.buttonSize * 0.75
+
     let title: TrendingTitle
     let entry: TrendingRailStore.Entry?
     let store: TrendingRailStore
@@ -64,6 +67,7 @@ struct TrendingRailHost: View {
             isLoadingState: config == nil && phase != .failed,
             stateFailed: phase == .failed,
             identifierPrefix: "trending.rail",
+            slotWidth: Self.slotWidth,
             onTrack: { if let config { router?.lead(config) } },
             onLike: { router?.like() },
             onEye: { if let config { router?.eye(config) } },
