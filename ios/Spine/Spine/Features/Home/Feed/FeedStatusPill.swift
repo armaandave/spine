@@ -139,6 +139,9 @@ struct FeedStatusPill: View {
             }
         }
 
+        /// The glows at half the strength they first had.
+        static let glowStrength = 0.5
+
         /// The dot, and the color of the glow behind it with its strength; nil for no glow.
         func dot(ink: ArtInk) -> (color: Color, glow: (color: Color, alpha: Double)?) {
             let dark = ink == .dark
@@ -146,15 +149,15 @@ struct FeedStatusPill: View {
             case .paused:
                 return (
                     dark ? Color(hex: 0xFFC24D) : Color(hex: 0xD98A00),
-                    (Color(red: 255 / 255, green: 176 / 255, blue: 40 / 255), dark ? 0.85 : 0.55)
+                    (Color(red: 255 / 255, green: 176 / 255, blue: 40 / 255), (dark ? 0.85 : 0.55) * Self.glowStrength)
                 )
             case .pickedBackUp:
                 let green = dark ? Color(hex: 0x34D07A) : Color(hex: 0x0C8F47)
-                return (green, (green, dark ? 0.85 : 0.55))
+                return (green, (green, (dark ? 0.85 : 0.55) * Self.glowStrength))
             case .stopped:
                 return (
                     dark ? Color(hex: 0xFF6B6B) : Color(hex: 0xC0392B),
-                    (Color(red: 255 / 255, green: 107 / 255, blue: 107 / 255), dark ? 0.7 : 0.45)
+                    (Color(red: 255 / 255, green: 107 / 255, blue: 107 / 255), (dark ? 0.7 : 0.45) * Self.glowStrength)
                 )
             case .other:
                 return (dark ? Color.white.opacity(0.7) : HomeDesign.Palette.lightInk.opacity(0.6), nil)
@@ -183,21 +186,24 @@ struct FeedStatusPill: View {
         .feedPillSurface(.status(ink: ink), height: HomeDesign.FeedDepth.statusPillHeight)
     }
 
-    /// A radial disc, fading from the dot's edge out to 7.5 pt, in a 15 pt frame that takes no room.
+    /// How far the glow reaches from the dot's center: 3.75 pt past its 2.5 pt edge (it was 5).
+    static let glowRadius: CGFloat = 6.25
+
+    /// A radial disc, at full strength to the dot's edge and fading out to `glowRadius`, in a frame that takes no room.
     @ViewBuilder
     private func glow(_ glow: (color: Color, alpha: Double)?) -> some View {
         if let glow {
             RadialGradient(
                 gradient: Gradient(stops: [
                     .init(color: glow.color.opacity(glow.alpha), location: 0),
-                    .init(color: glow.color.opacity(glow.alpha), location: 1.0 / 3),
+                    .init(color: glow.color.opacity(glow.alpha), location: HomeDesign.FeedDepth.statusDot / 2 / Self.glowRadius),
                     .init(color: glow.color.opacity(0), location: 1),
                 ]),
                 center: .center,
                 startRadius: 0,
-                endRadius: 7.5
+                endRadius: Self.glowRadius
             )
-            .frame(width: 15, height: 15)
+            .frame(width: Self.glowRadius * 2, height: Self.glowRadius * 2)
             .allowsHitTesting(false)
         }
     }

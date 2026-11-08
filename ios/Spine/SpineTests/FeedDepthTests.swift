@@ -348,6 +348,15 @@ final class FeedDepthTests: XCTestCase {
         return stride(from: 0, to: image.size.height, by: step).map { alpha(of: image, atX: x, y: $0) }.max() ?? 0
     }
 
+    func testTheStatusDotsGlowIsHalfAsStrongAndReachesAQuarterLessFar() {
+        XCTAssertEqual(FeedStatusPill.Kind.paused.dot(ink: .dark).glow?.alpha ?? 0, 0.425, accuracy: 0.0001)
+        XCTAssertEqual(FeedStatusPill.Kind.pickedBackUp.dot(ink: .light).glow?.alpha ?? 0, 0.275, accuracy: 0.0001)
+        XCTAssertEqual(FeedStatusPill.Kind.stopped.dot(ink: .dark).glow?.alpha ?? 0, 0.35, accuracy: 0.0001)
+        XCTAssertNil(FeedStatusPill.Kind.other.dot(ink: .dark).glow)
+        let edge = HomeDesign.FeedDepth.statusDot / 2
+        XCTAssertEqual(FeedStatusPill.glowRadius - edge, 5 * 0.75, accuracy: 0.0001)
+    }
+
     func testTheStatusPillsBorderIsAHairlineThinnerThanTheCountsPills() {
         for ink in [ArtInk.dark, .light] {
             let status = FeedPillStyle.status(ink: ink)
