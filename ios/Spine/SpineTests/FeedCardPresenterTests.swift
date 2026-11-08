@@ -368,10 +368,10 @@ final class FeedCardPresenterTests: XCTestCase {
     func testAStatusOnlyDayHasNoAmountAndNothingLit() throws {
         let card = model(try FeedTestItems.day(moves: ["picked_back_up"], mediaType: "tv"))
         XCTAssertEqual(card.kind, .status)
-        XCTAssertEqual(card.headline, .status(words: "Picked back up", tail: nil))
+        XCTAssertEqual(card.headline, .moves(pills: ["Picked back up"], tail: nil), "The status is its pill")
         XCTAssertNil(card.meter)
         let stopped = model(try FeedTestItems.day(moves: ["stopped"]))
-        XCTAssertEqual(stopped.headline, .status(words: "Stopped", tail: nil))
+        XCTAssertEqual(stopped.headline, .moves(pills: ["Stopped"], tail: nil))
     }
 
     func testAStartSaysStartedAndANoteOnPickingBackUpIsDropped() throws {
@@ -439,7 +439,7 @@ final class FeedCardPresenterTests: XCTestCase {
         let card = model(day, standing: FeedStanding(unit: .episodes, from: 3, to: 5, total: 9, whereText: "after E5"))
         XCTAssertEqual(card.meter?.from, 5)
         XCTAssertEqual(card.meter?.to, 5)
-        XCTAssertEqual(card.headline, .status(words: "Paused", tail: "after E5"))
+        XCTAssertEqual(card.headline, .moves(pills: ["Paused"], tail: "after E5"))
     }
 
     func testLogsAndPlanningNeverGetAMeter() throws {

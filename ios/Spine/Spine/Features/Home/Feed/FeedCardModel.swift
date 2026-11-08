@@ -23,8 +23,10 @@ nonisolated enum FeedHeadline: Equatable, Sendable {
     /// A day's amount ("+3 episodes") in the card accent, then the muted real "where" when the friend's standing
     /// knows it, and the status pills. A card draws the pills when it has them, else the tail.
     case progress(amount: String, tail: String?, pills: [String])
-    /// A status move ("Paused", "Picked back up") with nothing lit; the muted "where" after it when known. Also the
-    /// old-server fallback, a day's own words.
+    /// A day that was only a status move ("Paused", "Picked back up"), nothing lit: the same pills a progress day
+    /// draws, then the muted "where" when the friend's standing knows it.
+    case moves(pills: [String], tail: String?)
+    /// The old-server fallback: a day's own words, and an activity row's action.
     case status(words: String, tail: String?)
     /// "Started".
     case started

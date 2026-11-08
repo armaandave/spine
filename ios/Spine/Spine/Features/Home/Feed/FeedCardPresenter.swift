@@ -154,7 +154,7 @@ enum FeedCardPresenter {
         if !moves.isEmpty {
             return ProgressDay(
                 kind: .status,
-                headline: .status(words: moves.joined(separator: ", "), tail: standing?.whereText),
+                headline: .moves(pills: moves, tail: standing?.whereText),
                 meter: meter(from: standing, isStatus: true)
             )
         }
@@ -317,6 +317,8 @@ enum FeedCardPresenter {
                 .joined(separator: ", ")
         case let .progress(amount, tail, pills):
             return ([amount] + pills + [tail].compactMap { $0 }).joined(separator: ", ")
+        case let .moves(pills, tail):
+            return (pills + [tail].compactMap { $0 }).joined(separator: ", ")
         case let .status(words, tail):
             return [words, tail].compactMap { $0 }.joined(separator: ", ")
         case .started:

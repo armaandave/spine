@@ -348,6 +348,17 @@ final class FeedDepthTests: XCTestCase {
         return stride(from: 0, to: image.size.height, by: step).map { alpha(of: image, atX: x, y: $0) }.max() ?? 0
     }
 
+    func testTheStatusPillsBorderIsAHairlineThinnerThanTheCountsPills() {
+        for ink in [ArtInk.dark, .light] {
+            let status = FeedPillStyle.status(ink: ink)
+            let counts = FeedPillStyle.counts(ink: ink)
+            XCTAssertEqual(status.rimWidth, 1.0 / 3, accuracy: 0.0001)
+            XCTAssertEqual(status.highlightWidth, 0.5)
+            XCTAssertLessThan(status.rimWidth, counts.rimWidth)
+            XCTAssertLessThan(status.highlightWidth, counts.highlightWidth)
+        }
+    }
+
     private func alpha(of image: UIImage, atX x: CGFloat, y: CGFloat) -> Double {
         guard let cgImage = image.cgImage else { return -1 }
         let px = min(max(Int(x * image.scale), 0), cgImage.width - 1)

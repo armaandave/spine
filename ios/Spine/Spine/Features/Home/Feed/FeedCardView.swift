@@ -222,6 +222,15 @@ struct FeedCardView: View, Equatable {
                         .feedTextLift(ink)
                         .foregroundStyle(ink.muted)
                 }
+            case let .moves(pills, tail):
+                ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
+                if let tail {
+                    Text(tail)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .feedTextLift(ink)
+                        .foregroundStyle(ink.muted)
+                }
             case let .status(words, tail):
                 Text(words)
                     .fontWeight(.bold)

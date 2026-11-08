@@ -12,6 +12,9 @@ nonisolated struct FeedPillStyle {
     let shadowBlur: CGFloat
     let shadowOffsetY: CGFloat
     let shadow: Color
+    /// The rim's and the top highlight's widths.
+    var rimWidth: CGFloat = 0.5
+    var highlightWidth: CGFloat = 0.75
 
     private static let warmShadow = Color(red: 40 / 255, green: 30 / 255, blue: 0)
 
@@ -34,19 +37,25 @@ nonisolated struct FeedPillStyle {
         }
     }
 
+    /// The status pill's border: one pixel on a 3x screen, and a highlight two thirds as wide as the counts pill's.
+    static let statusRimWidth: CGFloat = 1.0 / 3
+    static let statusHighlightWidth: CGFloat = 0.5
+
     /// The status pill: a hairline capsule, its highlight at its weakest.
     static func status(ink: ArtInk) -> FeedPillStyle {
         switch ink {
         case .dark:
             FeedPillStyle(
                 fillTop: .white.opacity(0.07), fillBottom: .white.opacity(0.07), rim: .white.opacity(0.42),
-                highlight: 0.20, shadowBlur: 5, shadowOffsetY: 2, shadow: .black.opacity(0.35)
+                highlight: 0.20, shadowBlur: 5, shadowOffsetY: 2, shadow: .black.opacity(0.35),
+                rimWidth: statusRimWidth, highlightWidth: statusHighlightWidth
             )
         case .light:
             FeedPillStyle(
                 fillTop: .white.opacity(0.30), fillBottom: .white.opacity(0.30),
                 rim: HomeDesign.Palette.lightInk.opacity(0.38),
-                highlight: 0.60, shadowBlur: 5, shadowOffsetY: 2, shadow: warmShadow.opacity(0.22)
+                highlight: 0.60, shadowBlur: 5, shadowOffsetY: 2, shadow: warmShadow.opacity(0.22),
+                rimWidth: statusRimWidth, highlightWidth: statusHighlightWidth
             )
         }
     }
@@ -82,7 +91,7 @@ struct FeedPillSurface: ViewModifier {
                 ))
             }
             .overlay {
-                Capsule().strokeBorder(style.rim, lineWidth: 0.5)
+                Capsule().strokeBorder(style.rim, lineWidth: style.rimWidth)
             }
             .overlay {
                 Capsule()
@@ -95,9 +104,9 @@ struct FeedPillSurface: ViewModifier {
                             startPoint: .top,
                             endPoint: .bottom
                         ),
-                        lineWidth: 0.75
+                        lineWidth: style.highlightWidth
                     )
-                    .padding(0.5)
+                    .padding(style.rimWidth)
             }
     }
 }
