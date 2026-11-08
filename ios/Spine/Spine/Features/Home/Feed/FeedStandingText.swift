@@ -3,7 +3,7 @@ import Foundation
 /// The muted "where" after a friend's amount on a feed card: where they stand on the title, in a few words. The tile's
 /// panel says more ("p. 212 of 448"); a feed line is short.
 enum FeedStandingText {
-    /// "p. 212", "now 71%", "63/70" episodes ("9 episodes" when the end is not known), "41/90" chapters, "14h" or
+    /// "p. 212", "total 71%", "63/70" episodes ("9 episodes" when the end is not known), "41/90" chapters, "14h" or
     /// "1h 30m" for a game counted in time. Nil when there is nothing to say yet.
     static func whereText(for position: TilePosition) -> String? {
         let current = whole(position.current)
@@ -13,7 +13,7 @@ enum FeedStandingText {
             guard current > 0 else { return nil }
             return "p. \(InProgressTilePresenter.grouped(current))"
         case .percent:
-            return "now \(InProgressTilePresenter.number(position.current))%"
+            return "total \(InProgressTilePresenter.number(position.current))%"
         case .episodes:
             return counted(current, of: total, noun: "episode")
         case .chapters:

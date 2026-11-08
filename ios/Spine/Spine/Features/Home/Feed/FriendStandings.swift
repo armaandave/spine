@@ -58,7 +58,9 @@ enum FeedStandingMath {
 /// Where each friend stands on the titles their newest feed cards are about, loaded from the lists the profile's In
 /// progress rail already reads (`GET /users/<username>/tracking/`), one request per friend, type and status however many
 /// cards, a few at a time, after the feed's first page is in. A show is counted by the season the friend is in, whose
-/// episode count comes from the season's public page (one request per show and season). A card whose standing is not
+/// episode count comes from the season's public page (one request per show and season). A title the friend finished
+/// that day is no longer in their In progress list, so a wanted title the list did not have is looked up by name in
+/// their Completed list (one small request each) and drawn where they ended. A card whose standing is not
 /// there yet is drawn without one and gets it when it lands; a card without a meter is a complete card, so a failure
 /// shows nothing.
 @MainActor
@@ -74,6 +76,8 @@ final class FriendStandings: FeedStandingProviding {
     struct Want: Equatable {
         let pair: Pair
         let titleKey: String
+        /// The title's name, which finds it in the Completed list. Nil when the card has none.
+        let title: String?
         /// The card's day, in its own unit; nil for a status-only day.
         let told: TodayPart?
     }
@@ -117,6 +121,8 @@ final class FriendStandings: FeedStandingProviding {
     private struct Job {
         let pair: Pair
         var titleKeys: Set<String>
+        /// The wanted titles' names by title key, for the Completed lookup.
+        var titles: [String: String]
     }
 
     private enum Outcome {
@@ -210,6 +216,7 @@ final class FriendStandings: FeedStandingProviding {
         return Want(
             pair: Pair(username: item.actor.username, mediaType: mediaType, status: status),
             titleKey: FeedEntries.titleKey(for: ref),
+            title: ActivityFeedPresentation.clean(item.media?.title),
             told: told
         )
     }
@@ -289,14 +296,17 @@ final class FriendStandings: FeedStandingProviding {
 
     private func enqueue(wants: [Want], reloading: Bool) {
         var keys: [Pair: Set<String>] = [:]
+        var names: [Pair: [String: String]] = [:]
         var order: [Pair] = []
         for want in wants {
             if keys[want.pair] == nil { order.append(want.pair) }
             keys[want.pair, default: []].insert(want.titleKey)
+            if let title = want.title { names[want.pair, default: [:]][want.titleKey] = title }
         }
         for pair in order {
             let entry = entries[pair] ?? Entry()
             let wanted = keys[pair] ?? []
+            let titles = names[pair] ?? [:]
             // A pair already loaded can have shows whose season has not been read.
             loadSeasons(pair: pair, titleKeys: wanted)
             if reloading {
@@ -313,8 +323,9 @@ final class FriendStandings: FeedStandingProviding {
             }
             if let queued = queue.firstIndex(where: { $0.pair == pair }) {
                 queue[queued].titleKeys.formUnion(wanted)
+                queue[queued].titles.merge(titles) { _, new in new }
             } else {
-                queue.append(Job(pair: pair, titleKeys: wanted))
+                queue.append(Job(pair: pair, titleKeys: wanted, titles: titles))
             }
         }
         pump()
@@ -362,6 +373,20 @@ final class FriendStandings: FeedStandingProviding {
                 if job.titleKeys.isSubset(of: seen) { break }
                 guard let next = APIPageCursor.nextPage(from: response.next) else { break }
                 page = next
+            }
+            // A title finished that day is in Completed now. Only the wanted titles the list did not have are asked
+            // for, by name, one small request each. A finished show has no place to read (its season comes from the
+            // episode up next), so shows are not asked.
+            if job.pair.status == "In progress", job.pair.mediaType != "tv" {
+                for key in job.titleKeys.subtracting(seen).sorted() {
+                    guard let title = job.titles[key] else { continue }
+                    let finished = try await repository.list(
+                        mediaType: job.pair.mediaType, page: nil, status: "Completed", query: title
+                    )
+                    for row in finished.results where FeedEntries.titleKey(for: row.media.ref) == key {
+                        if let position = InProgressTilePresenter.position(for: row) { found[key] = position }
+                    }
+                }
             }
             outcome = .loaded(positions: found, seasons: places)
         } catch is CancellationError {

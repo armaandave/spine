@@ -41,6 +41,7 @@ final class StandingsRepoRoot {
         let mediaType: String
         let status: String?
         let page: String?
+        var query: String?
     }
 
     private(set) var requests: [Request] = []
@@ -90,7 +91,7 @@ final class StandingsRepository: TrackingRepository {
     }
 
     func list(mediaType: String, page: String?, status: String?, query: String?) async throws -> PagedResponse<Spine.LibraryItem> {
-        try await root.respond(.init(username: username ?? "", mediaType: mediaType, status: status, page: page))
+        try await root.respond(.init(username: username ?? "", mediaType: mediaType, status: status, page: page, query: query))
     }
 
     func detail(ref: MediaRef) async throws -> TrackingState { fatalError("Not used") }
@@ -254,6 +255,10 @@ final class FriendStandingsTests: XCTestCase {
             try day(7, "20 pages", title: "7"),
             try FeedTestItems.log(id: 8, rating: "4", username: "a", actorID: 3),
         ]
+        root.set("a", "book", rows: [bookRow("7", page: 10), bookRow("8", page: 10)])
+        root.set("b", "book", rows: [bookRow("7", page: 10)])
+        root.set("c", "manga", rows: [mangaRow("9", chapter: 4, of: 90)])
+        root.set("c", "book", rows: [bookRow("7", page: 10)])
         let provider = provider()
         provider.prepare(for: items)
         await until(root.requests.count == 5 && root.running == 0)
@@ -293,6 +298,7 @@ final class FriendStandingsTests: XCTestCase {
         let items = try users.enumerated().map { index, user in
             try day(index + 1, "10 pages", user: user, actor: 10 + index)
         }
+        for user in users { root.set(user, "book", rows: [bookRow("7", page: 10)]) }
         let provider = provider()
         provider.prepare(for: items)
         await until(root.requests.count == 3)
@@ -334,7 +340,7 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertNil(standing.from, "Pages cannot go on a percent bar without the book's length")
         XCTAssertEqual(standing.to, 71)
         XCTAssertEqual(standing.total, 100)
-        XCTAssertEqual(standing.whereText, "now 71%")
+        XCTAssertEqual(standing.whereText, "total 71%")
     }
 
     func testAPercentBookWithItsPageCountConvertsTheDay() throws {
@@ -438,7 +444,7 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertNil(provider.standing(for: item, isNewestOfTitle: true))
         let card = FeedCardPresenter.model(for: item, standing: nil, isNewestOfTitle: true)
         XCTAssertNil(card.meter)
-        XCTAssertEqual(root.requests.count, 1, "No other status is probed for it")
+        XCTAssertEqual(root.requests.map(\.status), ["In progress", "Completed"], "Only Completed is tried after In progress")
     }
 
     func testOnlyTheNewestCardOfATitleGetsItsStanding() async throws {
@@ -450,6 +456,106 @@ final class FriendStandingsTests: XCTestCase {
         await landed(provider)
         XCTAssertNotNil(provider.standing(for: newest, isNewestOfTitle: true))
         XCTAssertNil(provider.standing(for: older, isNewestOfTitle: false))
+    }
+
+    // MARK: 6b. A title finished that day
+
+    func testAFriendWhoFinishedABookThatDayGetsTheEndFromTheCompletedList() async throws {
+        root.set("a", "book", rows: [])
+        root.set("a", "book", "Completed", rows: [bookRow("7", page: 476, of: 476)])
+        let item = try day(1, "304 pages")
+        let provider = provider()
+        provider.prepare(for: [item])
+        await landed(provider)
+
+        XCTAssertEqual(root.requests.map(\.status), ["In progress", "Completed"])
+        XCTAssertEqual(root.requests.last?.query, "Perf My Book", "Asked for by name, first page only")
+        XCTAssertNil(root.requests.last?.page)
+        let standing = try XCTUnwrap(provider.standing(for: item, isNewestOfTitle: true))
+        XCTAssertEqual(standing.whereText, "p. 476")
+        XCTAssertEqual(standing.from, 172, "The day's 304 pages are lit at the end")
+        XCTAssertEqual(standing.to, 476)
+        XCTAssertEqual(standing.total, 476, "A full bar")
+        let card = FeedCardPresenter.model(for: item, standing: standing, isNewestOfTitle: true)
+        XCTAssertNotNil(card.meter)
+
+        provider.prepare(for: [item])
+        try? await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(root.requests.count, 2, "Asked once while the answer is fresh")
+    }
+
+    func testOnlyTheTitleMissingFromTheListIsAskedForInCompleted() async throws {
+        root.set("a", "book", rows: [bookRow("7", page: 212)])
+        root.set("a", "book", "Completed", rows: [bookRow("8", page: 300, of: 300), bookRow("9", page: 10, of: 10)])
+        let inProgress = try day(1, "30 pages", title: "7")
+        let finished = try day(2, "50 pages", title: "8")
+        let provider = provider()
+        provider.prepare(for: [inProgress, finished])
+        await landed(provider)
+
+        XCTAssertEqual(root.requests.map(\.status), ["In progress", "Completed"], "One Completed request, for one title")
+        XCTAssertEqual(provider.standing(for: inProgress, isNewestOfTitle: true)?.to, 212)
+        XCTAssertEqual(provider.standing(for: finished, isNewestOfTitle: true)?.to, 300)
+        XCTAssertEqual(provider.standing(for: finished, isNewestOfTitle: true)?.whereText, "p. 300")
+    }
+
+    func testATitleFoundInProgressMakesNoCompletedRequest() async throws {
+        root.set("a", "book", rows: [bookRow("7", page: 212)])
+        let item = try day(1, "30 pages")
+        let provider = provider()
+        provider.prepare(for: [item])
+        await landed(provider)
+        XCTAssertEqual(root.requests.map(\.status), ["In progress"])
+    }
+
+    func testATitleInNeitherListGetsNoStanding() async throws {
+        root.set("a", "book", "Completed", rows: [bookRow("99", page: 300, of: 300)])
+        let item = try day(1, "30 pages")
+        let provider = provider()
+        provider.prepare(for: [item])
+        await landed(provider)
+        XCTAssertEqual(root.requests.map(\.status), ["In progress", "Completed"])
+        XCTAssertNil(provider.standing(for: item, isNewestOfTitle: true), "A search hit for another title is not it")
+    }
+
+    func testAPausedCardNeverAsksTheCompletedList() async throws {
+        let item = try day(1, nil, moves: ["paused"])
+        let provider = provider()
+        provider.prepare(for: [item])
+        await landed(provider)
+        XCTAssertEqual(root.requests.map(\.status), ["Paused"])
+    }
+
+    func testAFinishedShowIsLeftWithoutAPlaceAndNotAsked() async throws {
+        // A finished show's row has no episode up next, so the season it ended in cannot be known from it.
+        root.set("a", "tv", "Completed", rows: [seasonShowRow("5", watched: 24, aired: 24)])
+        let media = StandingsSeasonPages()
+        let item = try day(1, "3 episodes", type: "tv", source: "tmdb", title: "5")
+        let provider = provider(seasons: media)
+        provider.prepare(for: [item])
+        await landed(provider)
+        XCTAssertEqual(root.requests.map(\.status), ["In progress"], "No request per finished show")
+        XCTAssertNil(provider.standing(for: item, isNewestOfTitle: true))
+        XCTAssertTrue(media.detailRequests.isEmpty)
+    }
+
+    func testAFinishedMangaGetsItsChaptersFromTheCompletedList() async throws {
+        root.set("a", "manga", "Completed", rows: [mangaRow("9", chapter: 90, of: 90)])
+        let item = try day(1, "5 chapters", type: "manga", source: "mangadex", title: "9")
+        let provider = provider()
+        provider.prepare(for: [item])
+        await landed(provider)
+        XCTAssertEqual(root.requests.map(\.status), ["In progress", "Completed"])
+        let standing = try XCTUnwrap(provider.standing(for: item, isNewestOfTitle: true))
+        XCTAssertEqual(standing.whereText, "90/90")
+        XCTAssertEqual(standing.to, 90)
+        XCTAssertEqual(standing.total, 90)
+    }
+
+    func testAPercentPositionSaysTotal() {
+        let position = TilePosition(unit: .percent, current: 63, total: 100, pagesTotal: nil)
+        XCTAssertEqual(FeedStandingText.whereText(for: position), "total 63%")
+        XCTAssertEqual(FeedStandingText.whereText(for: TilePosition(unit: .percent, current: 63.5, total: 100, pagesTotal: nil)), "total 63.5%")
     }
 
     // MARK: 7. Paging
@@ -478,7 +584,7 @@ final class FriendStandingsTests: XCTestCase {
         let provider = provider()
         provider.prepare(for: [item])
         await landed(provider)
-        XCTAssertEqual(root.requests.count, 3)
+        XCTAssertEqual(root.requests.map(\.status), ["In progress", "In progress", "In progress", "Completed"])
         XCTAssertNil(provider.standing(for: item, isNewestOfTitle: true))
     }
 
@@ -743,12 +849,12 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertNil(FeedStandingMath.seasonStanding(season: 1, watched: 3, total: 0, told: nil), "No end, no meter")
     }
 
-    func testTheSeasonsWordsNameSpecialsAndKeepASingular() {
+    func testTheSeasonsWordsNameSpecialsAndUseASlash() {
         XCTAssertEqual(FeedStandingText.seasonText(season: 1, current: 3, total: 12), "S1 \u{00B7} 3/12")
         XCTAssertEqual(FeedStandingText.spoken("S1 \u{00B7} 3/12"), "S1 \u{00B7} 3 of 12", "Never read as a date")
         XCTAssertEqual(FeedStandingText.spoken("1,204/1,500"), "1,204 of 1,500")
         XCTAssertEqual(FeedStandingText.spoken("p. 212"), "p. 212")
-        XCTAssertEqual(FeedStandingText.seasonText(season: 2, current: 1, total: 1), "S2 \u{00B7} 1 of 1 episode")
+        XCTAssertEqual(FeedStandingText.seasonText(season: 2, current: 1, total: 1), "S2 \u{00B7} 1/1")
         XCTAssertEqual(FeedStandingText.seasonText(season: 0, current: 1, total: 4), "Specials \u{00B7} 1/4")
     }
 

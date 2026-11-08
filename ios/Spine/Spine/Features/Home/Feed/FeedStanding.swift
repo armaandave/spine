@@ -11,7 +11,7 @@ nonisolated struct FeedStanding: Equatable, Sendable {
     let to: Int?
     /// The end of the run. Nil gives no meter (percent always runs to 100).
     let total: Int?
-    /// "9 of 62 episodes", "p. 212", "now 71%".
+    /// "9 of 62 episodes", "p. 212", "total 71%".
     let whereText: String?
 
     init(unit: MeterUnit, from: Int?, to: Int?, total: Int?, whereText: String?) {
