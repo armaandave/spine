@@ -63,7 +63,7 @@ Primary checks before handing off non-trivial changes:
 1. While building, run only the tests for the area you changed:
    - `cd src && uv run --locked python manage.py test <app_or_test_path>`
    - plus `uv run --locked ruff check src` and, if models changed, `makemigrations --check --dry-run`.
-2. The full suite (`scripts/check.sh`, the same as CI's Fast checks) runs once per feature, inside the ship line (`scripts/ship-merge.sh`, `scripts/ios/SHIP.md`), not after every change. CI runs it again before anything deploys.
+2. The full suite (`scripts/check.sh`: ruff, models without a migration, the suite on SQLite) runs once per feature, inside the ship line (`scripts/ship-merge.sh`, `scripts/ios/SHIP.md`), not after every change. CI runs the suite again on Postgres before anything deploys.
 3. For template/HTMX changes, verify:
    - Full-page load
    - Partial fragment response
@@ -235,8 +235,8 @@ Every feature follows this path. Armaan drives it with the prompts in quotes.
 ## 15) CI
 
 - `.github/workflows/ci.yml` runs on every push to any branch, on GitHub-hosted runners (free for this public repo):
-  - "Fast checks": `scripts/check.sh` (ruff, `makemigrations --check`, the full suite on SQLite with `uv.lock`).
-  - "Database checks": every migration, then the full suite, on Postgres 16 like production.
+  - "Fast checks": ruff and `makemigrations --check`, with `uv.lock`. The SQLite suite isn't repeated in CI: the ship line runs it (`scripts/check.sh`) on the merged commit before pushing.
+  - "Database checks": every migration, then the full suite, on Postgres 16 like production, with crash safety off (tests don't need it).
   - "Deploy production": pushes to `myapp-main` only, after both pass (`deploy-backend-desk-mac.yml`).
 - Upstream's App Tests and Stale workflows are disabled in GitHub. Leave upstream's workflow files unedited so upstream merges stay clean.
 - When CI goes red, find the run with `gh run list`, read the failure with `gh run view <run-id> --log-failed`, reproduce it (`scripts/check.sh`, or the Database checks commands against a throwaway Postgres), fix the cause, and push. Keep `myapp-main` green.

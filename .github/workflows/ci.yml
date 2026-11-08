@@ -20,16 +20,21 @@ jobs:
   checks:
     name: Fast checks
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       # Pinned to a commit because it is a third-party action.
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
-      # Lint, models without a migration, and the test suite on SQLite.
-      - name: scripts/check.sh
-        run: scripts/check.sh
+      # Lint and models without a migration. The test suite runs once here, on Postgres
+      # like production (Database checks); the ship line already ran it on SQLite
+      # (scripts/check.sh) on the merged commit before the push.
+      - name: Lint
+        run: uv run --locked ruff check src
+      - name: Models without a migration
+        working-directory: src
+        run: uv run --locked python manage.py makemigrations --check --dry-run
 
   database:
     name: Database checks
@@ -65,6 +70,18 @@ jobs:
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
+      # Tests don't need crash safety: skip waiting for the disk on every commit. Test-only
+      # settings for this throwaway server, not production's.
+      - name: Make Postgres fast for tests
+        env:
+          PGPASSWORD: spine-ci
+        run: |
+          psql -h 127.0.0.1 -U spine -d spine -v ON_ERROR_STOP=1 \
+            -c "ALTER SYSTEM SET fsync = off" \
+            -c "ALTER SYSTEM SET synchronous_commit = off" \
+            -c "ALTER SYSTEM SET full_page_writes = off" \
+            -c "SELECT pg_reload_conf()"
+          psql -h 127.0.0.1 -U spine -d spine -Atc "SHOW fsync; SHOW synchronous_commit; SHOW full_page_writes"
       # What every deploy does when the new container starts (entrypoint.sh).
       - name: Apply every migration to an empty database
         run: uv run --locked python manage.py migrate --noinput
