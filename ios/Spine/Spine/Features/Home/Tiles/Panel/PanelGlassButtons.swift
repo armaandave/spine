@@ -83,6 +83,8 @@ struct PanelGlassButtons: View {
             // button (it shrinks to a circle while it morphs) can never make the outline or tint wider than the glass.
             Color.clear
                 .frame(width: quickWidth, height: InProgressPanelMetrics.buttonHeight)
+                // The whole capsule takes the tap: a clear label is otherwise hit-testable only where it draws.
+                .contentShape(Capsule())
                 .overlay { Capsule().fill(PanelStyle.primaryTint) }
                 .overlay {
                     ZStack {
@@ -140,6 +142,9 @@ struct PanelGlassButtons: View {
             // circle, drawing a second, larger ring around it.
             Color.clear
                 .frame(width: updateWidth, height: InProgressPanelMetrics.buttonHeight)
+                // The whole capsule takes the tap. Its fill is see-through while Update isn't the main button, so
+                // without this only the word "Update" did, which on a wide button is a small part of it.
+                .contentShape(Capsule())
                 .overlay { Capsule().fill(PanelStyle.primaryTint).opacity(layout.updatePrimary) }
                 .overlay {
                     ZStack {
