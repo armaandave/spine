@@ -18,8 +18,8 @@ Core rules, in case of doubt:
 1. A push to `myapp-main` runs CI and, once it passes, deploys production. It also makes
    a TestFlight build when the push changes the iOS app. Never put a CI skip marker in a
    commit message: it would skip CI and the deploy.
-2. Run `scripts/check.sh` before merging, then watch CI and the deploy on the pushed
-   commit. A red deploy can mean production is down: fix it or roll back.
+2. Run `scripts/check.sh` once, before merging (the feature's only full-suite run), then
+   watch CI and the deploy on the pushed commit. A red deploy can mean production is down: fix it or roll back.
 3. Never push, deploy, or write to App Store Connect without the user's explicit yes in
    this conversation for this ship.
 4. The API must keep working for every installed build.

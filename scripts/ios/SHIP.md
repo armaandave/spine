@@ -49,8 +49,11 @@ Run from the feature worktree unless a step says otherwise.
    `origin/myapp-main` into the branch if it has moved, and resolve conflicts.
 2. **Verify.**
    - Run `scripts/check.sh` (the same checks as CI's Fast checks) and fix anything it
-     reports.
-   - If iOS changed, build it and run the iOS tests (`ios/AGENTS.md`).
+     reports. This is the one full-suite run for the feature; building only ran the
+     tests for the changed area.
+   - If iOS changed, build it. Run the full `SpineTests` only if tested logic changed
+     (models, decoding, view models, presentation helpers); view-only changes just build
+     (`ios/AGENTS.md`).
    - For non-trivial changes, run a code review (`/code-review` in Claude Code) and fix
      the findings.
 3. **Compatibility.** Check every changed file under `src/api/` (feature-status lists
@@ -84,7 +87,9 @@ Run from the feature worktree unless a step says otherwise.
      `ExitWorktree` (keep) first.
    - In the main checkout (`~/projects/spine`), which must be clean and on `myapp-main`:
      `git merge --no-ff <branch>`.
-   - Run `scripts/check.sh` on the merged `myapp-main`, then `git push origin myapp-main`.
+   - `git push origin myapp-main`. Step 1 already merged `myapp-main` into the branch
+     and step 2 tested it, so don't run `scripts/check.sh` again; CI runs the suite before
+     deploying. If `myapp-main` moved since step 1, go back to step 1 instead.
    - Commit as `armaandave@outlook.com`, with the trailers your instructions require.
    - Run `scripts/ios/test-backend.sh update`, so the always-on test backend (the one
      Spine Dev talks to) serves the new `myapp-main`.
