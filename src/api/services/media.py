@@ -4682,11 +4682,29 @@ def poster_palette(image_url):
 
     The first time, they're counted in the background, for the next open.
     """
-    if not image_url or not image_url.startswith(("http://", "https://")) or image_url == settings.IMG_NONE:
-        return None
-    colors = PosterPalette.objects.filter(image_url=image_url).values_list("colors", flat=True).first()
-    if colors is not None or not settings.POSTER_PALETTE_COUNTING:
-        return colors
+    return poster_palettes([image_url]).get(image_url)
+
+
+def poster_palettes(image_urls):
+    """Return {url: colors} for the shown posters whose colors are saved, in one query.
+
+    Each poster without them is counted in the background, for the next load.
+    """
+    urls = {
+        url
+        for url in image_urls
+        if url and url.startswith(("http://", "https://")) and url != settings.IMG_NONE
+    }
+    if not urls:
+        return {}
+    saved = dict(PosterPalette.objects.filter(image_url__in=urls).values_list("image_url", "colors"))
+    if settings.POSTER_PALETTE_COUNTING:
+        for url in urls - saved.keys():
+            _schedule_poster_palette(url)
+    return saved
+
+
+def _schedule_poster_palette(image_url):
     schedule_key = f"poster-palette:{hashlib.sha256(image_url.encode()).hexdigest()}"
     try:
         if cache.add(schedule_key, 1, timeout=POSTER_PALETTE_SCHEDULE_TTL):
@@ -4697,7 +4715,6 @@ def poster_palette(image_url):
         with suppress(ConnectionInterrupted, RedisError, ConnectionError, OSError):
             cache.delete(schedule_key)
         logger.warning("Poster palette enqueue failed type=%s", type(error).__name__)
-    return None
 
 
 def poster_accent_color(metadata, ref):
