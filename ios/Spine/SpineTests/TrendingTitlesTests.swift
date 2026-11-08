@@ -390,6 +390,32 @@ final class TrendingTitlesTests: XCTestCase {
         XCTAssertTrue(mayaAndMore.facesKey.hasSuffix("+1"))
     }
 
+    func testATitleWithNoFriendsSaysWhatItIsAndItsYear() throws {
+        let movieRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "movie", mediaId: "7", seasonNumber: nil, episodeNumber: nil)
+        let movie = MediaSummary(ref: movieRef, title: "Sinners")
+        let page = MediaDetail(ref: movieRef, title: "Sinners", releaseDate: "2025-04-18")
+        XCTAssertEqual(TrendingTileModel.info(for: movie, detail: page, loading: false), "Movie · 2025")
+        XCTAssertNil(TrendingTileModel.info(for: movie, detail: nil, loading: true), "No half line while the page loads")
+        XCTAssertEqual(TrendingTileModel.info(for: movie, detail: nil, loading: false), "Movie", "A page with no year")
+
+        let dated = MediaSummary(ref: movieRef, title: "Sinners", releaseDate: "2025-04-18")
+        XCTAssertEqual(TrendingTileModel.info(for: dated, detail: nil, loading: true), "Movie · 2025", "The row's own date")
+    }
+
+    func testAShowsYearIsItsFirstAirDate() throws {
+        let show = title(friends: []).media
+        let page = MediaDetail(
+            ref: show.ref, title: "Severance", releaseDate: "2025-01-17",
+            details: ["first_air_date": .string("2022-02-18")]
+        )
+        XCTAssertEqual(TrendingTileModel.info(for: show, detail: page, loading: false), "Series · 2022")
+        XCTAssertNil(TrendingTileModel.info(
+            for: MediaSummary(ref: MediaRef(itemId: nil, source: "x", mediaType: "podcast", mediaId: "1",
+                                            seasonNumber: nil, episodeNumber: nil), title: "P"),
+            detail: nil, loading: false
+        ), "An unknown kind with no year says nothing")
+    }
+
     func testAPersonWithNoNameIsSpokenByUsername() throws {
         let detail = TrendingTileModel.detail(for: title(friends: [UserSummary(id: 9, username: "zed", displayName: "", avatarUrl: nil)]))
         XCTAssertEqual(detail.avatars.first?.name, "zed")

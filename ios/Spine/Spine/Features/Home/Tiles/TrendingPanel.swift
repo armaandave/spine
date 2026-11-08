@@ -49,7 +49,9 @@ struct TrendingPanel: View {
                 TrendingOutsideTapLayer(onOutsideTap: collapsePicker)
             }
 
-            TrendingTitleBlock(state: state, titles: titles, detail: detail, isHidden: pickerOpen)
+            TrendingTitleBlock(
+                state: state, titles: titles, detail: detail, media: title.media, entry: entry, isHidden: pickerOpen
+            )
                 .padding(.top, HomeDesign.Metric.trendingTitleTop)
                 .frame(maxHeight: .infinity, alignment: .top)
 
@@ -153,12 +155,15 @@ private struct TrendingOutsideTapLayer: View {
 
 // MARK: - The title block
 
-/// The centered title and, under it, the friends' faces. The title is drawn by the shared `SwipeTitle`, which follows
-/// the scroll and changes in place; the faces row is one view that stays, so it is never empty between two titles.
+/// The centered title and, under it, the friends' faces (or, with none, the title's kind and year). The title is drawn
+/// by the shared `SwipeTitle`, which follows the scroll and changes in place; the row under it is one view that stays,
+/// so it is never empty between two titles.
 private struct TrendingTitleBlock: View {
     let state: HomeTilesState
     let titles: [String]
     let detail: TrendingTileDetail
+    let media: MediaSummary
+    let entry: TrendingRailStore.Entry?
     let isHidden: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -173,7 +178,7 @@ private struct TrendingTitleBlock: View {
                 .accessibilityAddTraits(.isHeader)
                 .allowsHitTesting(false)
 
-            TrendingFacesRow(detail: detail)
+            TrendingFacesRow(detail: detail, media: media, entry: entry)
                 .padding(.top, HomeDesign.Metric.trendingInfoGap)
                 .frame(height: HomeDesign.Metric.trendingInfoHeight)
                 .opacity(isHidden ? 0 : 1)
@@ -184,23 +189,44 @@ private struct TrendingTitleBlock: View {
     }
 }
 
-/// The friends' faces, each opening that person's profile; nothing else is ever in the row. When the title changes the
-/// old faces stay until the new ones fade in over them (no gap), and a title nobody has logged shows an empty row.
+/// The friends' faces, each opening that person's profile. When the title changes the old faces stay until the new ones
+/// fade in over them (no gap). A title nobody you follow has logged shows its kind and year instead ("Movie · 2025"),
+/// once its page has loaded; it reads the rail's entry here, so only this row redraws when the page arrives.
 private struct TrendingFacesRow: View {
     let detail: TrendingTileDetail
+    let media: MediaSummary
+    let entry: TrendingRailStore.Entry?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Quieter than the title above it.
+    private static let infoInk = Color.white.opacity(0.6)
+
     var body: some View {
+        let info = detail.avatars.isEmpty
+            ? TrendingTileModel.info(
+                for: media,
+                detail: entry?.viewModel.detail,
+                loading: entry.map { !$0.isReady && $0.phase != .failed } ?? true
+            )
+            : nil
         ZStack {
             if !detail.avatars.isEmpty {
                 faces
                     .id(detail.facesKey)
                     .transition(.opacity)
+            } else if let info {
+                Text(info)
+                    .font(HomeDesign.Text.quiet)
+                    .foregroundStyle(Self.infoInk)
+                    .lineLimit(1)
+                    .id(info)
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: detail.facesKey)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: info)
         .dynamicTypeSize(...HomeDesign.Text.maxCategory)
     }
 

@@ -298,4 +298,48 @@ enum TrendingTileModel {
         default: return "\(names[0]), \(names[1]) and \(names.count - 2) more \(tail)"
         }
     }
+
+    // MARK: Kind and year
+
+    /// "Movie · 2025": what the title is and the year it came out, shown under a title no one you follow has logged.
+    /// The year is the title page's (a show's first air date), else the row's own date. While the page is loading and
+    /// the row brought no year this is nil, so the line arrives whole rather than growing a year a moment later.
+    static func info(for media: MediaSummary, detail: MediaDetail?, loading: Bool) -> String? {
+        let year = detail.flatMap(year(of:)) ?? year(from: media.releaseDate)
+        if year == nil, loading { return nil }
+        let parts = [kind(of: media.ref.mediaType), year].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// One title's kind, in the singular.
+    static func kind(of mediaType: String) -> String? {
+        switch mediaType {
+        case "movie": "Movie"
+        case "tv", "season", "episode": "Series"
+        case "anime": "Anime"
+        case "manga": "Manga"
+        case "game": "Game"
+        case "book": "Book"
+        case "comic": "Comic"
+        case "music": "Album"
+        default: nil
+        }
+    }
+
+    private static func year(of detail: MediaDetail) -> String? {
+        func text(_ key: String) -> String? {
+            if case let .string(value)? = detail.details?[key] { value } else { nil }
+        }
+        let showStart = detail.ref.mediaType == "tv" ? text("first_air_date") : nil
+        let dates = [showStart, detail.releaseDate, text("release_date"), text("first_air_date"), text("start_date"),
+                     text("publish_date")]
+        return dates.lazy.compactMap { year(from: $0) }.first
+    }
+
+    /// The year at the front of a date ("2025-03-14" or "2025"), if it is one.
+    private static func year(from date: String?) -> String? {
+        guard let date, date.count >= 4 else { return nil }
+        let year = date.prefix(4)
+        return year.allSatisfy(\.isASCII) && year.allSatisfy(\.isNumber) ? String(year) : nil
+    }
 }
