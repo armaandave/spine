@@ -7,7 +7,9 @@
 # the branch has backend changes production doesn't have, the test backend must be serving
 # this checkout first (scripts/ios/test-backend.sh use). The iPhone must be on the Mac's Wi-Fi.
 #
-# Usage: scripts/ios/build-to-iphone.sh [--build-only] [--device <id>]
+# Usage: scripts/ios/build-to-iphone.sh [--laptop] [--build-only] [--device <id>]
+#   --laptop       build and install from Armaan's laptop instead of this Mac
+#                  (scripts/ios/LAPTOP.md); the phone must be plugged into the laptop or on its Wi-Fi
 #   --build-only   compile for a generic iPhone; do not touch the phone
 #   --local        accepted for older instructions; changes nothing
 #   --device       override the phone (default: SPINE_DEVICE_ID or Armaan's iPhone 14 Pro Max)
@@ -15,12 +17,18 @@ set -euo pipefail
 
 device=${SPINE_DEVICE_ID:-5717B25A-53E3-532D-8303-931EE324948F}
 build_only=0
+on_laptop=0
+use_laptop=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --local) ;;
     --build-only) build_only=1 ;;
+    --laptop) use_laptop=1 ;;
+    # Internal: laptop.sh runs this on the laptop with the test backend's address and what it
+    # serves, already checked here, since the test backend lives on this Mac.
+    --on-laptop) on_laptop=1; given_api=$2; given_serving=$3; shift 2 ;;
     --device) device=$2; shift ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -43,7 +51,10 @@ configuration=Debug
 
 # Run the helpers next to this script, so older worktrees can use myapp-main's copies.
 here=$(cd "$(dirname "$0")" && pwd)
-if [ $build_only -eq 1 ]; then
+if [ $on_laptop -eq 1 ]; then
+  local_api=$given_api
+  serving=$given_serving
+elif [ $build_only -eq 1 ]; then
   local_api=$("$here/test-backend.sh" api)
   serving="(not checked)"
 else
@@ -55,6 +66,15 @@ else
   if [ "$verdict" = local-backend ] && [ "$served" != "$top" ]; then
     die "this branch has backend changes production doesn't have, and the test backend serves $serving. Serve this checkout first: scripts/ios/test-backend.sh use"
   fi
+fi
+
+if [ $use_laptop -eq 1 ]; then
+  grep -q -- '--on-laptop' "$top/scripts/ios/build-to-iphone.sh" ||
+    die "this checkout predates laptop builds. Merge origin/myapp-main into the branch first; nothing was built."
+  args=(--on-laptop "$local_api" "$serving" --device "$device")
+  [ $build_only -eq 1 ] && args+=(--build-only)
+  echo "Building on the laptop; this Mac's ios queue isn't used."
+  exec "$here/laptop.sh" run scripts/ios/build-to-iphone.sh "${args[@]}"
 fi
 
 # One stable build cache per checkout, so worktrees never share build products.
@@ -80,11 +100,22 @@ else
   destination="id=$device"
 fi
 
+sign_args=()
+if [ $on_laptop -eq 1 ]; then
+  # Over SSH the login keychain is locked, so sign from the agent keychain that
+  # laptop-signing-setup.sh made (scripts/ios/LAPTOP.md).
+  kc=$HOME/Library/Keychains/spine-agent.keychain-db
+  [ -f "$kc" ] && [ -s "$HOME/spine-agent/.keychain-pass" ] ||
+    die "the laptop can't sign phone builds yet. Armaan runs this once in Terminal on the laptop: $top/scripts/ios/laptop-signing-setup.sh"
+  security unlock-keychain -p "$(cat "$HOME/spine-agent/.keychain-pass")" "$kc"
+  sign_args=("OTHER_CODE_SIGN_FLAGS=--keychain $kc")
+fi
+
 echo "Building $scheme ($configuration)... log: $log"
 mkdir -p "$(dirname "$build_dir")"
 if ! xcodebuild -project "$project" -scheme "$scheme" -configuration "$configuration" \
     -destination "$destination" -derivedDataPath "$build_dir" \
-    -allowProvisioningUpdates "SPINE_API_BASE_URL=$local_api" build > "$log" 2>&1; then
+    -allowProvisioningUpdates "SPINE_API_BASE_URL=$local_api" ${sign_args[@]+"${sign_args[@]}"} build > "$log" 2>&1; then
   grep -E "error:|BUILD FAILED" "$log" | head -n 30 >&2 || true
   die "build failed; full log at $log. Nothing was installed."
 fi
