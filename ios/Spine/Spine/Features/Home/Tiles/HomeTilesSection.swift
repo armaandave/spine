@@ -317,16 +317,18 @@ private enum TileURL {
 /// the edge and a one-point highlight along the top, as two solid shapes. Both are solid colors, because a gradient
 /// stroke is rasterized by Core Graphics on the main thread every frame the tile's size changes (the open and the
 /// close), which was the biggest single cost of both.
-private struct TileOutline: View {
+struct TileOutline: View {
     let shape: RoundedRectangle
+    /// The shape's corner radius, for the highlight's crescent (Up next's tile is rounder than the tiles').
+    var corner: CGFloat = HomeDesign.Metric.tileCorner
 
     var body: some View {
         ZStack(alignment: .top) {
             shape.strokeBorder(TileStyle.stroke, lineWidth: TileStyle.strokeWidth)
-            TileTopHighlight()
+            TileTopHighlight(corner: corner)
                 .fill(TileStyle.highlight)
                 // The crescent lives in the corner's height; a strip that tall is all that is ever redrawn.
-                .frame(height: HomeDesign.Metric.tileCorner + TileStyle.highlightWidth)
+                .frame(height: corner + TileStyle.highlightWidth)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -338,14 +340,16 @@ private struct TileOutline: View {
 /// the outline is taken from a rectangle taller than the strip; only the top corners matter and they do not depend on
 /// the height.
 private struct TileTopHighlight: Shape {
+    var corner: CGFloat = HomeDesign.Metric.tileCorner
+
     func path(in rect: CGRect) -> Path {
         let full = CGRect(
             x: rect.minX,
             y: rect.minY,
             width: rect.width,
-            height: rect.height + 2 * HomeDesign.Metric.tileCorner
+            height: rect.height + 2 * corner
         )
-        let outline = RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous).path(in: full)
+        let outline = RoundedRectangle(cornerRadius: corner, style: .continuous).path(in: full)
         return outline.subtracting(outline.offsetBy(dx: 0, dy: TileStyle.highlightWidth))
     }
 }

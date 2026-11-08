@@ -25,6 +25,8 @@ final class HomeViewModel {
     @ObservationIgnored private var inProgressLoaded = false
     /// The people you follow, for the Friends row.
     let friends = HomeFriendsModel()
+    /// What's coming up from your shows and anime, for the Up next tile and page.
+    let upNext: HomeUpNextModel
 
     /// The activity of the people you follow; your own is on your profile.
     let feed: ActivityFeedViewModel
@@ -126,6 +128,7 @@ final class HomeViewModel {
         self.onUnauthorized = onUnauthorized
         self.loadsTileExtras = loadsTileExtras
         self.socialRepository = loadsTileExtras ? socialRepository : nil
+        upNext = HomeUpNextModel(repository: loadsTileExtras ? trackingRepository : nil, onUnauthorized: onUnauthorized)
         trendingFallback = loadsTileExtras ? listRepository.map { TrendingFallbackSource(listRepository: $0) } : nil
         let feed = ActivityFeedViewModel(
             username: nil,
@@ -225,7 +228,9 @@ final class HomeViewModel {
             return false
         }
 
+        async let upNextLoad: Void = upNext.load()
         await loadInProgress(forceToday: true)
+        await upNextLoad
         return true
     }
 
@@ -632,6 +637,8 @@ struct HomeView: View {
     @State private var selectedPost: ActivityPostSelection?
     /// A day of Planning adds, open on its titles.
     @State private var selectedPlanning: ActivityItem?
+    /// The Up next page, pushed from its tile.
+    @State private var showsUpNext = false
     /// Only for the project owner: a long press on the picture offers to choose the site-wide one.
     @State private var isHomePicturePickerPresented = false
 
@@ -705,7 +712,8 @@ struct HomeView: View {
                             viewModel: viewModel,
                             actions: tileActions,
                             onOpenProfile: { onSelectTab(.profile) },
-                            onFindPeople: onFindPeople
+                            onFindPeople: onFindPeople,
+                            onOpenUpNext: { showsUpNext = true }
                         )
                         HomeFeedRows(model: viewModel.feedModel, onOpen: openCard)
                         HomeFeedFooter(feed: viewModel.feed)
@@ -767,6 +775,20 @@ struct HomeView: View {
             }
             .modifier(HomeRefreshTriggers(viewModel: viewModel, selectedTab: selectedTab))
             .modifier(HomeWriteFailureAlert(viewModel: viewModel))
+            .navigationDestination(isPresented: $showsUpNext) {
+                UpNextView(
+                    model: viewModel.upNext,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    diaryRepository: diaryRepository,
+                    listRepository: listRepository,
+                    peopleRepository: peopleRepository,
+                    currentUserId: currentUserId,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            }
             .modifier(HomeQuickActionWarmup(viewModel: viewModel))
             .onChange(of: selectedRef) { oldValue, newValue in
                 if oldValue != nil, newValue == nil {
@@ -1009,6 +1031,8 @@ private struct HomeRefreshTriggers: ViewModifier {
                 if let profile = notification.userInfo?["profile"] as? UserProfile {
                     viewModel.profile = profile
                     Task { await viewModel.loadInProgress() }
+                    // Turning TV or anime off or on changes what's coming up.
+                    Task { await viewModel.upNext.load() }
                 } else {
                     Task { await viewModel.reload() }
                 }

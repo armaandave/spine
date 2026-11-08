@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The first item of Home's lazy stack, one plain view: the header, the two tiles, the "Friends" row and the states
-/// that stand in for the feed (loading, error, empty). The feed's own rows follow it as separate items.
+/// The first item of Home's lazy stack, one plain view: the header, the two tiles, the Up next tile, the "Friends" row
+/// and the states that stand in for the feed (loading, error, empty). The feed's own rows follow it as separate items.
 ///
 /// Each part reads what it needs inside its own body (`HomeTopHeader` the profile, `HomeTilesSection` the tiles,
 /// `HomeFeedStatus` the feed's state), so a change in one redraws that part and not the others. Nothing here reads the
@@ -12,6 +12,7 @@ struct HomeTop: View {
     @StableInput var actions: HomeTilesActions
     @StableInput var onOpenProfile: () -> Void
     @StableInput var onFindPeople: () -> Void
+    @StableInput var onOpenUpNext: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -61,6 +62,8 @@ struct HomeTop: View {
                         actions: actions
                     )
                     .padding(.top, HomeTopSpec.headerToTiles)
+                    // Full width under the two tiles, once something is coming up.
+                    HomeUpNextTile(model: viewModel.upNext, onOpen: onOpenUpNext)
                     friendsRow
                     HomeFeedStatus(viewModel: viewModel, onFindPeople: onFindPeople)
                 }
@@ -196,6 +199,8 @@ private struct HomeTopHeader: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Profile")
+                // Light in the picture's color, shining right off the screen.
+                .background { AvatarBeam(avatarURL: viewModel.profile?.avatarUrl, diameter: HomeTopSpec.avatar) }
             }
         }
         .frame(minHeight: HomeTopArtSpec.headerRowHeight, alignment: .bottom)
