@@ -73,7 +73,9 @@ private struct InProgressPanel: View {
             // Where the title stands now. Today's part is the meter's lit stretch, not a "+6 chapters" that reads as a
             // random number when the last update was days ago.
             TilePanelTitleRow(title: detail.title, accessibilityLabel: detail.accessibilityLabel) {
-                Text(detail.whereText)
+                if !detail.whereText.isEmpty {
+                    Text(detail.whereText)
+                }
             }
             meter(accent: accent)
                 .padding(.top, 16)

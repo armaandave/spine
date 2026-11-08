@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Home's two square tiles, In progress and Trending. Tap one and it springs open to the full width and 410 pt: the
+/// Home's two tiles, In progress and Trending, 164 pt tall when closed. Tap one and it springs open to the full width and 410 pt: the
 /// other slides away, the tile's posters fly out of their fan into a row you swipe through, the glow behind the page
 /// follows the poster you are on, and a panel at the bottom says where that title stands and offers its buttons.
 ///

@@ -88,6 +88,8 @@ final class HomeViewModel {
 
     @ObservationIgnored private let profileRepository: ProfileRepository
     @ObservationIgnored private let trackingRepository: TrackingRepository
+    /// For a season with nothing watched yet, which has no tracking: its page still counts its episodes.
+    @ObservationIgnored private let seasonPages: MediaRepository
     @ObservationIgnored private let activityRepository: ActivityRepository
     @ObservationIgnored private let onUnauthorized: () -> Void
     /// Whether Home asks for the extras the tiles show beyond the rail and the feed: today's rows, your own activity
@@ -125,6 +127,7 @@ final class HomeViewModel {
         // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
         let mediaRepository = mediaRepository ?? AppRepositories.current().media
         let diaryRepository = diaryRepository ?? AppRepositories.current().diary
+        seasonPages = mediaRepository
         let continueWatching = ContinueWatchingTicks(
             mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
@@ -293,8 +296,9 @@ final class HomeViewModel {
     }
 
     /// Reads the current season of each show in the rail (`InProgressTilePresenter.currentSeasonNumber`) that has not
-    /// been read at its version, one small tracking read each, so its panel counts the season you are in. A write's
-    /// answer that already carries that season is used as it is. Until a read lands the panel says "Season 2".
+    /// been read at its version, one small tracking read each, so its panel counts the season you are in. A season with
+    /// nothing watched yet has no tracking, so its page is read instead. A write's answer that already carries that
+    /// season is used as it is. Until a read lands the panel says "Season 2".
     private func syncSeasons() {
         guard loadsTileExtras else { return }
         let items = tiles.inProgress
@@ -303,13 +307,14 @@ final class HomeViewModel {
         if kept.count != tiles.seasons.count { tiles.seasons = kept }
         seasonReads = seasonReads.filter { ids.contains($0.key) }
 
-        var reads: [(id: String, key: String, ref: MediaRef, number: Int, showWatched: Int?)] = []
+        var reads: [(id: String, key: String, ref: MediaRef, number: Int, showWatched: Int)] = []
         for item in items {
+            // A show with no count of its own has no place to show either (`position(for:)` is nil).
             guard let number = InProgressTilePresenter.currentSeasonNumber(for: item),
-                  let tv = item.tracking.tv else { continue }
+                  let tv = item.tracking.tv, let showWatched = tv.watchedCount else { continue }
             let key = "\(number)|\(tv.version)"
             if let state = tv.season, state.seasonNumber == number,
-               let season = TileSeason(state: state, showWatched: tv.watchedCount) {
+               let season = TileSeason(state: state, showWatched: showWatched) {
                 seasonReads[item.id] = key
                 if tiles.seasons[item.id] != season { tiles.seasons[item.id] = season }
                 continue
@@ -317,22 +322,32 @@ final class HomeViewModel {
             guard seasonReads[item.id] != key else { continue }
             seasonReads[item.id] = key
             let ref = ContinueWatchingEpisodes.seasonRef(show: item.media.ref, seasonNumber: number)
-            reads.append((item.id, key, ref, number, tv.watchedCount))
+            reads.append((item.id, key, ref, number, showWatched))
         }
         guard !reads.isEmpty else { return }
 
         seasonRefresh = Task { [weak self] in
             for read in reads {
-                guard let self else { return }
-                let state = try? await trackingRepository.detail(ref: read.ref)
+                // A read a newer one has replaced is not made.
+                guard let self, seasonReads[read.id] == read.key else { continue }
+                let state: TVSeasonState?
+                do {
+                    state = try await trackingRepository.detail(ref: read.ref).tv?.season
+                } catch APIError.httpStatus(404, _) {
+                    // Nothing watched in it yet (the season after the one just finished, or one not aired), so it
+                    // has no tracking (TV-205); its page still counts its episodes, with none watched.
+                    state = try? await seasonPages.detail(ref: read.ref).userState?.tv?.season
+                } catch {
+                    state = nil
+                }
                 guard seasonReads[read.id] == read.key else { continue }
                 // A read that failed is tried again the next time the rail changes or loads.
                 guard let state else {
                     seasonReads[read.id] = nil
                     continue
                 }
-                guard let seasonState = state.tv?.season, seasonState.seasonNumber == read.number,
-                      let season = TileSeason(state: seasonState, showWatched: read.showWatched) else { continue }
+                guard state.seasonNumber == read.number,
+                      let season = TileSeason(state: state, showWatched: read.showWatched) else { continue }
                 if tiles.seasons[read.id] != season { tiles.seasons[read.id] = season }
             }
         }

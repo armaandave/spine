@@ -8,12 +8,14 @@ import XCTest
 final class HomeIntegrationTests: XCTestCase {
     private var activity: HomeRecordingActivityRepository!
     private var tracking: HomeRecordingTrackingRepository!
+    private var media: SurfacesMediaRepository!
     private var unauthorized = 0
 
     override func setUp() async throws {
         try await super.setUp()
         activity = HomeRecordingActivityRepository()
         tracking = HomeRecordingTrackingRepository()
+        media = SurfacesMediaRepository()
         unauthorized = 0
     }
 
@@ -35,7 +37,7 @@ final class HomeIntegrationTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: profile(following: following, enabled: enabled)),
             trackingRepository: tracking,
             activityRepository: activity,
-            mediaRepository: SurfacesMediaRepository(),
+            mediaRepository: media,
             diaryRepository: SurfacesDiaryRepository(),
             loadsTileExtras: extras,
             onUnauthorized: { [unowned self] in unauthorized += 1 }
@@ -544,6 +546,39 @@ final class HomeIntegrationTests: XCTestCase {
         plain.inProgressItems = [crown]
         XCTAssertNil(plain.seasonRefresh)
         XCTAssertEqual(tracking.detailCalls.count, 2)
+    }
+
+    func testASeasonWithNothingWatchedYetIsCountedFromItsPage() async throws {
+        // Season 2 just finished: up next is S3 E1, and season 3 has no tracking yet (the server answers 404).
+        let finished = TVTrackingSurfacesTests.crown(watched: 20, upNext: (3, 1))
+        media.details[TVTrackingSurfacesTests.seasonRef(3).id] = TVTrackingSurfacesTests.crownSeason(3, watched: 0)
+        let home = makeHome(extras: true, enabled: ["tv"])
+
+        home.inProgressItems = [finished]
+        await home.seasonRefresh?.value
+        XCTAssertEqual(tracking.detailCalls, [TVTrackingSurfacesTests.seasonRef(3)])
+        XCTAssertEqual(media.detailRequests, [TVTrackingSurfacesTests.seasonRef(3)])
+        let detail = home.tiles.detail(for: finished)
+        XCTAssertEqual(detail.whereText, "S3 \u{00B7} 0 of 10 episodes")
+        XCTAssertEqual(detail.meter?.kind, .ticks(count: 10))
+        XCTAssertEqual(detail.meter?.to, 0)
+
+        // Read once: the page answered, so a reload asks for nothing more.
+        home.inProgressItems = [finished]
+        await home.seasonRefresh?.value
+        XCTAssertEqual(tracking.detailCalls.count, 1)
+        XCTAssertEqual(media.detailRequests.count, 1)
+    }
+
+    func testAShowWithNoCountOfItsOwnIsNotRead() async throws {
+        let unknown = TVTrackingSurfacesTests.showItem(
+            "77", "Unknown",
+            tv: TVTrackingSurfacesTests.showState(status: "In progress", watched: nil, aired: nil, upNext: (1, 2))
+        )
+        let home = makeHome(extras: true, enabled: ["tv"])
+        home.inProgressItems = [unknown]
+        XCTAssertNil(home.seasonRefresh)
+        XCTAssertTrue(tracking.detailCalls.isEmpty)
     }
 
     // MARK: The page top's states
