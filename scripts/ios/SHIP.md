@@ -28,7 +28,10 @@ the workflow in this file only. Testing a branch on the iPhone before it ships i
   always comes from `myapp-main`.
 - **The deploy skips a push that doesn't change the backend** (`src/`, the Dockerfile,
   the production compose file, `pyproject.toml`, `uv.lock`, the deploy scripts), and a
-  push that a newer push has overtaken. The job log says which.
+  push production already includes (a late run of an older push). The job log says which.
+- **Every passing push that's newer than production deploys,** even while a later push
+  is still in CI; that later push deploys again when it passes. So when ships land in a
+  row, production moves forward with each one instead of waiting for the newest to pass.
 - **Migrations run during the deploy**, when the new container starts (`entrypoint.sh`),
   right after the backup. There is no separate step. The site is down for the seconds
   the container takes to restart.
