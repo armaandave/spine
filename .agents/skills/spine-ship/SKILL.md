@@ -4,7 +4,8 @@ description: >-
   Ship Spine work to production and TestFlight: merge a finished feature into
   myapp-main and push it, which deploys the backend once CI passes and makes a
   TestFlight build when the iOS app changed; or roll back a bad ship. Use when the
-  user says "ship this", "ship it", "merge and ship", or "roll back". Testing on the
+  user says "ship this", "ship it", "merge and ship", "roll back", or "make a
+  TestFlight build". Testing on the
   iPhone first is spine-test-on-iphone.
 ---
 

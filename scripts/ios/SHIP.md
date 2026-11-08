@@ -12,6 +12,7 @@ the workflow in this file only. Testing a branch on the iPhone before it ships i
 | Starting work | "New feature: <what>. New worktree and branch." |
 | Trying it on the phone | "Test this on my iPhone." |
 | It's done | "Ship this." (Workflow A) |
+| A TestFlight build of what's shipped | "Make a TestFlight build." ("TestFlight builds") |
 | Something broke | "Production broke after the last ship. Roll back." (Workflow B) |
 
 ## How shipping works
@@ -96,14 +97,19 @@ Run from the feature worktree unless a step says otherwise.
      `~/.local/bin/agent-cleanup run --owner <task> --label spine-ship-merge --timeout 14400 -- scripts/ship-merge.sh <branch> "<merge message>"`.
      The message ends with the trailers your instructions require; commits are
      `armaandave@outlook.com`.
-   - One ship at a time goes through the line; the rest wait (up to 3 hours, `Waiting:`).
-     In its turn it catches the main checkout (`~/projects/spine`, which must be clean and
-     on `myapp-main`) up to `origin/myapp-main`, runs `git merge --no-ff <branch>` and
-     `scripts/check.sh` on the result, pushes, and runs `scripts/ios/test-backend.sh update`
+   - Ships that arrive while the line is busy wait (up to 3 hours, `Waiting:`) and then go
+     out **together**: the next one in catches the main checkout (`~/projects/spine`, which
+     must be clean and on `myapp-main`) up to `origin/myapp-main`, runs
+     `git merge --no-ff` for every waiting branch (each keeps its own merge commit), runs
+     `scripts/check.sh` once and pushes once, then runs `scripts/ios/test-backend.sh update`
      (the always-on test backend Spine Dev talks to then serves the new `myapp-main`).
-   - It prints `SHIPPED: <sha>`. On a conflict or failing checks it undoes its own merge
-     and stops: fix the branch (merge `origin/myapp-main` into it) and run it again. Never
-     merge or push `myapp-main` by hand outside the line.
+   - A branch that conflicts is left out. If the batch's checks fail, it ships the branches
+     one at a time, so only the one that broke them stops. A ship whose chat died while
+     waiting is dropped, not shipped.
+   - Each ship prints its own result: `SHIPPED: <branch> is in <sha>` (the pushed commit,
+     maybe shared with other ships) or `STOPPED: <why>`. A stopped ship's merge is undone:
+     fix the branch (merge `origin/myapp-main` into it) and run it again. Never merge or
+     push `myapp-main` by hand outside the line.
 7. **CI and the deploy.** Find the run with `gh run list --commit <sha>`, then
    `gh run watch <run-id> --exit-status`.
    - Red checks: nothing was deployed. Fix forward on a branch and ship again.
@@ -255,6 +261,17 @@ below.
    counts by type. The pre-deploy backup is the way back: the fill replaces stored values, not only blanks.
 
 Remove this section once the production fill has finished.
+
+## TestFlight builds
+
+- **Automatic:** every push to `myapp-main` that changes the iOS app starts an Xcode Cloud
+  build. Its "Auto-cancel builds" setting is on, so when ships push in a row, a newer push
+  cancels the build still running and one build carries them all. Every build spends Xcode
+  Cloud hours; ships don't need to wait for each other to save them.
+- **On request:** when Armaan says "make a TestFlight build", run
+  `scripts/ios/testflight-build.sh`. It builds `myapp-main` as it is now, whether or not the
+  last push changed the app. His request is the yes for it and for step 9 of Workflow A
+  (add the build to "Me", tag the commit), which comes next. Never start one otherwise.
 
 ## Workflow B: roll back after a bad ship
 
