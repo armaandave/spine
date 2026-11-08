@@ -44,8 +44,8 @@ private enum UpNextTileSpec {
     static let leading: CGFloat = 16
     static let trailing: CGFloat = 14
     static let posterGap: CGFloat = 6
-    /// A whole 2:3 poster, 30% shorter than the first version's 57.
-    static let poster = CGSize(width: 27, height: 40)
+    /// A whole 2:3 poster (27 x 40 made 15% bigger).
+    static let poster = CGSize(width: 31, height: 46)
     /// The strip under the poster holding its date.
     static let band: CGFloat = 9
     static let posterCorner: CGFloat = 5
