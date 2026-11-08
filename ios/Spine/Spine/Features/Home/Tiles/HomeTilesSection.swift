@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Home's two tiles, In progress and Trending, 164 pt tall when closed. Tap one and it springs open to the full width and 410 pt: the
+/// Home's two tiles, In progress and Trending, 168 pt tall when closed. Tap one and it springs open to the full width and 410 pt: the
 /// other slides away, the tile's posters fly out of their fan into a row you swipe through, the glow behind the page
 /// follows the poster you are on, and a panel at the bottom says where that title stands and offers its buttons.
 ///
@@ -27,6 +27,7 @@ struct HomeTilesSection: View {
                     contentWidth: contentWidth,
                     model: model,
                     state: state,
+                    glow: glow,
                     actions: actions,
                     onOpen: { openTile(tile) },
                     onClose: closeTile
@@ -62,9 +63,10 @@ struct HomeTilesSection: View {
         guard state.open == nil, model.face(for: tile) == .items else { return }
         openTicks += 1
         let posters = model.posters(for: tile)
-        HomeGlow.prefetch(HomeGlow.neighbors(of: 0, in: posters.map(\.media)))
+        let rest = state.restIndex(tile)
+        HomeGlow.prefetch(HomeGlow.neighbors(of: rest, in: posters.map(\.media)))
         if posters.count > TileGeometry.fanMountedCount {
-            TilePosterArt.prefetch(posters, at: TileGeometry.openPrefetchIndexes(count: posters.count))
+            TilePosterArt.prefetch(posters, at: TileGeometry.openPrefetchIndexes(rest: rest, count: posters.count))
         }
         state.requestOpen(
             tile,
@@ -91,7 +93,12 @@ private struct TilesSync: View {
     var body: some View {
         let inProgressIDs = model.ids(for: .inProgress)
         let trendingIDs = model.ids(for: .trending)
-        let focused = state.focusedMedia(model: model)
+        // What the glow is showing: the focused poster, else the front posters of the two fans.
+        let glowTargets = [
+            state.focusedMedia(model: model),
+            state.frontMedia(.inProgress, model: model),
+            state.frontMedia(.trending, model: model),
+        ]
         Color.clear
             .frame(width: 0, height: 0)
             .onChange(of: inProgressIDs, initial: true) { _, ids in
@@ -100,7 +107,7 @@ private struct TilesSync: View {
             .onChange(of: trendingIDs, initial: true) { _, ids in
                 sync(ids, for: .trending)
             }
-            .onChange(of: focused, initial: true) { _, _ in
+            .onChange(of: glowTargets, initial: true) { _, _ in
                 state.syncGlow(glow, model: model)
             }
             .accessibilityHidden(true)
@@ -123,6 +130,7 @@ private struct HomeTile: View {
     let contentWidth: CGFloat
     let model: HomeTilesModel
     let state: HomeTilesState
+    let glow: HomeGlowModel
     let actions: HomeTilesActions
     let onOpen: () -> Void
     let onClose: () -> Void
@@ -183,7 +191,8 @@ private struct HomeTile: View {
             switch face {
             case .items:
                 TileArt(
-                    url: posters.first.flatMap { TileURL.make($0.media.displayPosterURL) },
+                    // The blurred art behind the fan follows its front poster.
+                    url: front(of: posters).flatMap { TileURL.make($0.media.displayPosterURL) },
                     side: side,
                     height: TileGeometry.closedHeight,
                     contentWidth: contentWidth,
@@ -193,6 +202,7 @@ private struct HomeTile: View {
                     tile: tile,
                     posters: posters,
                     state: state,
+                    glow: glow,
                     contentWidth: contentWidth,
                     onOpenTitle: openTitle
                 )
@@ -221,6 +231,12 @@ private struct HomeTile: View {
                     ))
             }
         }
+    }
+
+    /// The poster in front of the fan: the title the tile rests on.
+    private func front(of posters: [TilePoster]) -> TilePoster? {
+        let index = state.restIndex(tile)
+        return posters.indices.contains(index) ? posters[index] : nil
     }
 
     /// The whole closed tile is one button: it opens, or (for an empty tile) offers what to do about it.
