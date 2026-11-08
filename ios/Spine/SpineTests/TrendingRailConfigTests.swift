@@ -156,7 +156,8 @@ final class TrendingRailConfigTests: XCTestCase {
         let anime = make("anime", UserMediaState(isTracked: true, anime: AnimeState(inLibrary: true, eye: TVEyeState(filled: true, tap: .unmarkMarks))), source: "mal")
         XCTAssertEqual(anime.eyeLabel, "Anime watched")
         XCTAssertTrue(anime.isEyeSelected)
-        XCTAssertEqual(make("anime", .untracked, source: "mal").eyeLabel, "Mark anime watched")
+        XCTAssertEqual(make("anime", UserMediaState(isTracked: true, anime: AnimeState(inLibrary: true)), source: "mal").eyeLabel, "Mark anime watched")
+        XCTAssertEqual(make("anime", .untracked, source: "mal").eyeLabel, "Mark as watched", "No anime state yet: the page uses its standard rail")
     }
 
     func testTheStarIsAlwaysThereAndFilledByARating() {
