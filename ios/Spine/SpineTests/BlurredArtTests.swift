@@ -458,36 +458,32 @@ final class BlurredArtTests: XCTestCase {
         let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
         let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
         XCTAssertEqual(CGFloat(output.width) / CGFloat(output.height), HomeBackdropArt.aspect, accuracy: 0.01)
-        XCTAssertEqual(output.height, 90, "a landscape backdrop is cropped to the frame's width, keeping its height")
+        XCTAssertEqual(output.width, 135, "a 16:9 backdrop is cropped to the media page's 3:2, keeping its height")
         let pixels = rgbaPixels(output)
         for (x, y) in [(0, 0), (output.width - 1, 0), (10, 45), (output.width - 1, output.height - 1), (5, output.height - 1)] {
             XCTAssertEqual(pixels.alpha(x, y), 255, "opaque at \(x), \(y)")
         }
     }
 
-    func testThePictureIsSharpAtTheTopMeltsInTheMiddleAndIsSoftAtTheBottom() throws {
+    func testThePictureIsTheMediaPagesStripSharpThenASoftContinuation() throws {
         let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
         let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
         let pixels = rgbaPixels(output)
-        // Above 34% of the height (row 30) the rows are the source's own.
-        for row in 0 ... 24 {
+        // The strip is the top 90 rows; above 80% of it (row 72) the rows are the source's own.
+        for row in 0 ... 66 {
             let white = (row / 2) % 2 == 0
             XCTAssertEqual(Int(pixels.red(10, row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
         }
-        XCTAssertGreaterThan(contrast(pixels, rows: 4 ... 7), 240)
-        // Half way through the melt some of the blur shows.
-        let middle = contrast(pixels, rows: 42 ... 45)
-        XCTAssertGreaterThan(middle, 40)
-        XCTAssertLessThan(middle, 230)
-        // From 62% (row 56) down it is the blurred copy alone.
-        XCTAssertLessThan(contrast(pixels, rows: 62 ... 85), 30)
+        XCTAssertGreaterThan(contrast(pixels, rows: 40 ... 43), 240)
+        // Below the strip it is the soft continuation alone.
+        XCTAssertLessThan(contrast(pixels, rows: 100 ... 160), 30)
     }
 
     func testThePictureProcessorHasAStableIdentifierThatNamesItsNumbers() {
         let identifier = HomeBackdropMeltProcessor().identifier
         XCTAssertEqual(identifier, HomeBackdropMeltProcessor().identifier)
         XCTAssertTrue(identifier.hasPrefix("com.armaan.spine.homebackdrop?"))
-        for part in ["aspect=", "from=0.34", "to=0.62", "sigma=", "sat="] {
+        for part in ["aspect=", "strip=1.5", "melt=0.8", "sigma=", "sat="] {
             XCTAssertTrue(identifier.contains(part), "\(identifier) lacks \(part)")
         }
         XCTAssertNotEqual(identifier, BlurredArt.Style.glow.processor.identifier)
