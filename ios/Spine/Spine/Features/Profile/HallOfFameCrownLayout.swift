@@ -36,6 +36,19 @@ enum HallOfFameCrownPosition {
 struct HallOfFameCrownLayout {
     static let avatarDiameter: CGFloat = 128
     static let crownHeight: CGFloat = 210
+    /// Every crown is drawn as a slice of the full one (seven cards below the avatar):
+    /// the same card size and the same angle between neighbors, centered, whatever the count.
+    static let cardSize = CGSize(width: 54, height: 81)
+    private static let fullCrownCount = 7
+    private static let angleStep: Double = 26
+    /// Three cards or fewer sit this much closer to the avatar than a full crown's middle card;
+    /// four to six step back down to where the full crown sits.
+    private static let smallCrownLift: CGFloat = 29
+
+    static func avatarLift(forCount count: Int) -> CGFloat {
+        let count = min(max(count, 3), fullCrownCount)
+        return smallCrownLift * CGFloat(fullCrownCount - count) / CGFloat(fullCrownCount - 3)
+    }
 
     static func arrangement(for slots: [FavoriteSlot]) -> HallOfFameCrownArrangement {
         guard let musicIndex = slots.firstIndex(where: { $0.id == "music" }) else {
@@ -66,24 +79,15 @@ struct HallOfFameCrownLayout {
         let collapseProgress = clampedCollapseProgress(collapseProgress)
         let remaining = 1 - collapseProgress
         let collapsedScale: CGFloat = 0.28
-        let maxAngle = maxAngle(for: count)
-        let angles: [Double]
-        if count == 1 {
-            angles = [0]
-        } else {
-            angles = (0..<count).map { index in
-                let progress = Double(index) / Double(count - 1)
-                return -maxAngle + progress * maxAngle * 2
-            }
-        }
         let radiusX = avatarDiameter * 1.12
         let radiusY = avatarDiameter * 0.95
-        let baseY = avatarDiameter * 0.10
+        let baseY = avatarDiameter * 0.10 + avatarLift(forCount: count)
 
-        return angles.enumerated().map { index, degrees in
+        return (0..<count).map { index in
+            let offsetFromCenter = Double(index) - Double(count - 1) / 2
+            let degrees = offsetFromCenter * angleStep
             let radians = degrees * .pi / 180
-            let distanceFromCenter = abs(Double(index) - Double(count - 1) / 2)
-            let normalizedDistance = count == 1 ? 0 : distanceFromCenter / (Double(count - 1) / 2)
+            let normalizedDistance = abs(offsetFromCenter) / (Double(fullCrownCount - 1) / 2)
             let scale = 1.04 - CGFloat(normalizedDistance) * 0.10
             let x = sin(radians) * radiusX
             let aboveY = baseY - cos(radians) * radiusY
@@ -130,11 +134,10 @@ struct HallOfFameCrownLayout {
         return isSquare ? CGSize(width: cardSize.width, height: cardSize.width) : cardSize
     }
 
-    /// Room kept above the avatar on every profile, sized for the largest music card
-    /// (one card below), so the avatar sits in the same place whatever the favorites.
+    /// Room kept above the avatar on every profile for the music card at its highest
+    /// (a full crown below), so the avatar sits in the same place whatever the favorites.
     static func avatarTopClearance(collapseProgress: CGFloat) -> CGFloat {
-        let musicHeight = cardSize(for: 1).width
-        return (musicHeight + musicAvatarGap(forLowerCount: 1))
+        (cardSize.width + musicAvatarGap(forLowerCount: fullCrownCount))
             * (1 - clampedCollapseProgress(collapseProgress))
     }
 
@@ -142,7 +145,6 @@ struct HallOfFameCrownLayout {
     /// Cards are placed without taking up layout space, so the header has to ask.
     static func lowestCardEdge(for slots: [FavoriteSlot]) -> CGFloat {
         let below = arrangement(for: slots).below
-        let cardSize = cardSize(for: max(below.count, 1))
         let placements = placements(count: below.count, avatarDiameter: avatarDiameter, position: .belowAvatar)
 
         return zip(below, placements).map { slot, placement in
@@ -154,61 +156,23 @@ struct HallOfFameCrownLayout {
     }
 
     /// How much further down the name sits than it does under a full crown (seven cards below),
-    /// so it keeps the same distance from the lowest card on every profile. Fewer favorites mean
-    /// bigger cards, so this can be either sign.
+    /// so it keeps the same distance from the lowest card on every profile. Smaller crowns sit
+    /// closer to the avatar, so their names move up.
     static func nameOffset(for slots: [FavoriteSlot], collapseProgress: CGFloat) -> CGFloat {
         (lowestCardEdge(for: slots) - fullCrownCardEdge) * (1 - clampedCollapseProgress(collapseProgress))
     }
 
     private static let fullCrownCardEdge = lowestCardEdge(
-        for: Array(repeating: FavoriteSlot(id: "movie", title: "", item: nil), count: 7)
+        for: Array(repeating: FavoriteSlot(id: "movie", title: "", item: nil), count: fullCrownCount)
     )
 
+    /// Gap between the avatar and the upright middle card below it, kept for the music card above.
     static func musicAvatarGap(forLowerCount count: Int) -> CGFloat {
-        let cardSize = cardSize(for: count)
         let center = placements(count: count, avatarDiameter: avatarDiameter, position: .belowAvatar)[count / 2]
         return crownHeight / 2 + center.y - cardSize.height / 2 - avatarDiameter
     }
 
-    static func cardSize(for count: Int) -> CGSize {
-        switch max(count, 1) {
-        case 1:
-            CGSize(width: 74, height: 111)
-        case 2:
-            CGSize(width: 70, height: 105)
-        case 3:
-            CGSize(width: 66, height: 99)
-        case 4:
-            CGSize(width: 62, height: 93)
-        case 5:
-            CGSize(width: 58, height: 87)
-        case 6, 7:
-            CGSize(width: 54, height: 81)
-        default:
-            CGSize(width: 50, height: 75)
-        }
-    }
-
     private static func clampedCollapseProgress(_ collapseProgress: CGFloat) -> CGFloat {
         min(1, max(0, collapseProgress))
-    }
-
-    private static func maxAngle(for count: Int) -> Double {
-        switch count {
-        case 1:
-            0
-        case 2:
-            35
-        case 3:
-            48
-        case 4:
-            58
-        case 5:
-            66
-        case 6:
-            76
-        default:
-            78
-        }
     }
 }

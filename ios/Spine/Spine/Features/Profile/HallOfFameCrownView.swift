@@ -17,7 +17,7 @@ struct HallOfFameCrownView: View {
 
     var body: some View {
         let arrangement = HallOfFameCrownLayout.arrangement(for: slots)
-        let cardSize = HallOfFameCrownLayout.cardSize(for: max(arrangement.below.count, 1))
+        let cardSize = HallOfFameCrownLayout.cardSize
         let belowPlacements = HallOfFameCrownLayout.placements(
             count: arrangement.below.count,
             avatarDiameter: HallOfFameCrownLayout.avatarDiameter,
