@@ -12,6 +12,7 @@ the workflow in this file only. Testing a branch on the iPhone before it ships i
 | Starting work | "New feature: <what>. New worktree and branch." |
 | Trying it on the phone | "Test this on my iPhone." |
 | It's done | "Ship this." (Workflow A) |
+| A TestFlight build of what's shipped | "Make a TestFlight build." ("TestFlight builds") |
 | Something broke | "Production broke after the last ship. Roll back." (Workflow B) |
 
 ## How shipping works
@@ -252,6 +253,17 @@ below.
    counts by type. The pre-deploy backup is the way back: the fill replaces stored values, not only blanks.
 
 Remove this section once the production fill has finished.
+
+## TestFlight builds
+
+- **Automatic:** every push to `myapp-main` that changes the iOS app starts an Xcode Cloud
+  build. Its "Auto-cancel builds" setting is on, so when ships push in a row, a newer push
+  cancels the build still running and one build carries them all. Every build spends Xcode
+  Cloud hours; ships don't need to wait for each other to save them.
+- **On request:** when Armaan says "make a TestFlight build", run
+  `scripts/ios/testflight-build.sh`. It builds `myapp-main` as it is now, whether or not the
+  last push changed the app. His request is the yes for it and for step 9 of Workflow A
+  (add the build to "Me", tag the commit), which comes next. Never start one otherwise.
 
 ## Workflow B: roll back after a bad ship
 
