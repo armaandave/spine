@@ -4690,10 +4690,15 @@ def poster_palettes(image_urls):
 
     Each poster without them is counted in the background, for the next load.
     """
+    # A URL longer than the table's column (a signed link, say) gets no colors.
+    max_length = PosterPalette._meta.get_field("image_url").max_length
     urls = {
         url
         for url in image_urls
-        if url and url.startswith(("http://", "https://")) and url != settings.IMG_NONE
+        if url
+        and url.startswith(("http://", "https://"))
+        and url != settings.IMG_NONE
+        and len(url) <= max_length
     }
     if not urls:
         return {}

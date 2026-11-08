@@ -111,3 +111,15 @@ class PosterPaletteTrackingListTests(TestCase):
         self.assertEqual(second, {"Movie 1": PALETTE, "Movie 2": PALETTE})
         palette_reads = [query for query in queries.captured_queries if "app_posterpalette" in query["sql"]]
         self.assertEqual(len(palette_reads), 1)
+
+
+class PosterPaletteLongUrlTests(TestCase):
+    """A poster URL longer than the palette table's column is never counted."""
+
+    @override_settings(POSTER_PALETTE_COUNTING=True)
+    @patch("app.utils.color.poster_palette_from_url", return_value=PALETTE)
+    def test_an_overlong_url_gets_no_palette_and_no_count(self, count):
+        from api.services.media import poster_palette
+
+        self.assertIsNone(poster_palette("https://example.com/" + "a" * 2000))
+        count.assert_not_called()
