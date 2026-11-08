@@ -76,16 +76,20 @@ nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
 
         // The wash, made small and scaled back up: the strip with its edges carried on outward, blurred until only its
         // colors are left, so the frame below the strip is a smooth field of the picture's own colors.
-        let down = HomeBackdropArt.washScale
-        let small = extent.applying(CGAffineTransform(scaleX: down, y: down))
+        // The small copy is whole pixels, so its edge pixels are solid and stay solid when carried outward.
+        let small = CGRect(
+            x: 0, y: 0,
+            width: max(1, (frame.width * HomeBackdropArt.washScale).rounded(.down)),
+            height: max(1, (frame.height * HomeBackdropArt.washScale).rounded(.down))
+        )
         let wash = sharp
             .clampedToExtent()
-            .transformed(by: CGAffineTransform(scaleX: down, y: down))
-            .applyingGaussianBlur(sigma: max(Double(frame.width * down) * HomeBackdropArt.wash, 0.01))
+            .transformed(by: CGAffineTransform(scaleX: small.width / frame.width, y: small.height / frame.height))
+            .applyingGaussianBlur(sigma: max(Double(small.width) * HomeBackdropArt.wash, 0.01))
             .cropped(to: small)
             .clampedToExtent()
             .samplingLinear()
-            .transformed(by: CGAffineTransform(scaleX: 1 / down, y: 1 / down))
+            .transformed(by: CGAffineTransform(scaleX: frame.width / small.width, y: frame.height / small.height))
             .cropped(to: extent)
             .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: HomeBackdropArt.washSaturation])
 

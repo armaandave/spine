@@ -217,7 +217,7 @@ enum HomeTopArtSpec {
     /// The header row: the date over "Home" on the left; the label over the profile photo on the right.
     static let headerRowHeight: CGFloat = 54
     /// From the header row to the tiles.
-    static let headerToTiles: CGFloat = 32
+    static let headerToTiles: CGFloat = 16
 
     /// Black over the picture: (opacity, location). A light shade keeps the status bar readable, a little darkens the
     /// middle, and the last stop is solid so the bottom meets the black page.

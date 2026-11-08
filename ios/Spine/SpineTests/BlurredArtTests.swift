@@ -238,9 +238,9 @@ final class BlurredArtTests: XCTestCase {
         let tile = try XCTUnwrap(BlurredArt.Style.tile.processor.process(source)?.cgImage)
         let page = try XCTUnwrap(BlurredArt.Style.page.processor.process(source)?.cgImage)
         let glow = try XCTUnwrap(BlurredArt.Style.glow.processor.process(source)?.cgImage)
-        // Grey stays grey under saturation; brightness multiplies: card x0.7, tile x0.6, glow x0.82, page x0.6.
+        // Grey stays grey under saturation; brightness multiplies: card x0.7, tile x0.5, glow x0.82, page x0.6.
         XCTAssertEqual(Double(rgbaPixels(card).red(4, 2)), 128 * 0.7, accuracy: 3)
-        XCTAssertEqual(Double(rgbaPixels(tile).red(4, 4)), 128 * 0.6, accuracy: 3)
+        XCTAssertEqual(Double(rgbaPixels(tile).red(4, 4)), 128 * 0.5, accuracy: 3)
         XCTAssertEqual(Double(rgbaPixels(glow).red(4, 4)), 128 * 0.82, accuracy: 3)
         XCTAssertEqual(Double(rgbaPixels(page).red(4, 4)), 128 * 0.6, accuracy: 3)
     }
@@ -248,7 +248,7 @@ final class BlurredArtTests: XCTestCase {
     func testTheCardIsCalmerThanTheTiles() {
         XCTAssertEqual(BlurredArt.Style.card.saturation, 1.1)
         XCTAssertEqual(BlurredArt.Style.card.brightness, 0.7)
-        XCTAssertEqual(BlurredArt.Style.tile.saturation, 1.7, "The tiles keep their boost")
+        XCTAssertEqual(BlurredArt.Style.tile.saturation, 1.0, "The tiles are muted to the poster's own colors")
     }
 
     func testBlurSpreadsAnEdgeButKeepsTheBorderSolid() throws {
@@ -474,12 +474,14 @@ final class BlurredArtTests: XCTestCase {
             let white = (row / 2) % 2 == 0
             XCTAssertEqual(Int(pixels.red(10, row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
         }
-        // Below the strip is a smooth field of the picture's colors: the stripes' mid grey, not black and with no
-        // stripes left in it.
-        XCTAssertLessThan(contrast(pixels, rows: 96 ... (output.height - 1)), 24)
+        // Below the strip is a smooth field of the picture's own colors: no stripes left in it (neighboring rows are
+        // nearly the same) and not black.
+        for row in 92 ..< (output.height - 1) {
+            let step = abs(Int(pixels.red(10, row + 1)) - Int(pixels.red(10, row)))
+            XCTAssertLessThan(step, 10, "rows \(row) and \(row + 1) blend smoothly")
+        }
         for row in [100, output.height - 1] {
             XCTAssertGreaterThan(Int(pixels.red(10, row)), 60, "row \(row) has the picture's color, not black")
-            XCTAssertLessThan(Int(pixels.red(10, row)), 220, "row \(row) is a mix of the picture's colors")
         }
     }
 

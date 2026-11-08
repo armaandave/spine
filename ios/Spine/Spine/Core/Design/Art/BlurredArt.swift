@@ -48,11 +48,11 @@ nonisolated enum BlurredArt {
             }
         }
 
-        /// The card stays near the poster's own colors (1.1), so a feed of them is calm; the others are boosted.
+        /// The card and the closed tiles stay near the poster's own colors, so Home is calm; the others are boosted.
         var saturation: Double {
             switch self {
             case .card: 1.1
-            case .tile: 1.7
+            case .tile: 1.0
             case .glow: 1.75
             case .page: 1.6
             }
@@ -62,7 +62,7 @@ nonisolated enum BlurredArt {
         var brightness: Double {
             switch self {
             case .card: 0.7
-            case .tile: 0.6
+            case .tile: 0.5
             case .glow: 0.82
             case .page: 0.6
             }

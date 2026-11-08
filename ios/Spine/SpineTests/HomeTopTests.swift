@@ -358,8 +358,8 @@ final class HomeTopTests: XCTestCase {
         XCTAssertEqual(S.height(width: 390), 470)
         XCTAssertEqual(S.headerRowTop(width: 390), 232)
         XCTAssertEqual(S.headerRowHeight, 54)
-        XCTAssertEqual(S.headerToTiles, 32)
-        XCTAssertEqual(S.tilesTop(width: 390), 318)
+        XCTAssertEqual(S.headerToTiles, 16)
+        XCTAssertEqual(S.tilesTop(width: 390), 302)
         XCTAssertEqual(S.tilesTop(width: 390), S.headerRowTop(width: 390) + S.headerRowHeight + S.headerToTiles)
         XCTAssertEqual(HomeBackdropArt.aspect, 390.0 / 470, accuracy: 0.0001)
     }
