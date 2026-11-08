@@ -199,8 +199,6 @@ private struct HomeTopHeader: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Profile")
-                // Light in the picture's color, shining right off the screen.
-                .background { AvatarBeam(avatarURL: viewModel.profile?.avatarUrl, diameter: HomeTopSpec.avatar) }
             }
         }
         .frame(minHeight: HomeTopArtSpec.headerRowHeight, alignment: .bottom)
