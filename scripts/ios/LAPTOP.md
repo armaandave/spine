@@ -5,18 +5,30 @@ simulators and test runs here are slow and wait in the `ios` queue. Armaan's lap
 Pro, M1 Pro, 32 GB, `armaans-macbook-pro-2` on Tailscale) can do that work instead.
 `scripts/ios/laptop.sh` runs it there over SSH; the code still lives and is edited here.
 
-## Ask first, once per chat
+## Ask first, once per checkout
 
-Before the **first** iOS build, simulator or test run in a chat, ask Armaan one short question
-and wait for the answer:
+Before the **first** iOS build, simulator or test run, check the saved answer:
+
+```bash
+scripts/ios/machine.sh          # laptop, homemac or unset
+```
+
+If it prints `unset`, ask Armaan one short question right away, wait, and save his answer:
 
 > Build on the laptop or on HomeMac?
 
-- Use his answer for the rest of that chat. Don't ask again in the same chat.
-- He can switch at any time ("use the laptop", "use HomeMac"); follow the latest.
-- Never pick for him, and don't carry an answer over from another chat.
+```bash
+scripts/ios/machine.sh set laptop     # or: set homemac
+```
+
+- Every later iOS job reads `scripts/ios/machine.sh`, not memory, so the answer survives the
+  chat being summarized and is never asked twice. It lives in the checkout's git folder, so
+  each worktree (normally one chat) has its own, and removing the worktree removes it.
+- He can switch at any time ("use the laptop", "use HomeMac"): `machine.sh set` the new one.
+- Never pick for him.
 - HomeMac means the usual way: `agent-cleanup ... --queue ios` (`TEST_ON_IPHONE.md`,
   `ios/AGENTS.md`).
+- A ship asks before anything else, as its first step (`SHIP.md`).
 
 ## How the laptop works
 

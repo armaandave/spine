@@ -90,7 +90,8 @@ in the `ios` queue (heavy iOS work on this Mac takes turns; it may wait for its 
 ~/.local/bin/agent-cleanup run --owner <task> --label spine-phone-build --queue ios -- scripts/ios/build-to-iphone.sh
 ```
 
-- Laptop or HomeMac: before the chat's first build, ask Armaan which one (`LAPTOP.md`). For
+- Laptop or HomeMac: before the first build, `scripts/ios/machine.sh`; if `unset`, ask
+  Armaan and save his answer with `machine.sh set` (`LAPTOP.md`). For
   the laptop, run `scripts/ios/build-to-iphone.sh --laptop` under `agent-cleanup run` without
   `--queue ios`; the phone must then be plugged into the laptop or on its Wi-Fi.
 - It builds the current checkout, including uncommitted changes, into its own build
