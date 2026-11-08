@@ -386,10 +386,10 @@ final class FeedCardRenderTests: XCTestCase {
 
     func testTheCountsReserveFollowsTheirDigits() {
         XCTAssertEqual(FeedCardView.countsReserve(for: nil), 0)
-        // 64 and 7 for each digit.
-        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: false, likeCount: 0, commentCount: 0)), 78)
-        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 12, commentCount: 3)), 85)
-        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 1204, commentCount: 38)), 113, "The thousands comma takes room too")
+        // 66 and 8 for each character.
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: false, likeCount: 0, commentCount: 0)), 82)
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 12, commentCount: 3)), 90)
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 1204, commentCount: 38)), 122, "The thousands comma takes room too")
     }
 
     func testTwoEqualModelsCompareEqual() throws {

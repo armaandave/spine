@@ -18,8 +18,8 @@ final class FeedDepthTests: XCTestCase {
         XCTAssertEqual(D.countsIcon, 13)
         XCTAssertEqual(D.countsTrailing, 10)
         XCTAssertEqual(D.countsBottom, 8)
-        XCTAssertEqual(D.countsReserveBase, 64)
-        XCTAssertEqual(D.countsReservePerDigit, 7)
+        XCTAssertEqual(D.countsReserveBase, 66)
+        XCTAssertEqual(D.countsReservePerDigit, 8)
 
         XCTAssertEqual(D.statusPillHeight, 19)
         XCTAssertEqual(D.statusLeading, 6)
@@ -57,12 +57,12 @@ final class FeedDepthTests: XCTestCase {
         XCTAssertGreaterThan(leftmost, 0)
     }
 
-    func testTheCountsReserveIs64AndSevenADigit() {
+    func testTheCountsReserveIs66AndEightACharacter() {
         XCTAssertEqual(FeedCountsPill.reserve(for: nil), 0)
         for (likes, comments) in [(0, 0), (12, 3), (1204, 38), (999_999, 999_999)] {
             let engagement = PostEngagement(hasLiked: false, likeCount: likes, commentCount: comments)
             let digits = likes.formatted().count + comments.formatted().count
-            XCTAssertEqual(FeedCountsPill.reserve(for: engagement), 64 + 7 * CGFloat(digits))
+            XCTAssertEqual(FeedCountsPill.reserve(for: engagement), 66 + 8 * CGFloat(digits))
             XCTAssertEqual(FeedCardView.countsReserve(for: engagement), FeedCountsPill.reserve(for: engagement))
         }
     }

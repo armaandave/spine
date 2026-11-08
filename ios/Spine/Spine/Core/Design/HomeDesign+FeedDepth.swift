@@ -20,9 +20,10 @@ extension HomeDesign {
         static let countsTrailing: CGFloat = 10
         /// The pill's bottom edge to the card's bottom edge.
         static let countsBottom: CGFloat = 8
-        /// Room kept left of the pill for detail rows and the meter: 64 + 7 per digit.
-        static let countsReserveBase: CGFloat = 64
-        static let countsReservePerDigit: CGFloat = 7
+        /// Room kept left of the pill for detail rows and the meter: 66 + 8 per character of the counts (a bold 12 pt
+        /// monospaced digit measures 8, not the board's 7.2), which keeps at least 6 pt between them.
+        static let countsReserveBase: CGFloat = 66
+        static let countsReservePerDigit: CGFloat = 8
 
         // MARK: Status pill
 

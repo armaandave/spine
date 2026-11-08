@@ -109,6 +109,7 @@ final class FriendStandingsTests: XCTestCase {
     private var clock = Date(timeIntervalSince1970: 2_000_000)
     private var unauthorized = 0
     private var changes = 0
+    private var seenChanges = 0
 
     override func setUp() {
         super.setUp()
@@ -116,6 +117,7 @@ final class FriendStandingsTests: XCTestCase {
         clock = Date(timeIntervalSince1970: 2_000_000)
         unauthorized = 0
         changes = 0
+        seenChanges = 0
     }
 
     private func provider(
@@ -203,8 +205,8 @@ final class FriendStandingsTests: XCTestCase {
 
     /// Waits for what landed to be told to Home.
     private func landed(_ provider: FriendStandings, file: StaticString = #filePath, line: UInt = #line) async {
-        await until(provider.notifyTask != nil, file: file, line: line)
-        await provider.notifyTask?.value
+        await until(changes > seenChanges, file: file, line: line)
+        seenChanges = changes
     }
 
     private func pair(_ user: String, _ type: String, _ status: String = "In progress") -> FriendStandings.Pair {
