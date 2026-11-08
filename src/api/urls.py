@@ -17,6 +17,7 @@ from api.views.featured import (
     FeaturedShelvesView,
 )
 from api.views.health import HealthView, MetaView
+from api.views.home_picture import HomePictureView
 from api.views.imports import (
     ExportCSVView,
     ImportScheduleView,
@@ -152,6 +153,7 @@ from api.views.user_content import (
 urlpatterns = [
     path("health/", HealthView.as_view(), name="api-health"),
     path("meta/", MetaView.as_view(), name="api-meta"),
+    path("home-picture/", HomePictureView.as_view(), name="api-home-picture"),
     path("auth/register/", RegisterView.as_view(), name="api-register"),
     path("auth/login/", LoginView.as_view(), name="api-login"),
     path("auth/refresh/", RefreshView.as_view(), name="api-refresh"),

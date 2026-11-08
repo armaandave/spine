@@ -10,6 +10,7 @@ from api.services.item_metadata import bump_holders
 from app.external_ratings import RATING_SOURCES
 
 from app.models import (
+    HomePicture,
     BookSession,
     CustomBackdropPreference,
     CustomLogoPreference,
@@ -146,6 +147,13 @@ class MediaAdmin(admin.ModelAdmin):
     search_fields = ["item__title", "user__username", "notes"]
     list_display = ["__str__", "status", "score", "user"]
     list_filter = ["status"]
+
+
+@admin.register(HomePicture)
+class HomePictureAdmin(admin.ModelAdmin):
+    """Admin for the site-wide Home picture."""
+
+    list_display = ["item", "set_by", "updated_at"]
 
 
 @admin.register(MediaLike)
