@@ -141,6 +141,7 @@ from api.views.tracking import (
     TrackingDetailView,
     TrackingListView,
     TVStartView,
+    UpNextView,
 )
 from api.views.user_content import (
     UserDiaryListView,
@@ -250,6 +251,7 @@ urlpatterns = [
     ),
     path("companies/<str:source>/<str:company_id>/games/", CompanyGamesView.as_view(), name="api-company-games"),
     path("tracking/", TrackingListView.as_view(), name="api-tracking-list"),
+    path("tracking/up-next/", UpNextView.as_view(), name="api-up-next"),
     path("tracking/<str:source>/anime/<str:media_id>/rows/", AnimeRowsView.as_view(), name="api-anime-rows"),
     path("tracking/<str:source>/tv/<str:media_id>/start/", TVStartView.as_view(), name="api-tv-start"),
     path("tracking/<str:source>/tv/<str:media_id>/seasons/<int:season_number>/start/", SeasonStartView.as_view(), name="api-season-start"),

@@ -36,6 +36,7 @@ from api.services import completion as completion_service
 from api.services import diary as diary_service
 from api.services import filters as filter_service
 from api.services import tracking as tracking_service
+from api.services import up_next as up_next_service
 from api.views.mixins import MediaExposureMixin
 from app import anime_titles, anime_tracking, series_tracking, tv_tracking
 from app.models import BasicMedia, Episode, GameSession, MediaTypes, Status
@@ -154,6 +155,31 @@ class TrackingListView(MediaExposureMixin, APIView):
         if streaming is not None:
             response.data["streaming"] = streaming
         return response
+
+
+class UpNextView(APIView):
+    """Home's Up next: dated TV and anime episodes that haven't aired yet (UN-001)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        rows = up_next_service.rows_for(request.user)
+        prime_collection_items(
+            [media.item for media, _airing in rows],
+            request.user,
+            media_by_item={media.item_id: media for media, _airing in rows},
+        )
+        return Response(
+            {
+                "results": [
+                    {
+                        "media": media_summary_from_item(media.item, request=request, user=request.user),
+                        "airing": {**airing, "air_date": airing["air_date"].isoformat()},
+                    }
+                    for media, airing in rows
+                ],
+            },
+        )
 
 
 class TrackingDetailView(MediaExposureMixin, APIView):
