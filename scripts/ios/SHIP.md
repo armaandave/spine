@@ -167,8 +167,8 @@ which installed builds decode and never show as numbers:
   (`saved_on`), so Stats and the Activity list read it there. Before, the date only moved
   the journey's latest progress and the row stayed on the day it was made. Installed builds
   never send it for those types, so nothing they do changes. A day before the previous
-  save is allowed now, one before the start is still refused (BK-306), and the journey's
-  latest progress stays its newest day.
+  save is refused, as is one before the start (BK-306, decision 66), and the app's calendar
+  starts at the later of the two (`progressed_on`, new and optional on a journey).
 - `viewer` on a progress day's own page (`GET /api/v1/progress/<id>/`) gains `can_edit`,
   `can_delete` and `edit`, for the owner, and `can_delete` for an admin. The feed and the
   lists never carry them, and anyone else's page has the two keys it had.
@@ -180,7 +180,8 @@ which installed builds decode and never show as numbers:
 - New optional, only for a request that asks: `include=planning` on `/api/v1/feed/` and a
   profile's plain `/api/v1/users/<username>/activity/` adds rows with `type`
   `planning_added` and `object.type` `planning`, with `id` a negative address at or above
-  2^44 that opens no progress page, and `GET /api/v1/planning/<id>/` lists the titles. A
+  2^44 that opens no progress page, the titles' names (`object.titles`) and up to three
+  posters (`object.posters`), and `GET /api/v1/planning/<id>/` lists the titles. A
   list opened from a number ignores it, and the profile row's `counts.activity` and the
   rail don't ask.
 
