@@ -465,25 +465,28 @@ final class BlurredArtTests: XCTestCase {
         }
     }
 
-    func testThePictureIsTheMediaPagesStripSharpThenASoftContinuation() throws {
+    func testThePictureIsTheMediaPagesStripSharpThenFadingToBlack() throws {
         let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
         let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
         let pixels = rgbaPixels(output)
-        // The strip is the top 90 rows; above 80% of it (row 72) the rows are the source's own.
-        for row in 0 ... 66 {
+        // The strip is the top 90 rows; above its last 35% (row 58) the rows are the source's own, never blurred.
+        for row in 0 ... 54 {
             let white = (row / 2) % 2 == 0
             XCTAssertEqual(Int(pixels.red(10, row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
         }
-        XCTAssertGreaterThan(contrast(pixels, rows: 40 ... 43), 240)
-        // Below the strip it is the soft continuation alone.
-        XCTAssertLessThan(contrast(pixels, rows: 100 ... 160), 30)
+        // In the fade the white rows darken toward the bottom of the strip.
+        XCTAssertLessThan(Int(pixels.red(10, 84)), Int(pixels.red(10, 60)))
+        // Below the strip it is black.
+        for row in [92, 120, output.height - 1] {
+            XCTAssertLessThan(Int(pixels.red(10, row)), 4, "row \(row) is black")
+        }
     }
 
     func testThePictureProcessorHasAStableIdentifierThatNamesItsNumbers() {
         let identifier = HomeBackdropMeltProcessor().identifier
         XCTAssertEqual(identifier, HomeBackdropMeltProcessor().identifier)
         XCTAssertTrue(identifier.hasPrefix("com.armaan.spine.homebackdrop?"))
-        for part in ["aspect=", "strip=1.5", "melt=0.8", "sigma=", "sat="] {
+        for part in ["aspect=", "strip=1.5", "fade=0.35"] {
             XCTAssertTrue(identifier.contains(part), "\(identifier) lacks \(part)")
         }
         XCTAssertNotEqual(identifier, BlurredArt.Style.glow.processor.identifier)
