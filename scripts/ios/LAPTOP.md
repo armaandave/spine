@@ -13,9 +13,18 @@ Before the **first** iOS build, simulator or test run, check the saved answer:
 scripts/ios/machine.sh          # laptop, homemac or unset
 ```
 
-If it prints `unset`, ask Armaan one short question right away, wait, and save his answer:
+If it prints `unset`, ask Armaan right away, wait, and save his answer. **Always ask in the
+app's question picker, never as plain text:** `AskUserQuestion` in Claude Code
+(`request_user_input` in Codex), one single-choice question with exactly two options, no
+"(Recommended)":
 
-> Build on the laptop or on HomeMac?
+- Question: "Build <checkout name> on the laptop or on HomeMac?", plus what it's for in a
+  few words, e.g. "(phone build for the ship)". The picker can hide the chat text above it,
+  so the question must make sense on its own.
+- Header: "Machine"
+- Options: "Laptop" (description: "Faster; the laptop must stay awake") and "HomeMac"
+  (description: "Waits in HomeMac's iOS queue").
+- If no picker tool exists in the session, ask the same question as plain text.
 
 ```bash
 scripts/ios/machine.sh set laptop     # or: set homemac

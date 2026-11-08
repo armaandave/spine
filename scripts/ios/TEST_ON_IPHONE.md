@@ -91,7 +91,7 @@ in the `ios` queue (heavy iOS work on this Mac takes turns; it may wait for its 
 ```
 
 - Laptop or HomeMac: before the first build, `scripts/ios/machine.sh`; if `unset`, ask
-  Armaan and save his answer with `machine.sh set` (`LAPTOP.md`). For
+  Armaan in the question picker and save his answer with `machine.sh set` (`LAPTOP.md`). For
   the laptop, run `scripts/ios/build-to-iphone.sh --laptop` under `agent-cleanup run` without
   `--queue ios`; the phone must then be plugged into the laptop or on its Wi-Fi.
 - It builds the current checkout, including uncommitted changes, into its own build

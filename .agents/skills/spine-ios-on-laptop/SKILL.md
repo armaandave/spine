@@ -15,7 +15,8 @@ from the main checkout.
 Core rules, in case of doubt:
 
 1. Before the first iOS build, simulator or test run, run `scripts/ios/machine.sh`. If it
-   prints `unset`, ask Armaan "Build on the laptop or on HomeMac?", wait, and save it with
+   prints `unset`, ask Armaan "Build on the laptop or on HomeMac?" in the question
+   picker (`AskUserQuestion`; options Laptop and HomeMac, `LAPTOP.md`), wait, and save it with
    `scripts/ios/machine.sh set <laptop|homemac>`. Every later job reads that, never memory;
    `set` again if he switches. Never pick for him.
 2. Laptop jobs: `scripts/ios/laptop.sh` (run, exec, sim start|app|stop, pull) and
