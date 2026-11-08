@@ -107,8 +107,13 @@ final class TileModelsTests: XCTestCase {
         ))
     }
 
-    private func detail(_ item: Spine.LibraryItem, today: TodayPart? = nil, baseline: Double? = nil) -> TileDetailModel {
-        InProgressTilePresenter.detail(for: item, today: today, baseline: baseline)
+    private func detail(
+        _ item: Spine.LibraryItem,
+        today: TodayPart? = nil,
+        baseline: Double? = nil,
+        season: TileSeason? = nil
+    ) -> TileDetailModel {
+        InProgressTilePresenter.detail(for: item, today: today, baseline: baseline, season: season)
     }
 
     // MARK: Panel text, meter and action per type
@@ -210,25 +215,85 @@ final class TileModelsTests: XCTestCase {
         XCTAssertEqual(model.primary?.label, "+1 issue")
     }
 
-    func testAShowGetsOneTickPerEpisode() throws {
-        let model = detail(show("show", watched: 4, aired: 10, upNext: (1, 5)))
-        XCTAssertEqual(model.whereText, "4 of 10 episodes")
+    func testAShowIsCountedByTheSeasonUpNextIsIn() throws {
+        // 16 of the show's 19 aired episodes, up next S2 E8: the panel counts season 2, one tick per episode.
+        let item = show("show", watched: 16, aired: 19, upNext: (2, 8))
+        let season = TileSeason(seasonNumber: 2, watched: 7, total: 10, showWatchedAtRead: 16)
+        let model = detail(item, season: season)
+        XCTAssertEqual(model.whereText, "S2 \u{00B7} 7 of 10 episodes")
         XCTAssertEqual(model.meter?.kind, .ticks(count: 10))
-        XCTAssertEqual(model.meter?.from, 4)
-        XCTAssertEqual(model.primary, .tickUpNext(season: 1, episode: 5))
-        XCTAssertEqual(model.primary?.label, "Watched E5", "Season 1 reads like the sheet's button: no season code")
+        XCTAssertEqual(model.meter?.from, 7)
+        XCTAssertEqual(model.meter?.to, 7)
+        XCTAssertEqual(model.primary, .tickUpNext(season: 2, episode: 8))
+        XCTAssertEqual(model.accessibilityLabel, "Title show, Season 2, 7 of 10 episodes")
 
-        let lit = detail(show("show", watched: 4, aired: 10, upNext: (1, 5)), today: TodayPart(unit: .episodes, amount: 2), baseline: 4)
+        // Today's episodes are lit inside the season, never more than the season has watched.
+        let lit = detail(item, today: TodayPart(unit: .episodes, amount: 2), baseline: 16, season: season)
         XCTAssertEqual(lit.todayText, "+2 ep")
-        XCTAssertEqual(lit.meter?.from, 2)
-        XCTAssertEqual(lit.meter?.to, 4)
+        XCTAssertEqual(lit.meter?.from, 5)
+        XCTAssertEqual(lit.meter?.to, 7)
+        let binge = detail(item, today: TodayPart(unit: .episodes, amount: 12), baseline: 16, season: season)
+        XCTAssertEqual(binge.meter?.from, 0)
+        XCTAssertEqual(binge.meter?.to, 7)
     }
 
-    func testALongShowGetsAWindow() throws {
-        let model = detail(show("long", watched: 9, aired: 62, upNext: (2, 3)))
-        XCTAssertEqual(model.whereText, "9 of 62 episodes")
-        guard case .window = model.meter?.kind else { return XCTFail("A show of 62 episodes draws a window") }
-        XCTAssertEqual(model.primary?.label, "Watched S2 E3")
+    func testAShowsSeasonWaitsForItsReadAndNeverShowsTheWholeShow() throws {
+        let item = show("waiting", watched: 16, aired: 19, upNext: (2, 8))
+        let before = detail(item)
+        XCTAssertEqual(before.whereText, "Season 2")
+        XCTAssertNil(before.meter)
+        XCTAssertEqual(before.accessibilityLabel, "Title waiting, Season 2")
+        // A read of another season (up next has moved on) is not this one.
+        let stale = detail(item, season: TileSeason(seasonNumber: 1, watched: 9, total: 9, showWatchedAtRead: 9))
+        XCTAssertEqual(stale.whereText, "Season 2")
+        XCTAssertNil(stale.meter)
+    }
+
+    func testEpisodesWatchedSinceTheReadMoveTheSeasonOnAtOnce() throws {
+        let season = TileSeason(seasonNumber: 2, watched: 7, total: 10, showWatchedAtRead: 16)
+        let moved = detail(show("moved", watched: 18, aired: 19, upNext: (2, 10)), season: season)
+        XCTAssertEqual(moved.whereText, "S2 \u{00B7} 9 of 10 episodes")
+        // Never past the season's end, never below nothing.
+        let past = detail(show("past", watched: 30, aired: 30, upNext: (2, 10)), season: season)
+        XCTAssertEqual(past.whereText, "S2 \u{00B7} 10 of 10 episodes")
+        let back = detail(show("back", watched: 2, aired: 19, upNext: (2, 1)), season: season)
+        XCTAssertEqual(back.whereText, "S2 \u{00B7} 0 of 10 episodes")
+    }
+
+    func testCaughtUpCountsTheSeasonAiringNextAndAShowWithNeitherIsCountedWhole() throws {
+        var tv = TVTrackingSurfacesTests.showState(status: "In progress", watched: 15, aired: 15, caughtUp: true)
+        tv.nextAiring = TVAiring(seasonNumber: 3, episodeNumber: 6, airDate: "2026-11-12")
+        let airing = item("tv", "airing", status: "In progress", tv: tv)
+        XCTAssertEqual(InProgressTilePresenter.currentSeasonNumber(for: airing), 3)
+        let model = detail(airing, season: TileSeason(seasonNumber: 3, watched: 5, total: 10, showWatchedAtRead: 15))
+        XCTAssertEqual(model.whereText, "S3 \u{00B7} 5 of 10 episodes")
+
+        let whole = detail(show("long", watched: 9, aired: 62))
+        XCTAssertNil(InProgressTilePresenter.currentSeasonNumber(for: show("long", watched: 9, aired: 62)))
+        XCTAssertEqual(whole.whereText, "9 of 62 episodes")
+        guard case .window = whole.meter?.kind else { return XCTFail("A show of 62 episodes draws a window") }
+    }
+
+    func testALongSeasonGetsAWindow() throws {
+        let model = detail(
+            show("one-piece", watched: 1_089, aired: 1_150, upNext: (21, 200)),
+            season: TileSeason(seasonNumber: 21, watched: 199, total: 300, showWatchedAtRead: 1_089)
+        )
+        XCTAssertEqual(model.whereText, "S21 \u{00B7} 199 of 300 episodes")
+        guard case .window = model.meter?.kind else { return XCTFail("A season of 300 episodes draws a window") }
+        XCTAssertEqual(model.primary?.label, "Watched S21 E200")
+    }
+
+    func testTheSeasonReadIsBuiltFromTheSeasonsTracking() throws {
+        let read = try XCTUnwrap(TileSeason(
+            state: TVSeasonState(seasonNumber: 2, state: .inProgress, watchedCount: 7, airedCount: 6, episodeCount: 10),
+            showWatched: 16
+        ))
+        XCTAssertEqual(read, TileSeason(seasonNumber: 2, watched: 7, total: 10, showWatchedAtRead: 16))
+        let airedOnly = TileSeason(state: TVSeasonState(seasonNumber: 1, watchedCount: 3, airedCount: 8), showWatched: nil)
+        XCTAssertEqual(airedOnly?.total, 8)
+        XCTAssertEqual(airedOnly?.showWatchedAtRead, 0)
+        XCTAssertNil(TileSeason(state: TVSeasonState(seasonNumber: 4), showWatched: 3), "Nothing to count")
     }
 
     func testAnAnimeReadsLikeAShowWithoutASeason() throws {
@@ -268,8 +333,13 @@ final class TileModelsTests: XCTestCase {
     func testVoiceOverReadsWhereAndTodayWithoutSymbols() throws {
         let model = detail(book("voice", pages: 212), today: TodayPart(unit: .pages, amount: 20), baseline: 212)
         XCTAssertEqual(model.accessibilityLabel, "Title voice, page 212 of 400, 20 pages today")
-        XCTAssertEqual(detail(show("voice-show", watched: 4, aired: 10, upNext: (1, 5))).accessibilityLabel,
-                       "Title voice-show, 4 of 10 episodes")
+        XCTAssertEqual(
+            detail(
+                show("voice-show", watched: 4, aired: 10, upNext: (1, 5)),
+                season: TileSeason(seasonNumber: 1, watched: 4, total: 10, showWatchedAtRead: 4)
+            ).accessibilityLabel,
+            "Title voice-show, Season 1, 4 of 10 episodes"
+        )
     }
 
     func testLargeCountsAreGrouped() throws {

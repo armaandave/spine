@@ -184,6 +184,7 @@ private struct HomeTile: View {
                 TileArt(
                     url: posters.first.flatMap { TileURL.make($0.media.displayPosterURL) },
                     side: side,
+                    height: TileGeometry.closedHeight,
                     contentWidth: contentWidth,
                     isOpen: isOpen
                 )
@@ -327,7 +328,9 @@ private struct TileTopHighlight: Shape {
 /// stretches it with the tile and fades it out, so the glow behind shows through: it is only ever scaled and faded.
 private struct TileArt: View {
     let url: URL?
+    /// The closed tile's width and height.
     let side: CGFloat
+    let height: CGFloat
     let contentWidth: CGFloat
     let isOpen: Bool
 
@@ -352,11 +355,11 @@ private struct TileArt: View {
                 }
             }
         }
-        .frame(width: side, height: side)
+        .frame(width: side, height: height)
         .clipped()
         .scaleEffect(
             x: isOpen ? contentWidth / side : 1,
-            y: isOpen ? HomeDesign.Metric.tileOpenHeight / side : 1,
+            y: isOpen ? HomeDesign.Metric.tileOpenHeight / height : 1,
             anchor: .topLeading
         )
         .animation(TileMotion.frame(reduceMotion: reduceMotion), value: isOpen)

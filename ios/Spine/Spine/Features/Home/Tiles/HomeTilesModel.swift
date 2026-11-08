@@ -35,6 +35,8 @@ final class HomeTilesModel {
     var todayParts: [String: TodayPart] = [:]
     /// Where each In progress title stood when the rail loaded, in its tile unit, by item id. Gains since then are lit.
     var baselines: [String: Double] = [:]
+    /// Each show's current season once read, by item id: a show's panel counts its season.
+    var seasons: [String: TileSeason] = [:]
     /// Item ids with a quick action on its way: their main button waits.
     var busyItemIDs: Set<String> = []
 
@@ -130,7 +132,8 @@ final class HomeTilesModel {
         InProgressTilePresenter.detail(
             for: item,
             today: todayParts[HomeTodayStore.titleKey(for: item.media.ref)],
-            baseline: baselines[item.id]
+            baseline: baselines[item.id],
+            season: seasons[item.id]
         )
     }
 

@@ -13,12 +13,45 @@ struct TilePosition: Equatable {
     var pagesTotal: Double?
 }
 
+/// The season a show in the In progress tile is counted by, as its season's tracking read it. A show is always partway
+/// through a season, never through the whole show, so its panel counts this season's episodes.
+struct TileSeason: Equatable {
+    let seasonNumber: Int
+    let watched: Int
+    /// The season's episodes: its episode count when known (a season still airing has more to come), else the aired.
+    let total: Int?
+    /// The show's watched count when the season was read. Episodes watched on this phone since then move the season
+    /// on at once, before it is read again.
+    let showWatchedAtRead: Int
+
+    init(seasonNumber: Int, watched: Int, total: Int?, showWatchedAtRead: Int) {
+        self.seasonNumber = seasonNumber
+        self.watched = watched
+        self.total = total
+        self.showWatchedAtRead = showWatchedAtRead
+    }
+
+    /// Nil for a season with nothing to count.
+    init?(state: TVSeasonState, showWatched: Int?) {
+        let total = [state.episodeCount, state.airedCount].compactMap { $0 }.first { $0 > 0 }
+        guard state.watchedCount != nil || total != nil else { return nil }
+        self.init(
+            seasonNumber: state.seasonNumber,
+            watched: max(0, state.watchedCount ?? 0),
+            total: total,
+            showWatchedAtRead: showWatched ?? 0
+        )
+    }
+}
+
 /// Everything the In progress panel shows and decides for one title.
 struct TileDetailModel: Equatable {
     let title: String
-    /// "+2 ep", "+20 pages", "+3%", "+1h". Nil when nothing was done today.
+    /// "+2 ep", "+20 pages", "+3%", "+1h". Nil when nothing was done today. Not drawn (the meter's lit part shows
+    /// today, and a number of days ago reads as random); VoiceOver says it.
     let todayText: String?
-    /// "9 of 62 episodes", "p. 212 of 400", "47%", "41 of 90 chapters", "14h". Empty when the title's place is not known.
+    /// "S2 · 7 of 10 episodes", "p. 212 of 400", "47%", "41 of 90 chapters", "14h": where the title stands now.
+    /// Empty when the title's place is not known.
     let whereText: String
     /// Nil when there is nothing honest to draw: no known end, or a game counted in hours.
     let meter: ProgressMeterModel?
@@ -36,13 +69,20 @@ enum InProgressTilePresenter {
     ///   - today: what the server counted today for this title (`HomeTodayStore.part(for:)`).
     ///   - baseline: where the title stood when the rail loaded, from `position(for:)`; local gains since then are
     ///     lit too.
-    static func detail(for item: LibraryItem, today: TodayPart?, baseline: Double?) -> TileDetailModel {
+    ///   - season: a show's current season once it has been read (`currentSeasonNumber`); a show is counted by it.
+    static func detail(
+        for item: LibraryItem,
+        today: TodayPart?,
+        baseline: Double?,
+        season: TileSeason? = nil
+    ) -> TileDetailModel {
         let title = item.media.displayTitle
         let position = position(for: item)
 
         var todayAmount = 0.0
         var meter: ProgressMeterModel?
         var whereText = ""
+        var spokenWhere = ""
         if let position {
             todayAmount = TileTodayMath.today(
                 server: today,
@@ -51,13 +91,26 @@ enum InProgressTilePresenter {
                 unit: position.unit,
                 total: position.pagesTotal ?? position.total
             )
-            meter = ProgressMeterModel.make(
-                unit: meterUnit(for: position.unit),
-                from: wholeNumber(position.current - todayAmount),
-                to: wholeNumber(position.current),
-                total: position.total.map(wholeNumber)
-            )
-            whereText = placeText(position)
+            if let seasonNumber = currentSeasonNumber(for: item) {
+                let place = seasonPlace(
+                    number: seasonNumber,
+                    season: season,
+                    showWatched: wholeNumber(position.current),
+                    today: todayAmount
+                )
+                meter = place.meter
+                whereText = place.text
+                spokenWhere = place.spoken
+            } else {
+                meter = ProgressMeterModel.make(
+                    unit: meterUnit(for: position.unit),
+                    from: wholeNumber(position.current - todayAmount),
+                    to: wholeNumber(position.current),
+                    total: position.total.map(wholeNumber)
+                )
+                whereText = placeText(position)
+                spokenWhere = whereText.hasPrefix("p. ") ? "page " + whereText.dropFirst(3) : whereText
+            }
         }
         let todayText = position.flatMap { text(forToday: todayAmount, unit: $0.unit) }
 
@@ -69,8 +122,36 @@ enum InProgressTilePresenter {
             accentHex: item.media.posterAccentColor,
             primary: QuickActionPlan.make(for: item),
             secondaryTitle: InProgressUpdates.route(for: item) == .page ? "Open" : "Update",
-            accessibilityLabel: accessibilityLabel(title: title, whereText: whereText, todayText: todayText)
+            accessibilityLabel: accessibilityLabel(title: title, spokenWhere: spokenWhere, todayText: todayText)
         )
+    }
+
+    // MARK: Seasons
+
+    /// The season a show's panel counts: the one up next is in, else the one airing next. Nil for anything but a show,
+    /// and for a show with neither, which is counted as a whole.
+    static func currentSeasonNumber(for item: LibraryItem) -> Int? {
+        guard item.media.ref.mediaType == "tv", let tv = item.tracking.tv else { return nil }
+        return tv.upNext?.seasonNumber ?? tv.nextAiring?.seasonNumber
+    }
+
+    /// "S2 · 7 of 10 episodes" and the season's ticks, today's episodes lit (never more than the season has watched).
+    /// Until the season has been read: "Season 2" and no meter, never the whole show's numbers.
+    private static func seasonPlace(
+        number: Int,
+        season: TileSeason?,
+        showWatched: Int,
+        today: Double
+    ) -> (text: String, spoken: String, meter: ProgressMeterModel?) {
+        let name = "Season \(number)"
+        guard let season, season.seasonNumber == number else { return (name, name, nil) }
+        var watched = max(0, season.watched + showWatched - season.showWatchedAtRead)
+        if let total = season.total { watched = min(watched, total) }
+        let episodes = counted(watched, of: season.total, noun: "episode")
+        guard !episodes.isEmpty else { return (name, name, nil) }
+        let lit = min(wholeNumber(today), watched)
+        let meter = ProgressMeterModel.make(unit: .episodes, from: watched - lit, to: watched, total: season.total)
+        return ("S\(number) \u{00B7} \(episodes)", "\(name), \(episodes)", meter)
     }
 
     /// "5 titles", "1 title".
@@ -209,10 +290,9 @@ enum InProgressTilePresenter {
         }
     }
 
-    private static func accessibilityLabel(title: String, whereText: String, todayText: String?) -> String {
-        guard !whereText.isEmpty else { return title }
-        let place = whereText.hasPrefix("p. ") ? "page " + whereText.dropFirst(3) : whereText
-        return [title, place, todayText.map { "\($0.dropFirst()) today" }].compactMap { $0 }.joined(separator: ", ")
+    private static func accessibilityLabel(title: String, spokenWhere: String, todayText: String?) -> String {
+        guard !spokenWhere.isEmpty else { return title }
+        return [title, spokenWhere, todayText.map { "\($0.dropFirst()) today" }].compactMap { $0 }.joined(separator: ", ")
     }
 
     // MARK: Numbers

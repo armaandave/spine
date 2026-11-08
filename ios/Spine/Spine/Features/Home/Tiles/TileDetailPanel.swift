@@ -70,12 +70,10 @@ private struct InProgressPanel: View {
     var body: some View {
         let accent = ArtAccent.pastel(fromHex: detail.accentHex)
         VStack(alignment: .leading, spacing: 0) {
+            // Where the title stands now. Today's part is the meter's lit stretch, not a "+6 chapters" that reads as a
+            // random number when the last update was days ago.
             TilePanelTitleRow(title: detail.title, accessibilityLabel: detail.accessibilityLabel) {
-                if let today = detail.todayText {
-                    Text("\(Text(today).foregroundStyle(accent)) \(detail.whereText)")
-                } else {
-                    Text(detail.whereText)
-                }
+                Text(detail.whereText)
             }
             meter(accent: accent)
                 .padding(.top, 16)

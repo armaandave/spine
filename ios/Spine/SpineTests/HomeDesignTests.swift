@@ -55,6 +55,7 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.tileGap, 12)
         XCTAssertEqual(M.tileOpenHeight, 410)
         XCTAssertEqual(M.tileCorner, 30)
+        XCTAssertEqual(M.tileClosedHeight, 164)
         XCTAssertEqual(M.cardHeight, 115)
         XCTAssertEqual(M.cardCorner, 20)
         XCTAssertEqual(M.cardInset, 12)

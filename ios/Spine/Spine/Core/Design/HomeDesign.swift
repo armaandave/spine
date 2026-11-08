@@ -8,6 +8,9 @@ nonisolated enum HomeDesign {
         static let pageMargin: CGFloat = 16
         static let tileGap: CGFloat = 12
         static let tileOpenHeight: CGFloat = 410
+        /// A closed tile is as tall as its fan, its title and its count need, with a 10 pt margin under the count's
+        /// line (about 13 under its letters). It is no longer square: the square left a band of nothing under the text.
+        static let tileClosedHeight: CGFloat = 164
         static let tileCorner: CGFloat = 30
 
         /// 30% shorter than the mock's 164.

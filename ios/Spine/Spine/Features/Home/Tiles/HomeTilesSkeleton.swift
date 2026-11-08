@@ -44,7 +44,7 @@ struct HomeTilesSkeleton: View {
                         .offset(x: TileGeometry.labelLeading, y: TileGeometry.subtitleTop(isOpen: false) + 3)
                 }
                 .frame(width: contentWidth, height: HomeDesign.Metric.tileOpenHeight, alignment: .topLeading)
-                .frame(width: side, height: side, alignment: .topLeading)
+                .frame(width: side, height: TileGeometry.closedHeight, alignment: .topLeading)
                 .background(TileStyle.veil)
                 .clipShape(RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous))
                 .overlay {
@@ -56,7 +56,7 @@ struct HomeTilesSkeleton: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: side)
+        .frame(height: TileGeometry.closedHeight)
         .environment(\.colorScheme, .dark)
     }
 }

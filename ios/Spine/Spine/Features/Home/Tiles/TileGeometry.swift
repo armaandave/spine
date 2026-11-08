@@ -53,13 +53,17 @@ nonisolated enum TileGeometry {
 
     // MARK: Section
 
+    /// A closed tile's width: half the content less half the gap.
     static func tileSide(contentWidth: CGFloat) -> CGFloat {
         HomeDesign.Metric.tileSide(contentWidth: contentWidth)
     }
 
+    /// A closed tile's height, whatever the width: the fan, the title and the count.
+    static let closedHeight = HomeDesign.Metric.tileClosedHeight
+
     /// The section's height: one tile closed, 410 open.
     static func containerHeight(contentWidth: CGFloat, isOpen: Bool) -> CGFloat {
-        isOpen ? HomeDesign.Metric.tileOpenHeight : tileSide(contentWidth: contentWidth)
+        isOpen ? HomeDesign.Metric.tileOpenHeight : closedHeight
     }
 
     /// Tile `tile` (0 left, 1 right) while tile `open` is open (nil when none is). The open tile fills the width;
@@ -69,7 +73,7 @@ nonisolated enum TileGeometry {
         let closedLeft = CGFloat(tile) * (side + HomeDesign.Metric.tileGap)
         guard let open else {
             return TileFrame(
-                left: closedLeft, width: side, height: side, slide: 0, scale: 1, opacity: 1, z: 1,
+                left: closedLeft, width: side, height: closedHeight, slide: 0, scale: 1, opacity: 1, z: 1,
                 isOpen: false, hitTestable: true
             )
         }
@@ -80,7 +84,7 @@ nonisolated enum TileGeometry {
             )
         }
         return TileFrame(
-            left: closedLeft, width: side, height: side, slide: tile == 0 ? -80 : 100, scale: 0.82, opacity: 0,
+            left: closedLeft, width: side, height: closedHeight, slide: tile == 0 ? -80 : 100, scale: 0.82, opacity: 0,
             z: 1, isOpen: false, hitTestable: false
         )
     }

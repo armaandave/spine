@@ -41,6 +41,7 @@ final class HomeViewModel {
         set {
             tiles.inProgress = newValue
             syncGlowIdle()
+            syncSeasons()
         }
     }
 
@@ -71,9 +72,13 @@ final class HomeViewModel {
         onUnauthorized: onUnauthorized
     )
 
-    /// The Today refresh and the Trending fill on their way, so a test can wait for them.
+    /// The Today refresh, the Trending fill and the shows' season reads on their way, so a test can wait for them.
     @ObservationIgnored private(set) var todayRefresh: Task<Void, Never>?
     @ObservationIgnored private(set) var trendingFill: Task<Void, Never>?
+    @ObservationIgnored private(set) var seasonRefresh: Task<Void, Never>?
+    /// The season read each show's `tiles.seasons` entry came from or is waiting for ("2|14": season, version), by
+    /// item id. A show is read again only when its season or its version changes.
+    @ObservationIgnored private var seasonReads: [String: String] = [:]
 
     /// Your own recent activity and the fallback titles, kept for Trending.
     @ObservationIgnored private var ownActivity: [ActivityItem] = []
@@ -284,6 +289,52 @@ final class HomeViewModel {
             guard let self else { return }
             await todayStore.refresh(username: username, force: force)
             if tiles.todayParts != todayStore.parts { tiles.todayParts = todayStore.parts }
+        }
+    }
+
+    /// Reads the current season of each show in the rail (`InProgressTilePresenter.currentSeasonNumber`) that has not
+    /// been read at its version, one small tracking read each, so its panel counts the season you are in. A write's
+    /// answer that already carries that season is used as it is. Until a read lands the panel says "Season 2".
+    private func syncSeasons() {
+        guard loadsTileExtras else { return }
+        let items = tiles.inProgress
+        let ids = Set(items.map(\.id))
+        let kept = tiles.seasons.filter { ids.contains($0.key) }
+        if kept.count != tiles.seasons.count { tiles.seasons = kept }
+        seasonReads = seasonReads.filter { ids.contains($0.key) }
+
+        var reads: [(id: String, key: String, ref: MediaRef, number: Int, showWatched: Int?)] = []
+        for item in items {
+            guard let number = InProgressTilePresenter.currentSeasonNumber(for: item),
+                  let tv = item.tracking.tv else { continue }
+            let key = "\(number)|\(tv.version)"
+            if let state = tv.season, state.seasonNumber == number,
+               let season = TileSeason(state: state, showWatched: tv.watchedCount) {
+                seasonReads[item.id] = key
+                if tiles.seasons[item.id] != season { tiles.seasons[item.id] = season }
+                continue
+            }
+            guard seasonReads[item.id] != key else { continue }
+            seasonReads[item.id] = key
+            let ref = ContinueWatchingEpisodes.seasonRef(show: item.media.ref, seasonNumber: number)
+            reads.append((item.id, key, ref, number, tv.watchedCount))
+        }
+        guard !reads.isEmpty else { return }
+
+        seasonRefresh = Task { [weak self] in
+            for read in reads {
+                guard let self else { return }
+                let state = try? await trackingRepository.detail(ref: read.ref)
+                guard seasonReads[read.id] == read.key else { continue }
+                // A read that failed is tried again the next time the rail changes or loads.
+                guard let state else {
+                    seasonReads[read.id] = nil
+                    continue
+                }
+                guard let seasonState = state.tv?.season, seasonState.seasonNumber == read.number,
+                      let season = TileSeason(state: seasonState, showWatched: read.showWatched) else { continue }
+                if tiles.seasons[read.id] != season { tiles.seasons[read.id] = season }
+            }
         }
     }
 

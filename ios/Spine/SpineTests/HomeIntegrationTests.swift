@@ -487,6 +487,65 @@ final class HomeIntegrationTests: XCTestCase {
         XCTAssertNil(home.todayCount(for: pages))
     }
 
+    // MARK: Seasons
+
+    private func seasonTracking(_ number: Int, watched: Int, episodes: Int) -> TrackingState {
+        var tv = TVTrackingSurfacesTests.showState(status: "In progress", watched: 14, aired: 20, upNext: (number, watched + 1))
+        tv.season = TVSeasonState(seasonNumber: number, state: .inProgress, watchedCount: watched, airedCount: episodes,
+                                  episodeCount: episodes)
+        return TrackingState(trackingId: 1, status: "In progress", rating: nil, progress: nil, repeats: nil, startDate: nil,
+                             endDate: nil, notes: nil, updatedAt: nil, tv: tv)
+    }
+
+    func testAShowsPanelCountsItsSeasonOnceTheSeasonIsReadAndReadsItOncePerVersion() async throws {
+        let crown = TVTrackingSurfacesTests.crown(watched: 14)
+        tracking.seasonStates["1396|2"] = seasonTracking(2, watched: 4, episodes: 10)
+        let home = makeHome(extras: true, enabled: ["tv"])
+
+        home.inProgressItems = [crown]
+        XCTAssertEqual(home.tiles.detail(for: crown).whereText, "Season 2", "Until the read lands")
+        await home.seasonRefresh?.value
+        XCTAssertEqual(tracking.detailCalls, [TVTrackingSurfacesTests.seasonRef(2)])
+        XCTAssertEqual(home.tiles.detail(for: crown).whereText, "S2 \u{00B7} 4 of 10 episodes")
+        XCTAssertEqual(home.tiles.detail(for: crown).meter?.kind, .ticks(count: 10))
+
+        // The same show at the same version is not read again.
+        home.inProgressItems = [crown]
+        await home.seasonRefresh?.value
+        XCTAssertEqual(tracking.detailCalls.count, 1)
+
+        // A tick on this phone moves it on at once, and its new version is read.
+        let ticked = TVTrackingSurfacesTests.crown(watched: 15, upNext: (2, 6))
+        var tv = try XCTUnwrap(ticked.tracking.tv)
+        tv.version += 1
+        tracking.seasonStates["1396|2"] = seasonTracking(2, watched: 5, episodes: 10)
+        home.continueWatching.onUpdate(crown.id, tv)
+        let moved = try XCTUnwrap(home.tiles.inProgress.first)
+        XCTAssertEqual(home.tiles.detail(for: moved).whereText, "S2 \u{00B7} 5 of 10 episodes")
+        await home.seasonRefresh?.value
+        XCTAssertEqual(tracking.detailCalls.count, 2)
+        XCTAssertEqual(home.tiles.detail(for: moved).whereText, "S2 \u{00B7} 5 of 10 episodes")
+    }
+
+    func testASeasonReadThatFailedIsTriedAgainAndNoneAreMadeWithoutTheExtras() async throws {
+        let crown = TVTrackingSurfacesTests.crown(watched: 14)
+        let home = makeHome(extras: true, enabled: ["tv"])
+        home.inProgressItems = [crown]
+        await home.seasonRefresh?.value
+        XCTAssertEqual(home.tiles.detail(for: crown).whereText, "Season 2")
+
+        tracking.seasonStates["1396|2"] = seasonTracking(2, watched: 4, episodes: 10)
+        home.inProgressItems = [crown]
+        await home.seasonRefresh?.value
+        XCTAssertEqual(tracking.detailCalls.count, 2)
+        XCTAssertEqual(home.tiles.detail(for: crown).whereText, "S2 \u{00B7} 4 of 10 episodes")
+
+        let plain = makeHome(extras: false, enabled: ["tv"])
+        plain.inProgressItems = [crown]
+        XCTAssertNil(plain.seasonRefresh)
+        XCTAssertEqual(tracking.detailCalls.count, 2)
+    }
+
     // MARK: The page top's states
 
     func testThePageTopShowsFailureLoadingOrContent() {
@@ -647,7 +706,15 @@ final class HomeRecordingTrackingRepository: TrackingRepository {
         PagedResponse(count: 0, next: nil, previous: nil, results: [])
     }
 
-    func detail(ref: MediaRef) async throws -> TrackingState { throw APIError.httpStatus(404, nil) }
+    /// A season's tracking by "mediaId|season"; anything else is a 404.
+    var seasonStates: [String: TrackingState] = [:]
+    private(set) var detailCalls: [MediaRef] = []
+
+    func detail(ref: MediaRef) async throws -> TrackingState {
+        detailCalls.append(ref)
+        guard let state = seasonStates["\(ref.mediaId)|\(ref.seasonNumber ?? -1)"] else { throw APIError.httpStatus(404, nil) }
+        return state
+    }
 
     func update(ref: MediaRef, request: TrackingWriteRequest) async throws -> TrackingState {
         updateCalls.append((ref, request.status))
