@@ -20,20 +20,26 @@ struct InProgressMorphPanel: View {
     /// The panel's width: the section's content width less the panel's inset on both sides (326 on a 390 pt phone),
     /// until it has been measured.
     @State private var width = Double(TileGeometry.referenceContentWidth - 2 * TileGeometry.panelInset)
-    /// Posters' colors counted on this device, by item id; the server's, or ones counted earlier, need no waiting.
+    /// Posters' colors counted on this device, by item id and poster URL (a title's poster can change under the same
+    /// id when it moves to a new season); the server's, or ones counted earlier, need no waiting.
     /// A title with none draws the plain meter, and its colors fade in when they arrive.
     @State private var counted: [String: [PosterSwatch]] = [:]
     @Environment(\.colorSchemeContrast) private var contrast
 
     private static func posterURL(_ item: LibraryItem) -> URL? {
-        item.media.displayPosterURL.flatMap { URL(string: $0) }
+        item.inProgressMedia.displayPosterURL.flatMap { URL(string: $0) }
+    }
+
+    /// The key a title's counted colors are kept under: its id with the poster they were counted from.
+    private static func countKey(_ item: LibraryItem) -> String {
+        "\(item.id)|\(item.inProgressMedia.displayPosterURL ?? "")"
     }
 
     /// The server's palette if it gives colors, else the count made here, whether by this view or by an earlier panel.
     private func tint(for item: LibraryItem) -> MeterTint? {
-        let swatches = counted[item.id] ?? PosterPaletteStore.shared.known(server: nil, url: Self.posterURL(item))
+        let swatches = counted[Self.countKey(item)] ?? PosterPaletteStore.shared.known(server: nil, url: Self.posterURL(item))
         return MeterTint.choose(
-            server: item.media.posterPalette, counted: swatches, highContrast: contrast == .increased
+            server: item.inProgressMedia.posterPalette, counted: swatches, highContrast: contrast == .increased
         )
     }
 
@@ -48,7 +54,7 @@ struct InProgressMorphPanel: View {
             .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { measured in
                 if measured > 0, abs(measured - width) > 0.01 { width = measured }
             }
-            .task(id: items.map { "\($0.id)|\($0.media.displayPosterURL ?? "")" }) {
+            .task(id: items.map { "\($0.id)|\($0.inProgressMedia.displayPosterURL ?? "")" }) {
                 await countPosters(of: items)
             }
             .overlay(alignment: .topLeading) {
@@ -74,12 +80,12 @@ extension InProgressMorphPanel {
         // Posters an earlier panel counted need no work, but this view has not read them yet.
         var wanted: [(id: String, url: URL)] = []
         for item in items {
-            guard let url = Self.posterURL(item), MeterTint.choose(server: item.media.posterPalette, counted: nil) == nil
+            guard let url = Self.posterURL(item), MeterTint.choose(server: item.inProgressMedia.posterPalette, counted: nil) == nil
             else { continue }
             if let known = PosterPaletteStore.shared.known(server: nil, url: url) {
-                counted[item.id] = known
+                counted[Self.countKey(item)] = known
             } else {
-                wanted.append((item.id, url))
+                wanted.append((Self.countKey(item), url))
             }
         }
         await withTaskGroup(of: (String, [PosterSwatch]?).self) { group in

@@ -147,7 +147,7 @@ enum InProgressTilePresenter {
             todayText: todayText,
             place: place,
             meter: meter,
-            accentHex: item.media.posterAccentColor,
+            accentHex: item.inProgressMedia.posterAccentColor,
             primary: QuickActionPlan.make(for: item),
             secondaryTitle: InProgressUpdates.route(for: item) == .page ? "Open" : "Update",
             accessibilityLabel: accessibilityLabel(title: title, spokenWhere: spokenWhere, todayText: todayText)

@@ -1,6 +1,7 @@
 import logging
 from functools import partial
 
+from django.conf import settings
 from django.db.models import Exists, F, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -12,8 +13,11 @@ from rest_framework.views import APIView
 from api.exceptions import TVValidationError
 from api.pagination import StandardResultsSetPagination
 from api.serializers.common import (
+    absolute_url,
+    artwork_from_payload,
     media_summary_from_item,
     prime_collection_items,
+    saved_poster_url,
     tv_season_started,
 )
 from api.serializers.tracking import (
@@ -39,7 +43,16 @@ from api.services import tracking as tracking_service
 from api.services import up_next as up_next_service
 from api.views.mixins import MediaExposureMixin
 from app import anime_titles, anime_tracking, series_tracking, tv_tracking
-from app.models import BasicMedia, Episode, GameSession, MediaTypes, Status
+from app.curation import picked_image_urls
+from app.models import (
+    BasicMedia,
+    CustomPosterPreference,
+    Episode,
+    GameSession,
+    Item,
+    MediaTypes,
+    Status,
+)
 from streaming import filters as streaming_filters
 
 logger = logging.getLogger(__name__)
@@ -129,6 +142,7 @@ class TrackingListView(MediaExposureMixin, APIView):
         elif continue_watching:
             # One query: up next's title and still, for the hold preview (TV-701).
             tv_tracking.prime_up_next_episodes(page)
+            _prime_up_next_season_posters(page, request.user, request)
         # The rows are the owner's, as the owner sees them. Another user's leave out
         # media.user_state, which would be the owner's too: their lists and latest log,
         # hidden ones included.
@@ -420,6 +434,64 @@ def _work_out_due_for(user, media_type):
             tv_airing.refresh_due_for_user(user)
     except Exception:
         logger.exception("Could not work out due %s rows for user %s", media_type, user.pk)
+
+
+def _prime_up_next_season_posters(rows, user, request):
+    """Set the poster of each TV row's up next season, in three queries for the page.
+
+    The In progress tile shows the season the viewer is on. The poster is the one the
+    show page's season cards show: the viewer's own pick, else an admin's, else the
+    poster saved on the season Item (never the show's), else, before the season has an
+    Item, the stored listing's season image. The accent colour is sent only when it
+    describes that exact image: Item.poster_accent_color is worked out from Item.image,
+    so it goes with the saved poster (or an admin pick that is the saved poster). A pick
+    of the viewer's brings the accent saved with that pick, which may be empty.
+    """
+    tv_rows = [
+        row
+        for row in rows
+        if isinstance(row, tv_tracking.TV) and row.up_next_season is not None and hasattr(row, "_tv_stored_seasons")
+    ]
+    if not tv_rows:
+        return
+    season_items = {
+        (item.source, item.media_id, item.season_number): item
+        for item in Item.objects.filter(
+            media_type=MediaTypes.SEASON.value,
+            media_id__in={row.item.media_id for row in tv_rows},
+            season_number__in={row.up_next_season for row in tv_rows},
+        )
+    }
+    # The picks (the viewer's over an admin's), then the viewer's with their accents.
+    picks = picked_image_urls(season_items.values(), CustomPosterPreference, user)
+    # A viewer's pick stores the accent of that exact image when it is made.
+    own_picked = dict(
+        CustomPosterPreference.objects.filter(
+            user=user,
+            item_id__in=[item.pk for item in season_items.values()],
+        ).values_list("item_id", "accent_color"),
+    )
+    for row in tv_rows:
+        number = row.up_next_season
+        item = season_items.get((row.item.source, row.item.media_id, number))
+        poster, accent = None, None
+        if item is not None:
+            pick = picks.get(item.pk)
+            if pick:
+                poster = absolute_url(request, pick)
+                if item.pk in own_picked:
+                    accent = own_picked[item.pk] or None
+                elif pick == item.image:
+                    accent = item.poster_accent_color or None
+            else:
+                poster = saved_poster_url(item, request=request)
+                accent = (item.poster_accent_color or None) if poster else None
+        if poster is None:
+            entry = (row._tv_stored_seasons or {}).get(str(number))
+            image = entry.get("image") if isinstance(entry, dict) else None
+            if image and image != settings.IMG_NONE:
+                poster = artwork_from_payload({"image": image}, MediaTypes.SEASON.value, request=request)["poster_url"]
+        row._tv_up_next_season_poster = (poster, accent)
 
 
 def _tv_list_filters(queryset, media_type, *, continue_watching):

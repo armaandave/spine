@@ -511,7 +511,7 @@ final class HomeViewModel {
 
     /// The glow rests on the first In progress title, else the newest post's art.
     private func syncGlowIdle() {
-        let media = tiles.inProgress.first?.media ?? feed.items.first?.media
+        let media = tiles.inProgress.first?.inProgressMedia ?? feed.items.first?.media
         if glowModel.idle != media { glowModel.idle = media }
     }
 

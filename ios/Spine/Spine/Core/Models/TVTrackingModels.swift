@@ -114,6 +114,11 @@ nonisolated struct TVEpisodePointer: Codable, Hashable {
     var isNew: Bool
     /// The episode's still, for the show page's Up next row; nil when the server has none.
     var imageUrl: String?
+    /// The poster of this episode's season, as the viewer sees it on a season page. Only Continue Watching rows carry
+    /// it (the In progress tile shows it in place of the show's poster); nil anywhere else, and from an older server.
+    var seasonPosterUrl: String?
+    /// The accent color of exactly that poster; nil when the server cannot vouch for one. Never the show's.
+    var seasonPosterAccentColor: String?
 
     init(
         seasonNumber: Int,
@@ -121,7 +126,9 @@ nonisolated struct TVEpisodePointer: Codable, Hashable {
         title: String? = nil,
         airDate: String? = nil,
         isNew: Bool = false,
-        imageUrl: String? = nil
+        imageUrl: String? = nil,
+        seasonPosterUrl: String? = nil,
+        seasonPosterAccentColor: String? = nil
     ) {
         self.seasonNumber = seasonNumber
         self.episodeNumber = episodeNumber
@@ -129,6 +136,20 @@ nonisolated struct TVEpisodePointer: Codable, Hashable {
         self.airDate = airDate
         self.isNew = isNew
         self.imageUrl = imageUrl
+        self.seasonPosterUrl = seasonPosterUrl
+        self.seasonPosterAccentColor = seasonPosterAccentColor
+    }
+
+    /// This pointer from a write's answer, which carries no season poster (only Continue Watching's list does), with
+    /// the season poster `old` had. The In progress tile then keeps its poster after a tick instead of flashing back to
+    /// the show's, and a tick into the next season keeps the last season's poster (with its own accent) until the rail
+    /// reloads and brings in the new one: the same show, and nearer than the whole show's poster.
+    func keepingSeasonPoster(from old: TVEpisodePointer?) -> TVEpisodePointer {
+        guard seasonPosterUrl == nil, let old else { return self }
+        var kept = self
+        kept.seasonPosterUrl = old.seasonPosterUrl
+        kept.seasonPosterAccentColor = old.seasonPosterAccentColor
+        return kept
     }
 
     init(from decoder: Decoder) throws {
@@ -139,6 +160,8 @@ nonisolated struct TVEpisodePointer: Codable, Hashable {
         airDate = try c.decodeIfPresent(String.self, forKey: .airDate)
         isNew = try c.decodeIfPresent(Bool.self, forKey: .isNew) ?? false
         imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
+        seasonPosterUrl = try c.decodeIfPresent(String.self, forKey: .seasonPosterUrl)
+        seasonPosterAccentColor = try c.decodeIfPresent(String.self, forKey: .seasonPosterAccentColor)
     }
 
     var coordinate: TVEpisodeCoordinate { TVEpisodeCoordinate(seasonNumber: seasonNumber, episodeNumber: episodeNumber) }

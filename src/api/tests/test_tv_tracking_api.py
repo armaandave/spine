@@ -22,8 +22,10 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api.views.tracking import _prime_up_next_season_posters
 from app.models import (
     TV,
+    CustomPosterPreference,
     DiaryEntry,
     Episode,
     Item,
@@ -1064,6 +1066,161 @@ class TVListEndpointTests(TVAPITestCase):
         self.assertEqual((up_next["title"], up_next["image_url"]), ("Three", None), "E3 has no still")
         # Other library lists don't load it.
         self.assertIsNone(self.tracked(media_type="tv")[0]["tracking"]["tv"]["up_next"]["image_url"])
+
+    # In progress shows the poster of the season the viewer is on
+    # (up_next.season_poster_url).
+
+    def season_poster_show(self, **kwargs):
+        show = self.make_show(seasons={1: 3, 2: 3}, **kwargs)
+        self.fake.show(show.media_id).season_posters = {1: "/s1.jpg", 2: "/s2.jpg"}
+        self.tick(show, 1, 1)
+        return show
+
+    def season_item(self, show, number=1):
+        return Item.objects.get(media_id=show.media_id, media_type=MediaTypes.SEASON.value, season_number=number)
+
+    def up_next_of(self, show):
+        rows = self.tracked(media_type="tv", continue_watching="true")
+        return next(row for row in rows if row["media"]["ref"]["media_id"] == show.media_id)["tracking"]["tv"]["up_next"]
+
+    def test_season_poster_is_the_up_next_seasons_saved_poster_with_its_accent(self):
+        show = self.season_poster_show(image="https://image.tmdb.org/t/p/w500/show.jpg")
+        Item.objects.filter(pk=self.season_item(show).pk).update(poster_accent_color="#112233")
+
+        up_next = self.up_next_of(show)
+
+        self.assertEqual(up_next["season_poster_url"], "https://image.tmdb.org/t/p/w500/s1.jpg")
+        self.assertEqual(up_next["season_poster_accent_color"], "#112233")
+
+    def test_season_poster_follows_up_next_into_the_next_season(self):
+        show = self.season_poster_show()
+        self.ticks(show, 1, [2, 3])
+        # Season 2 has no Item yet (nothing in it is tracked): the listing's image.
+        self.assertFalse(Item.objects.filter(media_id=show.media_id, media_type=MediaTypes.SEASON.value, season_number=2))
+
+        up_next = self.up_next_of(show)
+
+        self.assertEqual(up_next["season_number"], 2)
+        self.assertEqual(up_next["season_poster_url"], "https://image.tmdb.org/t/p/w500/s2.jpg")
+
+    def test_season_poster_viewers_own_pick_wins_with_the_accent_saved_for_it(self):
+        show = self.season_poster_show()
+        item = self.season_item(show)
+        Item.objects.filter(pk=item.pk).update(poster_accent_color="#112233")
+        admin = make_user(is_staff=True)
+        CustomPosterPreference.objects.create(user=admin, item=item, custom_image_url="https://example.com/admin.jpg")
+        mine = CustomPosterPreference.objects.create(
+            user=self.user, item=item, custom_image_url="https://example.com/mine.jpg", accent_color="#abcdef",
+        )
+
+        up_next = self.up_next_of(show)
+
+        self.assertEqual(up_next["season_poster_url"], "https://example.com/mine.jpg")
+        self.assertEqual(up_next["season_poster_accent_color"], "#abcdef", "the pick's own accent, not the saved poster's")
+
+        # A pick saved without an accent sends none, never the saved poster's.
+        CustomPosterPreference.objects.filter(pk=mine.pk).update(accent_color="")
+        self.assertIsNone(self.up_next_of(show)["season_poster_accent_color"])
+
+    def test_season_poster_ignores_another_non_staff_users_pick(self):
+        show = self.season_poster_show()
+        item = self.season_item(show)
+        Item.objects.filter(pk=item.pk).update(poster_accent_color="#112233")
+        other = make_user()
+        CustomPosterPreference.objects.create(
+            user=other, item=item, custom_image_url="https://example.com/other.jpg", accent_color="#999999",
+        )
+
+        up_next = self.up_next_of(show)
+
+        self.assertEqual(up_next["season_poster_url"], "https://image.tmdb.org/t/p/w500/s1.jpg")
+        self.assertEqual(up_next["season_poster_accent_color"], "#112233")
+
+    def test_season_poster_admin_pick_is_the_default_when_the_viewer_has_none(self):
+        show = self.season_poster_show()
+        item = self.season_item(show)
+        Item.objects.filter(pk=item.pk).update(poster_accent_color="#112233")
+        admin = make_user(is_staff=True)
+        CustomPosterPreference.objects.create(user=admin, item=item, custom_image_url="https://example.com/admin.jpg")
+
+        up_next = self.up_next_of(show)
+
+        self.assertEqual(up_next["season_poster_url"], "https://example.com/admin.jpg")
+        # The pick is not the saved poster, so the saved poster's accent isn't sent.
+        self.assertIsNone(up_next["season_poster_accent_color"])
+
+        # An admin's pick saves itself as the cover, with its own accent.
+        Item.objects.filter(pk=item.pk).update(image="https://example.com/admin.jpg", poster_accent_color="#445566")
+        up_next = self.up_next_of(show)
+        self.assertEqual(up_next["season_poster_url"], "https://example.com/admin.jpg")
+        self.assertEqual(up_next["season_poster_accent_color"], "#445566")
+
+    def test_season_poster_comes_from_the_listing_when_the_season_item_has_none(self):
+        show = self.season_poster_show()
+        Item.objects.filter(pk=self.season_item(show).pk).update(
+            image=settings.IMG_NONE,
+            poster_accent_color="#112233",
+        )
+
+        up_next = self.up_next_of(show)
+
+        self.assertEqual(up_next["season_poster_url"], "https://image.tmdb.org/t/p/w500/s1.jpg")
+        self.assertIsNone(up_next["season_poster_accent_color"])
+
+    def test_season_poster_comes_from_the_listing_when_there_is_no_season_item(self):
+        show = self.season_poster_show()
+        # A tracked season always has an Item, so call the primer on a row directly.
+        row = TV.objects.get(user=self.user, item=show)
+        row.item = Item.objects.get(pk=show.pk)
+        row.up_next_season = 1
+        row._tv_stored_seasons = TVListing.objects.get(item=show).seasons
+        Item.objects.filter(media_id=show.media_id, media_type=MediaTypes.SEASON.value).update(media_id="gone")
+
+        _prime_up_next_season_posters([row], self.user, None)
+
+        self.assertEqual(row._tv_up_next_season_poster, ("https://image.tmdb.org/t/p/w500/s1.jpg", None))
+
+    def test_season_poster_is_null_when_nothing_has_one(self):
+        show = self.season_poster_show()
+        Item.objects.filter(pk=self.season_item(show).pk).update(image=settings.IMG_NONE)
+        row = TVListing.objects.get(item=show)
+        row.seasons = {key: {k: v for k, v in entry.items() if k != "image"} for key, entry in row.seasons.items()}
+        row.save()
+
+        up_next = self.up_next_of(show)
+
+        self.assertIsNone(up_next["season_poster_url"])
+        self.assertIsNone(up_next["season_poster_accent_color"])
+
+    def test_season_poster_is_null_outside_continue_watching(self):
+        show = self.season_poster_show()
+
+        up_next = self.tracked(media_type="tv")[0]["tracking"]["tv"]["up_next"]
+        detail = self.detail(show).data["user_state"]["tv"]["up_next"]
+
+        for pointer in (up_next, detail):
+            self.assertIsNone(pointer["season_poster_url"])
+            self.assertIsNone(pointer["season_poster_accent_color"])
+
+    def test_season_posters_cost_the_same_queries_for_one_show_or_three(self):
+        def queries():
+            self.client.force_authenticate(type(self.user).objects.get(pk=self.user.pk))
+            with CaptureQueriesContext(connection) as captured:
+                response = self.client.get("/api/v1/tracking/", {"media_type": "tv", "continue_watching": "true"})
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+            return len(captured), response.data["results"]
+
+        self.season_poster_show(title="One")
+        cache.clear()
+        one, _ = queries()
+        self.season_poster_show(title="Two")
+        self.season_poster_show(title="Three")
+        cache.clear()
+        three, results = queries()
+
+        self.assertEqual(len(results), 3)
+        self.assertTrue(all(row["tracking"]["tv"]["up_next"]["season_poster_url"] for row in results))
+        self.assertEqual(three, one)
 
     def test_tv_900_home_season_list_has_only_started_unfinished_seasons(self):
         started = self.make_show(title="Started")

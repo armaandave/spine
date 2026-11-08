@@ -241,7 +241,10 @@ final class ContinueWatchingTicks {
         items.map { item in
             guard item.id == id else { return item }
             var tracking = item.tracking
-            tracking.tv = tv
+            // The write's answer has no season poster; the card keeps the one it had until the rail reloads.
+            var answer = tv
+            answer.upNext = tv.upNext?.keepingSeasonPoster(from: item.tracking.tv?.upNext)
+            tracking.tv = answer
             return LibraryItem(media: item.media, tracking: tracking)
         }
     }

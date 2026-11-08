@@ -8,6 +8,52 @@ struct TilePoster: Identifiable, Equatable {
     let media: MediaSummary
 }
 
+extension LibraryItem {
+    /// The one place that decides which poster an In progress title shows: a show on a Continue Watching row shows the
+    /// poster of the season it is on (the server's `season_poster_url` for its up-next episode); everything else shows
+    /// the title's own. The fan, the carousel, the glow, the panel's tint and the posters' prefetch all read this, so
+    /// they cannot disagree. Only the poster changes: the ref (so taps, ids and titles), the name and the rest stay the
+    /// show's. The show's palette and accent describe a different picture, so they are dropped; the season's own accent
+    /// (nil when the server could not vouch for one) takes their place.
+    var inProgressMedia: MediaSummary {
+        guard media.ref.mediaType == "tv", let next = tracking.tv?.upNext,
+              let url = next.seasonPosterUrl, !url.isEmpty else { return media }
+        var shown = MediaSummary(
+            ref: media.ref,
+            title: media.title,
+            preferredTitle: media.preferredTitle,
+            relation: media.relation,
+            contentRating: media.contentRating,
+            subtitle: media.subtitle,
+            overview: media.overview,
+            imageUrl: media.imageUrl,
+            posterUrl: media.posterUrl,
+            customPosterUrl: url,
+            backdropUrl: media.backdropUrl,
+            customBackdropUrl: media.customBackdropUrl,
+            posterOrientation: media.posterOrientation,
+            posterAccentColor: next.seasonPosterAccentColor,
+            logoUrl: media.logoUrl,
+            logoWidth: media.logoWidth,
+            logoHeight: media.logoHeight,
+            logoAspectRatio: media.logoAspectRatio,
+            releaseDate: media.releaseDate,
+            genres: media.genres,
+            languages: media.languages,
+            roles: media.roles,
+            creditRoles: media.creditRoles,
+            defaultSource: media.defaultSource,
+            position: media.position,
+            note: media.note,
+            userState: media.userState,
+            showTitle: media.showTitle,
+            episodeTitle: media.episodeTitle
+        )
+        shown.posterPalette = nil
+        return shown
+    }
+}
+
 /// What a closed tile shows.
 enum TileFace: Equatable {
     /// The first load is still on its way.
@@ -54,7 +100,7 @@ final class HomeTilesModel {
     // MARK: Posters
 
     var inProgressPosters: [TilePoster] {
-        inProgress.prefix(TileGeometry.maxPosters).map { TilePoster(id: $0.id, media: $0.media) }
+        inProgress.prefix(TileGeometry.maxPosters).map { TilePoster(id: $0.id, media: $0.inProgressMedia) }
     }
 
     var trendingPosters: [TilePoster] {

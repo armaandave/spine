@@ -879,6 +879,12 @@ On Home, a thin bar along each poster's bottom fills, in the app's tint, to how 
 On Home, the poster also carries the Library grid's badge just above the bar, by the same rule (TV-700, BK-001, GM-002), or where the bar would be when there's no bar. It moves where it is after a save, a poster with no badge text shows only its bar, and Profile's posters have no badge.
 The card has no tick of its own and no touch-and-hold menu.
 
+On Home, a show's poster is the poster of the season the viewer is on (up next's season), not the show's.
+Continue Watching sends it as `tracking.tv.up_next.season_poster_url`, the poster the show page's season card shows: the viewer's own pick, else an admin's pick, else the poster saved on the season, else (before the season has been tracked) the stored listing's season image.
+`season_poster_accent_color` is that poster's accent colour, sent only when it describes the poster sent: the saved poster's, an admin's pick's when that pick is the saved poster, and a viewer's own pick's the accent saved with that pick; a listing image sends null.
+Both are null where Continue Watching doesn't send them (other lists and the show page), and when the season has no poster at all; the card then shows the show's poster.
+Title, links and progress stay the show's.
+
 Tapping the poster opens the show.
 The title and the line are one button, at least 44 points tall, which dims while pressed. It opens a half-height sheet of up next's season, titled with the show and the season as the season page names it ("The Crown · Season 2").
 VoiceOver reads the button with where the show stands, which the card no longer shows: "The Crown, update progress, S2 E5 next, 4 of 10".
