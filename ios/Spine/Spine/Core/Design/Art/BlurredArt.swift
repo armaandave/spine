@@ -28,11 +28,11 @@ nonisolated enum BlurredArt {
         }
 
         /// The bake's shape, width over height, or nil to keep the thumbnail's. A card's art is the whole poster
-        /// squeezed to the card's shape (about 358 x 164), so the card shows the poster's colors from top to bottom
+        /// squeezed to the card's shape (about 358 x 115), so the card shows the poster's colors from top to bottom
         /// instead of a magnified middle band, and the view stretches it to the card without cropping.
         var bakedAspect: CGFloat? {
             switch self {
-            case .card: 2.2
+            case .card: 3.1
             case .tile, .glow, .page: nil
             }
         }

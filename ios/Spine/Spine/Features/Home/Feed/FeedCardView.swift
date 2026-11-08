@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// One card of the Home feed, 164 pt tall: baked blurred art behind a straight poster on the left, a text column
-/// (author, title, headline, up to two detail rows), a meter near the bottom and the read-only like and comment
-/// counts at the bottom right.
+/// One card of the Home feed, 115 pt tall: baked blurred art behind a straight poster on the left, a text column
+/// (author, title, headline, then what room is left for detail rows), a meter along the bottom and the read-only like
+/// and comment counts at the bottom right, beside the last row and the meter.
 ///
 /// Everything it draws is decided by `FeedCardModel`, so a card is cheap to re-evaluate and skips drawing when its
 /// model is equal (`.equatable()` at the call site). Positions are leading and top paddings from the design's
@@ -76,9 +76,24 @@ struct FeedCardView: View, Equatable {
 
     static let titleRowHeight: CGFloat = 21
     static let headlineHeight: CGFloat = 20
-    /// The meter's top edge: ticks end 40 pt above the bottom.
-    static let meterTop: CGFloat = HomeDesign.Metric.cardHeight - HomeDesign.Metric.meterBottom
-        - ProgressMeterMetrics.tickHeight
+    /// The gaps above the title and the headline. The card is short, so its lines sit close.
+    static let titleTop: CGFloat = 3
+    static let headlineTop: CGFloat = 2
+
+    /// The meter's top edge: its drawing ends `meterBottom` above the card's bottom, level with the counts, so a
+    /// window (ticks and a series line) starts higher than plain ticks or a bar.
+    static func meterTop(for kind: ProgressMeterModel.Kind) -> CGFloat {
+        HomeDesign.Metric.cardHeight - HomeDesign.Metric.meterBottom - ProgressMeterMetrics.height(for: kind)
+    }
+
+    /// Room kept at the right of the detail rows and the meter for the like and comment counts, from their digits
+    /// rather than measured: two 13 pt icons with 3 pt gaps, 10 pt between the pairs, 8 pt a digit, and 10 pt of air.
+    /// A card without counts (a Planning day) keeps none.
+    static func countsReserve(for engagement: PostEngagement?) -> CGFloat {
+        guard let engagement else { return 0 }
+        let digits = countText(engagement.likeCount).count + countText(engagement.commentCount).count
+        return 13 + 3 + 10 + 13 + 3 + 10 + 8 * CGFloat(digits)
+    }
 
     // MARK: Content
 
@@ -89,9 +104,9 @@ struct FeedCardView: View, Equatable {
             textColumn(ink: ink)
             if let meter = model.meter {
                 ProgressMeterView(model: meter, palette: palette(ink: ink))
-                    .padding(.top, Self.meterTop)
+                    .padding(.top, Self.meterTop(for: meter.kind))
                     .padding(.leading, textLeading)
-                    .padding(.trailing, HomeDesign.Metric.cardTrailing)
+                    .padding(.trailing, HomeDesign.Metric.cardTrailing + Self.countsReserve(for: model.engagement))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -126,13 +141,15 @@ struct FeedCardView: View, Equatable {
             // The author line is drawn above, as its own link; this keeps its place.
             Color.clear.frame(height: FeedAuthorLink.height)
             titleRow(ink: ink)
-                .padding(.top, 8)
+                .padding(.top, Self.titleTop)
             if let headline = model.headline {
                 headlineRow(headline, ink: ink)
-                    .padding(.top, 4)
+                    .padding(.top, Self.headlineTop)
             }
+            // The rows reach the counts' band at the bottom, so they stop short of the counts.
             ForEach(Array(model.details.enumerated()), id: \.offset) { _, row in
                 detailRow(row, ink: ink)
+                    .padding(.trailing, Self.countsReserve(for: model.engagement))
                     .padding(.top, row.topMargin)
             }
         }

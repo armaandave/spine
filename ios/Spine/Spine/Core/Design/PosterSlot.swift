@@ -65,7 +65,7 @@ enum PosterSlot {
         case .activityPost:
             CGSize(width: 74, height: 111)
         case .feedCard:
-            CGSize(width: 88, height: 132)
+            CGSize(width: 60, height: 90)
         case .homeCarousel, .postHero:
             CGSize(width: 120, height: 180)
         }
@@ -81,6 +81,8 @@ enum PosterSlot {
             10
         case .homeCarousel:
             12
+        case .feedCard:
+            6
         default:
             8
         }
@@ -92,7 +94,7 @@ enum PosterSlot {
                 && MediaTypeTheme.theme(for: mediaType ?? "unknown").artworkOrientation == .square)
         guard usesSquareArtwork else { return size }
         if self == .feedCard {
-            return CGSize(width: 132, height: 132)
+            return CGSize(width: 90, height: 90)
         }
         return CGSize(width: size.width, height: size.width)
     }

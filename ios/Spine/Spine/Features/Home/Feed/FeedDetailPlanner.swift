@@ -16,10 +16,10 @@ nonisolated enum FeedDetailRow: Equatable, Sendable {
     case favorite(glyph: String, text: String)
     case quiet(text: String, lines: Int)
 
-    /// The row's own height, from the mock: the chip 26, a review line 19, a favorite or quiet line 18.
+    /// The row's own height: the chip 22 (a pill's height), a review line 19, a favorite or quiet line 18.
     var height: CGFloat {
         switch self {
-        case .spoilers: 26
+        case .spoilers: 22
         case .review(_, let lines): CGFloat(lines) * 19
         case .favorite: 18
         case .quiet(_, let lines): CGFloat(lines) * 18
@@ -29,9 +29,8 @@ nonisolated enum FeedDetailRow: Equatable, Sendable {
     /// The gap above the row.
     var topMargin: CGFloat {
         switch self {
-        case .spoilers: 8
-        case .review: 6
-        case .favorite, .quiet: 4
+        case .spoilers, .favorite, .quiet: 3
+        case .review: 4
         }
     }
 
@@ -62,16 +61,18 @@ nonisolated enum FeedDetailRow: Equatable, Sendable {
     }
 }
 
-/// Which lines go under a card's headline: at most two, one when a meter takes the other, and always inside the
-/// card's 164 pt. The same rules as the mock's card(): spoilers chip, then review, then favorite, then the quiet line.
+/// Which lines go under a card's headline, always inside the card's 115 pt: at most one under a headline and two
+/// without one, and none under a headline when a meter takes the bottom. The same order as the mock's card():
+/// spoilers chip, then review, then favorite, then the quiet line.
 nonisolated enum FeedDetailPlanner {
     /// Where the rows start (the end of the headline row, or of the title line without a headline), measured from
-    /// the card's top: 12 top + 22 line one + 8 + 21 title (+ 4 + 20 headline).
-    static func rowsStart(hasHeadline: Bool) -> CGFloat { hasHeadline ? 87 : 63 }
+    /// the card's top: 9 top + 22 line one + 3 + 21 title (+ 2 + 20 headline).
+    static func rowsStart(hasHeadline: Bool) -> CGFloat { hasHeadline ? 77 : 55 }
 
-    /// The lowest the rows may reach: the meter band starts at 116 (164 - 40 - 8) and the counts at 137, so a card
-    /// with a meter ends its rows by 114 and one without by 136.
-    static func rowsLimit(hasMeter: Bool) -> CGFloat { hasMeter ? 114 : 136 }
+    /// The lowest the rows may reach. A meter's drawing ends 15 above the bottom (100) and a window meter, the
+    /// tallest, starts at 83, so a card with a meter ends its rows by 81. Without one the rows end where the counts
+    /// end, 12 above the bottom (103): the last row shares that band with the counts and stops short of them.
+    static func rowsLimit(hasMeter: Bool) -> CGFloat { hasMeter ? 81 : 103 }
 
     /// Where the rows end, from the card's top.
     static func bottom(of rows: [FeedDetailRow], hasHeadline: Bool) -> CGFloat {

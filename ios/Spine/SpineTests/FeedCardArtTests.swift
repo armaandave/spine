@@ -46,10 +46,10 @@ final class FeedCardArtTests: XCTestCase {
 
     func testThePosterRequestIsTheSlotsArtworkRequest() throws {
         let portrait = try card(id: 1)
-        // What the card's MediaArtwork hands SpineAsyncImage: the slot's 88 x 132 thumbnail.
+        // What the card's MediaArtwork hands SpineAsyncImage: the slot's 60 x 90 thumbnail.
         let view = try XCTUnwrap(SpineImagePipeline.request(
             url: URL(string: "https://p/1.jpg"),
-            thumbnailSize: CGSize(width: 88, height: 132)
+            thumbnailSize: CGSize(width: 60, height: 90)
         ))
         let prefetch = try XCTUnwrap(FeedCardArt.posterRequest(for: portrait.art))
         XCTAssertEqual(try key(prefetch), try key(view))
@@ -59,14 +59,14 @@ final class FeedCardArtTests: XCTestCase {
         XCTAssertNotEqual(try key(prefetch), try key(other))
     }
 
-    func testSquareArtIs132ByDefault() throws {
+    func testSquareArtIs90ByDefault() throws {
         let album = try card(id: 2, mediaType: "music")
         XCTAssertTrue(album.art.isSquare)
         let request = try XCTUnwrap(FeedCardArt.posterRequest(for: album.art))
-        let square = SpineImagePipeline.request(url: URL(string: "https://p/2.jpg"), thumbnailSize: CGSize(width: 132, height: 132))
+        let square = SpineImagePipeline.request(url: URL(string: "https://p/2.jpg"), thumbnailSize: CGSize(width: 90, height: 90))
         XCTAssertEqual(try key(request), try key(square))
-        XCTAssertEqual(FeedCardArt.posterSize(isSquare: true), CGSize(width: 132, height: 132))
-        XCTAssertEqual(FeedCardArt.posterSize(isSquare: false), CGSize(width: 88, height: 132))
+        XCTAssertEqual(FeedCardArt.posterSize(isSquare: true), CGSize(width: 90, height: 90))
+        XCTAssertEqual(FeedCardArt.posterSize(isSquare: false), CGSize(width: 60, height: 90))
     }
 
     func testTheBackgroundRequestIsTheBakedCardArt() throws {
@@ -99,7 +99,7 @@ final class FeedCardArtTests: XCTestCase {
         XCTAssertEqual(urls, ["https://p/4.jpg", "https://p/4.jpg", "https://p/av.jpg"])
         let url = URL(string: "https://p/4.jpg")
         let expected = [
-            SpineImagePipeline.request(url: url, thumbnailSize: CGSize(width: 88, height: 132)),
+            SpineImagePipeline.request(url: url, thumbnailSize: CGSize(width: 60, height: 90)),
             BlurredArt.request(url: url, style: .card),
             SpineImagePipeline.request(url: URL(string: "https://p/av.jpg"), thumbnailSize: CGSize(width: 20, height: 20)),
         ]
@@ -128,7 +128,7 @@ final class FeedCardArtTests: XCTestCase {
         )
         for (request, name) in zip(requests.prefix(3), ["a", "b", "c"]) {
             let expected = SpineImagePipeline.request(
-                url: URL(string: "https://p/\(name).jpg"), thumbnailSize: CGSize(width: 88, height: 132)
+                url: URL(string: "https://p/\(name).jpg"), thumbnailSize: CGSize(width: 60, height: 90)
             )
             XCTAssertEqual(try key(request), try key(expected), name)
         }
@@ -138,12 +138,19 @@ final class FeedCardArtTests: XCTestCase {
 
     func testTheFanStepsDownAndInFromTheMock() {
         let slots = (0 ..< 3).map { FeedCardStack.slot(index: $0, isSquare: false) }
-        XCTAssertEqual(slots[0], FeedStackSlot(x: 14, y: 16, width: 88, height: 132, dimming: 0))
-        XCTAssertEqual(slots[1], FeedStackSlot(x: 28, y: 28, width: 80, height: 120, dimming: 0.25))
-        XCTAssertEqual(slots[2], FeedStackSlot(x: 42, y: 40, width: 72, height: 108, dimming: 0.5))
+        XCTAssertEqual(slots[0], FeedStackSlot(x: 12, y: 12, width: 60, height: 90, dimming: 0))
+        XCTAssertEqual(slots[1], FeedStackSlot(x: 22, y: 20, width: 54, height: 81, dimming: 0.25))
+        XCTAssertEqual(slots[2], FeedStackSlot(x: 32, y: 28, width: 48, height: 72, dimming: 0.5))
         for slot in slots {
             XCTAssertLessThanOrEqual(slot.x + slot.width, HomeDesign.Metric.cardTextLeading, "A fan poster must stay left of the text")
             XCTAssertEqual(slot.width / slot.height, 2.0 / 3.0, accuracy: 0.0001)
+        }
+        for slot in slots + (0 ..< 3).map({ FeedCardStack.slot(index: $0, isSquare: true) }) {
+            XCTAssertLessThanOrEqual(
+                slot.y + slot.height,
+                HomeDesign.Metric.cardHeight - HomeDesign.Metric.cardInset,
+                "A fan poster must keep the card's bottom inset"
+            )
         }
     }
 
@@ -153,7 +160,7 @@ final class FeedCardArtTests: XCTestCase {
             XCTAssertLessThanOrEqual(slot.x + slot.width, HomeDesign.Metric.cardTextLeadingSquare)
             XCTAssertEqual(slot.width, slot.height)
         }
-        XCTAssertEqual(FeedCardStack.slot(index: 0, isSquare: true).width, 132)
+        XCTAssertEqual(FeedCardStack.slot(index: 0, isSquare: true).width, 90)
     }
 
     // MARK: Prefetch window

@@ -203,7 +203,7 @@ final class BlurredArtTests: XCTestCase {
     }
 
     func testTheCardBakesTheWholePosterSqueezedToTheCardsShape() throws {
-        XCTAssertEqual(BlurredArt.Style.card.bakedAspect, 2.2)
+        XCTAssertEqual(BlurredArt.Style.card.bakedAspect, 3.1)
         // A 2:3 poster as the card thumbnail decodes it (120x180 at 3x): red on top, blue at the bottom.
         let source = UIImage(
             cgImage: bitmap(width: 120, height: 180) { _, y in y < 90 ? (255, 0, 0) : (0, 0, 255) },
@@ -214,14 +214,14 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertEqual(output.scale, 3)
         let cg = try XCTUnwrap(output.cgImage)
         XCTAssertEqual(cg.width, 120)
-        XCTAssertEqual(cg.height, 55)
+        XCTAssertEqual(cg.height, 39)
         let pixels = rgbaPixels(cg)
         // Both halves of the poster are on the card, top above bottom, and every edge stays opaque.
         XCTAssertGreaterThan(pixels.red(60, 2), 200, "the poster's top is the card's top")
         XCTAssertLessThan(pixels.blue(60, 2), 60)
-        XCTAssertGreaterThan(pixels.blue(60, 52), 200, "the poster's bottom is the card's bottom")
-        XCTAssertLessThan(pixels.red(60, 52), 60)
-        for (x, y) in [(0, 0), (119, 0), (0, 54), (119, 54)] {
+        XCTAssertGreaterThan(pixels.blue(60, 36), 200, "the poster's bottom is the card's bottom")
+        XCTAssertLessThan(pixels.red(60, 36), 60)
+        for (x, y) in [(0, 0), (119, 0), (0, 38), (119, 38)] {
             XCTAssertEqual(pixels.alpha(x, y), 255, "edge \(x),\(y)")
         }
     }
@@ -240,7 +240,7 @@ final class BlurredArtTests: XCTestCase {
     }
 
     func testBlurSpreadsAnEdgeButKeepsTheBorderSolid() throws {
-        // A bright left half and dark right half, 120 wide like the card thumbnail at 3x; the card squeezes it to 120x55.
+        // A bright left half and dark right half, 120 wide like the card thumbnail at 3x; the card squeezes it to 120x39.
         let source = UIImage(
             cgImage: bitmap(width: 120, height: 72) { x, _ in x < 60 ? (255, 255, 255) : (0, 0, 0) },
             scale: 3,
@@ -248,12 +248,12 @@ final class BlurredArtTests: XCTestCase {
         )
         let output = try XCTUnwrap(BlurredArt.Style.card.processor.process(source)?.cgImage)
         let pixels = rgbaPixels(output)
-        XCTAssertGreaterThan(pixels.red(66, 36), 10, "the dark side picks up light across the edge")
-        XCTAssertLessThan(pixels.red(54, 36), 245, "the bright side picks up dark across the edge")
+        XCTAssertGreaterThan(pixels.red(66, 20), 10, "the dark side picks up light across the edge")
+        XCTAssertLessThan(pixels.red(54, 20), 245, "the bright side picks up dark across the edge")
         XCTAssertEqual(pixels.alpha(0, 0), 255)
-        XCTAssertEqual(pixels.alpha(119, 54), 255)
-        XCTAssertGreaterThan(pixels.red(0, 36), 240, "clamped edges do not fade toward transparent black")
-        XCTAssertLessThan(pixels.red(119, 36), 15)
+        XCTAssertEqual(pixels.alpha(119, 38), 255)
+        XCTAssertGreaterThan(pixels.red(0, 20), 240, "clamped edges do not fade toward transparent black")
+        XCTAssertLessThan(pixels.red(119, 20), 15)
     }
 
     func testProcessorsShareOneContext() throws {

@@ -10,19 +10,23 @@ nonisolated enum HomeDesign {
         static let tileOpenHeight: CGFloat = 410
         static let tileCorner: CGFloat = 30
 
-        static let cardHeight: CGFloat = 164
-        static let cardCorner: CGFloat = 24
-        static let cardPoster = CGSize(width: 88, height: 132)
-        static let cardSquare = CGSize(width: 132, height: 132)
-        static let cardInset: CGFloat = 14
-        /// Where the text starts when the art is a poster (square art: `cardTextLeadingSquare`).
-        static let cardTextLeading: CGFloat = 116
-        static let cardTextLeadingSquare: CGFloat = 160
+        /// 30% shorter than the mock's 164.
+        static let cardHeight: CGFloat = 115
+        static let cardCorner: CGFloat = 20
+        static let cardPoster = CGSize(width: 60, height: 90)
+        static let cardSquare = CGSize(width: 90, height: 90)
+        /// The poster's (or square art's) left and top inset.
+        static let cardInset: CGFloat = 12
+        /// Where the text starts when the art is a poster (square art: `cardTextLeadingSquare`): inset, art, 14.
+        static let cardTextLeading: CGFloat = 86
+        static let cardTextLeadingSquare: CGFloat = 116
         static let cardTrailing: CGFloat = 14
         static let cardGap: CGFloat = 10
-        static let cardTextTop: CGFloat = 12
-        static let meterBottom: CGFloat = 40
-        static let meterLineBottom: CGFloat = 33
+        static let cardTextTop: CGFloat = 9
+        /// The meter's drawing ends this far above the card's bottom, level with the counts.
+        static let meterBottom: CGFloat = 15
+        /// A window meter's series line ends this far above the card's bottom.
+        static let meterLineBottom: CGFloat = 17
         static let countsBottom: CGFloat = 12
         static let dayHeaderTop: CGFloat = 20
         static let dayHeaderBottom: CGFloat = 10

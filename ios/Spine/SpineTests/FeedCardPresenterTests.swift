@@ -224,7 +224,8 @@ final class FeedCardPresenterTests: XCTestCase {
             card.headline,
             .marks(starSymbols: fullStars + ["star.leadinghalf.filled"], liked: true, rewatch: true, repeatLabel: "Rewatch")
         )
-        XCTAssertEqual(card.details, [.review(text: "the hills chase alone is worth the ticket", lines: 2)])
+        // Under a headline the 115 pt card has room for one line.
+        XCTAssertEqual(card.details, [.review(text: "the hills chase alone is worth the ticket", lines: 1)])
         XCTAssertNil(card.meter)
         XCTAssertEqual(card.engagement, PostEngagement(hasLiked: false, likeCount: 3, commentCount: 2))
         XCTAssertEqual(card.destination, .diary(10))
@@ -236,7 +237,7 @@ final class FeedCardPresenterTests: XCTestCase {
         XCTAssertNil(card.headline)
         XCTAssertEqual(card.details.count, 1)
         // With no headline the rows start higher, so a card with only a review still fits.
-        XCTAssertLessThanOrEqual(FeedDetailPlanner.bottom(of: card.details, hasHeadline: false), 136)
+        XCTAssertLessThanOrEqual(FeedDetailPlanner.bottom(of: card.details, hasHeadline: false), 103)
     }
 
     func testARewatchAloneIsAHeadline() throws {
@@ -447,7 +448,7 @@ final class FeedCardPresenterTests: XCTestCase {
         XCTAssertNil(model(try FeedTestItems.planningRow(), standing: standing).meter)
     }
 
-    func testAMeterTakesOneDetailRowAndTheCardStillFits() throws {
+    func testAMeterUnderAHeadlineLeavesNoDetailRow() throws {
         let day = try FeedTestItems.item(
             type: "progress_updated", objectType: "progress_day",
             objectFields: "\"label\": \"86 pages\"",
@@ -455,8 +456,9 @@ final class FeedCardPresenterTests: XCTestCase {
         )
         let card = model(day, standing: FeedStanding(unit: .pages, from: 1, to: 87, total: 400, whereText: nil))
         XCTAssertNotNil(card.meter)
-        XCTAssertEqual(card.details.count, 1)
-        XCTAssertLessThanOrEqual(FeedDetailPlanner.bottom(of: card.details, hasHeadline: true), 114)
+        // The 115 pt card's bottom band holds the meter and the counts; the review stays on the post page.
+        XCTAssertEqual(card.details, [])
+        XCTAssertLessThanOrEqual(FeedDetailPlanner.bottom(of: card.details, hasHeadline: true), 81)
     }
 
     // MARK: Planning

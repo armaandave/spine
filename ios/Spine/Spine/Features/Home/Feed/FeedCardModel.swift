@@ -32,7 +32,7 @@ nonisolated enum FeedHeadline: Equatable, Sendable {
 
 /// What a card's artwork needs, so the view and the prefetcher request the same URLs.
 nonisolated struct FeedCardArtSpec: Equatable, Sendable {
-    /// The poster in the 88 x 132 slot (the 132 x 132 slot when `isSquare`). An episode row has no poster, so this
+    /// The poster in the 60 x 90 slot (the 90 x 90 slot when `isSquare`). An episode row has no poster, so this
     /// is its still, aspect-filled.
     let posterURL: String?
     /// What the card's baked blurred background is made from: the same image as the poster.

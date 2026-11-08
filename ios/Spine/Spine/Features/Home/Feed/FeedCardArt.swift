@@ -32,7 +32,7 @@ enum FeedCardArt {
         isSquare ? .square : .portrait
     }
 
-    /// The decoded size of a card poster: 88 x 132, or 132 x 132 for square art.
+    /// The decoded size of a card poster: 60 x 90, or 90 x 90 for square art.
     static func posterSize(isSquare: Bool) -> CGSize {
         PosterSlot.feedCard.artworkSize(mediaType: nil, orientation: orientation(isSquare: isSquare))
     }
@@ -159,8 +159,8 @@ extension View {
 
 // MARK: Planning fan
 
-/// Where each poster of a Planning card's fan sits, from the mock: the i-th is 14 further right and 12 further down
-/// than the one before it, 8 narrower and 12 shorter, and dimmed by a quarter more.
+/// Where each poster of a Planning card's fan sits: the i-th is 10 further right and 8 further down than the one
+/// before it, 6 narrower and 9 shorter (still 2:3), and dimmed by a quarter more.
 nonisolated struct FeedStackSlot: Equatable {
     let x: CGFloat
     let y: CGFloat
@@ -176,22 +176,21 @@ nonisolated enum FeedCardStack {
     static func slot(index: Int, isSquare: Bool) -> FeedStackSlot {
         let step = CGFloat(index)
         let inset = HomeDesign.Metric.cardInset
-        let top: CGFloat = 16
         if isSquare {
-            // Square art is 132 wide and the text starts at 160, so the fan steps right by less.
+            // Square art is 90 wide and the text starts at 116, so the fan steps right by less.
             return FeedStackSlot(
-                x: inset + 10 * step,
-                y: top + 12 * step,
-                width: HomeDesign.Metric.cardSquare.width - 12 * step,
-                height: HomeDesign.Metric.cardSquare.height - 12 * step,
+                x: inset + 7 * step,
+                y: inset + 8 * step,
+                width: HomeDesign.Metric.cardSquare.width - 9 * step,
+                height: HomeDesign.Metric.cardSquare.height - 9 * step,
                 dimming: 0.25 * Double(index)
             )
         }
         return FeedStackSlot(
-            x: inset + 14 * step,
-            y: top + 12 * step,
-            width: HomeDesign.Metric.cardPoster.width - 8 * step,
-            height: HomeDesign.Metric.cardPoster.height - 12 * step,
+            x: inset + 10 * step,
+            y: inset + 8 * step,
+            width: HomeDesign.Metric.cardPoster.width - 6 * step,
+            height: HomeDesign.Metric.cardPoster.height - 9 * step,
             dimming: 0.25 * Double(index)
         )
     }
@@ -199,7 +198,7 @@ nonisolated enum FeedCardStack {
 
 // MARK: Views
 
-/// A card's poster at (14, 16): one poster, or up to three stacked posters for a Planning day once its titles
+/// A card's poster at (12, 12): one poster, or up to three stacked posters for a Planning day once its titles
 /// have loaded. No shadow; a hairline keeps a dark cover's edge.
 struct FeedCardPoster: View {
     let art: FeedCardArtSpec
@@ -218,7 +217,7 @@ struct FeedCardPoster: View {
             )
             .overlay { Self.hairline }
             .padding(.leading, HomeDesign.Metric.cardInset)
-            .padding(.top, 16)
+            .padding(.top, HomeDesign.Metric.cardInset)
         } else {
             fan
         }

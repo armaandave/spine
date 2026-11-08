@@ -11,7 +11,7 @@ import XCTest
 @MainActor
 final class FeedCardRenderTests: XCTestCase {
     private static let cardWidth: CGFloat = 358
-    private static let cardHeight: CGFloat = 164
+    private static let cardHeight: CGFloat = 115
 
     private struct Fixture {
         let name: String
@@ -245,7 +245,7 @@ final class FeedCardRenderTests: XCTestCase {
             XCTAssertEqual(image.size.height, Self.cardHeight, "\(fixture.name)")
             XCTAssertEqual(image.scale, 3, "\(fixture.name)")
             XCTAssertEqual(image.cgImage?.width, 1074, "\(fixture.name)")
-            XCTAssertEqual(image.cgImage?.height, 492, "\(fixture.name)")
+            XCTAssertEqual(image.cgImage?.height, 345, "\(fixture.name)")
         }
     }
 
@@ -278,22 +278,36 @@ final class FeedCardRenderTests: XCTestCase {
             let bottom = FeedDetailPlanner.bottom(of: model.details, hasHeadline: model.headline != nil)
             let limit = FeedDetailPlanner.rowsLimit(hasMeter: model.meter != nil)
             XCTAssertLessThanOrEqual(bottom, limit, "\(fixture.name) text ends at \(bottom), past \(limit)")
-            // The counts start 12 + 16 above the bottom; the meter's top is where the view puts it.
-            if model.meter != nil {
-                XCTAssertLessThanOrEqual(bottom, FeedCardView.meterTop - 2, "\(fixture.name)")
+            // The meter's top is where the view puts it; the last row may share the counts' band (it stops short of
+            // them sideways) but never goes below the counts' bottom.
+            if let meter = model.meter {
+                XCTAssertLessThanOrEqual(bottom, FeedCardView.meterTop(for: meter.kind) - 2, "\(fixture.name)")
             }
-            XCTAssertLessThanOrEqual(bottom, 164 - 12 - 16, "\(fixture.name)")
+            XCTAssertLessThanOrEqual(bottom, 115 - 12, "\(fixture.name)")
         }
     }
 
-    func testTheMeterSitsWhereTheMockPutsIt() {
-        XCTAssertEqual(FeedCardView.meterTop, 116)
-        // Ticks end 40 above the bottom; a window's series line is 33 above it.
-        XCTAssertEqual(FeedCardView.meterTop + ProgressMeterMetrics.tickHeight, 164 - 40)
+    func testTheMeterSitsLevelWithTheCounts() {
+        // Ticks and bars end 15 above the bottom (92 to 100); a window starts higher so its series line ends 17 above.
+        let ticks = ProgressMeterModel.Kind.ticks(count: 10)
+        let bar = ProgressMeterModel.Kind.bar(total: 400)
+        let window = ProgressMeterModel.Kind.window(first: 141, span: 20, seriesTotal: 1100)
+        XCTAssertEqual(FeedCardView.meterTop(for: ticks), 92)
+        XCTAssertEqual(FeedCardView.meterTop(for: bar), 92)
+        XCTAssertEqual(FeedCardView.meterTop(for: ticks) + ProgressMeterMetrics.tickHeight, 115 - 15)
         XCTAssertEqual(
-            164 - (FeedCardView.meterTop + ProgressMeterMetrics.tickHeight + ProgressMeterMetrics.lineOffset + ProgressMeterMetrics.lineHeight),
-            33, accuracy: 0.001
+            115 - (FeedCardView.meterTop(for: window) + ProgressMeterMetrics.tickHeight + ProgressMeterMetrics.lineOffset
+                + ProgressMeterMetrics.lineHeight),
+            HomeDesign.Metric.meterLineBottom, accuracy: 0.001
         )
+        // The tallest meter still clears the rows' limit with a meter.
+        XCTAssertGreaterThanOrEqual(FeedCardView.meterTop(for: window) - 2, FeedDetailPlanner.rowsLimit(hasMeter: true))
+    }
+
+    func testTheCountsReserveFollowsTheirDigits() {
+        XCTAssertEqual(FeedCardView.countsReserve(for: nil), 0)
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: false, likeCount: 0, commentCount: 0)), 68)
+        XCTAssertEqual(FeedCardView.countsReserve(for: PostEngagement(hasLiked: true, likeCount: 12, commentCount: 3)), 76)
     }
 
     func testTwoEqualModelsCompareEqual() throws {
