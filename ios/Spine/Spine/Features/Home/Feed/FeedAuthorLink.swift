@@ -13,32 +13,38 @@ struct FeedAuthorLink: View {
     let ink: ArtInk
 
     var body: some View {
-        NavigationLink {
-            UserProfileDestination(username: username)
-        } label: {
-            HStack(spacing: 6) {
-                FeedAvatar(username: username, avatarURL: avatarURL, ink: ink)
-                Text(username)
-                    .font(HomeDesign.Text.username)
-                    .lineLimit(1)
-                    .feedTextLift(ink)
-                    .foregroundStyle(ink.text)
-                if let dayLabel {
-                    Text(dayLabel)
-                        .font(HomeDesign.Text.day)
+        // The link is only as wide as the avatar, name and day; the rest of the line is the card's, so a tap there
+        // opens the post, not the profile.
+        HStack(spacing: 0) {
+            NavigationLink {
+                UserProfileDestination(username: username)
+            } label: {
+                HStack(spacing: 6) {
+                    FeedAvatar(username: username, avatarURL: avatarURL, ink: ink)
+                    Text(username)
+                        .font(HomeDesign.Text.username)
                         .lineLimit(1)
                         .feedTextLift(ink)
-                        .foregroundStyle(ink.day)
-                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundStyle(ink.text)
+                    if let dayLabel {
+                        Text(dayLabel)
+                            .font(HomeDesign.Text.day)
+                            .lineLimit(1)
+                            .feedTextLift(ink)
+                            .foregroundStyle(ink.day)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
                 }
+                .frame(height: Self.height)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: Self.height)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel([username, dayLabel].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityHint("Opens \(username)'s profile")
+
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel([username, dayLabel].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityHint("Opens profile")
+        .frame(height: Self.height)
     }
 }
 

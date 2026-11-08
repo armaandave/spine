@@ -404,13 +404,13 @@ struct DiaryLogDetailView: View {
             }
     }
 
-    /// The art behind the whole page: the title's backdrop when it has one, else its poster.
+    /// The art behind the whole page: the log's own poster, which the title's details never replace, so the page does
+    /// not change tint when they arrive.
     private var pageArtURL: URL? {
         guard let entry = viewModel.entry else { return nil }
         return PostPageStyle.artURL(
-            mediaType: entry.media.ref.mediaType,
             posterURL: entry.media.displayPosterURL,
-            detail: viewModel.mediaDetail
+            detailPosterURL: viewModel.mediaDetail?.displayPosterURL
         )
     }
 
@@ -743,10 +743,20 @@ enum PostPageStyle {
     static let titleFont = Font.system(size: 30, weight: .black)
     static let subtitleFont = Font.system(size: 13, weight: .semibold)
 
-    /// The title's backdrop when a movie or show has one, else its poster.
-    static func artURL(mediaType: String, posterURL: String?, detail: MediaDetail?) -> URL? {
-        let backdrop = ["movie", "tv"].contains(mediaType) ? detail?.displayBackdropURL : nil
-        return URL(string: backdrop ?? detail?.displayPosterURL ?? posterURL ?? "")
+    /// The art for a progress post: what its feed card draws (the poster, or an episode's still).
+    static func artURL(for media: MediaSummary) -> URL? {
+        URL(string: FeedCardPresenter.artURL(for: media) ?? "")
+    }
+
+    /// The art for a log: its own poster; the title's details only stand in when the log has none.
+    static func artURL(posterURL: String?, detailPosterURL: String?) -> URL? {
+        URL(string: posterURL ?? detailPosterURL ?? "")
+    }
+
+    /// The tint under the page: the row's own, the title's details only when the row has none, so it never changes
+    /// once shown.
+    static func accentHex(summary: String?, detail: String?) -> String? {
+        summary ?? detail
     }
 
     /// The request the page's art loads, so a prefetch can ask for exactly the same bitmap.
@@ -854,7 +864,7 @@ struct PostHeroAuthorLine: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(user.username)
-        .accessibilityHint("Opens profile")
+        .accessibilityHint("Opens \(user.username)'s profile")
     }
 }
 

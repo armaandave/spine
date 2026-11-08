@@ -86,36 +86,50 @@ final class PostPageStyleTests: XCTestCase {
         XCTAssertEqual(stops.map(\.opacity), [0, 0.14, 0.48])
     }
 
-    func testArtIsTheBackdropOfAMovieOrShowElseThePoster() throws {
-        let withBackdrop = detail(mediaType: "movie", poster: "https://example.com/p.jpg", backdrop: "https://example.com/b.jpg")
+    func testALogsArtIsItsOwnPosterAndDetailsOnlyStandIn() {
         XCTAssertEqual(
-            PostPageStyle.artURL(mediaType: "movie", posterURL: "https://example.com/list.jpg", detail: withBackdrop)?.absoluteString,
-            "https://example.com/b.jpg"
-        )
-        let show = detail(mediaType: "tv", poster: "https://example.com/p.jpg", backdrop: "https://example.com/b.jpg")
-        XCTAssertEqual(
-            PostPageStyle.artURL(mediaType: "tv", posterURL: nil, detail: show)?.absoluteString,
-            "https://example.com/b.jpg"
-        )
-        let book = detail(mediaType: "book", poster: "https://example.com/cover.jpg", backdrop: "https://example.com/b.jpg")
-        XCTAssertEqual(
-            PostPageStyle.artURL(mediaType: "book", posterURL: nil, detail: book)?.absoluteString,
-            "https://example.com/cover.jpg"
-        )
-        let noBackdrop = detail(mediaType: "movie", poster: "https://example.com/p.jpg", backdrop: nil)
-        XCTAssertEqual(
-            PostPageStyle.artURL(mediaType: "movie", posterURL: nil, detail: noBackdrop)?.absoluteString,
-            "https://example.com/p.jpg"
-        )
-    }
-
-    func testArtFallsBackToTheRowsPosterBeforeTheDetailLoads() {
-        XCTAssertEqual(
-            PostPageStyle.artURL(mediaType: "movie", posterURL: "https://example.com/row.jpg", detail: nil)?.absoluteString,
+            PostPageStyle.artURL(posterURL: "https://example.com/row.jpg", detailPosterURL: "https://example.com/d.jpg")?.absoluteString,
             "https://example.com/row.jpg"
         )
-        XCTAssertNil(PostPageStyle.artURL(mediaType: "movie", posterURL: nil, detail: nil))
-        XCTAssertNil(PostPageStyle.artURL(mediaType: "movie", posterURL: "", detail: nil))
+        XCTAssertEqual(
+            PostPageStyle.artURL(posterURL: nil, detailPosterURL: "https://example.com/d.jpg")?.absoluteString,
+            "https://example.com/d.jpg"
+        )
+        XCTAssertNil(PostPageStyle.artURL(posterURL: nil, detailPosterURL: nil))
+        XCTAssertNil(PostPageStyle.artURL(posterURL: "", detailPosterURL: nil))
+    }
+
+    func testTheAccentIsTheRowsAndDetailsOnlyFillAGap() {
+        XCTAssertEqual(PostPageStyle.accentHex(summary: "#112233", detail: "#445566"), "#112233")
+        XCTAssertEqual(PostPageStyle.accentHex(summary: nil, detail: "#445566"), "#445566")
+        XCTAssertNil(PostPageStyle.accentHex(summary: nil, detail: nil))
+    }
+
+    func testAProgressPostsArtIsTheCardsArtNotTheBackdrop() {
+        let show = media(type: "tv", poster: "https://example.com/p.jpg", backdrop: "https://example.com/b.jpg")
+        XCTAssertEqual(PostPageStyle.artURL(for: show)?.absoluteString, "https://example.com/p.jpg")
+        XCTAssertEqual(FeedCardPresenter.artURL(for: show), "https://example.com/p.jpg")
+    }
+
+    func testThePageHidesTheNavigationBarAndDrawsOneRowOfButtons() throws {
+        let text = try Self.source("Features/Social/ProgressPostDetailView.swift")
+        XCTAssertFalse(text.contains(".toolbar {"), "Edit and Delete are drawn by the page, beside Back")
+        XCTAssertTrue(text.contains(".toolbar(.hidden, for: .navigationBar)"))
+        XCTAssertTrue(text.contains("PostProgressMeterView("))
+    }
+
+    func testTheMeterColorsAreCountedOnlyForAPosterWithNoServerPalette() {
+        let withPalette = FeedCardArtSpec(
+            posterURL: "https://example.com/p.jpg", backgroundURL: nil, accentHex: nil, guessInk: .dark,
+            isSquare: false, planningPosterURLs: [], posterPalette: [PosterSwatch(hex: "#112233", share: 1)]
+        )
+        let without = FeedCardArtSpec(
+            posterURL: "https://example.com/p.jpg", backgroundURL: nil, accentHex: nil, guessInk: .dark,
+            isSquare: false, planningPosterURLs: []
+        )
+        XCTAssertNil(FeedMeterColors.countURL(hasMeter: false, art: without))
+        XCTAssertNil(FeedMeterColors.countURL(hasMeter: true, art: withPalette))
+        XCTAssertEqual(FeedMeterColors.countURL(hasMeter: true, art: without)?.absoluteString, "https://example.com/p.jpg")
     }
 
     func testStarSymbolsDrawOnlyWhatIsEarned() {
@@ -135,6 +149,15 @@ final class PostPageStyleTests: XCTestCase {
     }
 
     // MARK: Fixtures
+
+    private func media(type: String, poster: String?, backdrop: String?) -> MediaSummary {
+        MediaSummary(
+            ref: MediaRef(itemId: 1, source: "tmdb", mediaType: type, mediaId: "1", seasonNumber: nil, episodeNumber: nil),
+            title: "The Bear",
+            posterUrl: poster,
+            backdropUrl: backdrop
+        )
+    }
 
     private func detail(mediaType: String, poster: String?, backdrop: String?) -> MediaDetail {
         MediaDetail(

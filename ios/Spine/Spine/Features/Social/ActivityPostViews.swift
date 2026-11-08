@@ -234,7 +234,7 @@ struct PostAuthorLink: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(user.username)
-        .accessibilityHint("Opens profile")
+        .accessibilityHint("Opens \(user.username)'s profile")
     }
 }
 
@@ -444,7 +444,7 @@ private struct PostCommentRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(comment.user.username)
-            .accessibilityHint("Opens profile")
+            .accessibilityHint("Opens \(comment.user.username)'s profile")
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {

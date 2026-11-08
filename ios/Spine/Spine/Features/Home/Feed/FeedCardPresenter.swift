@@ -203,16 +203,20 @@ enum FeedCardPresenter {
 
     // MARK: Art
 
+    /// An episode row has no poster on the wire, only the still.
+    static func artURL(for media: MediaSummary) -> String? {
+        media.ref.isEpisode
+            ? media.displayBackdropURL ?? media.imageUrl ?? media.displayPosterURL
+            : media.displayPosterURL
+    }
+
     private static func art(for item: ActivityItem) -> FeedCardArtSpec {
         guard let media = item.media else {
             return FeedCardArtSpec(
                 posterURL: nil, backgroundURL: nil, accentHex: nil, guessInk: .dark, isSquare: false, planningPosterURLs: []
             )
         }
-        // An episode row has no poster on the wire, only the still.
-        let url = media.ref.isEpisode
-            ? media.displayBackdropURL ?? media.imageUrl ?? media.displayPosterURL
-            : media.displayPosterURL
+        let url = artURL(for: media)
         return FeedCardArtSpec(
             posterURL: url,
             backgroundURL: url,

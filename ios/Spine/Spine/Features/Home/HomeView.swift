@@ -910,6 +910,7 @@ struct HomeView: View {
                         trackingRepository: trackingRepository,
                         currentUserId: currentUserId,
                         selectedTab: selectedTab,
+                        feedCard: selection.card,
                         onSelectTab: onSelectTab,
                         onUnauthorized: onUnauthorized
                     )
@@ -974,7 +975,9 @@ struct HomeView: View {
         case let .diary(id):
             selectedPost = ActivityPostSelection(post: .log(id))
         case let .progress(id):
-            selectedPost = ActivityPostSelection(post: .progress(id))
+            selectedPost = ActivityPostSelection(
+                post: .progress(id), card: viewModel.feedModel.entries.first { $0.id == activity.id }
+            )
         case .planning:
             selectedPlanning = activity
         case let .person(ref):
@@ -1077,6 +1080,8 @@ private struct HomeQuickActionWarmup: ViewModifier {
 
 private struct ActivityPostSelection: Identifiable {
     let post: ActivityPostRef
+    /// The card it was opened from, so a progress post can draw the card's bar.
+    var card: FeedCardModel? = nil
 
     var id: String { post.id }
 }

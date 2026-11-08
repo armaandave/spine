@@ -35,9 +35,12 @@ nonisolated enum FeedMeterColors {
     /// usable palette. Nil when nothing needs counting, so a card without a bar never starts a count.
     @MainActor
     static func countURL(for model: FeedCardModel) -> URL? {
-        guard model.meter != nil,
-              MeterTint.choose(server: model.art.posterPalette, counted: nil) == nil
-        else { return nil }
-        return FeedCardArt.url(from: model.art.posterURL)
+        countURL(hasMeter: model.meter != nil, art: model.art)
+    }
+
+    @MainActor
+    static func countURL(hasMeter: Bool, art: FeedCardArtSpec) -> URL? {
+        guard hasMeter, MeterTint.choose(server: art.posterPalette, counted: nil) == nil else { return nil }
+        return FeedCardArt.url(from: art.posterURL)
     }
 }
