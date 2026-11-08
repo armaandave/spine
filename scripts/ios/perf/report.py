@@ -44,6 +44,7 @@ SCENARIOS = {
     "testE_MemoryAfterScrollingFeed": "e) Memory: fresh launch + 10 fast swipes",
     "testF_TileExpandSwipeCollapse": "f) Tile: expand, swipe, collapse",
     "testF2_ExpandThenFastScroll": "f2) Tile: expand, then fast scroll",
+    "testF3_TileSwipeOnly": "f3) Tile: 12 carousel swipes, nothing else",
     "testG_IdleAfterTiles": "g) Idle after tiles",
     "testG2_IdleWithOpenTile": "g2) Idle with an open tile",
 }
@@ -59,6 +60,7 @@ KEYS = {
     "testE_MemoryAfterScrollingFeed": "e",
     "testF_TileExpandSwipeCollapse": "f",
     "testF2_ExpandThenFastScroll": "f2",
+    "testF3_TileSwipeOnly": "f3",
     "testG_IdleAfterTiles": "g",
     "testG2_IdleWithOpenTile": "g2",
 }
@@ -325,8 +327,13 @@ def counter_checks(key, b_results):
         checks += [zero("homeBody"), zero("feedCardBody")]
     elif key == "f2":
         checks += [zero("homeBody")]
+    elif key == "f3":
+        # A swipe redraws the panel and the posters, never the page, the cards or the tile section.
+        checks += [zero("homeBody"), zero("feedCardBody"), zero("tilesBody")]
+        panel = values("panelBody")
+        checks.append(("panelBody > 0", f"min {min(panel)} over {len(panel)} windows", "PASS" if min(panel) > 0 else "FAIL"))
     elif key in ("g", "g2"):
-        for name in ("homeBody", "feedCardBody", "feedCardAppear", "tilesBody", "glowBody"):
+        for name in ("homeBody", "feedCardBody", "feedCardAppear", "tilesBody", "glowBody", "panelBody"):
             vals = values(name)
             checks.append((f"{name} changes by at most 2", f"max {max(vals)} over {len(vals)} windows",
                            "PASS" if max(vals) <= 2 else "FAIL"))

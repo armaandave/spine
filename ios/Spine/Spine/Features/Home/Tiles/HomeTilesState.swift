@@ -48,6 +48,11 @@ final class HomeTilesState {
     /// The item ids each tile shows, in order, as the section last reported them.
     private(set) var ids: [HomeTileID: [String]] = [:]
 
+    /// The open tile's carousel offset in poster units (0 on the first poster, 1.5 halfway to the third). Written by
+    /// the carousel on every scroll frame and read only by the In progress panel, so nothing else is invalidated by
+    /// a scroll. Nil until the carousel reports after an open: a panel that appears first falls back to `focusIndex`.
+    var scrollPosition: Double?
+
     /// The focused poster's place in the open tile's list.
     var focusIndex: Int? {
         guard let open, let focusID else { return nil }
@@ -114,6 +119,7 @@ final class HomeTilesState {
         mounted = tile
         open = tile
         focusID = first
+        scrollPosition = nil
     }
 
     /// What a tap on a closed tile does. The change runs inside `animation` so that every view the change moves

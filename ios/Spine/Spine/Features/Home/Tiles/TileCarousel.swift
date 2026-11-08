@@ -187,6 +187,21 @@ struct TileCarousel: View {
             } action: { _, index in
                 focusChanged(to: index)
             }
+            // The fractional offset, for the In progress panel to follow the finger. Written here and read nowhere
+            // in this view, so a scroll frame redraws the panel and nothing else.
+            .onScrollGeometryChange(for: Double.self) { geometry in
+                let raw = TileGeometry.scrollPosition(
+                    scrollX: geometry.contentOffset.x + geometry.contentInsets.leading,
+                    count: count
+                )
+                // 1/512 of a poster: 0.26 pt, below one pixel.
+                return (raw * 512).rounded() / 512
+            } action: { _, position in
+                guard state.open == tile else { return }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { state.scrollPosition = position }
+            }
             .onChange(of: isOpen) { _, nowOpen in
                 guard let first = posters.first else { return }
                 // Opening starts on the first poster; closing sends the carousel back to it.

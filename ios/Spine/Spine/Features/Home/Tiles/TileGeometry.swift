@@ -154,6 +154,13 @@ nonisolated enum TileGeometry {
         return min(max(nearest, 0), count - 1)
     }
 
+    /// The same distance in poster units and not rounded: 1.5 is halfway from the second poster to the third. Kept
+    /// inside the list, so a rubber-banding scroll reads as the first or last poster.
+    static func scrollPosition(scrollX: CGFloat, count: Int) -> Double {
+        guard count > 0 else { return 0 }
+        return min(max(Double(scrollX / step), 0), Double(count - 1))
+    }
+
     /// The scroll distance that puts poster `index` in the middle.
     static func scrollX(forIndex index: Int) -> CGFloat {
         CGFloat(index) * step

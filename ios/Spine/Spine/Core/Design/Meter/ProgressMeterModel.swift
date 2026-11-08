@@ -23,8 +23,8 @@ nonisolated enum MeterTickState: Sendable, Equatable {
 /// feed cards, the tile panel and the update sheets. `from` and `to` are counts in
 /// `unit` (episodes watched, pages read, percent done); the part between them is
 /// today's and is lit. `from == to` lights nothing.
-nonisolated struct ProgressMeterModel: Equatable, Sendable {
-    enum Kind: Equatable, Sendable {
+nonisolated struct ProgressMeterModel: Hashable, Sendable {
+    enum Kind: Hashable, Sendable {
         /// One tick per unit, for short runs (up to 30).
         case ticks(count: Int)
         /// 20 ticks of a long series starting at episode `first`, with a line for the whole series.

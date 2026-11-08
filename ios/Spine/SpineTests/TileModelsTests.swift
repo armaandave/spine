@@ -351,6 +351,94 @@ final class TileModelsTests: XCTestCase {
         XCTAssertEqual(InProgressTilePresenter.number(12.34), "12.34")
     }
 
+    // MARK: The place in parts
+
+    func testThePlaceInPartsMakesTheSameLineForEveryTitle() throws {
+        let season = TileSeason(seasonNumber: 2, watched: 7, total: 10, showWatchedAtRead: 16)
+        let cases: [(TileDetailModel, String)] = [
+            (detail(book("pp-pages", pages: 212)), "p. 212 of 400"),
+            (detail(bookPercent("pp-percent", 47)), "47%"),
+            (detail(game("pp-hours", minutes: 840, percent: nil)), "14h"),
+            (detail(game("pp-time", minutes: 930, percent: nil)), "15h 30m"),
+            (detail(game("pp-game", minutes: nil, percent: 47)), "47%"),
+            (detail(series("manga", "pp-manga", 41)), "41 of 90 chapters"),
+            (detail(series("comic", "pp-comic", 6, of: 12)), "6 of 12 issues"),
+            (detail(show("pp-show", watched: 16, aired: 19, upNext: (2, 8)), season: season), "S2 \u{00B7} 7 of 10 episodes"),
+            (detail(show("pp-wait", watched: 16, aired: 19, upNext: (2, 8))), "Season 2"),
+            (detail(item("movie", "pp-movie")), ""),
+        ]
+        for (model, text) in cases {
+            XCTAssertEqual(model.place.text, text)
+            XCTAssertEqual(model.whereText, text)
+        }
+    }
+
+    func testThePartsOfEachPlace() throws {
+        let season = TileSeason(seasonNumber: 2, watched: 7, total: 10, showWatchedAtRead: 16)
+        XCTAssertEqual(
+            detail(show("pt-show", watched: 16, aired: 19, upNext: (2, 8)), season: season).place,
+            TilePlace(prefix: "S2 \u{00B7} ", value: 7, joiner: " of ", total: 10, suffix: " episodes")
+        )
+        XCTAssertEqual(
+            detail(show("pt-wait", watched: 16, aired: 19, upNext: (2, 8))).place,
+            TilePlace(prefix: "Season 2", value: nil, joiner: "", total: nil, suffix: "")
+        )
+        XCTAssertEqual(
+            detail(book("pt-pages", pages: 212)).place,
+            TilePlace(prefix: "p. ", value: 212, joiner: " of ", total: 400, suffix: "")
+        )
+        XCTAssertEqual(
+            detail(bookPercent("pt-percent", 47)).place,
+            TilePlace(prefix: "", value: 47, joiner: "", total: nil, suffix: "%")
+        )
+        XCTAssertEqual(
+            detail(game("pt-hours", minutes: 840, percent: nil)).place,
+            TilePlace(prefix: "14h", value: nil, joiner: "", total: nil, suffix: "")
+        )
+        XCTAssertEqual(detail(item("movie", "pt-movie")).place, .none)
+        // One chapter and one episode are singular.
+        XCTAssertEqual(detail(series("manga", "pt-one", 1, of: 1)).place.suffix, " chapter")
+    }
+
+    func testAPercentWithDecimalsRollsOnlyItsWholePart() throws {
+        func percent(_ id: String, _ value: String) -> TilePlace {
+            let progress = ProgressState(kind: "percentage", value: Decimal(string: value)!, max: 100, unit: "percent")
+            return detail(item("book", id, progress: progress, book: BookTrackingState(
+                currentJourney: BookJourneyState(id: 1, status: "In progress", progress: progress)
+            ))).place
+        }
+        // The suffix carries the decimals: "42.5%" is 42 and ".5%".
+        XCTAssertEqual(percent("pt-425", "42.5"), TilePlace(prefix: "", value: 42, joiner: "", total: nil, suffix: ".5%"))
+        XCTAssertEqual(percent("pt-05", "0.5"), TilePlace(prefix: "", value: 0, joiner: "", total: nil, suffix: ".5%"))
+        XCTAssertEqual(percent("pt-425", "42.5").text, "42.5%")
+        XCTAssertEqual(percent("pt-05", "0.5").text, "0.5%")
+        XCTAssertEqual(percent("pt-47", "47").text, "47%")
+    }
+
+    func testLargeCountsRollWithTheirCommaAndWordsStayWords() throws {
+        let place = detail(series("manga", "pt-big", 1089, of: 1150)).place
+        XCTAssertEqual(place.value, 1089)
+        XCTAssertEqual(place.total, 1150)
+        XCTAssertEqual(place.text, "1,089 of 1,150 chapters")
+    }
+
+    // MARK: Which action a title offers
+
+    func testEveryPlanHasThreeWordsLongestFirst() throws {
+        XCTAssertEqual(QuickActionPlan.tickUpNext(season: 2, episode: 8).labelTiers, ["Watched S2 E8", "+1 ep", "+1"])
+        XCTAssertEqual(QuickActionPlan.tickUpNext(season: nil, episode: 8).labelTiers, ["Watched E8", "+1 ep", "+1"])
+        XCTAssertEqual(QuickActionPlan.addPages(20).labelTiers, ["+20 pages", "+20 pg", "+20"])
+        XCTAssertEqual(QuickActionPlan.addChapters(1, unit: "chapter").labelTiers, ["+1 chapter", "+1 ch", "+1"])
+        XCTAssertEqual(QuickActionPlan.addChapters(1, unit: "issue").labelTiers, ["+1 issue", "+1 iss", "+1"])
+        XCTAssertEqual(QuickActionPlan.addPercent(2).labelTiers, ["+2%", "+2%", "+2%"])
+        XCTAssertEqual(QuickActionPlan.addHours(1).labelTiers, ["+1h", "+1h", "+1h"])
+        for plan in [QuickActionPlan.tickUpNext(season: 3, episode: 1), .addPages(20), .addPercent(5), .addHours(1),
+                     .addChapters(1, unit: "issue"), .openSheet(label: "Update")] {
+            XCTAssertEqual(plan.labelTiers.first, plan.label, "Tier 0 is the full label")
+            XCTAssertEqual(plan.labelTiers.count, 3)
+        }
+    }
+
     // MARK: Which action a title offers
 
     func testAPlanThatWouldReachTheEndOpensTheSheetInsteadOfWriting() throws {
