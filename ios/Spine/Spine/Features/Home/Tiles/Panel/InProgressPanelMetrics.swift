@@ -79,7 +79,7 @@ nonisolated enum PanelStyle {
 
 /// Every animation of the panel. Reduce Motion replaces each with the short fade, except the scrub, which is not an
 /// animation at all.
-nonisolated enum PanelMotion {
+enum PanelMotion {
     /// The board's plain `ease`.
     static func ease(_ duration: Double) -> Animation {
         .timingCurve(0.25, 0.1, 0.25, 1.0, duration: duration)
