@@ -316,9 +316,9 @@ enum FeedCardPresenter {
                 .compactMap { $0 }
                 .joined(separator: ", ")
         case let .progress(amount, tail, pills):
-            return ([amount] + pills + [tail].compactMap { $0 }).joined(separator: ", ")
+            return ([amount] + pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 }).joined(separator: ", ")
         case let .moves(pills, tail):
-            return (pills + [tail].compactMap { $0 }).joined(separator: ", ")
+            return (pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 }).joined(separator: ", ")
         case let .status(words, tail):
             return [words, tail].compactMap { $0 }.joined(separator: ", ")
         case .started:

@@ -317,7 +317,7 @@ final class FriendStandingsTests: XCTestCase {
     func testAShowGivesItsEpisodes() throws {
         let position = TilePosition(unit: .episodes, current: 63, total: 70, pagesTotal: nil)
         let standing = try XCTUnwrap(FeedStandingMath.standing(position: position, told: TodayPart(unit: .episodes, amount: 3)))
-        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 60, to: 63, total: 70, whereText: "63 of 70 episodes"))
+        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 60, to: 63, total: 70, whereText: "63/70"))
     }
 
     func testAShowWithNoKnownEndSaysHowManyAndDrawsNoMeter() throws {
@@ -359,9 +359,9 @@ final class FriendStandingsTests: XCTestCase {
         let manga = TilePosition(unit: .chapters, current: 41, total: 90, pagesTotal: nil)
         let standing = try XCTUnwrap(FeedStandingMath.standing(position: manga, told: TodayPart(unit: .chapters, amount: 5)))
         XCTAssertEqual(standing.from, 36)
-        XCTAssertEqual(standing.whereText, "41 of 90 chapters")
+        XCTAssertEqual(standing.whereText, "41/90")
         let comic = TilePosition(unit: .issues, current: 3, total: 12, pagesTotal: nil)
-        XCTAssertEqual(FeedStandingMath.standing(position: comic, told: nil)?.whereText, "3 of 12 issues")
+        XCTAssertEqual(FeedStandingMath.standing(position: comic, told: nil)?.whereText, "3/12")
     }
 
     func testADayLargerThanThePositionStartsAtZero() throws {
@@ -722,7 +722,7 @@ final class FriendStandingsTests: XCTestCase {
         let standing = try XCTUnwrap(FeedStandingMath.seasonStanding(
             season: 1, watched: 3, total: 12, told: TodayPart(unit: .episodes, amount: 3)
         ))
-        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 0, to: 3, total: 12, whereText: "S1 \u{00B7} 3 of 12 episodes"))
+        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 0, to: 3, total: 12, whereText: "S1 \u{00B7} 3/12"))
 
         let later = try XCTUnwrap(FeedStandingMath.seasonStanding(
             season: 2, watched: 7, total: 10, told: TodayPart(unit: .episodes, amount: 2)
@@ -738,15 +738,18 @@ final class FriendStandingsTests: XCTestCase {
         let complete = try XCTUnwrap(FeedStandingMath.seasonStanding(season: 1, watched: nil, total: 8, told: nil))
         XCTAssertEqual(complete.to, 8)
         XCTAssertNil(complete.from)
-        XCTAssertEqual(complete.whereText, "S1 \u{00B7} 8 of 8 episodes")
+        XCTAssertEqual(complete.whereText, "S1 \u{00B7} 8/8")
 
         XCTAssertNil(FeedStandingMath.seasonStanding(season: 1, watched: 3, total: 0, told: nil), "No end, no meter")
     }
 
     func testTheSeasonsWordsNameSpecialsAndKeepASingular() {
-        XCTAssertEqual(FeedStandingText.seasonText(season: 1, current: 3, total: 12), "S1 \u{00B7} 3 of 12 episodes")
+        XCTAssertEqual(FeedStandingText.seasonText(season: 1, current: 3, total: 12), "S1 \u{00B7} 3/12")
+        XCTAssertEqual(FeedStandingText.spoken("S1 \u{00B7} 3/12"), "S1 \u{00B7} 3 of 12", "Never read as a date")
+        XCTAssertEqual(FeedStandingText.spoken("1,204/1,500"), "1,204 of 1,500")
+        XCTAssertEqual(FeedStandingText.spoken("p. 212"), "p. 212")
         XCTAssertEqual(FeedStandingText.seasonText(season: 2, current: 1, total: 1), "S2 \u{00B7} 1 of 1 episode")
-        XCTAssertEqual(FeedStandingText.seasonText(season: 0, current: 1, total: 4), "Specials \u{00B7} 1 of 4 episodes")
+        XCTAssertEqual(FeedStandingText.seasonText(season: 0, current: 1, total: 4), "Specials \u{00B7} 1/4")
     }
 
     func testAFriendsShowCardCountsTheSeasonNotTheWholeShow() async throws {
@@ -760,7 +763,7 @@ final class FriendStandingsTests: XCTestCase {
         await until(provider.standing(for: item, isNewestOfTitle: true) != nil)
 
         let standing = try XCTUnwrap(provider.standing(for: item, isNewestOfTitle: true))
-        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 0, to: 3, total: 12, whereText: "S1 \u{00B7} 3 of 12 episodes"))
+        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 0, to: 3, total: 12, whereText: "S1 \u{00B7} 3/12"))
         XCTAssertFalse(standing.whereText?.contains("24") ?? true, "Never the whole show's numbers")
         XCTAssertEqual(media.detailRequests.map(\.mediaType), ["season"])
         XCTAssertEqual(media.detailRequests.first?.seasonNumber, 1)
@@ -769,7 +772,7 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertNotNil(card.meter)
         guard case let .progress(amount, tail, _) = card.headline else { return XCTFail("A progress headline") }
         XCTAssertEqual(amount, "+3 episodes")
-        XCTAssertEqual(tail, "S1 \u{00B7} 3 of 12 episodes")
+        XCTAssertEqual(tail, "S1 \u{00B7} 3/12")
     }
 
     func testUntilTheSeasonIsKnownTheCardHasNoMeterAndNoWords() async throws {
@@ -811,7 +814,7 @@ final class FriendStandingsTests: XCTestCase {
         )
         XCTAssertEqual(media.detailRequests.count, 1)
         XCTAssertEqual(provider.standing(for: second, isNewestOfTitle: true)?.to, 7)
-        XCTAssertEqual(provider.standing(for: second, isNewestOfTitle: true)?.whereText, "S1 \u{00B7} 7 of 12 episodes")
+        XCTAssertEqual(provider.standing(for: second, isNewestOfTitle: true)?.whereText, "S1 \u{00B7} 7/12")
     }
 
     func testAFailedSeasonReadIsLeftAloneForAMinuteThenAskedAgain() async throws {
