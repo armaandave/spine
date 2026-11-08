@@ -1367,6 +1367,9 @@ struct MetaOnlyMediaRepository: MediaRepository {
     func savePoster(ref _: MediaRef, posterURL _: String) async throws -> PosterSaveResponse { fatalError("Not used") }
     func backdrops(ref _: MediaRef) async throws -> [PosterOption] { fatalError("Not used") }
     func saveBackdrop(ref _: MediaRef, backdropURL _: String) async throws -> BackdropSaveResponse { fatalError("Not used") }
+    func homePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
+    func setHomePicture(ref _: MediaRef, backdropURL _: String) async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
+    func clearHomePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
     func logos(ref _: MediaRef) async throws -> [LogoOption] { fatalError("Not used") }
     func saveLogo(ref _: MediaRef, logoURL _: String) async throws -> LogoSaveResponse { fatalError("Not used") }
 }
@@ -1396,6 +1399,9 @@ private struct AllSearchMediaRepository: MediaRepository {
     func savePoster(ref _: MediaRef, posterURL _: String) async throws -> PosterSaveResponse { fatalError("Not used") }
     func backdrops(ref _: MediaRef) async throws -> [PosterOption] { fatalError("Not used") }
     func saveBackdrop(ref _: MediaRef, backdropURL _: String) async throws -> BackdropSaveResponse { fatalError("Not used") }
+    func homePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
+    func setHomePicture(ref _: MediaRef, backdropURL _: String) async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
+    func clearHomePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
     func logos(ref _: MediaRef) async throws -> [LogoOption] { fatalError("Not used") }
     func saveLogo(ref _: MediaRef, logoURL _: String) async throws -> LogoSaveResponse { fatalError("Not used") }
 }
@@ -1432,6 +1438,9 @@ private struct DelayedSearchMediaRepository: MediaRepository {
     func savePoster(ref _: MediaRef, posterURL _: String) async throws -> PosterSaveResponse { fatalError("Not used") }
     func backdrops(ref _: MediaRef) async throws -> [PosterOption] { fatalError("Not used") }
     func saveBackdrop(ref _: MediaRef, backdropURL _: String) async throws -> BackdropSaveResponse { fatalError("Not used") }
+    func homePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
+    func setHomePicture(ref _: MediaRef, backdropURL _: String) async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
+    func clearHomePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
     func logos(ref _: MediaRef) async throws -> [LogoOption] { fatalError("Not used") }
     func saveLogo(ref _: MediaRef, logoURL _: String) async throws -> LogoSaveResponse { fatalError("Not used") }
 }

@@ -198,6 +198,8 @@ final class HomeViewModel {
         // The feed's glowing heart and rewatch marks are drawn once, before the first card needs one.
         FeedMarkImages.warm()
         tiles.isLoadingTrending = tiles.trending.isEmpty
+        // The site-wide picture is asked for on the side: the first paint never waits for it.
+        Task { [topArt, seasonPages] in await topArt.loadSitePicture(using: seasonPages) }
         guard await loadProfileAndInProgress() else { return }
         async let friendsLoad: Void = loadFriends()
         await loadActivity()
@@ -604,6 +606,9 @@ struct HomeView: View {
     @State private var selectedPost: ActivityPostSelection?
     /// A day of Planning adds, open on its titles.
     @State private var selectedPlanning: ActivityItem?
+    /// Only for the project owner: a long press on the picture offers to choose the site-wide one.
+    @State private var isHomePictureMenuPresented = false
+    @State private var isHomePicturePickerPresented = false
 
     // The repositories and closures are the session's and the shell's own, so a shell that runs again does not run the
     // page again (`StableInput`); the user and the selected tab are what the page redraws for.
@@ -679,6 +684,21 @@ struct HomeView: View {
                         )
                         HomeFeedRows(model: viewModel.feedModel, onOpen: openCard)
                         HomeFeedFooter(feed: viewModel.feed)
+                    }
+                    // The picture's long press, for the one who may change it: a region above the header row, so the
+                    // header and the tiles keep their taps. A press that is held, not a tap, so scrolling works.
+                    .overlay(alignment: .top) {
+                        if viewModel.topArt.canChangeSitePicture {
+                            Color.clear
+                                .frame(height: HomeTopArtSpec.longPressHeight(
+                                    width: glow.screenWidth, topInset: glow.contentTopInset ?? 0
+                                ))
+                                .contentShape(Rectangle())
+                                .onLongPressGesture(minimumDuration: 0.5) {
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    isHomePictureMenuPresented = true
+                                }
+                        }
                     }
                     // Where the tiles sit in here does not change as the page scrolls; the glow ends by them.
                     .coordinateSpace(.named(HomeGlowModel.contentSpace))
@@ -789,6 +809,30 @@ struct HomeView: View {
             }
             // The book's and the game's progress sheets light all of today's part, as the tile does.
             .environment(\.progressSheetTodayPart, { [viewModel] ref in viewModel.todayPart(for: ref) })
+            .confirmationDialog("Home Picture", isPresented: $isHomePictureMenuPresented, titleVisibility: .visible) {
+                Button("Choose Home Picture") { isHomePicturePickerPresented = true }
+                if viewModel.topArt.hasSitePick {
+                    Button("Use daily picture", role: .destructive) {
+                        Task {
+                            guard let response = try? await mediaRepository.clearHomePicture() else { return }
+                            viewModel.topArt.applySitePicture(response)
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .fullScreenCover(isPresented: $isHomePicturePickerPresented) {
+                ProfileBackdropSearchView(
+                    title: "Home Picture",
+                    supportedMediaTypes: Array(HomeTopArtPick.eligibleTypes).sorted(),
+                    mediaRepository: mediaRepository,
+                    currentBackdropURL: viewModel.topArt.art?.backdrop.absoluteString,
+                    onUnauthorized: onUnauthorized
+                ) { ref, url in
+                    let response = try await mediaRepository.setHomePicture(ref: ref, backdropURL: url)
+                    viewModel.topArt.applySitePicture(response)
+                }
+            }
             .fullScreenCover(item: $selectedPlanning, onDismiss: { selectedPlanning = nil }) { activity in
                 if let planning = activity.planning {
                     NavigationStack {

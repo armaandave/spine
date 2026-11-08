@@ -48,16 +48,27 @@ nonisolated enum HomeTopArtPick {
 @Observable
 final class HomeTopArtModel {
     private(set) var art: HomeTopArt?
+    /// Whether you may choose the site-wide picture (the project owner): only then does Home take a long press.
+    private(set) var canChangeSitePicture = false
+    /// Whether the server has a site-wide picture set; while it does, it is the picture for everyone.
+    private(set) var hasSitePick = false
     /// Called when `art` changes, so the glow behind the page knows whether a picture covers it at rest.
     @ObservationIgnored var onChange: (HomeTopArt?) -> Void = { _ in }
 
     /// How many titles one attempt may ask about: normally the first has a backdrop.
     static let maxTries = 3
     static let defaultsKey = "home.topArt.v1"
+    /// The server's last answer about the site-wide picture, kept apart from the daily pick.
+    static let siteDefaultsKey = "home.sitePicture.v1"
 
     private nonisolated struct Stored: Codable {
         let dayKey: Int
         let art: HomeTopArt
+    }
+
+    private nonisolated struct SiteStored: Codable {
+        let art: HomeTopArt?
+        let canChange: Bool
     }
 
     @ObservationIgnored private let mediaRepository: MediaRepository
@@ -65,6 +76,10 @@ final class HomeTopArtModel {
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var artDay: Int?
+    @ObservationIgnored private var siteArt: HomeTopArt?
+    /// The lists last offered, to start the daily pick again when the site-wide picture is cleared.
+    @ObservationIgnored private var lastInProgress: [MediaSummary]?
+    @ObservationIgnored private var lastTrending: [MediaSummary] = []
     @ObservationIgnored private var task: Task<Void, Never>?
     /// Titles whose page answered with no backdrop today: not asked about again.
     @ObservationIgnored private var withoutBackdrop = Set<String>()
@@ -80,7 +95,23 @@ final class HomeTopArtModel {
         self.defaults = defaults
         self.calendar = calendar
         self.now = now
-        // Today's pick from an earlier launch is there on the first frame.
+        // The site-wide picture from the last answer is there on the first frame, with no wait for the network.
+        if let data = defaults.data(forKey: Self.siteDefaultsKey),
+           let site = try? JSONDecoder().decode(SiteStored.self, from: data) {
+            canChangeSitePicture = site.canChange
+            if let siteArt = site.art {
+                self.siteArt = siteArt
+                hasSitePick = true
+                art = siteArt
+                ArtworkPrefetch.prefetch([HomeBackdropArt.request(url: siteArt.backdrop)].compactMap { $0 })
+                return
+            }
+        }
+        restoreDaily()
+    }
+
+    /// Today's pick from an earlier launch is there on the first frame.
+    private func restoreDaily() {
         let today = HomeTopArtPick.dayKey(now(), calendar: calendar)
         if let data = defaults.data(forKey: Self.defaultsKey),
            let stored = try? JSONDecoder().decode(Stored.self, from: data),
@@ -91,13 +122,53 @@ final class HomeTopArtModel {
         }
     }
 
+    /// Asks the server for the site-wide picture. A failed read changes nothing.
+    func loadSitePicture(using repository: MediaRepository) async {
+        guard let response = try? await repository.homePicture() else { return }
+        applySitePicture(response)
+    }
+
+    /// The server's answer: its picture wins over the daily pick for as long as it is set; with none, the daily pick runs.
+    func applySitePicture(_ response: HomePictureResponse) {
+        canChangeSitePicture = response.canChange
+        if let picked = response.picture?.topArt {
+            siteArt = picked
+            hasSitePick = true
+            if art != picked {
+                art = picked
+                if let request = HomeBackdropArt.request(url: picked.backdrop) { ArtworkPrefetch.prefetch([request]) }
+                onChange(picked)
+            }
+            saveSite()
+            return
+        }
+        let hadPick = hasSitePick
+        siteArt = nil
+        hasSitePick = false
+        saveSite()
+        guard hadPick else { return }
+        art = nil
+        artDay = nil
+        restoreDaily()
+        onChange(art)
+        update(inProgress: lastInProgress, trending: lastTrending)
+    }
+
+    private func saveSite() {
+        if let data = try? JSONEncoder().encode(SiteStored(art: siteArt, canChange: canChangeSitePicture)) {
+            defaults.set(data, forKey: Self.siteDefaultsKey)
+        }
+    }
+
     var today: Int { HomeTopArtPick.dayKey(now(), calendar: calendar) }
 
     /// Offers the page's lists. `inProgress` is nil until the rail has loaded, so Trending cannot win a race with it.
     /// Nothing happens once today has a picture, while a pick is being made, or when nothing is eligible.
     func update(inProgress: [MediaSummary]?, trending: [MediaSummary]) {
+        lastInProgress = inProgress
+        lastTrending = trending
         let key = today
-        guard artDay != key, task == nil, let inProgress else { return }
+        guard !hasSitePick, artDay != key, task == nil, let inProgress else { return }
         if withoutBackdropDay != key {
             withoutBackdrop = []
             withoutBackdropDay = key
@@ -117,6 +188,7 @@ final class HomeTopArtModel {
                 withoutBackdrop.insert(media.ref.id)
                 continue
             }
+            guard !hasSitePick else { return }
             let picked = HomeTopArt(
                 ref: media.ref,
                 title: detail.displayTitle,
@@ -167,6 +239,11 @@ enum HomeTopArtSpec {
 
     static func headerRowTop(width: CGFloat) -> CGFloat {
         (referenceHeaderTop * scale(width: width)).rounded()
+    }
+
+    /// How tall the owner's long-press region is in the scrolling content: from its top to the header row.
+    static func longPressHeight(width: CGFloat, topInset: CGFloat) -> CGFloat {
+        max(0, headerRowTop(width: width) - topInset)
     }
 
     /// Where the closed tiles start, from the top of the screen.
