@@ -1,7 +1,7 @@
 import Foundation
 
 /// Whether a title still belongs in Home's In progress rail, from the tracking a write just answered with. The server
-/// lists a title there while it is In progress (a show or an anime: not caught up, not finished), so a card that a
+/// lists a title there while it is In progress (a show or an anime: not caught up, not finished, with an aired episode up next), so a card that a
 /// write has finished, paused, dropped or caught up leaves the rail at once instead of at the next refresh.
 enum InProgressRailMembership {
     nonisolated static func stays(_ item: LibraryItem) -> Bool {
@@ -10,10 +10,10 @@ enum InProgressRailMembership {
         case "tv":
             // A show's status and flags are in its own state; the card's status was only the list's.
             guard let tv = tracking.tv else { return tracking.status == InProgressLibraryLoader.status }
-            return !tv.finished && !tv.caughtUp && isInProgress(tv.status)
+            return !tv.finished && !tv.caughtUp && tv.upNext != nil && isInProgress(tv.status)
         case "anime":
             guard let anime = tracking.anime else { return tracking.status == InProgressLibraryLoader.status }
-            return !anime.finished && !anime.caughtUp && isInProgress(anime.status)
+            return !anime.finished && !anime.caughtUp && anime.upNext != nil && isInProgress(anime.status)
         default:
             return tracking.status == InProgressLibraryLoader.status
         }

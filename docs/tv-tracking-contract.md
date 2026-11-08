@@ -424,6 +424,7 @@ TV-801 keeps such seasons stored.
 When an unwatched regular episode airs, or the provider adds an aired regular episode to a season the user had finished, that season reopens and a Completed show moves to Watching.
 For a show that was finished, up next becomes that episode, and Continue Watching shows it as new: "S3 E1 · New".
 This happens within about an hour of the stored next air date; other provider changes take effect within two days.
+Loading the owner's Continue Watching also works out that user's due shows from their stored lists first, so a show whose episode has aired comes back on the next load. Anime does the same (AN-202).
 
 A show the provider lists no more episodes for stays Completed.
 Planning, Paused and Dropped shows don't move (TV-203).

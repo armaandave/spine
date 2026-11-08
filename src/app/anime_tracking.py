@@ -2373,7 +2373,7 @@ def refresh_after_calendar(items, reads=None):
                 logger.exception("Could not work out anime row %s after the calendar refresh", row_id)
 
 
-def refresh_due_titles(now=None):
+def refresh_due_titles(now=None, user=None):
     """Work out rows whose next episode may have aired, from stored copies (the hourly job).
 
     Selected up to the server's tomorrow and compared per user, because a user's calendar
@@ -2387,6 +2387,8 @@ def refresh_due_titles(now=None):
         .select_related("user")
         .order_by("next_air_date", "pk")
     )
+    if user is not None:
+        rows = rows.filter(user=user)
     for row in rows:
         if row.next_air_date > user_calendar.today(row.user):
             continue

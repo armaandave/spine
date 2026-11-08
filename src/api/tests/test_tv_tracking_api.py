@@ -994,6 +994,21 @@ class TVListEndpointTests(TVAPITestCase):
         self.assertEqual((up_next["season_number"], up_next["episode_number"]), (1, 3))
         self.assertEqual(rows[0]["tracking"]["progress"], {"kind": "episodes", "value": 2, "max": 18, "unit": "episode"})
 
+    def test_tv_701_a_caught_up_show_returns_on_the_next_load_once_its_episode_airs(self):
+        """TV-206 with TV-701: the load works out due shows, not the hourly job."""
+        show = self.make_show(seasons={1: [date(2026, 10, 18), date(2026, 10, 26)]}, title="Weekly")
+        self.tick(show, 1, 1)
+        self.assertTrue(self.tv(show).caught_up)
+        # 9 p.m. Pacific on Oct 25: the user's day is Oct 25, so Oct 26 has not aired.
+        self.assertEqual(self.tracked(media_type="tv", continue_watching="true"), [])
+
+        self.clock.set(datetime(2026, 10, 26, 8, 0), tz=PACIFIC)  # noqa: DTZ001 - read in Pacific time
+        rows = self.tracked(media_type="tv", continue_watching="true")
+
+        self.assertEqual(self.titles(rows), ["Weekly"])
+        up_next = rows[0]["tracking"]["tv"]["up_next"]
+        self.assertEqual((up_next["season_number"], up_next["episode_number"]), (1, 2))
+
     def test_tv_701_continue_watching_lists_shows_by_last_activity(self):
         older = self.make_show(title="Older")
         newer = self.make_show(title="Newer")

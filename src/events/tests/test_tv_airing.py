@@ -143,6 +143,30 @@ class TVAiringJobTests(TVAiringTestCase):
         self.assertEqual((tv.up_next_season, tv.up_next_episode), (1, 7))
         self.assertFalse(tv.caught_up)
 
+    def test_tv_206_a_list_request_never_calls_the_provider(self):
+        """Continue Watching works out due shows from stored listings; the hourly job fetches."""
+        show = make_show(
+            self.fake,
+            seasons={1: [date(2026, 9, 10) + timedelta(days=7 * n) for n in range(6)]},
+            status="Returning Series",
+            next_episode_to_air={"season_number": 1, "episode_number": 7, "air_date": date(2026, 10, 29)},
+        )
+        self.tick(show, 1, range(1, 7))
+        provider_show = self.fake.show(show.media_id)
+        provider_show.add_episode(1, 7, date(2026, 10, 29))
+        self.fake.reset_calls()
+        self.at(datetime(2026, 10, 29, 12, 0))
+
+        tv_airing.refresh_due_for_user(self.user)
+
+        self.assertEqual(self.fake.season_requests(show.media_id), [])
+        self.assertTrue(self.tv(show).caught_up)
+
+        self.run_job()
+
+        self.assertEqual(self.fake.season_requests(show.media_id), [(1,)])
+        self.assertFalse(self.tv(show).caught_up)
+
     def test_a_38_tv_203_dropped_paused_and_planning_shows_never_move(self):
         shows = {}
         for status in (Status.DROPPED.value, Status.PAUSED.value, Status.PLANNING.value):

@@ -37,8 +37,11 @@ final class HomeTopTests: XCTestCase {
         )
     }
 
-    private func anime(_ id: String, status: String = "In progress", caughtUp: Bool = false, finished: Bool = false) -> Spine.LibraryItem {
-        let state = AnimeState(version: 1, inLibrary: true, status: status, started: true, finished: finished, caughtUp: caughtUp)
+    private func anime(_ id: String, status: String = "In progress", caughtUp: Bool = false, finished: Bool = false, upNext: Int? = 2) -> Spine.LibraryItem {
+        let state = AnimeState(
+            version: 1, inLibrary: true, status: status, started: true, finished: finished, caughtUp: caughtUp,
+            upNext: upNext.map { AnimeEpisodePointer(episodeNumber: $0) }
+        )
         return Spine.LibraryItem(
             media: MediaSummary(
                 ref: MediaRef(itemId: nil, source: "mal", mediaType: "anime", mediaId: id, seasonNumber: nil, episodeNumber: nil),
@@ -88,6 +91,11 @@ final class HomeTopTests: XCTestCase {
             "1396", "The Crown", tv: TVTrackingSurfacesTests.showState(status: "Paused", watched: 4, aired: 10, upNext: (2, 5))
         )
         XCTAssertFalse(InProgressRailMembership.stays(paused))
+        // Not caught up but nothing aired is up next: the server's list leaves it out, so a write answer drops it too.
+        let nothingOut = TVTrackingSurfacesTests.showItem(
+            "1396", "The Crown", tv: TVTrackingSurfacesTests.showState(status: "In progress", watched: 6, aired: 6)
+        )
+        XCTAssertFalse(InProgressRailMembership.stays(nothingOut))
     }
 
     func testAnAnimeLeavesWhenItIsFinishedOrCaughtUp() {
@@ -95,6 +103,7 @@ final class HomeTopTests: XCTestCase {
         XCTAssertFalse(InProgressRailMembership.stays(anime("1", status: "Completed", finished: true)))
         XCTAssertFalse(InProgressRailMembership.stays(anime("1", caughtUp: true)))
         XCTAssertFalse(InProgressRailMembership.stays(anime("1", status: "Dropped")))
+        XCTAssertFalse(InProgressRailMembership.stays(anime("1", upNext: nil)))
     }
 
     // MARK: A write that finishes a title
@@ -193,7 +202,10 @@ final class HomeTopTests: XCTestCase {
         let home = makeHome(enabled: ["anime"])
         home.inProgressItems = [one, two]
 
-        home.continueWatching.onAnimeUpdate(one.media.ref, AnimeState(version: 2, inLibrary: true, status: "In progress", started: true))
+        home.continueWatching.onAnimeUpdate(
+            one.media.ref,
+            AnimeState(version: 2, inLibrary: true, status: "In progress", started: true, upNext: AnimeEpisodePointer(episodeNumber: 2))
+        )
         XCTAssertEqual(home.tiles.inProgress.map(\.id), [one.id, two.id])
 
         home.continueWatching.onAnimeUpdate(

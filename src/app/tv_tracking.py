@@ -4365,23 +4365,32 @@ def refresh_after_calendar(show_item):
             logger.exception("Could not work out TV row %s after the calendar refresh", tv_id)
 
 
-def refresh_due(tv):
+def refresh_due(tv, *, fetch=True):
     """Work out a show whose next episode may have aired (the hourly job). Returns changed.
 
     Uses the stored listing; when the next episode is known only from the provider's
     next episode to air and its season isn't stored, that season is fetched first.
+    With fetch=False (a request is waiting) it never calls the provider and leaves
+    those cases to the hourly job.
     """
     if tv.legacy_pending:
         return False
     show_item = tv.item
     listing = tv_listing.stored_listing(show_item)
     if listing is None:
+        if not fetch:
+            return False
         try:
             listing = tv_listing.get_listing(show_item)
         except TVDetailsUnavailable:
             return False
     next_to_air = listing.next_episode_to_air
-    if next_to_air is not None and next_to_air[1] is not None and not listing.is_listed(next_to_air[0], next_to_air[1]):
+    if (
+        fetch
+        and next_to_air is not None
+        and next_to_air[1] is not None
+        and not listing.is_listed(next_to_air[0], next_to_air[1])
+    ):
         try:
             listing = tv_listing.get_listing(show_item, seasons=[next_to_air[0]], max_age=timedelta(0))
         except TVDetailsUnavailable:

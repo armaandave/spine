@@ -1,3 +1,4 @@
+import logging
 from functools import partial
 
 from django.db.models import Exists, F, OuterRef, Q, Subquery
@@ -40,6 +41,8 @@ from app import anime_titles, anime_tracking, series_tracking, tv_tracking
 from app.models import BasicMedia, Episode, GameSession, MediaTypes, Status
 from streaming import filters as streaming_filters
 
+logger = logging.getLogger(__name__)
+
 
 class TrackingListView(MediaExposureMixin, APIView):
     """List tracked media for the current user."""
@@ -63,6 +66,8 @@ class TrackingListView(MediaExposureMixin, APIView):
         ).lower() in {"true", "1"}
         if continue_watching:
             manager_status_filter = Status.IN_PROGRESS.value
+            if owner == request.user:
+                _work_out_due_for(owner, media_type)
         ordering = request.query_params.get("ordering") or request.query_params.get("sort") or "release_date"
         search = request.query_params.get("q")
         manager_sort = ordering if ordering in {"score", "progress", "start_date", "end_date", "title"} else None
@@ -372,6 +377,23 @@ def _domain_action(media_type):
     if series_tracking.supports(media_type):
         return partial(tracking_service.perform_series_action, media_type=media_type)
     return None
+
+
+def _work_out_due_for(user, media_type):
+    """Work out the user's shows whose next episode aired since the hourly run (TV-206).
+
+    Lists read stored flags; this keeps them current for the one list that depends on
+    air dates. A failure leaves the stored list as it is.
+    """
+    try:
+        if media_type == MediaTypes.ANIME.value:
+            anime_tracking.refresh_due_titles(user=user)
+        else:
+            from events import tv_airing
+
+            tv_airing.refresh_due_for_user(user)
+    except Exception:
+        logger.exception("Could not work out due %s rows for user %s", media_type, user.pk)
 
 
 def _tv_list_filters(queryset, media_type, *, continue_watching):
