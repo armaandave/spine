@@ -6,7 +6,7 @@ struct TrendingTitle: Equatable, Identifiable {
     let key: String
     /// The show, never one of its seasons or episodes.
     let media: MediaSummary
-    /// Distinct people who logged or progressed it, most recent first. Empty for a fallback title.
+    /// Distinct people who logged it, most recent first, you included. Empty for a fallback title.
     let people: [UserSummary]
     /// You are one of `people`.
     let includesYou: Bool
@@ -14,8 +14,29 @@ struct TrendingTitle: Equatable, Identifiable {
     let averageRating: Double?
     /// The newest day it was done, "2026-11-07". Nil for a fallback title.
     let lastDay: String?
+    /// `people` without you: the faces the panel shows.
+    let friends: [UserSummary]
 
     var id: String { key }
+
+    /// `friends` is `people` unless the ranking says which of them is you.
+    init(
+        key: String,
+        media: MediaSummary,
+        people: [UserSummary],
+        includesYou: Bool,
+        averageRating: Double?,
+        lastDay: String?,
+        friends: [UserSummary]? = nil
+    ) {
+        self.key = key
+        self.media = media
+        self.people = people
+        self.includesYou = includesYou
+        self.averageRating = averageRating
+        self.lastDay = lastDay
+        self.friends = friends ?? people
+    }
 }
 
 struct TrendingResult: Equatable {
@@ -25,8 +46,11 @@ struct TrendingResult: Equatable {
     let subtitle: String
 }
 
-/// Works out the Trending tile from activity rows already in memory. Only logs, days of progress and starts count: a
-/// status move, a Planning day, a rating without a log and a row with no poster are left out.
+/// Works out the Trending tile from activity rows already in memory. Only logs count: a person qualifies on a title by
+/// having logged it (a log is the finish the app records; marks never reach activity). A day of progress, a start, a
+/// status move, a Planning day, a rating without a log and a row with no poster are left out. A day of progress would
+/// count only when it reached the title's end, but the wire's `progress_day` object carries no `current` or `max` (only
+/// words, an amount and moves), so there is no way to tell: the server would have to send an explicit finished flag.
 enum TrendingAggregator {
     static let windowDays = 7
     /// Fewer titles than this in the window widens it to everything given.
@@ -131,18 +155,9 @@ enum TrendingAggregator {
         return rows
     }
 
-    /// A log, or a day of progress with words (an amount or "Started"). A day that only moved a status has none.
+    /// A log that has not been deleted.
     private static func counts(_ item: ActivityItem) -> Bool {
-        if item.type == "diary_deleted" { return false }
-        switch item.object.type {
-        case "diary":
-            return true
-        case "progress_day":
-            return ActivityFeedPresentation.clean(item.object.label) != nil
-                || ActivityFeedPresentation.clean(item.object.summary) != nil
-        default:
-            return false
-        }
+        item.type != "diary_deleted" && item.object.type == "diary"
     }
 
     private static func age(ofDay key: String, from today: Date, calendar: Calendar) -> Int? {
@@ -172,7 +187,8 @@ enum TrendingAggregator {
                 people: people,
                 includesYou: you.map { you in people.contains { $0.id == you.id } } ?? false,
                 averageRating: average,
-                lastDay: ordered.first?.day
+                lastDay: ordered.first?.day,
+                friends: people.filter { $0.id != you?.id }
             )
         }
         return titles.sorted { lhs, rhs in
@@ -216,62 +232,69 @@ struct TrendingTileDetail: Equatable {
         let url: String?
         /// The first letter of the name, for a person with no picture.
         let initial: String
+        let name: String
     }
 
+    /// The most faces beside the average; the rest are a "+N" chip.
+    static let maxFaces = 4
+
     let title: String
-    /// "★ 4.3", nil without an average.
+    /// "4.4", nil without an average. The panel adds the star and "avg".
     let averageText: String?
-    /// Up to three, most recent first.
+    /// Friends who logged it, most recent first, up to four.
     let avatars: [Avatar]
-    /// "2 logged it", "You logged it", "Popular this week".
-    let whoLine: String
-    /// "Plan to watch", or "Planned" for a title already in your library.
-    let primaryTitle: String
-    let isPlanned: Bool
-    let secondaryTitle: String
+    /// Friends past the four faces.
+    let moreCount: Int
+    /// No friends and no average: the row says "Popular this week" so it is never empty.
+    let isPopularFallback: Bool
+    /// "Severance, average 4.4 out of 5, 2 friends logged or finished it".
     let accessibilityLabel: String
+    /// "Maya, Theo and 2 more logged or finished it".
+    let facesLabel: String
 }
 
 enum TrendingTileModel {
-    static func detail(for title: TrendingTitle, planned: Bool) -> TrendingTileDetail {
+    static func detail(for title: TrendingTitle) -> TrendingTileDetail {
         let name = title.media.displayTitle
-        let average = title.averageRating.map { "\u{2605} \(String(format: "%.1f", ($0 * 10).rounded() / 10))" }
-        let avatars = title.people.prefix(3).map { person in
-            TrendingTileDetail.Avatar(
-                url: person.avatarUrl,
-                initial: String((person.displayName.isEmpty ? person.username : person.displayName).prefix(1)).uppercased()
-            )
+        let average = title.averageRating.map { String(format: "%.1f", ($0 * 10).rounded() / 10) }
+        let friends = title.friends
+        let avatars = friends.prefix(TrendingTileDetail.maxFaces).map { person in
+            let shown = displayName(person)
+            return TrendingTileDetail.Avatar(url: person.avatarUrl, initial: String(shown.prefix(1)).uppercased(), name: shown)
         }
-        let who: String
-        if title.people.isEmpty {
-            who = "Popular this week"
-        } else if title.people.count == 1, title.includesYou {
-            who = "You logged it"
-        } else {
-            who = "\(title.people.count) logged it"
+        let more = max(0, friends.count - TrendingTileDetail.maxFaces)
+        let isFallback = friends.isEmpty && average == nil
+
+        var parts = [name]
+        if let average { parts.append("average \(average) out of 5") }
+        if !friends.isEmpty {
+            parts.append("\(friends.count) \(friends.count == 1 ? "friend" : "friends") logged or finished it")
+        } else if isFallback {
+            parts.append("Popular this week")
         }
-        let primary = planned ? "Planned" : planTitle(for: title.media.ref.mediaType)
         return TrendingTileDetail(
             title: name,
             averageText: average,
             avatars: Array(avatars),
-            whoLine: who,
-            primaryTitle: primary,
-            isPlanned: planned,
-            secondaryTitle: "Open",
-            accessibilityLabel: [name, average.map { "average \($0.dropFirst(2)) stars" }, who, primary]
-                .compactMap { $0 }
-                .joined(separator: ", ")
+            moreCount: more,
+            isPopularFallback: isFallback,
+            accessibilityLabel: parts.joined(separator: ", "),
+            facesLabel: facesLabel(for: friends.map(displayName))
         )
     }
 
-    /// Planning's words by type: "Plan to watch", "Plan to read".
-    private static func planTitle(for mediaType: String) -> String {
-        switch mediaType {
-        case "book", "manga", "comic": "Plan to read"
-        case "game", "boardgame": "Plan to play"
-        case "music": "Plan to listen"
-        default: "Plan to watch"
+    private static func displayName(_ person: UserSummary) -> String {
+        person.displayName.isEmpty ? person.username : person.displayName
+    }
+
+    /// Up to two names spoken, then "N more".
+    private static func facesLabel(for names: [String]) -> String {
+        let tail = "logged or finished it"
+        switch names.count {
+        case 0: return ""
+        case 1: return "\(names[0]) \(tail)"
+        case 2: return "\(names[0]) and \(names[1]) \(tail)"
+        default: return "\(names[0]), \(names[1]) and \(names.count - 2) more \(tail)"
         }
     }
 }

@@ -88,6 +88,17 @@ final class HomeSourceGuardrailTests: XCTestCase {
         }
     }
 
+    func testFeedRowsUseNoLiveShadowExceptTheLightHaloAndTheBakedMarks() throws {
+        // A live shadow is an offscreen pass per row. The text lift's light halo is the one in a row that repeats
+        // (a few texts of the minority of cards on light art); the marks' glow is drawn once into a bitmap.
+        var uses: [String] = []
+        for file in try swiftFiles(in: "Features/Home/Feed") {
+            let text = code(try String(contentsOf: file, encoding: .utf8))
+            if text.contains(".shadow(") { uses.append(file.lastPathComponent) }
+        }
+        XCTAssertEqual(uses.sorted(), ["FeedMarkImages.swift", "FeedTextLift.swift"])
+    }
+
     func testTheOnlyGlassInTheTilesIsTheCloseButtonAndTheOpenPanelsTwoButtons() throws {
         var uses: [String] = []
         for file in try swiftFiles(in: "Features/Home/Tiles") + swiftFiles(in: "Features/Home/Feed") {
@@ -127,6 +138,38 @@ final class HomeSourceGuardrailTests: XCTestCase {
             for token in [".mask(", ".compositingGroup", ".drawingGroup", "TimelineView", ".shadow(", ".subtracting("] {
                 XCTAssertFalse(text.contains(token), "\(file.lastPathComponent) uses \(token)")
             }
+        }
+    }
+
+    func testTheTrendingRailIsTheSharedActionRail() throws {
+        // The rail's glass lives in the shared file, outside the guarded folders; the Tiles folder only calls it, from
+        // the one host view, and the shared file has exactly one glass surface.
+        var callers: [String] = []
+        for file in try swiftFiles(in: "Features/Home/Tiles") {
+            let text = code(try String(contentsOf: file, encoding: .utf8))
+            if text.contains("ActionRail(") { callers.append(file.lastPathComponent) }
+        }
+        XCTAssertEqual(callers, ["TrendingRailHost.swift"])
+        let rail = code(try read("Features/MediaDetail/MediaActionRail.swift"))
+        XCTAssertEqual(rail.components(separatedBy: ".glassEffect(").count - 1, 1, "One glass surface for the whole rail")
+    }
+
+    func testTheMediaPageNoLongerDefinesTheRail() throws {
+        let page = code(try read("Features/MediaDetail/MediaDetailView.swift"))
+        XCTAssertFalse(page.contains("struct ActionRail"))
+        XCTAssertFalse(page.contains("struct StarRatingPill"))
+        XCTAssertTrue(page.contains("ActionRail("), "The page still draws it")
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: Self.sources.appendingPathComponent("Features/Home/TrendingPlanWriter.swift").path),
+            "Planning goes through the title's page model now"
+        )
+    }
+
+    func testTheTrendingPanelDrawsNoGlassBlurOrShadowOfItsOwn() throws {
+        for path in ["Features/Home/Tiles/TrendingPanel.swift", "Features/Home/Tiles/TrendingRailHost.swift"] {
+            let text = code(try read(path))
+            XCTAssertFalse(text.contains(".glassEffect"), path)
+            XCTAssertFalse(text.contains(".shadow("), path)
         }
     }
 

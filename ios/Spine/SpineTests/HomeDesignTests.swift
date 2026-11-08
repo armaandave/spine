@@ -66,7 +66,6 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.cardTextTop, 9)
         XCTAssertEqual(M.meterBottom, 15)
         XCTAssertEqual(M.meterLineBottom, 17)
-        XCTAssertEqual(M.countsBottom, 12)
         XCTAssertEqual(M.glowHeight, 440)
         XCTAssertEqual(M.carouselStep, 134)
         XCTAssertEqual(M.carouselTop, 70)

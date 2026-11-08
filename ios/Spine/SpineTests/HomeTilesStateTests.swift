@@ -739,14 +739,13 @@ final class HomeTilesStateTests: XCTestCase {
         )
     }
 
-    func testTrendingDetailKnowsWhatIsPlanned() {
+    func testTrendingDetailReadsTheTitleAndItsNeighborsAreNextThenPrevious() {
         let model = HomeTilesModel()
-        let planned = title("x")
-        model.trending = [planned, title("y")]
-        model.plannedIDs = [planned.key]
-        XCTAssertTrue(model.trendingDetail(for: planned).isPlanned)
-        XCTAssertEqual(model.trendingDetail(for: planned).primaryTitle, "Planned")
-        XCTAssertFalse(model.trendingDetail(for: model.trending[1]).isPlanned)
-        XCTAssertEqual(model.trendingDetail(for: model.trending[1]).primaryTitle, "Plan to watch")
+        model.trending = [title("w"), title("x"), title("y"), title("z")]
+        XCTAssertEqual(model.trendingDetail(for: model.trending[1]).title, "Title x")
+        XCTAssertEqual(model.trendingNeighbors(of: model.trending[1]).map(\.key), [model.trending[2].key, model.trending[0].key])
+        XCTAssertEqual(model.trendingNeighbors(of: model.trending[0]).map(\.key), [model.trending[1].key])
+        XCTAssertEqual(model.trendingNeighbors(of: model.trending[3]).map(\.key), [model.trending[2].key])
+        XCTAssertTrue(model.trendingNeighbors(of: title("elsewhere")).isEmpty)
     }
 }

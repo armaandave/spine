@@ -80,6 +80,45 @@ nonisolated enum BakedShadow {
     }
 
     nonisolated(unsafe) private static let cache = NSCache<NSString, UIImage>()
+
+    // MARK: Capsules
+
+    /// A capsule's shadow bitmap: a capsule `height` tall and `3 * height` wide, padded by `padding(blur:)`, at full
+    /// opacity (the view that shows it tints it, and the tint carries the alpha). Its middle stretches, so the one image
+    /// shadows a pill of any width: `capInsets` keep the two ends. Cached by its parameters.
+    static func capsule(
+        height: CGFloat,
+        blur: CGFloat,
+        offsetY: CGFloat,
+        scale: CGFloat = UIGraphicsImageRendererFormat.preferred().scale
+    ) -> (image: UIImage, capInsets: UIEdgeInsets) {
+        let pad = padding(blur: blur)
+        let insets = UIEdgeInsets(top: 0, left: pad + height / 2, bottom: 0, right: pad + height / 2)
+        let key = "capsule|\(height)|\(blur)|\(offsetY)|\(scale)" as NSString
+        if let cached = cache.object(forKey: key) { return (cached, insets) }
+
+        let size = CGSize(width: 3 * height, height: height)
+        let canvas = imageSize(size: size, blur: blur)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        format.opaque = false
+        let rendered = UIGraphicsImageRenderer(size: canvas, format: format).image { renderer in
+            let context = renderer.cgContext
+            // Drawn off the bitmap, one canvas-width to the left, with the shadow offset carrying the shadow back.
+            let shift = canvas.width
+            let shape = CGRect(x: pad - shift, y: pad, width: size.width, height: size.height)
+            context.setShadow(
+                offset: CGSize(width: shift, height: offsetY),
+                blur: blur,
+                color: UIColor.black.cgColor
+            )
+            context.setFillColor(UIColor.black.cgColor)
+            context.addPath(UIBezierPath(roundedRect: shape, cornerRadius: height / 2).cgPath)
+            context.fillPath()
+        }
+        cache.setObject(rendered, forKey: key)
+        return (rendered, insets)
+    }
 }
 
 /// The baked shadow of a poster of `size`, centered on it and reaching past it without taking any layout space.
@@ -90,21 +129,38 @@ struct BakedShadowView: View {
     var blur: CGFloat = 28
     var opacity: Double = 0.5
     var offsetY: CGFloat = 14
+    /// A color to draw the shadow in: the bitmap is made at full opacity and shown as a template, so the color carries
+    /// the alpha (`opacity` is ignored). Nil is a black shadow at `opacity`.
+    var tint: Color?
 
     var body: some View {
         let canvas = BakedShadow.imageSize(size: size, blur: blur)
         Color.clear
             .frame(width: size.width, height: size.height)
             .overlay {
-                Image(uiImage: BakedShadow.image(
-                    size: size,
-                    cornerRadius: cornerRadius,
-                    blur: blur,
-                    opacity: opacity,
-                    offsetY: offsetY
-                ))
-                .resizable()
-                .frame(width: canvas.width, height: canvas.height)
+                if let tint {
+                    Image(uiImage: BakedShadow.image(
+                        size: size,
+                        cornerRadius: cornerRadius,
+                        blur: blur,
+                        opacity: 1,
+                        offsetY: offsetY
+                    ))
+                    .renderingMode(.template)
+                    .resizable()
+                    .frame(width: canvas.width, height: canvas.height)
+                    .foregroundStyle(tint)
+                } else {
+                    Image(uiImage: BakedShadow.image(
+                        size: size,
+                        cornerRadius: cornerRadius,
+                        blur: blur,
+                        opacity: opacity,
+                        offsetY: offsetY
+                    ))
+                    .resizable()
+                    .frame(width: canvas.width, height: canvas.height)
+                }
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)

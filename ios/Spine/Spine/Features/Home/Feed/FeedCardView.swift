@@ -86,13 +86,11 @@ struct FeedCardView: View, Equatable {
         HomeDesign.Metric.cardHeight - HomeDesign.Metric.meterBottom - ProgressMeterMetrics.height(for: kind)
     }
 
-    /// Room kept at the right of the detail rows and the meter for the like and comment counts, from their digits
-    /// rather than measured: two 13 pt icons with 3 pt gaps, 10 pt between the pairs, 8 pt a digit, and 10 pt of air.
-    /// A card without counts (a Planning day) keeps none.
+    /// Room kept at the right of the detail rows and the meter for the counts pill, from its digits rather than
+    /// measured: 64 and 7 a digit (the pill is 18 + two 17 pt pairs + 8 + about 7 a digit wide). A card without counts
+    /// (a Planning day) keeps none.
     static func countsReserve(for engagement: PostEngagement?) -> CGFloat {
-        guard let engagement else { return 0 }
-        let digits = countText(engagement.likeCount).count + countText(engagement.commentCount).count
-        return 13 + 3 + 10 + 13 + 3 + 10 + 8 * CGFloat(digits)
+        FeedCountsPill.reserve(for: engagement)
     }
 
     // MARK: Content
@@ -107,13 +105,18 @@ struct FeedCardView: View, Equatable {
                     .padding(.top, Self.meterTop(for: meter.kind))
                     .padding(.leading, textLeading)
                     .padding(.trailing, HomeDesign.Metric.cardTrailing + Self.countsReserve(for: model.engagement))
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // A friend's standing arriving fades its meter in, over the same 0.18 s the ink settles in.
+        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: model.meter != nil)
         .overlay(alignment: .bottomTrailing) {
-            counts(ink: ink)
-                .padding(.trailing, HomeDesign.Metric.cardTrailing)
-                .padding(.bottom, HomeDesign.Metric.countsBottom)
+            if let engagement = model.engagement {
+                FeedCountsPill(engagement: engagement, ink: ink)
+                    .padding(.trailing, HomeDesign.FeedDepth.countsTrailing)
+                    .padding(.bottom, HomeDesign.FeedDepth.countsBottom)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.accessibilityText(for: model))
@@ -164,13 +167,15 @@ struct FeedCardView: View, Equatable {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(model.title)
                 .font(HomeDesign.Text.title)
-                .foregroundStyle(ink.text)
                 .lineLimit(1)
+                .feedTextLift(ink)
+                .foregroundStyle(ink.text)
             if let tag = model.tag {
                 Text(tag)
                     .font(HomeDesign.Text.tag)
-                    .foregroundStyle(ink.muted)
                     .lineLimit(1)
+                    .feedTextLift(ink)
+                    .foregroundStyle(ink.muted)
                     .fixedSize()
             }
         }
@@ -193,44 +198,49 @@ struct FeedCardView: View, Equatable {
                     .foregroundStyle(ink.star)
                 }
                 if liked {
-                    Image(systemName: "heart.fill")
-                        .foregroundStyle(ink.heart)
+                    FeedMarkView(mark: .heart, ink: ink, size: HomeDesign.FeedDepth.heartSize)
+                        .padding(.horizontal, HomeDesign.FeedDepth.markMargin)
                 }
                 if rewatch {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundStyle(ink.rewatch)
+                    FeedMarkView(mark: .rewatch, ink: ink, size: HomeDesign.FeedDepth.rewatchSize)
+                        .padding(.horizontal, HomeDesign.FeedDepth.markMargin)
                 }
             case let .progress(amount, tail, pills):
                 Text(amount)
                     .fontWeight(.heavy)
-                    .foregroundStyle(ink.accent(posterAccentHex: model.art.accentHex))
                     .lineLimit(1)
+                    .feedTextLift(ink)
+                    .foregroundStyle(ink.accent(posterAccentHex: model.art.accentHex))
                     .layoutPriority(2)
                 if !pills.isEmpty {
-                    ForEach(pills, id: \.self) { pill($0, ink: ink) }
+                    ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
                 } else if let tail {
                     Text(tail)
                         .fontWeight(.medium)
-                        .foregroundStyle(ink.muted)
                         .lineLimit(1)
+                        .feedTextLift(ink)
+                        .foregroundStyle(ink.muted)
                 }
             case let .status(words, tail):
                 Text(words)
                     .fontWeight(.bold)
-                    .foregroundStyle(ink.text)
                     .lineLimit(1)
+                    .feedTextLift(ink)
+                    .foregroundStyle(ink.text)
                     .layoutPriority(2)
                 if let tail {
                     Text(tail)
                         .fontWeight(.medium)
-                        .foregroundStyle(ink.muted)
                         .lineLimit(1)
+                        .feedTextLift(ink)
+                        .foregroundStyle(ink.muted)
                 }
             case .started:
                 Text("Started")
                     .fontWeight(.heavy)
-                    .foregroundStyle(ink.accent(posterAccentHex: model.art.accentHex))
                     .lineLimit(1)
+                    .feedTextLift(ink)
+                    .foregroundStyle(ink.accent(posterAccentHex: model.art.accentHex))
             }
         }
         .font(HomeDesign.Text.headline)
@@ -242,18 +252,6 @@ struct FeedCardView: View, Equatable {
     private func isMarks(_ headline: FeedHeadline) -> Bool {
         if case .marks = headline { return true }
         return false
-    }
-
-    /// "Paused", "Stopped", "Picked back up": a small chip after the amount.
-    private func pill(_ word: String, ink: ArtInk) -> some View {
-        Text(word)
-            .font(HomeDesign.Text.pill)
-            .foregroundStyle(ink.text)
-            .lineLimit(1)
-            .padding(.horizontal, 9)
-            .frame(height: 22)
-            .background(ink.chipFill, in: Capsule())
-            .overlay { Capsule().strokeBorder(ink.chipLine, lineWidth: 0.5) }
     }
 
     // MARK: Detail rows
@@ -278,9 +276,10 @@ struct FeedCardView: View, Equatable {
         case let .review(text, lines):
             Text(text)
                 .font(HomeDesign.Text.review)
-                .foregroundStyle(ink.text)
                 .lineLimit(lines)
                 .lineSpacing(2.3)
+                .feedTextLift(ink)
+                .foregroundStyle(ink.text)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .frame(height: row.height, alignment: .top)
         case let .favorite(glyph, text):
@@ -290,15 +289,17 @@ struct FeedCardView: View, Equatable {
                     .lineLimit(1)
             }
             .font(HomeDesign.Text.quiet)
+            .feedTextLift(ink)
             .foregroundStyle(ink.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: row.height, alignment: .top)
         case let .quiet(text, lines):
             Text(text)
                 .font(HomeDesign.Text.quiet)
-                .foregroundStyle(ink.muted)
                 .lineLimit(lines)
                 .lineSpacing(1.9)
+                .feedTextLift(ink)
+                .foregroundStyle(ink.muted)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .frame(height: row.height, alignment: .top)
         }
@@ -308,29 +309,6 @@ struct FeedCardView: View, Equatable {
 
     /// A count's words: always the number, so a card nobody has reacted to reads "0" beside each icon.
     static func countText(_ count: Int) -> String {
-        count.formatted()
-    }
-
-    /// Read-only likes and comments, each with its number (a zero reads "0", as in the mock). A Planning card has none.
-    @ViewBuilder
-    private func counts(ink: ArtInk) -> some View {
-        if let engagement = model.engagement {
-            HStack(spacing: 10) {
-                HStack(spacing: 3) {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(engagement.hasLiked ? ink.heart : ink.muted)
-                    Text(Self.countText(engagement.likeCount))
-                }
-                HStack(spacing: 3) {
-                    CommentBubbleShape()
-                        .fill(ink.muted)
-                        .frame(width: 13, height: 13)
-                    Text(Self.countText(engagement.commentCount))
-                }
-            }
-            .font(HomeDesign.Text.counts)
-            .foregroundStyle(ink.muted)
-        }
+        FeedCountsPill.countText(count)
     }
 }
