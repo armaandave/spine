@@ -65,6 +65,18 @@ jobs:
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
+      # Tests don't need crash safety: skip waiting for the disk on every commit. Test-only
+      # settings for this throwaway server, not production's.
+      - name: Make Postgres fast for tests
+        env:
+          PGPASSWORD: spine-ci
+        run: |
+          psql -h 127.0.0.1 -U spine -d spine -v ON_ERROR_STOP=1 \
+            -c "ALTER SYSTEM SET fsync = off" \
+            -c "ALTER SYSTEM SET synchronous_commit = off" \
+            -c "ALTER SYSTEM SET full_page_writes = off" \
+            -c "SELECT pg_reload_conf()"
+          psql -h 127.0.0.1 -U spine -d spine -Atc "SHOW fsync; SHOW synchronous_commit; SHOW full_page_writes"
       # What every deploy does when the new container starts (entrypoint.sh).
       - name: Apply every migration to an empty database
         run: uv run --locked python manage.py migrate --noinput
