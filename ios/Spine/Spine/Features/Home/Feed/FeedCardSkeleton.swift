@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A feed card's place while the feed loads: the card's size and shape with faint bars where the poster and the
-/// text will be. Still, so waiting costs nothing to draw. Home shows three.
+/// text will be. Still, so waiting costs nothing to draw. Home shows four.
 struct FeedCardSkeleton: View {
     private static let fill = Color.white.opacity(0.07)
     private static let bar = Color.white.opacity(0.09)

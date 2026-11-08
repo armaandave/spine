@@ -178,12 +178,13 @@ final class FeedCardArtTests: XCTestCase {
         }
     }
 
-    func testTheWindowIsTheNextEightCardsAndSkipsHeaders() throws {
+    func testTheWindowIsTheNextElevenCardsAndSkipsHeaders() throws {
+        XCTAssertEqual(FeedCardArt.lookahead, 11)
         let list = try entries(cards: 30)
         let prefetcher = FeedCardPrefetcher(sink: { _ in })
         // Entry 0 is a day header; the cards after it are 1, 2, 3, 4 and then a header and 5, 6, 7, 8 ...
-        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 0, in: list)), [1, 2, 3, 4, 5, 6, 7, 8])
-        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 1, in: list)), [2, 3, 4, 5, 6, 7, 8, 9])
+        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 0, in: list)), Array(1 ... 11))
+        XCTAssertEqual(ids(prefetcher.cardsToPrefetch(appearing: 1, in: list)), Array(2 ... 12))
     }
 
     func testEachAppearanceExtendsTheWindowByTheCardsNotYetAsked() throws {
@@ -192,16 +193,16 @@ final class FeedCardArtTests: XCTestCase {
         let prefetcher = FeedCardPrefetcher(sink: recorder.sink)
 
         prefetcher.entryAppeared(at: 0, in: list)
-        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), Set(1 ... 8))
+        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), Set(1 ... 11))
 
         // The next card on screen only adds the one card that came into the window.
         recorder.batches.removeAll()
         prefetcher.entryAppeared(at: 1, in: list)
-        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), [9])
+        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), [12])
 
         recorder.batches.removeAll()
         prefetcher.entryAppeared(at: 2, in: list)
-        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), [10])
+        XCTAssertEqual(Set(prefetchedCardIDs(recorder)), [13])
     }
 
     func testAFastFlingExtendsFromWhereItLands() throws {
@@ -211,10 +212,10 @@ final class FeedCardArtTests: XCTestCase {
         prefetcher.entryAppeared(at: 0, in: list)
         recorder.batches.removeAll()
 
-        // Landing on entry 40 (card 32 or so): the 8 cards after it, nothing before.
+        // Landing on entry 40 (card 32 or so): the 11 cards after it, nothing before.
         prefetcher.entryAppeared(at: 40, in: list)
         let landed = Set(prefetchedCardIDs(recorder))
-        XCTAssertEqual(landed.count, 8)
+        XCTAssertEqual(landed.count, 11)
         XCTAssertTrue(landed.allSatisfy { id in
             list.firstIndex(where: { $0.id == "card-\(id)" }).map { $0 > 40 } ?? false
         })

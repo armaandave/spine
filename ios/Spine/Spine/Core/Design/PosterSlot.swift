@@ -23,7 +23,7 @@ enum PosterSlot {
     case statsTopGrid
     /// A post in the activity feed; its text is as tall as this.
     case activityPost
-    /// A card in the Home feed; square art takes 132x132.
+    /// A card in the Home feed; square art takes 90x90.
     case feedCard
     /// A poster in an open Home tile's carousel.
     case homeCarousel

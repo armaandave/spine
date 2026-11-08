@@ -103,7 +103,8 @@ private enum HomeTopSpec {
     static let headerToTiles: CGFloat = 22
     static let tilesToFriends: CGFloat = 30
     static let skeletonTop: CGFloat = 14
-    static let skeletonCards = 3
+    /// Four 115 pt cards fill about the height three of the old 164 pt ones did.
+    static let skeletonCards = 4
     static let dateFont = Font.system(size: 13, weight: .semibold)
     static let titleFont = Font.system(size: 32, weight: .heavy)
     static let titleTracking: CGFloat = -0.6

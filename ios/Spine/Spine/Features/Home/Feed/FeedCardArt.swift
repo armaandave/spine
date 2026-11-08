@@ -7,8 +7,9 @@ import SwiftUI
 /// tests all ask for the same URL, thumbnail size and processors, and a prefetched row finds its images already in
 /// Nuke's memory cache.
 enum FeedCardArt {
-    /// How many cards past the one that just appeared are prefetched.
-    static let lookahead = 8
+    /// How many cards past the one that just appeared are prefetched: 11 of the 125 pt rows reach about as far down
+    /// the feed (1,375 pt) as 8 of the old 174 pt rows did.
+    static let lookahead = 11
     /// Avatars are drawn at 20 pt and decoded at that size, never at full size.
     static let avatarSize = CGSize(width: 20, height: 20)
     /// The card is glass: its art and base are partly see-through, so the page (and the glow near the top) shows
