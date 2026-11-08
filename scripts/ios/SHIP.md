@@ -94,14 +94,19 @@ Run from the feature worktree unless a step says otherwise.
      `~/.local/bin/agent-cleanup run --owner <task> --label spine-ship-merge --timeout 14400 -- scripts/ship-merge.sh <branch> "<merge message>"`.
      The message ends with the trailers your instructions require; commits are
      `armaandave@outlook.com`.
-   - One ship at a time goes through the line; the rest wait (up to 3 hours, `Waiting:`).
-     In its turn it catches the main checkout (`~/projects/spine`, which must be clean and
-     on `myapp-main`) up to `origin/myapp-main`, runs `git merge --no-ff <branch>` and
-     `scripts/check.sh` on the result, pushes, and runs `scripts/ios/test-backend.sh update`
+   - Ships that arrive while the line is busy wait (up to 3 hours, `Waiting:`) and then go
+     out **together**: the next one in catches the main checkout (`~/projects/spine`, which
+     must be clean and on `myapp-main`) up to `origin/myapp-main`, runs
+     `git merge --no-ff` for every waiting branch (each keeps its own merge commit), runs
+     `scripts/check.sh` once and pushes once, then runs `scripts/ios/test-backend.sh update`
      (the always-on test backend Spine Dev talks to then serves the new `myapp-main`).
-   - It prints `SHIPPED: <sha>`. On a conflict or failing checks it undoes its own merge
-     and stops: fix the branch (merge `origin/myapp-main` into it) and run it again. Never
-     merge or push `myapp-main` by hand outside the line.
+   - A branch that conflicts is left out. If the batch's checks fail, it ships the branches
+     one at a time, so only the one that broke them stops. A ship whose chat died while
+     waiting is dropped, not shipped.
+   - Each ship prints its own result: `SHIPPED: <branch> is in <sha>` (the pushed commit,
+     maybe shared with other ships) or `STOPPED: <why>`. A stopped ship's merge is undone:
+     fix the branch (merge `origin/myapp-main` into it) and run it again. Never merge or
+     push `myapp-main` by hand outside the line.
 7. **CI and the deploy.** Find the run with `gh run list --commit <sha>`, then
    `gh run watch <run-id> --exit-status`.
    - Red checks: nothing was deployed. Fix forward on a branch and ship again.

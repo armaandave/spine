@@ -4,7 +4,7 @@
 # (scripts/ios/LAPTOP.md). Code stays here: each job sends this checkout, uncommitted and
 # new files included, to the laptop's agent-only copy (~/spine-agent, never his own
 # ~/projects/spine) and runs there. Laptop jobs never use this Mac's ios queue; they wait in
-# their own line on the laptop, one at a time.
+# their own line on the laptop, two at a time (one per checkout).
 #
 # Usage: scripts/ios/laptop.sh <command>
 #   check              is the laptop reachable? prints LAPTOP: ok or STOPPED: ...
@@ -86,11 +86,27 @@ case "$cmd" in
     ;;
   run)
     [ $# -gt 0 ] || die "run needs a command"
+    # One job per checkout at a time, so a second job's sync never rewrites files under a
+    # build that's still running. The lock lives in this checkout's git folder, here.
+    if [ -z "${SPINE_LAPTOP_CHECKOUT_LOCKED:-}" ]; then
+      checkout_lock="$(git -C "$top" rev-parse --absolute-git-dir)/spine-laptop.lock"
+      lockf -s -t 0 "$checkout_lock" true ||
+        echo "Waiting:    another laptop job from this checkout is running; this one starts when it ends"
+      SPINE_LAPTOP_CHECKOUT_LOCKED=1 exec lockf -s "$checkout_lock" "$0" run "$@"
+    fi
     sync
     reap_sims
-    lock="~/$remote_repo/.lock"
-    # Wait in the laptop's line. lockf releases it when the job ends or is hung up.
-    remote "$touch_sim; cd ~/$remote_dir && { lockf -s -t 0 $lock true || echo 'Waiting:    another job is using the laptop; this one starts when it ends'; } && exec lockf -s $lock $(quote "$@")"
+    # Then the laptop's line: two jobs at once (it has 32 GB), in two slots. lockf frees a
+    # slot when its job ends or is hung up; it exits 75 when the slot is busy.
+    remote "$touch_sim; cd ~/$remote_dir && said=
+      while :; do
+        for s in 1 2; do
+          lockf -s -t 0 ~/$remote_repo/.slot\$s $(quote "$@"); rc=\$?
+          [ \$rc -ne 75 ] && exit \$rc
+        done
+        [ -n \"\$said\" ] || { echo 'Waiting:    two jobs are using the laptop; this one starts when one ends'; said=1; }
+        sleep 10
+      done"
     ;;
   exec)
     [ $# -gt 0 ] || die "exec needs a command"
