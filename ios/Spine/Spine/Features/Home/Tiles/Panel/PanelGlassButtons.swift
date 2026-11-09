@@ -19,6 +19,8 @@ struct PanelOutline: View {
         let rect = CGRect(origin: .zero, size: size)
         guard rect.width > 2, rect.height > 2 else { return }
         let ring = rect.insetBy(dx: TileStyle.strokeWidth / 2, dy: TileStyle.strokeWidth / 2)
+        var context = context
+        context.opacity = PanelStyle.outlineStrength
         context.stroke(
             Path(roundedRect: ring, cornerRadius: ring.height / 2, style: .continuous),
             with: .color(TileStyle.stroke),
@@ -28,7 +30,7 @@ struct PanelOutline: View {
         // The top highlight is the capsule minus the same capsule moved down by 1 pt: an even-odd fill of both,
         // clipped to the first, is exactly its top crescent.
         var clipped = context
-        clipped.opacity = strength
+        clipped.opacity = strength * PanelStyle.outlineStrength
         clipped.clip(to: Path(roundedRect: rect, cornerRadius: rect.height / 2, style: .continuous))
         var crescent = Path(roundedRect: rect, cornerRadius: rect.height / 2, style: .continuous)
         crescent.addPath(Path(

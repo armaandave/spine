@@ -66,6 +66,9 @@ nonisolated enum PanelStyle {
     static let primaryTint = Color.white.opacity(0.09)
     /// How strong the accent glow behind `+N` is at full.
     static let quickGlow = 0.16
+    /// The buttons' own ring and top line (`PanelOutline`) at this share of the tiles' (`TileStyle`): half, so they
+    /// add only a little to the native glass's edge light.
+    static let outlineStrength = 0.5
     /// Strength of the lit span's glow (board `box-shadow 0 0 10px accent .6`).
     static let litGlow = 0.6
 
