@@ -8,7 +8,7 @@ from django.core.cache import cache
 
 from app import helpers
 from app.models import Item, MediaTypes, Sources
-from app.providers import services
+from app.providers import quota, services
 from app.providers.search_rank import rank_results
 
 logger = logging.getLogger(__name__)
@@ -607,6 +607,11 @@ def _cached_goodreads_id(cache_key, query, variables, mappings):
     cached = cache.get(cache_key)
     if cached is not None:
         return cached or None
+    # Once Hardcover has asked us to stop (its daily cap), leave it alone until then; the
+    # link is looked up again on a later page open.
+    if until := quota.blocked_until(Sources.HARDCOVER.value):
+        msg = f"Hardcover is rate limited until {until.isoformat()}"
+        raise RuntimeError(msg)
 
     response = services.api_request(
         Sources.HARDCOVER.value,

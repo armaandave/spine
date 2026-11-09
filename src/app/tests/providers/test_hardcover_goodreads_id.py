@@ -4,12 +4,25 @@ import requests
 from django.core.cache import cache
 from django.test import TestCase
 
-from app.providers import hardcover
+from app.providers import hardcover, quota
 
 
 class HardcoverGoodreadsIdTests(TestCase):
     def setUp(self):
         cache.clear()
+        quota.clear()
+        self.addCleanup(quota.clear)
+
+    @patch("app.providers.hardcover.services.api_request")
+    def test_leaves_hardcover_alone_while_it_has_asked_us_to_stop(self, api_request_mock):
+        response = requests.Response()
+        response.status_code = 429
+        response.headers["Retry-After"] = "68281"
+        quota.rate_limited("hardcover", hardcover.base_url, response, max_sleep=60)
+
+        with self.assertRaises(RuntimeError):
+            hardcover.goodreads_id("427578")
+        api_request_mock.assert_not_called()
 
     @patch("app.providers.hardcover.services.api_request")
     def test_returns_first_linked_goodreads_id_and_caches_it(self, api_request_mock):
