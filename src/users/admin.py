@@ -31,8 +31,8 @@ class CustomUserAdmin(UserAdmin):
             },
         ),
     )
-    list_display = ("username", "is_staff", "is_active", "is_demo", "last_login")
-    list_filter = ("is_staff", "is_active", "is_demo")
+    list_display = ("username", "is_staff", "is_artwork_curator", "is_active", "is_demo", "last_login")
+    list_filter = ("is_staff", "is_artwork_curator", "is_active", "is_demo")
 
     def get_fieldsets(self, _, obj=None):
         """Customize the fieldsets for the User model in the admin interface."""
@@ -41,7 +41,7 @@ class CustomUserAdmin(UserAdmin):
 
         fieldsets = [
             (None, {"fields": ("username", "password")}),
-            ("Permissions", {"fields": ("is_staff", "is_active")}),
+            ("Permissions", {"fields": ("is_staff", "is_artwork_curator", "is_active")}),
         ]
 
         field_groups = {}
@@ -50,7 +50,7 @@ class CustomUserAdmin(UserAdmin):
                 continue
 
             # Skip fields already included
-            if field.name in {"username", "password", "is_staff", "is_active", "id"}:
+            if field.name in {"username", "password", "is_staff", "is_artwork_curator", "is_active", "id"}:
                 continue
 
             # Group fields by prefix (everything before first underscore)
