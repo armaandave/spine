@@ -219,13 +219,18 @@ enum HomeTopArtSpec {
     /// From the header row to the tiles.
     static let headerToTiles: CGFloat = 16
 
-    /// Black over the picture: (opacity, location). A light shade keeps the status bar readable, a little darkens the
-    /// middle, and the last stop is solid so the bottom meets the black page.
+    /// Black over the picture: (opacity, location). A light shade keeps the status bar readable; from the picture's
+    /// foot (about where the header row starts) the colors fade out gradually, eased, through the header and the
+    /// tiles, so they meet the black page with no flat block of color and no edge.
     static let shade: [(opacity: Double, location: CGFloat)] = [
         (0.35, 0),
         (0, 0.16),
-        (0.22, 0.68),
-        (0.62, 0.86),
+        (0.08, 0.45),
+        (0.3, 0.56),
+        (0.55, 0.67),
+        (0.78, 0.78),
+        (0.92, 0.88),
+        (1, 0.97),
         (1, 1),
     ]
 

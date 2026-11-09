@@ -13,8 +13,9 @@ nonisolated enum HomeBackdropArt {
     static let stripAspect: CGFloat = BackdropLayout.stripCropAspectRatio
     /// The size Nuke decodes, in points (3:2, about 1260 x 840 pixels at 3x), not the backdrop's full resolution.
     static let thumbnailSize = CGSize(width: 420, height: 280)
-    /// How much of the strip, from its bottom up, dissolves into the wash.
-    static let fade: CGFloat = 0.4
+    /// How much of the strip, from its bottom up, dissolves into the wash: a long melt, so the picture never stops at
+    /// a line.
+    static let fade: CGFloat = 0.6
     /// How soft the wash is: its Gaussian sigma as a share of the width. Large enough that it is only color, with no
     /// shapes or streaks left in it.
     static let wash: Double = 0.22
@@ -32,12 +33,15 @@ nonisolated enum HomeBackdropArt {
 }
 
 /// Crops the image to the media page's 3:2 strip around its center and puts it at the top of a frame of
-/// `HomeBackdropArt.aspect`. Under it is a wash: the strip, its edges carried on outward, blurred until only its colors
-/// are left. The strip's lower `fade` dissolves smoothly into that wash. The output is one opaque bitmap.
+/// `HomeBackdropArt.aspect`. Under it is a wash: the strip with its reflection below it, blurred until only its colors
+/// are left, so the colors under the picture are the ones of its lower part, carried on down and changing as they go
+/// rather than one row smeared into a flat block. The strip's lower `fade` dissolves smoothly into that wash. The
+/// output is one opaque bitmap.
 nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
     var identifier: String {
         "com.armaan.spine.homebackdrop?aspect=\(HomeBackdropArt.aspect)&strip=\(HomeBackdropArt.stripAspect)"
             + "&fade=\(HomeBackdropArt.fade)&wash=\(HomeBackdropArt.wash)&washsat=\(HomeBackdropArt.washSaturation)"
+            + "&mirror=1"
     }
 
     /// The part of a `width` x `height` image with the strip's shape, centered.
@@ -74,8 +78,11 @@ nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
             .cropped(to: crop)
             .transformed(by: CGAffineTransform(translationX: -crop.minX, y: stripBottom - crop.minY))
 
-        // The wash, made small and scaled back up: the strip with its edges carried on outward, blurred until only its
-        // colors are left, so the frame below the strip is a smooth field of the picture's own colors.
+        // The strip's reflection about its bottom edge fills the frame below it (the frame below the strip is shorter
+        // than the strip, so one reflection covers it).
+        let mirrored = sharp.transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: 2 * stripBottom))
+        // The wash, made small and scaled back up: the strip and its reflection, edges carried on outward, blurred
+        // until only their colors are left, so the frame below the strip is a smooth field of the picture's own colors.
         // The small copy is whole pixels, so its edge pixels are solid and stay solid when carried outward.
         let small = CGRect(
             x: 0, y: 0,
@@ -83,6 +90,8 @@ nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
             height: max(1, (frame.height * HomeBackdropArt.washScale).rounded(.down))
         )
         let wash = sharp
+            .composited(over: mirrored)
+            .cropped(to: extent)
             .clampedToExtent()
             .transformed(by: CGAffineTransform(scaleX: small.width / frame.width, y: small.height / frame.height))
             .applyingGaussianBlur(sigma: max(Double(small.width) * HomeBackdropArt.wash, 0.01))

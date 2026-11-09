@@ -469,8 +469,8 @@ final class BlurredArtTests: XCTestCase {
         let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
         let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
         let pixels = rgbaPixels(output)
-        // The strip is the top 90 rows; above its last 40% (row 54) the rows are the source's own, never blurred.
-        for row in 0 ... 50 {
+        // The strip is the top 90 rows; above its last 60% (row 36) the rows are the source's own, never blurred.
+        for row in 0 ... 32 {
             let white = (row / 2) % 2 == 0
             XCTAssertEqual(Int(pixels.red(10, row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
         }
@@ -489,7 +489,7 @@ final class BlurredArtTests: XCTestCase {
         let identifier = HomeBackdropMeltProcessor().identifier
         XCTAssertEqual(identifier, HomeBackdropMeltProcessor().identifier)
         XCTAssertTrue(identifier.hasPrefix("com.armaan.spine.homebackdrop?"))
-        for part in ["aspect=", "strip=1.5", "fade=0.4", "wash=0.22", "washsat="] {
+        for part in ["aspect=", "strip=1.5", "fade=0.6", "wash=0.22", "washsat=", "mirror=1"] {
             XCTAssertTrue(identifier.contains(part), "\(identifier) lacks \(part)")
         }
         XCTAssertNotEqual(identifier, BlurredArt.Style.glow.processor.identifier)
