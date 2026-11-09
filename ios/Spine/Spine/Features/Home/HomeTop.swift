@@ -230,9 +230,16 @@ private struct HomeTopHeader: View {
         }
         // Restarts when the picture changes (and drops the old count). The colors are counted once per picture, off
         // the main thread; the title is white until the new color is known, then fades to it.
-        .task(id: viewModel.topArt.art?.backdrop) {
-            await updateTitleTint(for: viewModel.topArt.art?.backdrop)
+        .task(id: tintSource) {
+            await updateTitleTint(for: tintSource)
         }
+    }
+
+    /// Where the header's colors come from: the poster a tile's carousel is on while one is open, counted the same way
+    /// as the picture; else the picture.
+    private var tintSource: URL? {
+        if let poster = viewModel.glowModel.focused?.displayPosterURL, let url = URL(string: poster) { return url }
+        return viewModel.topArt.art?.backdrop
     }
 
     private func updateTitleTint(for url: URL?) async {
