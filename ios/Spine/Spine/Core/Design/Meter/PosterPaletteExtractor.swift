@@ -16,21 +16,22 @@ nonisolated enum PosterPaletteExtractor {
 
     /// The poster through the shared image pipeline, decoded straight to 96 px. The carousel has usually shown it
     /// already, so its bytes come from the pipeline's cache and nothing is downloaded again.
+    /// `limit` is how many colors to keep; Home's picture keeps more than a poster's five, to find a second color.
     @concurrent
-    static func load(url: URL) async -> [PosterSwatch]? {
+    static func load(url: URL, limit: Int = paletteSize) async -> [PosterSwatch]? {
         var request = ImageRequest(url: url)
         request.thumbnail = ImageRequest.ThumbnailOptions(maxPixelSize: Float(side))
         guard let image = try? await ImagePipeline.shared.image(for: request), let cgImage = image.cgImage else {
             return nil
         }
-        return palette(of: cgImage)
+        return palette(of: cgImage, limit: limit)
     }
 
     // MARK: Counting
 
-    static func palette(of image: CGImage) -> [PosterSwatch]? {
+    static func palette(of image: CGImage, limit: Int = paletteSize) -> [PosterSwatch]? {
         guard let pixels = rgbPixels(of: image), !pixels.isEmpty else { return nil }
-        return palette(of: pixels)
+        return palette(of: pixels, limit: limit)
     }
 
     /// Each pixel as 0xRRGGBB, transparency flattened onto white like the server does, long side at most 96.
@@ -66,8 +67,8 @@ nonisolated enum PosterPaletteExtractor {
         return pixels
     }
 
-    /// The server's steps on a list of 0xRRGGBB pixels.
-    static func palette(of pixels: [UInt32]) -> [PosterSwatch] {
+    /// The server's steps on a list of 0xRRGGBB pixels, keeping the biggest `limit` colors (the server keeps five).
+    static func palette(of pixels: [UInt32], limit: Int = paletteSize) -> [PosterSwatch] {
         let swatches = medianCut(pixels, into: quantizedColors)
         let total = Double(swatches.reduce(0) { $0 + $1.count })
         guard total > 0 else { return [] }
@@ -96,7 +97,7 @@ nonisolated enum PosterPaletteExtractor {
             }
         }
         groups.sort { $0.count > $1.count }
-        return groups.prefix(paletteSize).map { group in
+        return groups.prefix(limit).map { group in
             let count = Double(group.count)
             return PosterSwatch(
                 hex: hex(red: group.sum.0 / count, green: group.sum.1 / count, blue: group.sum.2 / count),

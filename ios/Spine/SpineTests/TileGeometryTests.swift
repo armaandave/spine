@@ -333,6 +333,18 @@ final class TileGeometryTests: XCTestCase {
         }
     }
 
+    func testOnlyTheFocusedPosterAndItsTwoNeighborsStayAsTheOpenCarouselFolds() {
+        for slots: CGFloat in [-1, 0, 1, -0.5, 0.5] {
+            XCTAssertEqual(TileGeometry.openFoldOpacity(slotsFromFocus: slots, progress: 1), 1, "\(slots) stays")
+        }
+        for slots: CGFloat in [-3, -2, 2, 3] {
+            XCTAssertEqual(TileGeometry.openFoldOpacity(slotsFromFocus: slots, progress: 1), 0, "\(slots) fades out")
+            XCTAssertEqual(TileGeometry.openFoldOpacity(slotsFromFocus: slots, progress: 0), 1, "\(slots) at rest")
+        }
+        XCTAssertEqual(TileGeometry.openFoldOpacity(slotsFromFocus: 1.5, progress: 1), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(TileGeometry.openFoldOpacity(slotsFromFocus: 2, progress: 0.5), 0.5, accuracy: 0.0001)
+    }
+
     func testOnlyTheSideWithNeighborsSlidesWhenTheFocusIsFirstOrLast() {
         let count = 4
         func moved(focus: Int) -> [Int] {

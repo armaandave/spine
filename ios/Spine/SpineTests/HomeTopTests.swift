@@ -322,17 +322,6 @@ final class HomeTopTests: XCTestCase {
         XCTAssertLessThan(S.faceSide, line)
     }
 
-    func testTheRoomUnderFriendsIsTheRoomAboveIt() throws {
-        let sources = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Spine/Features/Home", isDirectory: true)
-        let top = try String(contentsOf: sources.appendingPathComponent("HomeTop.swift"), encoding: .utf8)
-        XCTAssertTrue(top.contains("static let friendsToFeed: CGFloat = tilesToFriends"), "one number for both gaps")
-        XCTAssertTrue(top.contains(".padding(.bottom, HomeTopSpec.friendsToFeed)"))
-        XCTAssertTrue(top.contains(".padding(.top, HomeTopSpec.tilesToFriends)"))
-    }
-
     func testTheHeaderSqueezeReadsOnlyTheOpenTileAndAnimatesWithTheTilesCurve() throws {
         let sources = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

@@ -858,12 +858,7 @@ struct HomeView: View {
                     supportedMediaTypes: Array(HomeTopArtPick.eligibleTypes).sorted(),
                     mediaRepository: mediaRepository,
                     currentBackdropURL: viewModel.topArt.art?.backdrop.absoluteString,
-                    onUnauthorized: onUnauthorized,
-                    resetTitle: viewModel.topArt.hasSitePick ? "Use Daily Picture" : nil,
-                    onReset: { [mediaRepository, viewModel] in
-                        guard let response = try? await mediaRepository.clearHomePicture() else { return }
-                        viewModel.topArt.applySitePicture(response)
-                    }
+                    onUnauthorized: onUnauthorized
                 ) { ref, url in
                     let response = try await mediaRepository.setHomePicture(ref: ref, backdropURL: url)
                     viewModel.topArt.applySitePicture(response)

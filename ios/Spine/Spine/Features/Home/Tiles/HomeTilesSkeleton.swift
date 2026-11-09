@@ -46,10 +46,13 @@ struct HomeTilesSkeleton: View {
                 .frame(width: contentWidth, height: HomeDesign.Metric.tileOpenHeight, alignment: .topLeading)
                 .frame(width: side, height: TileGeometry.closedHeight, alignment: .topLeading)
                 .background(TileStyle.veil)
+                .overlay { FeedCardSheen() }
                 .clipShape(RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous)
-                        .strokeBorder(TileStyle.stroke, lineWidth: TileStyle.strokeWidth)
+                        .strokeBorder(
+                            TileStyle.stroke.opacity(TileStyle.outlineStrength), lineWidth: TileStyle.strokeWidth
+                        )
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Loading \(tile.title)")

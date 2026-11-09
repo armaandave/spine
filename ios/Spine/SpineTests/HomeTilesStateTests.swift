@@ -537,10 +537,10 @@ final class HomeTilesStateTests: XCTestCase {
         for name in ["HomeTilesSection.swift", "TileGeometry.swift", "HomeTilesSkeleton.swift", "TileDetailPanel.swift"] {
             XCTAssertFalse(try tileSource(name).contains("scrollOffset"), name)
         }
-        // The folds are transforms and one brightness: no new view, no layout. The open fold reads where its poster
-        // sits in the render pass (`visualEffect`'s proxy), which lays nothing out.
+        // The folds are transforms, one brightness and (the open fold's far posters) an opacity: no new view, no
+        // layout. The open fold reads where its poster sits in the render pass (`visualEffect`'s proxy), which lays
+        // nothing out.
         let body = String(carousel[fold.upperBound ..< next.lowerBound])
-            .replacingOccurrences(of: "proxy.frame(in: .scrollView(axis: .horizontal))", with: "")
         for forbidden in ["GeometryReader", "overlay", "background", "ZStack", "frame(", "Color."] {
             XCTAssertFalse(body.contains(forbidden), forbidden)
         }
