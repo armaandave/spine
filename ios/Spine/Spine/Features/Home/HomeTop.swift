@@ -89,8 +89,8 @@ struct HomeTop: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, HomeTopSpec.tilesToFriends)
-        // The same room under the heading as above it. The first card, or the skeleton or message that stands in for
-        // it, starts right under this.
+        // The first card sits as far under the heading as the next card sits under it. The first card, or the
+        // skeleton or message that stands in for it, starts right under this.
         .padding(.bottom, HomeTopSpec.friendsToFeed)
     }
 
@@ -119,8 +119,8 @@ private enum HomeTopSpec {
     /// What the header adds under itself at rest, so the tiles start `HomeTopArtSpec.headerToTiles` below its row.
     static let restExtraGap: CGFloat = HomeTopArtSpec.headerToTiles - headerToTiles
     static let tilesToFriends: CGFloat = 30
-    /// Under the Friends row, to the first card: as much as above it.
-    static let friendsToFeed: CGFloat = tilesToFriends
+    /// Under the Friends row, to the first card: the same room as under each card (the gap between cards).
+    static let friendsToFeed: CGFloat = HomeDesign.Metric.cardGap
     /// Four 115 pt cards fill about the height three of the old 164 pt ones did.
     static let skeletonCards = 4
     static let dateFont = Font.system(size: 13, weight: .semibold)
@@ -129,6 +129,9 @@ private enum HomeTopSpec {
     /// The title's glow, in the title's color: a tight layer and a wide one.
     static let titleGlowTightOpacity: Double = 0.45
     static let titleGlowWideOpacity: Double = 0.3
+    /// The date's glow, the same strength, its reach scaled to the smaller text.
+    static let dateGlowTightRadius: CGFloat = 3
+    static let dateGlowWideRadius: CGFloat = 8
     /// The museum-style label over the profile photo, naming the picture.
     static let labelFont = Font.system(size: 11, weight: .semibold)
     static let labelTracking: CGFloat = 0.4
@@ -154,8 +157,8 @@ private struct HomeTopHeader: View {
 
     /// The date line is worked out when the header appears and again when the day changes under it.
     @State private var today = Date()
-    /// The title's color from the picture; nil (white, no glow) until the picture's colors are known.
-    @State private var titleTint: MeterTint.RGB?
+    /// The title's and the date's colors from the picture; nil (as before, no glow) until the picture's colors are known.
+    @State private var tints = HeaderTints()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -165,17 +168,27 @@ private struct HomeTopHeader: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(today.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
                     .font(HomeTopSpec.dateFont)
-                    .foregroundStyle(.white.opacity(0.84))
+                    .foregroundStyle(tints.date?.color ?? .white.opacity(0.84))
+                    // The same glow as the title's, in the date's own color (the picture's second one).
+                    .shadow(
+                        color: tints.date?.color.opacity(HomeTopSpec.titleGlowTightOpacity) ?? .clear,
+                        radius: HomeTopSpec.dateGlowTightRadius
+                    )
+                    .shadow(
+                        color: tints.date?.color.opacity(HomeTopSpec.titleGlowWideOpacity) ?? .clear,
+                        radius: HomeTopSpec.dateGlowWideRadius
+                    )
                     .lineLimit(1)
+                    .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
                 Text("Home")
                     .font(HomeTopSpec.titleFont)
                     .tracking(HomeTopSpec.titleTracking)
-                    .foregroundStyle(titleTint?.color ?? .white)
+                    .foregroundStyle(tints.title?.color ?? .white)
                     // A soft glow in the same color: a tight one and a wide one, faint. None while the title is white.
-                    .shadow(color: titleTint?.color.opacity(HomeTopSpec.titleGlowTightOpacity) ?? .clear, radius: 6)
-                    .shadow(color: titleTint?.color.opacity(HomeTopSpec.titleGlowWideOpacity) ?? .clear, radius: 16)
+                    .shadow(color: tints.title?.color.opacity(HomeTopSpec.titleGlowTightOpacity) ?? .clear, radius: 6)
+                    .shadow(color: tints.title?.color.opacity(HomeTopSpec.titleGlowWideOpacity) ?? .clear, radius: 16)
                     .lineLimit(1)
-                    .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: titleTint)
+                    .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
             }
             .dynamicTypeSize(...HomeDesign.Text.maxCategory)
 
@@ -224,19 +237,32 @@ private struct HomeTopHeader: View {
 
     private func updateTitleTint(for url: URL?) async {
         guard let url else {
-            titleTint = nil
+            tints = HeaderTints()
             return
         }
-        // Already counted: the color is set at once (it still fades in from white after the first frame).
-        if let known = PosterPaletteStore.shared.known(server: nil, url: url) {
-            titleTint = HomeTitleTint.color(from: known)
+        // Already counted: the colors are set at once (they still fade in from white after the first frame).
+        if let known = PosterPaletteStore.homePicture.known(server: nil, url: url) {
+            tints = HeaderTints(swatches: known)
             return
         }
-        // Not counted yet: the old picture's color doesn't belong on this one, so the title goes back to white first.
-        titleTint = nil
-        let counted = await PosterPaletteStore.shared.swatches(server: nil, url: url)
+        // Not counted yet: the old picture's colors don't belong on this one, so the header goes back to white first.
+        tints = HeaderTints()
+        let counted = await PosterPaletteStore.homePicture.swatches(server: nil, url: url)
         guard !Task.isCancelled else { return }
-        titleTint = counted.flatMap { HomeTitleTint.color(from: $0) }
+        tints = counted.map(HeaderTints.init(swatches:)) ?? HeaderTints()
+    }
+}
+
+/// The header's colors from the picture: the title takes its most common real color, the date the next one.
+private struct HeaderTints: Equatable {
+    var title: MeterTint.RGB?
+    var date: MeterTint.RGB?
+
+    init() {}
+
+    init(swatches: [PosterSwatch]) {
+        title = HomeTitleTint.color(from: swatches)
+        date = HomeTitleTint.dateColor(from: swatches)
     }
 }
 

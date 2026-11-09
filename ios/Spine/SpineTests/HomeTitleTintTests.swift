@@ -23,6 +23,36 @@ final class HomeTitleTintTests: XCTestCase {
         XCTAssertEqual(hex(tint), "#D98A3C")
     }
 
+    func testTheDateTakesTheNextRealColorAfterTheTitles() {
+        let swatches = [swatch("#050505", 0.5), swatch("#D98A3C", 0.25), swatch("#2A2A2A", 0.15), swatch("#3C8AD9", 0.1)]
+        XCTAssertEqual(hex(HomeTitleTint.color(from: swatches)), "#D98A3C")
+        XCTAssertEqual(hex(HomeTitleTint.dateColor(from: swatches)), "#3C8AD9", "black and the near-black grey skipped")
+    }
+
+    func testTheDateSkipsColorsFromTheTitlesFamilyAndGreys() {
+        // An orange title; a lighter orange and a grey come next, then a real blue further down.
+        let swatches = [
+            swatch("#D98A3C", 0.4), swatch("#F0B070", 0.25), swatch("#8A8A8A", 0.15), swatch("#3C8AD9", 0.05),
+        ]
+        XCTAssertEqual(hex(HomeTitleTint.dateColor(from: swatches)), "#3C8AD9")
+    }
+
+    func testWithNoDifferentColorTheDateIsALighterShadeOfTheTitle() throws {
+        let swatches = [swatch("#000000", 0.6), swatch("#D98A3C", 0.3), swatch("#F0B070", 0.1)]
+        let title = try XCTUnwrap(HomeTitleTint.color(from: swatches))
+        let date = try XCTUnwrap(HomeTitleTint.dateColor(from: swatches))
+        XCTAssertEqual(date, title.mixed(toward: .white, by: HomeTitleTint.dateFallbackMix))
+        XCTAssertNil(HomeTitleTint.dateColor(from: [swatch("#000000", 1)]), "no title color, no date color")
+    }
+
+    func testHueGapGoesTheShortWayRoundTheWheel() {
+        let red = (lightness: 50.0, a: 60.0, b: 1.0)
+        let nearRed = (lightness: 50.0, a: 60.0, b: -1.0)
+        XCTAssertLessThan(HomeTitleTint.hueGap(red, nearRed), 5, "across zero degrees")
+        let green = (lightness: 50.0, a: -60.0, b: 0.0)
+        XCTAssertEqual(HomeTitleTint.hueGap(red, green), 179, accuracy: 2)
+    }
+
     func testABlackTopSwatchGivesWayToTheNext() {
         let tint = HomeTitleTint.color(from: [swatch("#050505", 0.6), swatch("#D98A3C", 0.25), swatch("#3C8AD9", 0.15)])
         XCTAssertEqual(hex(tint), "#D98A3C")
