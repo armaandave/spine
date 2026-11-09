@@ -117,8 +117,10 @@ class User(AbstractUser):
     """Custom user model."""
 
     is_demo = models.BooleanField(default=False)
+    # db_default lets code from before this field (a rollback) still create users.
     is_artwork_curator = models.BooleanField(
         default=False,
+        db_default=False,
         help_text="Their poster, backdrop and logo picks are everyone's default (an admin's pick still wins)",
     )
 
