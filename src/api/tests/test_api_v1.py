@@ -5467,7 +5467,49 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(rating["max_value"], "5")
         self.assertEqual(rating["vote_count"], 1234)
         self.assertEqual(rating["url"], "https://hardcover.app/books/the-great-gatsby")
-        self.assertEqual(item.external_ratings.get().rating_source, "hardcover")
+        self.assertTrue(item.external_ratings.filter(rating_source="hardcover").exists())
+
+    @patch("app.tasks.enrich_external_ratings.delay")
+    @patch("api.services.media.provider_services.get_media_metadata")
+    def test_book_detail_sends_the_stored_goodreads_link_without_a_rating(self, metadata_mock, enqueue_mock):
+        metadata_mock.return_value = {
+            "media_id": "427578",
+            "media_type": "book",
+            "source": "hardcover",
+            "title": "Project Hail Mary",
+            "image": "https://example.com/hail-mary.jpg",
+            "score": 4.5,
+            "score_count": 100,
+        }
+
+        first = self.client.get("/api/v1/media/hardcover/book/427578/")
+        # The ratings task finds the link in the background (Hardcover may be busy).
+        self.assertEqual(first.data["external_ratings_preparation"]["state"], "pending")
+        self.assertIn("goodreads", enqueue_mock.call_args.args[1])
+        self.assertNotIn("Goodreads", [rating["source"] for rating in first.data["external_ratings"]])
+
+        item = Item.objects.get(source=Sources.HARDCOVER.value, media_id="427578")
+        ExternalRating.objects.create(
+            item=item,
+            rating_source="goodreads",
+            status=ExternalRating.Status.UNAVAILABLE,
+            canonical_url="https://www.goodreads.com/book/show/54493401",
+            last_attempted_at=timezone.now(),
+        )
+        recheck = self.client.get("/api/v1/media/hardcover/book/427578/external-ratings/")
+
+        goodreads = [rating for rating in recheck.data["external_ratings"] if rating["source"] == "Goodreads"]
+        self.assertEqual(
+            goodreads,
+            [{
+                "source": "Goodreads",
+                "value": "",
+                "vote_count": None,
+                "max_value": "5",
+                "url": "https://www.goodreads.com/book/show/54493401",
+            }],
+        )
+        self.assertEqual(recheck.data["external_ratings_preparation"]["state"], "ready")
 
     def test_hardcover_rating_without_slug_uses_id_redirect_url(self):
         ratings = external_ratings(

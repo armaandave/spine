@@ -36,6 +36,7 @@ class TransientExternalRatingError(Exception):
 
 RATING_URL_BASES = {
     "comicvine": "https://comicvine.gamespot.com/",
+    "goodreads": "https://www.goodreads.com/",
     "hardcover": "https://hardcover.app/",
     "igdb": "https://www.igdb.com/",
     "imdb": "https://www.imdb.com/",
@@ -52,6 +53,7 @@ RATING_URL_BASES = {
 }
 RATING_URL_HOSTS = {
     "comicvine": {"comicvine.gamespot.com"},
+    "goodreads": {"goodreads.com"},
     "hardcover": {"hardcover.app"},
     "igdb": {"igdb.com"},
     "imdb": {"imdb.com"},
@@ -159,6 +161,26 @@ def _fetch_mal(item, get_metadata):
             "url": metadata.get("source_url"),
         },
     }
+
+
+def _fetch_goodreads(item, get_metadata):
+    """The book's Goodreads page, found through Hardcover (Open Library books by ISBN).
+
+    Only the link is stored: Goodreads turns away the server, so the app reads the
+    rating from this page on the phone.
+    """
+    from app.providers import hardcover
+
+    if item.source == Sources.HARDCOVER.value:
+        goodreads_id = hardcover.goodreads_id(item.media_id)
+    else:
+        isbns = (get_metadata().get("details") or {}).get("isbn") or []
+        goodreads_id = next(
+            (found for isbn in isbns[:2] if (found := hardcover.goodreads_id_for_isbn(isbn))),
+            None,
+        )
+    url = f"https://www.goodreads.com/book/show/{goodreads_id}" if goodreads_id else None
+    return {"goodreads": {"url": url}}
 
 
 def _matched_manga_rating_enabled(item):
@@ -338,6 +360,18 @@ RATING_SOURCES = {
         "wire_max": "5",
         "fresh_for": FRESH_FOR,
         "fetch": _fetch_metadata,
+    },
+    "goodreads": {
+        "key": "goodreads",
+        "label": "Goodreads",
+        "item_sources": frozenset({Sources.HARDCOVER.value, Sources.OPENLIBRARY.value}),
+        "media_types": frozenset({MediaTypes.BOOK.value}),
+        "max_value": Decimal("5"),
+        "wire_max": "5",
+        "fresh_for": FRESH_FOR,
+        "fetch": _fetch_goodreads,
+        # Link only (no value to sort or show); the detail page sends it on its own.
+        "exposed": lambda: False,
     },
     "musicbrainz": {
         "key": "musicbrainz",

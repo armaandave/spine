@@ -8,7 +8,7 @@ from django.core.cache import cache
 
 from app import helpers
 from app.models import Item, MediaTypes, Sources
-from app.providers import services
+from app.providers import quota, services
 from app.providers.search_rank import rank_results
 
 logger = logging.getLogger(__name__)
@@ -532,6 +532,104 @@ def book(media_id):
         cache.set(cache_key, data)
 
     return data
+
+
+GOODREADS_PLATFORM_ID = 1
+GOODREADS_ID_TIMEOUT = 60 * 60 * 24 * 30
+GOODREADS_ID_MISSING_TIMEOUT = 60 * 60 * 24 * 7
+
+
+GOODREADS_MAPPING_FIELDS = """
+book_mappings(
+  where: {platform_id: {_eq: $platform_id}}
+  order_by: {id: asc}
+  limit: 1
+) {
+  external_id
+}
+"""
+
+
+def goodreads_id(media_id):
+    """Return the Goodreads book ID Hardcover links to this book, or None.
+
+    Hardcover links a book to many Goodreads editions, which all show the same
+    rating; the first one it linked is Goodreads' main page for the book.
+    """
+    if not str(media_id).isdigit():
+        return None
+    query = f"""
+    query GoodreadsId($book_id: Int!, $platform_id: Int!) {{
+      books_by_pk(id: $book_id) {{ {GOODREADS_MAPPING_FIELDS} }}
+    }}
+    """
+    return _cached_goodreads_id(
+        f"{Sources.HARDCOVER.value}_goodreads_id_v1_{media_id}",
+        query,
+        {"book_id": int(media_id)},
+        lambda data: (data["books_by_pk"] or {}).get("book_mappings") or [],
+    )
+
+
+def goodreads_id_for_isbn(isbn):
+    """Return the Goodreads book ID of the Hardcover book with this edition ISBN, or None."""
+    normalized = str(isbn or "").replace("-", "").strip().upper()
+    if not normalized:
+        return None
+    query = f"""
+    query GoodreadsIdByISBN($isbn: String!, $platform_id: Int!) {{
+      editions(
+        where: {{_or: [{{isbn_13: {{_eq: $isbn}}}}, {{isbn_10: {{_eq: $isbn}}}}]}}
+        order_by: {{users_count: desc}}
+        limit: 1
+      ) {{
+        book {{ {GOODREADS_MAPPING_FIELDS} }}
+      }}
+    }}
+    """
+    return _cached_goodreads_id(
+        f"{Sources.HARDCOVER.value}_goodreads_id_isbn_v1_{normalized}",
+        query,
+        {"isbn": normalized},
+        lambda data: next(
+            ((edition.get("book") or {}).get("book_mappings") or [] for edition in data["editions"]),
+            [],
+        ),
+    )
+
+
+def _cached_goodreads_id(cache_key, query, variables, mappings):
+    """Look up a Goodreads ID on Hardcover, kept 30 days when found.
+
+    Runs in the background ratings task, so it waits out Hardcover's rate limits;
+    a failed request raises for the task to retry.
+    """
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached or None
+    # Once Hardcover has asked us to stop (its daily cap), leave it alone until then; the
+    # link is looked up again on a later page open.
+    if until := quota.blocked_until(Sources.HARDCOVER.value):
+        msg = f"Hardcover is rate limited until {until.isoformat()}"
+        raise RuntimeError(msg)
+
+    response = services.api_request(
+        Sources.HARDCOVER.value,
+        "POST",
+        base_url,
+        params={
+            "query": query,
+            "variables": {**variables, "platform_id": GOODREADS_PLATFORM_ID},
+        },
+        headers={"Authorization": settings.HARDCOVER_API},
+    )
+    rows = mappings(response["data"])
+    found = str(rows[0].get("external_id") or "").strip() if rows else ""
+    if not found.isdigit():
+        cache.set(cache_key, "", GOODREADS_ID_MISSING_TIMEOUT)
+        return None
+    cache.set(cache_key, found, GOODREADS_ID_TIMEOUT)
+    return found
 
 
 def saved_book(media_id):
