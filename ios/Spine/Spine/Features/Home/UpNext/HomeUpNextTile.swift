@@ -91,7 +91,11 @@ private struct UpNextTileFace: View {
         .padding(.trailing, UpNextTileSpec.trailing)
         .frame(maxWidth: .infinity)
         .frame(height: UpNextTileSpec.height)
-        .background { UpNextTileArt(url: items.first.flatMap { URL(string: $0.media.displayPosterURL ?? "") }) }
+        .background {
+            // The feed card's sheen on the art, under the posters and the words, as the card has it.
+            UpNextTileArt(url: items.first.flatMap { URL(string: $0.media.displayPosterURL ?? "") })
+                .overlay { FeedCardSheen() }
+        }
         .background(TileStyle.veil)
         .clipShape(shape)
         .overlay { TileOutline(shape: shape, corner: UpNextTileSpec.corner) }

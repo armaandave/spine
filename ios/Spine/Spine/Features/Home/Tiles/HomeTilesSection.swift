@@ -385,6 +385,9 @@ private struct TileArt: View {
                     Color.clear
                 }
             }
+            // The feed card's sheen on the art, as the card has it: under the posters and the words, so only the glass
+            // catches the light. It stretches and fades with the art as the tile opens.
+            FeedCardSheen()
         }
         .frame(width: side, height: height)
         .clipped()

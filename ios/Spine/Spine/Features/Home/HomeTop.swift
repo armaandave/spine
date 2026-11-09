@@ -126,6 +126,9 @@ private enum HomeTopSpec {
     static let dateFont = Font.system(size: 13, weight: .semibold)
     static let titleFont = Font.system(size: 30, weight: .heavy)
     static let titleTracking: CGFloat = -0.5
+    /// The title's glow, in the title's color: a tight layer and a wide one.
+    static let titleGlowTightOpacity: Double = 0.45
+    static let titleGlowWideOpacity: Double = 0.3
     /// The museum-style label over the profile photo, naming the picture.
     static let labelFont = Font.system(size: 11, weight: .semibold)
     static let labelTracking: CGFloat = 0.4
@@ -151,6 +154,9 @@ private struct HomeTopHeader: View {
 
     /// The date line is worked out when the header appears and again when the day changes under it.
     @State private var today = Date()
+    /// The title's color from the picture; nil (white, no glow) until the picture's colors are known.
+    @State private var titleTint: MeterTint.RGB?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         // The label goes while a tile is open: the picture it names has faded out.
@@ -164,8 +170,12 @@ private struct HomeTopHeader: View {
                 Text("Home")
                     .font(HomeTopSpec.titleFont)
                     .tracking(HomeTopSpec.titleTracking)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(titleTint?.color ?? .white)
+                    // A soft glow in the same color: a tight one and a wide one, faint. None while the title is white.
+                    .shadow(color: titleTint?.color.opacity(HomeTopSpec.titleGlowTightOpacity) ?? .clear, radius: 6)
+                    .shadow(color: titleTint?.color.opacity(HomeTopSpec.titleGlowWideOpacity) ?? .clear, radius: 16)
                     .lineLimit(1)
+                    .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: titleTint)
             }
             .dynamicTypeSize(...HomeDesign.Text.maxCategory)
 
@@ -205,6 +215,28 @@ private struct HomeTopHeader: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
             today = Date()
         }
+        // Restarts when the picture changes (and drops the old count). The colors are counted once per picture, off
+        // the main thread; the title is white until the new color is known, then fades to it.
+        .task(id: viewModel.topArt.art?.backdrop) {
+            await updateTitleTint(for: viewModel.topArt.art?.backdrop)
+        }
+    }
+
+    private func updateTitleTint(for url: URL?) async {
+        guard let url else {
+            titleTint = nil
+            return
+        }
+        // Already counted: the color is set at once (it still fades in from white after the first frame).
+        if let known = PosterPaletteStore.shared.known(server: nil, url: url) {
+            titleTint = HomeTitleTint.color(from: known)
+            return
+        }
+        // Not counted yet: the old picture's color doesn't belong on this one, so the title goes back to white first.
+        titleTint = nil
+        let counted = await PosterPaletteStore.shared.swatches(server: nil, url: url)
+        guard !Task.isCancelled else { return }
+        titleTint = counted.flatMap { HomeTitleTint.color(from: $0) }
     }
 }
 
