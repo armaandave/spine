@@ -12,21 +12,31 @@ enum GoodreadsRating {
         _ page: URL,
         session: URLSession = .shared,
         defaults: UserDefaults = .standard,
-        now: Date = Date()
+        now: Date = Date(),
+        readInBrowser: (URL) async -> (value: Double, count: Int?)? = { await GoodreadsBrowserReader.shared.rating($0) }
     ) async -> ExternalRating? {
         if let saved = saved(page, defaults: defaults, now: now) {
             return saved
         }
+        // A plain request first; when Goodreads answers with its bot check, the hidden browser.
+        var found = await plainRequest(page, session: session)
+        if found == nil, !Task.isCancelled {
+            found = await readInBrowser(page)
+        }
+        guard let found else { return nil }
+        save(found, for: page, defaults: defaults, now: now)
+        return rating(value: found.value, count: found.count, page: page)
+    }
+
+    private static func plainRequest(_ page: URL, session: URLSession) async -> (value: Double, count: Int?)? {
         var request = URLRequest(url: page)
         request.timeoutInterval = 15
         guard let (data, response) = try? await session.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200,
-              let found = await Task.detached(operation: { aggregateRating(in: data) }).value
+              (response as? HTTPURLResponse)?.statusCode == 200
         else {
             return nil
         }
-        save(found, for: page, defaults: defaults, now: now)
-        return rating(value: found.value, count: found.count, page: page)
+        return await Task.detached(operation: { aggregateRating(in: data) }).value
     }
 
     /// The rating in the page's structured data, the block Goodreads keeps for search engines:

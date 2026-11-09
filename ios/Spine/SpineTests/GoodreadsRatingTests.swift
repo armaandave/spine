@@ -31,19 +31,47 @@ final class GoodreadsRatingTests: XCTestCase {
         let page = try XCTUnwrap(URL(string: "https://www.goodreads.com/book/show/1"))
         let start = Date(timeIntervalSince1970: 1_000_000)
 
-        let first = await GoodreadsRating.load(page, session: session, defaults: defaults, now: start)
+        let noBrowser: (URL) async -> (value: Double, count: Int?)? = { _ in nil }
+
+        let first = await GoodreadsRating.load(
+            page, session: session, defaults: defaults, now: start, readInBrowser: noBrowser
+        )
         GoodreadsRatingStubProtocol.page = Data()
         let sixDaysLater = await GoodreadsRating.load(
-            page, session: session, defaults: defaults, now: start.addingTimeInterval(6 * 86_400)
+            page, session: session, defaults: defaults, now: start.addingTimeInterval(6 * 86_400), readInBrowser: noBrowser
         )
         let eightDaysLater = await GoodreadsRating.load(
-            page, session: session, defaults: defaults, now: start.addingTimeInterval(8 * 86_400)
+            page, session: session, defaults: defaults, now: start.addingTimeInterval(8 * 86_400), readInBrowser: noBrowser
         )
 
         XCTAssertEqual(first?.value, "4.2")
         XCTAssertEqual(first?.voteCount, 10)
         XCTAssertEqual(sixDaysLater, first)
         XCTAssertNil(eightDaysLater)
+    }
+
+    func testBotCheckFallsBackToTheBrowserView() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "GoodreadsRatingBotCheckTests"))
+        defaults.removePersistentDomain(forName: "GoodreadsRatingBotCheckTests")
+        GoodreadsRatingStubProtocol.page = Data("<html>AwsWafIntegration challenge</html>".utf8)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [GoodreadsRatingStubProtocol.self]
+        let page = try XCTUnwrap(URL(string: "https://www.goodreads.com/book/show/2"))
+        var browserPages: [URL] = []
+
+        let rating = await GoodreadsRating.load(
+            page,
+            session: URLSession(configuration: configuration),
+            defaults: defaults,
+            readInBrowser: { url in
+                browserPages.append(url)
+                return (value: 4.4, count: 7)
+            }
+        )
+
+        XCTAssertEqual(browserPages, [page])
+        XCTAssertEqual(rating?.value, "4.4")
+        XCTAssertEqual(rating?.voteCount, 7)
     }
 }
 
