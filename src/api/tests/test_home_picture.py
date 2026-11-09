@@ -63,6 +63,13 @@ class HomePictureTests(TestCase):
         self.assertEqual(self.client.delete(self.url).status_code, 403)
         self.assertFalse(HomePicture.objects.exists())
 
+    def test_artwork_curator_cannot_change_it(self):
+        artist = get_user_model().objects.create_user(username="artist", password="x", is_artwork_curator=True)
+        self.as_user(artist)
+        self.assertFalse(self.client.get(self.url).json()["can_change"])
+        self.assertEqual(self.put().status_code, 403)
+        self.assertEqual(self.client.delete(self.url).status_code, 403)
+
     def test_staff_put_then_viewer_get(self):
         self.as_user(self.staff)
         response = self.put()

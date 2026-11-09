@@ -117,6 +117,10 @@ class User(AbstractUser):
     """Custom user model."""
 
     is_demo = models.BooleanField(default=False)
+    is_artwork_curator = models.BooleanField(
+        default=False,
+        help_text="Their poster, backdrop and logo picks are everyone's default (an admin's pick still wins)",
+    )
 
     profile_private = models.BooleanField(
         default=False, help_text="Toggle profile visibility to anonymous users"

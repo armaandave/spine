@@ -1,10 +1,14 @@
-"""Curated artwork: an admin's artwork pick is everyone's default until they pick their own."""
+"""Curated artwork: a curator's artwork pick is everyone's default until they pick their own.
+
+Curators are admins and artwork curators. An admin's pick always beats an artwork
+curator's, whichever came first.
+"""
 
 from django.db.models import Prefetch, Q, prefetch_related_objects
 
 from app.models import CustomBackdropPreference, CustomPosterPreference, MediaTypes, Sources
 
-# Item relation and attribute that hold prefetched admin picks, per kind of artwork.
+# Item relation and attribute that hold prefetched curator picks, per kind of artwork.
 _PREFETCHED = {
     CustomPosterPreference: ("customposterpreference_set", "curated_poster_preferences"),
     CustomBackdropPreference: ("custombackdroppreference_set", "curated_backdrop_preferences"),
@@ -23,17 +27,22 @@ def music_picks_apply(item):
 
 
 def is_curator(user):
-    """Admins curate artwork for everyone."""
-    return bool(user and user.is_authenticated and user.is_staff)
+    """Admins and artwork curators curate artwork for everyone."""
+    return bool(user and user.is_authenticated and (user.is_staff or user.is_artwork_curator))
+
+
+_CURATORS = Q(user__is_staff=True) | Q(user__is_artwork_curator=True)
+# Admin picks first, then artwork curators' picks; newest first within each.
+_CURATED_ORDER = ("-user__is_staff", "-updated_at")
 
 
 def curated_preferences(model):
-    """Admin picks of one kind of artwork, newest first."""
-    return model.objects.filter(user__is_staff=True).order_by("-updated_at")
+    """Curator picks of one kind of artwork, the winning pick first."""
+    return model.objects.filter(_CURATORS).order_by(*_CURATED_ORDER)
 
 
 def curated_prefetches(prefix=""):
-    """Prefetch admin poster and backdrop picks, through ``prefix`` (e.g. ``item__``)."""
+    """Prefetch curator poster and backdrop picks, through ``prefix`` (e.g. ``item__``)."""
     return [
         Prefetch(f"{prefix}{lookup}", queryset=curated_preferences(model), to_attr=to_attr)
         for model, (lookup, to_attr) in _PREFETCHED.items()
@@ -41,14 +50,14 @@ def curated_prefetches(prefix=""):
 
 
 def prime_curated_artwork(items):
-    """Load admin poster and backdrop picks for a page of Items in two queries."""
+    """Load curator poster and backdrop picks for a page of Items in two queries."""
     items = [item for item in items if item is not None]
     if items:
         prefetch_related_objects(items, *curated_prefetches())
 
 
 def curated_image_url(model, item):
-    """Return the newest admin pick of this kind for an Item, or None."""
+    """Return the winning curator pick of this kind for an Item, or None."""
     if item is None or item.pk is None or not music_picks_apply(item):
         return None
     to_attr = _PREFETCHED.get(model, (None, None))[1]
@@ -61,14 +70,14 @@ def curated_image_url(model, item):
 
 
 def picked_image_urls(items, model, user):
-    """Map Item ids to the pick each viewer sees: their own, else an admin's."""
+    """Map Item ids to the pick each viewer sees: their own, else a curator's."""
     item_ids = [item.pk for item in items if music_picks_apply(item)]
     if not item_ids:
         return {}
     viewer_id = user.pk if user is not None and user.is_authenticated else None
-    owners = Q(user__is_staff=True) | Q(user_id=viewer_id) if viewer_id else Q(user__is_staff=True)
+    owners = _CURATORS | Q(user_id=viewer_id) if viewer_id else _CURATORS
     own, curated = {}, {}
-    for preference in model.objects.filter(owners, item_id__in=item_ids).order_by("-updated_at"):
+    for preference in model.objects.filter(owners, item_id__in=item_ids).order_by(*_CURATED_ORDER):
         picks = own if preference.user_id == viewer_id else curated
         picks.setdefault(preference.item_id, preference.custom_image_url)
     return {**curated, **own}

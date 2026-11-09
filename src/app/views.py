@@ -31,7 +31,7 @@ from app.models import TV, BasicMedia, Item, MediaTypes, Season, Sources, Status
 from app.providers import igdb, manual, mdblist, services, tmdb
 from app.templatetags import app_tags
 from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices, User
-from app.curation import curated_image_url, is_curator
+from app.curation import curated_image_url
 from app.forms import DiaryEntryForm
 from app.models import DiaryEntry, MediaLike
 from app.utils.color import (
@@ -1901,8 +1901,9 @@ def save_poster_preference(request):
             defaults={"custom_image_url": custom_image_url, "accent_color": palette["accent"]}
         )
 
-        # Only an admin's pick becomes everyone's cover.
-        if is_curator(request.user):
+        # Only an admin's pick becomes the title's own cover; an artwork curator's
+        # still shows for everyone through the curated picks.
+        if request.user.is_staff:
             item.image = custom_image_url
             item.poster_accent_color = palette["accent"]
             item.save(update_fields=["image", "poster_accent_color"])
