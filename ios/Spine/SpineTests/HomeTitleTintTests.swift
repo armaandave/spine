@@ -83,4 +83,24 @@ final class HomeTitleTintTests: XCTestCase {
         let orange = try XCTUnwrap(MeterTint.RGB(hex: "#D98A3C"))
         XCTAssertEqual(hex(HomeTitleTint.readable(orange)), "#D98A3C")
     }
+
+    func testOnTheGlowAColorTooCloseToItsMainColorGivesWayToTheNext() {
+        // The glow is the same poster: its blue is behind the header, so the title takes the light gold.
+        let poster = [swatch("#3C6EB4", 0.6), swatch("#F0D890", 0.4)]
+        XCTAssertEqual(hex(HomeTitleTint.color(from: poster)), hex(HomeTitleTint.readable(MeterTint.RGB(hex: "#3C6EB4")!)))
+        XCTAssertEqual(hex(HomeTitleTint.color(from: poster, against: poster)), "#F0D890")
+    }
+
+    func testOnTheGlowWithNoColorThatStandsOutTheFirstIsLightenedUntilItDoes() throws {
+        let poster = [swatch("#3C6EB4", 0.7), swatch("#4A7CC0", 0.3)]
+        let glow = try XCTUnwrap(MeterTint.RGB(hex: "#3C6EB4"))
+        let title = try XCTUnwrap(HomeTitleTint.color(from: poster, against: poster))
+        XCTAssertGreaterThanOrEqual(HomeTitleTint.contrast(title, glow), HomeTitleTint.backgroundContrast)
+    }
+
+    func testOnAVeryLightGlowTheHeaderStaysWhite() {
+        let glow = [swatch("#F4F4F4", 1)]
+        XCTAssertNil(HomeTitleTint.color(from: [swatch("#D98A3C", 1)], against: glow))
+        XCTAssertNil(HomeTitleTint.dateColor(from: [swatch("#D98A3C", 1)], against: glow))
+    }
 }

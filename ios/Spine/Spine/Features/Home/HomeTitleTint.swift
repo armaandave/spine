@@ -28,16 +28,22 @@ nonisolated enum HomeTitleTint {
     /// With no color different enough, the date takes the title's color mixed this far toward white.
     static let dateFallbackMix = 0.45
 
-    /// The title's color for a picture's swatches, or nil when every one of them is black or near-black.
-    static func color(from swatches: [PosterSwatch]) -> MeterTint.RGB? {
-        colors(from: swatches).first
+    /// While a tile is open the header sits on the glow, the blurred art of the same poster, so a color must stand out
+    /// from the glow's main color by at least this contrast ratio (WCAG's 3:1 for large text).
+    static let backgroundContrast = 3.0
+
+    /// The title's color for a picture's swatches, or nil when every one of them is black or near-black. With
+    /// `background` (the glow's swatches), only a color that stands out from the glow's main color.
+    static func color(from swatches: [PosterSwatch], against background: [PosterSwatch]? = nil) -> MeterTint.RGB? {
+        colors(from: swatches, against: background).first
     }
 
     /// The date's color: the most common of the picture's other real colors that is clearly a different color from the
     /// title's (`dateHueGap` round the wheel, `dateMinimumChroma` of color), compared as they are shown, after being made
-    /// readable. With none, a lighter shade of the title's color. Nil only when the title has no color (all dark).
-    static func dateColor(from swatches: [PosterSwatch]) -> MeterTint.RGB? {
-        let found = colors(from: swatches)
+    /// readable. With none, a lighter shade of the title's color. Nil only when the title has no color (all dark). With
+    /// `background`, the same, from the colors that stand out from the glow.
+    static func dateColor(from swatches: [PosterSwatch], against background: [PosterSwatch]? = nil) -> MeterTint.RGB? {
+        let found = colors(from: swatches, against: background)
         guard let title = found.first else { return nil }
         let titleTone = lab(of: title)
         for candidate in found.dropFirst() {
@@ -48,7 +54,36 @@ nonisolated enum HomeTitleTint {
                 return candidate
             }
         }
-        return title.mixed(toward: .white, by: dateFallbackMix)
+        let fallback = title.mixed(toward: .white, by: dateFallbackMix)
+        if let glow = mainColor(of: background), contrast(fallback, glow) < backgroundContrast { return nil }
+        return fallback
+    }
+
+    /// The picture's real colors, made readable, keeping only those that stand out from the glow's main color. When
+    /// none does, the first one lightened until it does; when even that can't (a very light glow), none, and the header
+    /// stays white.
+    static func colors(from swatches: [PosterSwatch], against background: [PosterSwatch]?) -> [MeterTint.RGB] {
+        let found = colors(from: swatches)
+        guard let glow = mainColor(of: background) else { return found }
+        let standing = found.filter { contrast($0, glow) >= backgroundContrast }
+        if !standing.isEmpty { return standing }
+        guard var lifted = found.first else { return [] }
+        for _ in 0..<8 where contrast(lifted, glow) < backgroundContrast {
+            lifted = lifted.mixed(toward: .white, by: 0.15)
+        }
+        return contrast(lifted, glow) >= backgroundContrast ? [lifted] : []
+    }
+
+    /// The glow's main color: the biggest of its swatches, black included, as it is (not made readable).
+    static func mainColor(of swatches: [PosterSwatch]?) -> MeterTint.RGB? {
+        swatches?.max(by: { $0.share < $1.share }).flatMap { MeterTint.RGB(hex: $0.hex) }
+    }
+
+    /// The WCAG contrast ratio of two colors, 1 to 21.
+    static func contrast(_ first: MeterTint.RGB, _ second: MeterTint.RGB) -> Double {
+        let one = TrendingOpenTint.luminance(first)
+        let two = TrendingOpenTint.luminance(second)
+        return (max(one, two) + 0.05) / (min(one, two) + 0.05)
     }
 
     static func chroma(_ tone: (lightness: Double, a: Double, b: Double)) -> Double {

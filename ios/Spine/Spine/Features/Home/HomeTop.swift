@@ -236,28 +236,42 @@ private struct HomeTopHeader: View {
     }
 
     /// Where the header's colors come from: the poster a tile's carousel is on while one is open, counted the same way
-    /// as the picture; else the picture.
-    private var tintSource: URL? {
-        if let poster = viewModel.glowModel.focused?.displayPosterURL, let url = URL(string: poster) { return url }
-        return viewModel.topArt.art?.backdrop
+    /// as the picture and checked against the glow behind the header; else the picture.
+    private var tintSource: TintSource? {
+        let glow = viewModel.glowModel
+        if let poster = glow.focused?.displayPosterURL, let url = URL(string: poster) {
+            return TintSource(colors: url, glow: glow.activeURL)
+        }
+        return (viewModel.topArt.art?.backdrop).map { TintSource(colors: $0, glow: nil) }
     }
 
-    private func updateTitleTint(for url: URL?) async {
-        guard let url else {
+    private func updateTitleTint(for source: TintSource?) async {
+        guard let source else {
             tints = HeaderTints()
             return
         }
+        let store = PosterPaletteStore.homePicture
         // Already counted: the colors are set at once (they still fade in from white after the first frame).
-        if let known = PosterPaletteStore.homePicture.known(server: nil, url: url) {
-            tints = HeaderTints(swatches: known)
+        if let known = store.known(server: nil, url: source.colors),
+           source.glow == nil || store.known(server: nil, url: source.glow) != nil {
+            tints = HeaderTints(swatches: known, glow: store.known(server: nil, url: source.glow))
             return
         }
         // Not counted yet: the old picture's colors don't belong on this one, so the header goes back to white first.
         tints = HeaderTints()
-        let counted = await PosterPaletteStore.homePicture.swatches(server: nil, url: url)
+        async let counted = store.swatches(server: nil, url: source.colors)
+        async let glow = store.swatches(server: nil, url: source.glow)
+        let (swatches, glowSwatches) = await (counted, glow)
         guard !Task.isCancelled else { return }
-        tints = counted.map(HeaderTints.init(swatches:)) ?? HeaderTints()
+        tints = swatches.map { HeaderTints(swatches: $0, glow: glowSwatches) } ?? HeaderTints()
     }
+}
+
+/// The image the header's colors are counted from, and the glow image behind the header they must stand out from
+/// (nil at rest, where the picture is darkened under the header).
+private struct TintSource: Hashable {
+    let colors: URL
+    let glow: URL?
 }
 
 /// The header's colors from the picture: the title takes its most common real color, the date the next one.
@@ -267,9 +281,9 @@ private struct HeaderTints: Equatable {
 
     init() {}
 
-    init(swatches: [PosterSwatch]) {
-        title = HomeTitleTint.color(from: swatches)
-        date = HomeTitleTint.dateColor(from: swatches)
+    init(swatches: [PosterSwatch], glow: [PosterSwatch]? = nil) {
+        title = HomeTitleTint.color(from: swatches, against: glow)
+        date = HomeTitleTint.dateColor(from: swatches, against: glow)
     }
 }
 
