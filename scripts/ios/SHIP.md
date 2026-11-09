@@ -12,14 +12,15 @@ the workflow in this file only. Testing a branch on the iPhone before it ships i
 | Starting work | "New feature: <what>. New worktree and branch." |
 | Trying it on the phone | "Test this on my iPhone." |
 | It's done | "Ship this." (Workflow A) |
+| A TestFlight build of what's shipped | "Make a TestFlight build." ("TestFlight builds") |
 | Something broke | "Production broke after the last ship. Roll back." (Workflow B) |
 
 ## How shipping works
 
 - **A push to `myapp-main` deploys production once CI passes.** GitHub Actions
-  (`.github/workflows/ci.yml`) runs "Fast checks" (`scripts/check.sh`: ruff, models
-  without a migration, the test suite on SQLite) and "Database checks" (every migration
-  and the suite on Postgres 16, like production). When both pass, "Deploy production"
+  (`.github/workflows/ci.yml`) runs "Fast checks" (ruff and models without a migration)
+  and "Database checks" (every migration and the test suite on Postgres 16, like
+  production, in three parts at once). The ship line already ran the suite on SQLite (`scripts/check.sh`). When both pass, "Deploy production"
   runs `deploy-backend-desk-mac.yml` on this Mac's self-hosted runner. It backs up the
   production database to `~/projects/spine-backups/pre-deploy-<run>.dump`, rebuilds the
   Docker stack from `~/projects/spine-deploy` at exactly the pushed commit, checks
@@ -27,7 +28,10 @@ the workflow in this file only. Testing a branch on the iPhone before it ships i
   always comes from `myapp-main`.
 - **The deploy skips a push that doesn't change the backend** (`src/`, the Dockerfile,
   the production compose file, `pyproject.toml`, `uv.lock`, the deploy scripts), and a
-  push that a newer push has overtaken. The job log says which.
+  push production already includes (a late run of an older push). The job log says which.
+- **Every passing push that's newer than production deploys,** even while a later push
+  is still in CI; that later push deploys again when it passes. So when ships land in a
+  row, production moves forward with each one instead of waiting for the newest to pass.
 - **Migrations run during the deploy**, when the new container starts (`entrypoint.sh`),
   right after the backup. There is no separate step. The site is down for the seconds
   the container takes to restart.
@@ -45,12 +49,24 @@ the workflow in this file only. Testing a branch on the iPhone before it ships i
 
 Run from the feature worktree unless a step says otherwise.
 
-1. **Status.** `git fetch origin`, then `scripts/ios/feature-status.sh`. Merge
+1. **Machine first, then status.**
+   - Before anything else: if the branch changes the iOS app
+     (`git diff --name-only origin/myapp-main... -- ios/Spine`, or uncommitted changes
+     there) and `scripts/ios/machine.sh` prints `unset`, ask Armaan right away in the question
+     picker ("Build on the laptop or on HomeMac?", `LAPTOP.md` says how), wait, and save the answer:
+     `scripts/ios/machine.sh set <laptop|homemac>`. Every iOS build and test below reads
+     `scripts/ios/machine.sh`, never memory (`scripts/ios/LAPTOP.md`). Don't ask again later
+     in the ship.
+   - `git fetch origin`, then `scripts/ios/feature-status.sh`. Merge
    `origin/myapp-main` into the branch if it has moved, and resolve conflicts.
 2. **Verify.**
-   - Run `scripts/check.sh` (the same checks as CI's Fast checks) and fix anything it
-     reports.
-   - If iOS changed, build it and run the iOS tests (`ios/AGENTS.md`).
+   - Don't run `scripts/check.sh` here: the ship line (step 6) runs it on the merged
+     result, the feature's one full-suite run. Building only ran the tests for the
+     changed area.
+   - If iOS changed, build it on the machine `scripts/ios/machine.sh` names: HomeMac's
+     `ios` queue (`ios/AGENTS.md`) or the laptop (`LAPTOP.md`). Run the full `SpineTests`
+     only if tested logic changed (models, decoding, view models, presentation helpers);
+     view-only changes just build.
    - For non-trivial changes, run a code review (`/code-review` in Claude Code) and fix
      the findings.
 3. **Compatibility.** Check every changed file under `src/api/` (feature-status lists
@@ -80,14 +96,23 @@ Run from the feature worktree unless a step says otherwise.
 
    Then carry on.
 6. **Ship.**
-   - Claude Code: if the session is isolated in the feature worktree, leave it with
-     `ExitWorktree` (keep) first.
-   - In the main checkout (`~/projects/spine`), which must be clean and on `myapp-main`:
-     `git merge --no-ff <branch>`.
-   - Run `scripts/check.sh` on the merged `myapp-main`, then `git push origin myapp-main`.
-   - Commit as `armaandave@outlook.com`, with the trailers your instructions require.
-   - Run `scripts/ios/test-backend.sh update`, so the always-on test backend (the one
-     Spine Dev talks to) serves the new `myapp-main`.
+   - Get in the ship line, from the feature worktree, in the background:
+     `~/.local/bin/agent-cleanup run --owner <task> --label spine-ship-merge --timeout 14400 -- scripts/ship-merge.sh <branch> "<merge message>"`.
+     The message ends with the trailers your instructions require; commits are
+     `armaandave@outlook.com`.
+   - Ships that arrive while the line is busy wait (up to 3 hours, `Waiting:`) and then go
+     out **together**: the next one in catches the main checkout (`~/projects/spine`, which
+     must be clean and on `myapp-main`) up to `origin/myapp-main`, runs
+     `git merge --no-ff` for every waiting branch (each keeps its own merge commit), runs
+     `scripts/check.sh` once and pushes once, then runs `scripts/ios/test-backend.sh update`
+     (the always-on test backend Spine Dev talks to then serves the new `myapp-main`).
+   - A branch that conflicts is left out. If the batch's checks fail, it ships the branches
+     one at a time, so only the one that broke them stops. A ship whose chat died while
+     waiting is dropped, not shipped.
+   - Each ship prints its own result: `SHIPPED: <branch> is in <sha>` (the pushed commit,
+     maybe shared with other ships) or `STOPPED: <why>`. A stopped ship's merge is undone:
+     fix the branch (merge `origin/myapp-main` into it) and run it again. Never merge or
+     push `myapp-main` by hand outside the line.
 7. **CI and the deploy.** Find the run with `gh run list --commit <sha>`, then
    `gh run watch <run-id> --exit-status`.
    - Red checks: nothing was deployed. Fix forward on a branch and ship again.
@@ -154,8 +179,8 @@ which installed builds decode and never show as numbers:
   (`saved_on`), so Stats and the Activity list read it there. Before, the date only moved
   the journey's latest progress and the row stayed on the day it was made. Installed builds
   never send it for those types, so nothing they do changes. A day before the previous
-  save is allowed now, one before the start is still refused (BK-306), and the journey's
-  latest progress stays its newest day.
+  save is refused, as is one before the start (BK-306, decision 66), and the app's calendar
+  starts at the later of the two (`progressed_on`, new and optional on a journey).
 - `viewer` on a progress day's own page (`GET /api/v1/progress/<id>/`) gains `can_edit`,
   `can_delete` and `edit`, for the owner, and `can_delete` for an admin. The feed and the
   lists never carry them, and anyone else's page has the two keys it had.
@@ -167,7 +192,8 @@ which installed builds decode and never show as numbers:
 - New optional, only for a request that asks: `include=planning` on `/api/v1/feed/` and a
   profile's plain `/api/v1/users/<username>/activity/` adds rows with `type`
   `planning_added` and `object.type` `planning`, with `id` a negative address at or above
-  2^44 that opens no progress page, and `GET /api/v1/planning/<id>/` lists the titles. A
+  2^44 that opens no progress page, the titles' names (`object.titles`) and up to three
+  posters (`object.posters`), and `GET /api/v1/planning/<id>/` lists the titles. A
   list opened from a number ignores it, and the profile row's `counts.activity` and the
   rail don't ask.
 
@@ -238,6 +264,17 @@ below.
    counts by type. The pre-deploy backup is the way back: the fill replaces stored values, not only blanks.
 
 Remove this section once the production fill has finished.
+
+## TestFlight builds
+
+- **Automatic:** every push to `myapp-main` that changes the iOS app starts an Xcode Cloud
+  build. Its "Auto-cancel builds" setting is on, so when ships push in a row, a newer push
+  cancels the build still running and one build carries them all. Every build spends Xcode
+  Cloud hours; ships don't need to wait for each other to save them.
+- **On request:** when Armaan says "make a TestFlight build", run
+  `scripts/ios/testflight-build.sh`. It builds `myapp-main` as it is now, whether or not the
+  last push changed the app. His request is the yes for it and for step 9 of Workflow A
+  (add the build to "Me", tag the commit), which comes next. Never start one otherwise.
 
 ## Workflow B: roll back after a bad ship
 

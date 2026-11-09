@@ -20,21 +20,32 @@ jobs:
   checks:
     name: Fast checks
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       # Pinned to a commit because it is a third-party action.
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
-      # Lint, models without a migration, and the test suite on SQLite.
-      - name: scripts/check.sh
-        run: scripts/check.sh
+      # Lint and models without a migration. The test suite runs once here, on Postgres
+      # like production (Database checks); the ship line already ran it on SQLite
+      # (scripts/check.sh) on the merged commit before the push.
+      - name: Lint
+        run: uv run --locked ruff check src
+      - name: Models without a migration
+        working-directory: src
+        run: uv run --locked python manage.py makemigrations --check --dry-run
 
+  # The suite in three parts on three machines at once (scripts/test_shards.py): together
+  # exactly the full suite, so CI takes about a third as long. Deploy waits for all three.
   database:
-    name: Database checks
+    name: Database checks (${{ matrix.part }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
     services:
       # Production runs postgres:16-alpine (docker-compose.production.yml).
       postgres:
@@ -65,11 +76,54 @@ jobs:
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
+      # Tests don't need crash safety: skip waiting for the disk on every commit. Test-only
+      # settings for this throwaway server, not production's. Autovacuum off too: halfway
+      # through a run it gathered table statistics from earlier tests' data, and with them
+      # Postgres planned one TV Activity query so badly that a test taking 5 seconds on its
+      # own ran past 20 minutes (ManyMovedTests, 2026-11-08). Without them every test gets
+      # the same plan it gets alone.
+      - name: Make Postgres fast for tests
+        env:
+          PGPASSWORD: spine-ci
+        run: |
+          psql -h 127.0.0.1 -U spine -d spine -v ON_ERROR_STOP=1 \
+            -c "ALTER SYSTEM SET fsync = off" \
+            -c "ALTER SYSTEM SET synchronous_commit = off" \
+            -c "ALTER SYSTEM SET full_page_writes = off" \
+            -c "ALTER SYSTEM SET autovacuum = off" \
+            -c "SELECT pg_reload_conf()"
+          psql -h 127.0.0.1 -U spine -d spine -Atc "SHOW fsync; SHOW synchronous_commit; SHOW full_page_writes; SHOW autovacuum"
       # What every deploy does when the new container starts (entrypoint.sh).
       - name: Apply every migration to an empty database
         run: uv run --locked python manage.py migrate --noinput
+      # The suite has hung here before, until the job's time limit cut it off with no
+      # clue. If it's still running at 25 and 40 minutes, print what Postgres is waiting on
+      # and each test process's Python stack (which test, which line), then carry on.
       - name: Tests on Postgres
-        run: uv run --locked python manage.py test --parallel 4 --noinput
+        env:
+          PGPASSWORD: spine-ci
+        run: |
+          report() {
+            echo "::group::Still running after $1 minutes: Postgres sessions"
+            psql -h 127.0.0.1 -U spine -d spine -c "SELECT pid, datname, state, wait_event_type, wait_event, now() - query_start AS running_for, left(query, 300) AS query FROM pg_stat_activity WHERE datname LIKE 'test_%' ORDER BY query_start" || true
+            echo "::endgroup::"
+            echo "::group::Still running after $1 minutes: test processes"
+            uv tool install --quiet py-spy >/dev/null 2>&1 || true
+            for pid in $(pgrep -f "manage.py test"); do
+              echo "--- process $pid"
+              sudo "$HOME/.local/bin/py-spy" dump --pid "$pid" || true
+            done
+            echo "::endgroup::"
+          }
+          ( sleep 1500 && report 25 && sleep 900 && report 40 ) &
+          watchdog=$!
+          status=0
+          labels=$(python3 ../scripts/test_shards.py ${{ matrix.part }} 3)
+          echo "Part ${{ matrix.part }} of 3: $(echo $labels | wc -w) test modules"
+          uv run --locked python manage.py test --parallel 4 --noinput $labels || status=$?
+          pkill -P "$watchdog" 2>/dev/null || true
+          kill "$watchdog" 2>/dev/null || true
+          exit "$status"
 
   deploy:
     name: Deploy production

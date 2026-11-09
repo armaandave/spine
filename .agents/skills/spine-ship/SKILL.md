@@ -4,7 +4,8 @@ description: >-
   Ship Spine work to production and TestFlight: merge a finished feature into
   myapp-main and push it, which deploys the backend once CI passes and makes a
   TestFlight build when the iOS app changed; or roll back a bad ship. Use when the
-  user says "ship this", "ship it", "merge and ship", or "roll back". Testing on the
+  user says "ship this", "ship it", "merge and ship", "roll back", or "make a
+  TestFlight build". Testing on the
   iPhone first is spine-test-on-iphone.
 ---
 
@@ -18,8 +19,12 @@ Core rules, in case of doubt:
 1. A push to `myapp-main` runs CI and, once it passes, deploys production. It also makes
    a TestFlight build when the push changes the iOS app. Never put a CI skip marker in a
    commit message: it would skip CI and the deploy.
-2. Run `scripts/check.sh` before merging, then watch CI and the deploy on the pushed
+2. The ship line runs `scripts/check.sh` on the merged result, the feature's only
+   full-suite run; don't run it before. Then watch CI and the deploy on the pushed
    commit. A red deploy can mean production is down: fix it or roll back.
 3. Never push, deploy, or write to App Store Connect without the user's explicit yes in
    this conversation for this ship.
 4. The API must keep working for every installed build.
+5. If the branch changes the iOS app, ask "laptop or HomeMac?" first, in the question picker (`AskUserQuestion`), unless
+   `scripts/ios/machine.sh` already has the answer, and save it there. Merge and push only
+   through the ship line, `scripts/ship-merge.sh`, so several ships can run at once.

@@ -17,6 +17,7 @@ from app.models import (
     Sources,
     Status,
 )
+from app.tests.anime_fixtures import FakeAnimeProvider
 from app.tests.tv_fixtures import FakeTVProvider
 
 
@@ -49,17 +50,19 @@ class CreateMedia(TestCase):
             title="Test Anime",
             image="http://example.com/image.jpg",
         )
-        self.client.post(
-            reverse("media_save"),
-            {
-                "media_id": "1",
-                "source": Sources.MAL.value,
-                "media_type": MediaTypes.ANIME.value,
-                "status": Status.PLANNING.value,
-                "progress": 0,
-                "repeats": 0,
-            },
-        )
+        with FakeAnimeProvider() as provider:
+            provider.add("1", title="Test Anime", total=26)
+            self.client.post(
+                reverse("media_save"),
+                {
+                    "media_id": "1",
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "status": Status.PLANNING.value,
+                    "progress": 0,
+                    "repeats": 0,
+                },
+            )
         self.assertEqual(
             Anime.objects.filter(item__media_id="1", user=self.user).exists(),
             True,

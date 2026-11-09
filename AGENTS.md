@@ -60,9 +60,10 @@ Background services (when needed):
 
 Primary checks before handing off non-trivial changes:
 
-1. Targeted tests for changed area:
+1. While building, run only the tests for the area you changed:
    - `cd src && uv run --locked python manage.py test <app_or_test_path>`
-2. Before calling the work done: `scripts/check.sh` (ruff, models without a migration, the full suite), the same as CI's Fast checks.
+   - plus `uv run --locked ruff check src` and, if models changed, `makemigrations --check --dry-run`.
+2. The full suite (`scripts/check.sh`: ruff, models without a migration, the suite on SQLite) runs once per feature, inside the ship line (`scripts/ship-merge.sh`, `scripts/ios/SHIP.md`), not after every change. CI runs the suite again on Postgres before anything deploys.
 3. For template/HTMX changes, verify:
    - Full-page load
    - Partial fragment response
@@ -213,10 +214,13 @@ These do not block current implementation but should be finalized later:
 Every feature follows this path. Armaan drives it with the prompts in quotes.
 
 1. **Start.** "New feature: <what>. New worktree and branch." Work only in that worktree, under `.claude/worktrees/<name>`: inside the repo, so the settings find the main checkout's `.env`. Keep API changes additive. Don't merge or push.
-2. **Build.** Implement the feature and verify it. Run `scripts/check.sh` before calling the work done.
+2. **Build.** Implement the feature and verify it with the tests for the area you changed (section 6). The full suite waits for the ship.
    - New logic gets a test. A bug fix gets a test that fails before the fix and passes after it.
+   - One test per rule, at the layer where the rule lives. Don't repeat the same rule in the API, listing, import and app tests.
+   - Layout, styling and wording changes get no new tests: compile, then check on the phone or simulator. Don't assert on-screen text or read source files as text in tests.
    - Tests must pass with no `.env` and no API keys, as in CI.
 3. **Try on the phone.** "Test this on my iPhone." Use the `spine-test-on-iphone` skill (`scripts/ios/TEST_ON_IPHONE.md`). It installs **Spine Dev**, the Debug app, which talks to the always-on test backend on the Mac (`scripts/ios/test-backend.sh`), signed in as its dev user. A branch with backend changes is served from the test backend first (`scripts/ios/test-backend.sh use`); never deploy to test. Armaan's real **Spine** app (TestFlight, production, the real account) is never used for testing. Repeat 2–3 until Armaan is happy.
+   - Laptop or HomeMac: before a chat's first iOS build, simulator or test run, check `scripts/ios/machine.sh`; if it says `unset`, ask Armaan which machine in the question picker (`AskUserQuestion`, as `scripts/ios/LAPTOP.md` says) and save his answer with `machine.sh set` (every later step reads it). Ships ask first, and wait in the ship line (`scripts/ship-merge.sh`), which ships everyone waiting together with one test run, so several can run at once. The laptop (`scripts/ios/LAPTOP.md`, `spine-ios-on-laptop` skill) skips this Mac's `ios` queue.
 4. **Ship.** "Ship this." Use the `spine-ship` skill (`scripts/ios/SHIP.md`): verify, merge into `myapp-main` in the main checkout, and push. CI then deploys production, and Xcode Cloud makes a TestFlight build if the iOS app changed. Watch both, verify production, then remove the worktree and delete any scratch simulators it left behind.
 5. **Roll back.** "Roll back" if a ship broke production (`scripts/ios/SHIP.md`, Workflow B).
 
@@ -231,8 +235,8 @@ Every feature follows this path. Armaan drives it with the prompts in quotes.
 ## 15) CI
 
 - `.github/workflows/ci.yml` runs on every push to any branch, on GitHub-hosted runners (free for this public repo):
-  - "Fast checks": `scripts/check.sh` (ruff, `makemigrations --check`, the full suite on SQLite with `uv.lock`).
-  - "Database checks": every migration, then the full suite, on Postgres 16 like production.
+  - "Fast checks": ruff and `makemigrations --check`, with `uv.lock`. The SQLite suite isn't repeated in CI: the ship line runs it (`scripts/check.sh`) on the merged commit before pushing.
+  - "Database checks (1/3, 2/3, 3/3)": every migration, then the full suite on Postgres 16 like production, split into three parts that run on three machines at once (`scripts/test_shards.py`; `config/tests/test_test_shards.py` checks the parts add up to exactly the full suite). Crash safety is off (tests don't need it).
   - "Deploy production": pushes to `myapp-main` only, after both pass (`deploy-backend-desk-mac.yml`).
 - Upstream's App Tests and Stale workflows are disabled in GitHub. Leave upstream's workflow files unedited so upstream merges stay clean.
 - When CI goes red, find the run with `gh run list`, read the failure with `gh run view <run-id> --log-failed`, reproduce it (`scripts/check.sh`, or the Database checks commands against a throwaway Postgres), fix the cause, and push. Keep `myapp-main` green.

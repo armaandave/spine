@@ -251,6 +251,11 @@ final class InProgressUpdate {
         page.viewer.map(\.progress) ?? item.tracking.progress
     }
 
+    /// The earliest day a save can be dated: the current journey's start or last save, whichever is later.
+    var bookDateFloor: Date? {
+        (page.viewer?.book?.currentJourney ?? item.tracking.reading?.currentJourney)?.progressDateFloor
+    }
+
     /// The current journey's status, or the book's own when it has no journey (paused directly).
     var bookJourneyStatus: String? {
         page.viewer.map { $0.book?.currentJourney?.status ?? $0.status }
@@ -620,6 +625,7 @@ private struct InProgressUpdateSheets: ViewModifier {
                     isSaving: page.isSavingProgress,
                     errorMessage: page.progressErrorMessage,
                     journeyStatus: update.bookJourneyStatus,
+                    dateFloor: update.bookDateFloor,
                     onSave: { await update.saveBookProgress($0) },
                     onFinish: { update.openCompletion() },
                     opensLogAfterSave: { page.viewer?.book?.opensLog == true },

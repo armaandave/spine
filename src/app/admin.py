@@ -265,6 +265,7 @@ SpecialModels = [
     "CustomBackdropPreference",
     "CustomLogoPreference",
     "CustomPosterPreference",
+    "PosterPalette",
     "DiaryEntry",
     "Tag",
     "DiaryEntryTag",

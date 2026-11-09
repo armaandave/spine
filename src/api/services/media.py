@@ -99,6 +99,7 @@ from app.models import (
     ExternalRating,
     Item,
     MediaTypes,
+    PosterPalette,
     Sources,
 )
 from app.providers import anilist, apple_music, hardcover, mal, musicbrainz
@@ -1405,6 +1406,11 @@ def media_detail(  # noqa: C901, PLR0912, PLR0915
         "completion": completion,
         "custom_backdrop_url": custom_backdrop_url,
         "custom_poster_url": absolute_url(request, viewer_poster.custom_image_url) if viewer_poster else None,
+        "poster_palette": poster_palette(
+            absolute_url(request, viewer_poster.custom_image_url)
+            if viewer_poster
+            else summary.get("poster_url") or summary.get("image_url"),
+        ),
         "related": metadata.get("related", {}),
         "related_sections": related_sections,
         "providers": watch_providers_for_user(metadata, user),
@@ -4666,6 +4672,54 @@ def title_logo(*, source, media_type, media_id):
 
         return steamgriddb.get_game_logo(media_id)
     return None
+
+
+POSTER_PALETTE_SCHEDULE_TTL = 60 * 10
+
+
+def poster_palette(image_url):
+    """Return the shown poster's colors by share.
+
+    The first time, they're counted in the background, for the next open.
+    """
+    return poster_palettes([image_url]).get(image_url)
+
+
+def poster_palettes(image_urls):
+    """Return {url: colors} for the shown posters whose colors are saved, in one query.
+
+    Each poster without them is counted in the background, for the next load.
+    """
+    # A URL longer than the table's column (a signed link, say) gets no colors.
+    max_length = PosterPalette._meta.get_field("image_url").max_length
+    urls = {
+        url
+        for url in image_urls
+        if url
+        and url.startswith(("http://", "https://"))
+        and url != settings.IMG_NONE
+        and len(url) <= max_length
+    }
+    if not urls:
+        return {}
+    saved = dict(PosterPalette.objects.filter(image_url__in=urls).values_list("image_url", "colors"))
+    if settings.POSTER_PALETTE_COUNTING:
+        for url in urls - saved.keys():
+            _schedule_poster_palette(url)
+    return saved
+
+
+def _schedule_poster_palette(image_url):
+    schedule_key = f"poster-palette:{hashlib.sha256(image_url.encode()).hexdigest()}"
+    try:
+        if cache.add(schedule_key, 1, timeout=POSTER_PALETTE_SCHEDULE_TTL):
+            from app.tasks import store_poster_palette
+
+            store_poster_palette.delay(image_url)
+    except (KombuOperationalError, ConnectionInterrupted, RedisError, ConnectionError, OSError) as error:
+        with suppress(ConnectionInterrupted, RedisError, ConnectionError, OSError):
+            cache.delete(schedule_key)
+        logger.warning("Poster palette enqueue failed type=%s", type(error).__name__)
 
 
 def poster_accent_color(metadata, ref):

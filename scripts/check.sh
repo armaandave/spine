@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The CI "Fast checks", run locally from any checkout or worktree before calling work
-# done: lint, models without a migration, and the full Django test suite (SQLite, test
-# settings). Uses uv.lock, the same dependencies as CI and the production image.
+# Lint, models without a migration, and the full Django test suite (SQLite, test
+# settings). The ship line (scripts/ship-merge.sh) runs it on the merged commit before
+# pushing; CI then runs lint and the migration check again, and the suite on Postgres. Uses uv.lock, the same dependencies as CI and the production image.
 #
 # Usage: scripts/check.sh   (SPINE_TEST_PARALLEL sets the test processes, default 4)
 set -euo pipefail

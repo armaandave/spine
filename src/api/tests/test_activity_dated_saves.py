@@ -3,7 +3,7 @@
 The date picker sends `progressed_on` with a save (games already did). The save's row
 keeps that day, so Stats and the Activity list read it there. Rules shared with games
 (`single_weight.sent_day`): today is never refused, a day ahead caps at today, a day
-before the start is refused (BK-306), and a day before the previous save is allowed.
+before the start is refused (BK-306), and so is a day before the previous save.
 """
 
 from datetime import date, datetime
@@ -14,7 +14,7 @@ from django.test import override_settings
 from api.services import activity_rows
 from api.tests.test_activity_new_year import NEW_YORK, TOKYO, NewYearBase
 from app import book_tracking, series_tracking
-from app.models import Book, BookSession, MediaTypes
+from app.models import Book, MediaTypes
 from social.models import ProgressChange
 
 NEW_YORK_TZ = ZoneInfo(NEW_YORK)
@@ -123,29 +123,29 @@ class DatedSaveTests(DatedSaveBase):
                 self.save(item, 10, DEC_1)
                 self.assertEqual(self.stamps(item), [DEC_1])
 
-    def test_a_day_before_the_previous_save_is_allowed(self):
+    def test_a_day_before_the_previous_save_is_refused(self):
         for media_type, fields in self.TYPES:
             with self.subTest(media_type):
                 item = self.started(media_type, **fields)
                 self.save(item, 20, DEC_27)
-                self.save(item, 25, DEC_20)
-                self.assertEqual(self.stamps(item), [DEC_27, DEC_20])
-                # The rise lands on its own day; the place is the last save's.
-                self.assertEqual(self.days(item), {DEC_27: 20, DEC_20: 5})
-                self.assertEqual((self.year(item, 2026), self.year(item, 2027)), (25, 0))
+                self.save(item, 25, DEC_20, expected=400)
+                self.assertEqual(self.stamps(item), [DEC_27])
+                # The same day, and today, are still fine.
+                self.save(item, 25, DEC_27)
+                self.save(item, 30)
+                self.assertEqual(self.stamps(item), [DEC_27, DEC_27, date(2027, 1, 2)])
 
-    def test_the_latest_progress_stays_the_newest_day(self):
-        item = self.started(MediaTypes.BOOK.value, total_pages=400)
-        self.save(item, 20, DEC_27)
-        self.save(item, 25, DEC_20)
-        session = BookSession.objects.get(related_book__item=item)
-        self.assertEqual(session.progressed_on, DEC_27)
-        self.assertEqual(Book.objects.get(item=item).progress, 25)
+    def test_the_journey_payload_carries_the_latest_progress_day(self):
+        book = self.started(MediaTypes.BOOK.value, total_pages=400)
         manga = self.started(MediaTypes.MANGA.value, series_total=100)
+        self.assertIsNone(book_tracking.journey_payload(Book.objects.get(item=book).current_session)["progressed_on"])
+        self.save(book, 20, DEC_27)
         self.save(manga, 20, DEC_27)
-        self.save(manga, 25, DEC_20)
-        attempt = series_tracking.Manga.objects.get(item=manga).current_attempt
-        self.assertEqual(attempt.progressed_on, DEC_27)
+        session = Book.objects.get(item=book).current_session
+        self.assertEqual(book_tracking.journey_payload(session)["progressed_on"], "2026-12-27")
+        row = series_tracking.Manga.objects.get(item=manga)
+        payload = series_tracking._journey_payload(row, row.current_attempt, [])
+        self.assertEqual(payload["progressed_on"], "2026-12-27")
 
     def test_a_tokyo_account_keeps_the_day_it_sent(self):
         from app.tests.tv_fixtures import make_user

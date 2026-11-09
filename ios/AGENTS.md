@@ -238,6 +238,10 @@ Implementation notes:
 
 No XCTest required for every change; required for non-trivial decoding/network logic.
 
+- **When to run them:** only when a change touches tested logic (models, decoding, view models, presentation helpers). While iterating, run just the affected classes (`-only-testing:SpineTests/<Class>`). The full `SpineTests` run happens once, at ship.
+- **View-only changes** (layout, styling, wording) get no new tests and no test run: build the app and check it on the phone or simulator.
+- Don't write tests that read source files as text or assert exact on-screen wording.
+
 Run them under the cleanup wrapper, in the `ios` queue (heavy iOS work on this Mac takes turns, one at a time), on a scratch simulator it creates and deletes afterwards (the stock "iPhone 17" simulator on this Mac can wedge on boot, and never borrow another session's). Run it in the background: it may wait for its turn first.
 
 ```sh
@@ -248,6 +252,8 @@ Run them under the cleanup wrapper, in the `ios` queue (heavy iOS work on this M
 ```
 
 A first boot loads the Mac heavily for a few minutes, and the Mac also serves production; the queue keeps it to one simulator at a time. Builds for a simulator or a phone go through the queue too (`--queue ios`).
+
+Laptop or HomeMac: before a chat's first iOS build, simulator or test run, check `scripts/ios/machine.sh`; if it says `unset`, ask Armaan which one in the question picker (`AskUserQuestion`) and save his answer with `machine.sh set`. The laptop runs it all without this queue (`scripts/ios/LAPTOP.md`).
 
 The helper deletes its simulator when the run ends. Start these runs from inside the feature's checkout, so shipping can delete any it left behind (`scripts/ios/delete-scratch-sims.sh`, `scripts/ios/SHIP.md` step 10).
 

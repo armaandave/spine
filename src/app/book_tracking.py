@@ -671,9 +671,10 @@ def update_progress(
         progress_day = max(filter(None, (today, _day(session.start_date), session.progressed_on)))
     elif session.start_date and saved_on < _day(session.start_date):
         raise ValidationError("Progress updates cannot predate the journey start.")
+    elif session.progressed_on and saved_on < session.progressed_on:
+        raise ValidationError("Pick a day on or after your last update.")
     else:
-        # Dated before the last save is allowed; the latest progress stays the newest.
-        progress_day = max(filter(None, (saved_on, session.progressed_on)))
+        progress_day = saved_on
     previous = _journey_progress(session)
     session.pages_read = pages
     session.percentage_read = percentage
@@ -1668,6 +1669,7 @@ def journey_payload(session):
         "origin": session.origin,
         "start_date": _date_string(session.start_date),
         "end_date": _date_string(session.end_date),
+        "progressed_on": _date_string(session.progressed_on),
         "progress": _journey_progress(session),
         "completion_diary_entry_id": session.completion_diary_entry_id,
         "is_reread": is_true_reread(session),

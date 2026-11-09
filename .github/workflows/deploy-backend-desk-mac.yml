@@ -40,9 +40,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # Manual runs always deploy. A push deploys only while it is still the tip of its
-      # branch (a late older run must not undo a newer deploy) and only when it changes
-      # something the backend image is built from.
+      # Manual runs always deploy. A push deploys when it is newer than what production
+      # runs, even if a later push is still in CI, so production moves forward with every
+      # push that passes (that later push deploys again if it passes). A late older run
+      # never undoes a newer deploy, and a push that changes nothing the backend image is
+      # built from is skipped.
       - name: Decide whether to deploy
         id: plan
         shell: bash
@@ -61,13 +63,18 @@ jobs:
           fi
           deploy_repo="$HOME/projects/spine-deploy"
           git -C "$deploy_repo" fetch --quiet origin "+refs/heads/$branch:refs/remotes/origin/$branch"
-          tip="$(git -C "$deploy_repo" rev-parse "origin/$branch")"
-          if [[ "$tip" != "$REQUESTED_REF" ]]; then
-            echo "Not deploying: $branch has moved on to ${tip:0:8}, and that push deploys itself."
+          if ! git -C "$deploy_repo" merge-base --is-ancestor "$REQUESTED_REF" "origin/$branch"; then
+            echo "Not deploying: ${REQUESTED_REF:0:8} isn't on $branch."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           deployed="$(docker exec spine printenv SPINE_COMMIT_SHA 2>/dev/null || true)"
+          if [[ -n "$deployed" ]] && git -C "$deploy_repo" cat-file -e "$deployed^{commit}" 2>/dev/null \
+            && git -C "$deploy_repo" merge-base --is-ancestor "$REQUESTED_REF" "$deployed"; then
+            echo "Not deploying: production already runs ${deployed:0:8}, which includes ${REQUESTED_REF:0:8}."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [[ -n "$deployed" ]] && git -C "$deploy_repo" cat-file -e "$deployed^{commit}" 2>/dev/null \
             && git -C "$deploy_repo" diff --quiet "$deployed" "$REQUESTED_REF" -- \
               src Dockerfile .dockerignore docker-compose.production.yml entrypoint.sh \

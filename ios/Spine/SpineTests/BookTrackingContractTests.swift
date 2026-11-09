@@ -9,6 +9,19 @@ final class BookTrackingContractTests: XCTestCase {
         super.tearDown()
     }
 
+    func testProgressDateFloorIsTheLaterOfStartAndLastSave() {
+        let cal = Calendar(identifier: .gregorian)
+        func floor(_ start: String?, _ saved: String?) -> String? {
+            ProgressDateFloor.date(startDate: start, progressedOn: saved, calendar: cal)
+                .map { CalendarDateCodec.string(from: $0, calendar: cal) }
+        }
+        XCTAssertEqual(floor("2026-12-01", "2026-12-27"), "2026-12-27")
+        XCTAssertEqual(floor("2026-12-01", nil), "2026-12-01")
+        XCTAssertEqual(floor("2026-12-30", "2026-12-27"), "2026-12-30")
+        XCTAssertEqual(floor(nil, "2026-12-27"), "2026-12-27")
+        XCTAssertNil(floor(nil, nil))
+    }
+
     func testTrackingStateDecodesCurrentJourneyHistoryAndUndatedRead() throws {
         let state = try JSONDecoder.api.decode(TrackingState.self, from: Self.trackingResponse)
 

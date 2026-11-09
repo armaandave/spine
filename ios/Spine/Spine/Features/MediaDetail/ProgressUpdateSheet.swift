@@ -550,6 +550,8 @@ struct ProgressUpdateSheet: View {
     let isSaving: Bool
     let errorMessage: String?
     let journeyStatus: String?
+    /// The earliest day the date row offers: the start or the last save, whichever is later.
+    let dateFloor: Date?
     let onSave: (ProgressUpdateSaveRequest) async -> Bool
     /// Finished Reading, or progress saved at the last page: the completion log, which closes the sheet first.
     let onFinish: () -> Void
@@ -567,6 +569,7 @@ struct ProgressUpdateSheet: View {
         isSaving: Bool,
         errorMessage: String?,
         journeyStatus: String?,
+        dateFloor: Date? = nil,
         onSave: @escaping (ProgressUpdateSaveRequest) async -> Bool,
         onFinish: @escaping () -> Void,
         opensLogAfterSave: @escaping () -> Bool = { false },
@@ -579,6 +582,7 @@ struct ProgressUpdateSheet: View {
         self.isSaving = isSaving
         self.errorMessage = errorMessage
         self.journeyStatus = journeyStatus
+        self.dateFloor = dateFloor
         self.onSave = onSave
         self.onFinish = onFinish
         self.opensLogAfterSave = opensLogAfterSave
@@ -663,6 +667,7 @@ struct ProgressUpdateSheet: View {
             canSave: viewModel.canSave && !isClosing,
             isSaving: isSaving || isSubmitting,
             date: $date,
+            dateFloor: dateFloor,
             onSave: save,
             onFinish: { perform(.finish) }
         ) {
@@ -787,6 +792,8 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     let isSaving: Bool
     /// The day the save is on; nil leaves the date row out.
     let date: Binding<Date>?
+    /// The earliest day the calendar offers; nil leaves it open.
+    let dateFloor: Date?
     /// False leaves out ⋯, for a sheet whose only choice is its number.
     let showsMore: Bool
     let onSave: () -> Void
@@ -809,6 +816,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         canSave: Bool,
         isSaving: Bool,
         date: Binding<Date>? = nil,
+        dateFloor: Date? = nil,
         showsMore: Bool = true,
         onSave: @escaping () -> Void,
         onFinish: @escaping () -> Void,
@@ -829,6 +837,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         self.canSave = canSave
         self.isSaving = isSaving
         self.date = date
+        self.dateFloor = dateFloor
         self.showsMore = showsMore
         self.onSave = onSave
         self.onFinish = onFinish
@@ -973,6 +982,14 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         }
     }
 
+    /// Nothing before the last save: an older day is fixed from its row with Edit. A floor in the future (a clock
+    /// behind the server's) falls back to today, so the range is never empty.
+    private var dateRange: ClosedRange<Date> {
+        let now = Date()
+        guard let dateFloor, dateFloor <= now else { return Date.distantPast...now }
+        return dateFloor...now
+    }
+
     /// "Date  Today": a tap opens the calendar under it and lowers the number pad; the number's row brings the pad
     /// back. The calendar stops at today, since a save can't be a day ahead.
     @ViewBuilder
@@ -1001,7 +1018,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         .accessibilityValue(ProgressDateWords.text(for: date.wrappedValue))
 
         if isPickingDate {
-            DatePicker("Date", selection: date, in: ...Date(), displayedComponents: .date)
+            DatePicker("Date", selection: date, in: dateRange, displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .labelsHidden()
         }

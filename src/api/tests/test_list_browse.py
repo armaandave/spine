@@ -150,6 +150,14 @@ class ListBrowseAPITests(TestCase):
     def test_add_to_list_membership_lists_sort_too(self):
         self.make_list("Old", updated_days_ago=4)
         self.make_list("New", updated_days_ago=1)
+        # A stored title, so the request never asks TMDB about it.
+        Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.MOVIE.value,
+            media_id="550",
+            title="Fight Club",
+            image="https://example.com/poster.jpg",
+        )
 
         response = self.client.get(
             "/api/v1/lists/",

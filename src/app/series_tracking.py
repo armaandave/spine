@@ -609,9 +609,8 @@ def _save_place(user, item, place, progressed_on, *, mutation_id=None):
         day = max(filter(None, (day, attempt.start_date, attempt.progressed_on)))
     elif attempt.start_date and day < attempt.start_date:
         raise ValidationError("Progress updates can't be before the attempt's start date.")
-    else:
-        # Dated before the last save is allowed; the latest progress stays the newest.
-        day = max(filter(None, (day, attempt.progressed_on)))
+    elif attempt.progressed_on and day < attempt.progressed_on:
+        raise ValidationError("Pick a day on or after your last update.")
     previous = _attempt_progress(attempt, row.item)
     attempt.place = place
     attempt.progressed_on = day
@@ -1776,6 +1775,7 @@ def _journey_payload(row, attempt, completed):
         "origin": attempt.origin,
         "start_date": _date_string(attempt.start_date),
         "end_date": _date_string(attempt.end_date),
+        "progressed_on": _date_string(attempt.progressed_on),
         "progress": _attempt_progress(attempt, row.item),
         "completion_diary_entry_id": attempt.completion_diary_entry_id,
         "is_reread": _is_reread(row, attempt, completed),

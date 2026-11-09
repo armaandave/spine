@@ -105,7 +105,7 @@ These are the maintainer's counting decisions of 2026-11-02, and the same as boo
 - Lowering a number fixes a typo. It is not a new read.
 - A first save with nothing before it counts whole on that day, even if it is catch-up. One that opens at a place, after Keep Reading, a pick-up or a new issue, adds only the rise (MC-200 to MC-202).
 - A log adds only what is left, on the log's day. Editing its date moves that count.
-- A number saved with a date (the date picker) follows BK-306: the save's day is the day sent, the phone's own date is never refused, a day one ahead caps at today, a day before the attempt's start is refused, and a day before the previous save is allowed. The attempt's latest progress stays its newest day.
+- A number saved with a date (the date picker) follows BK-306: the save's day is the day sent, the phone's own date is never refused, a day one ahead caps at today, a day before the attempt's start is refused, and so is a day before the previous save (the picker starts at that day; an older day is fixed from its row with Edit). The attempt's latest progress is its newest day.
 - A log can be dated before the attempt's start or its saves (the maintainer's decision 10, as BK-306). Dated before the attempt's first activity, everything that read counted moves to the log's date, and the start moves with it. Otherwise saves stay on their days and the rest lands on the log's date. Deleting the log puts the start back. Did Not Finish, Restart and Edit Dates keep their date checks.
 - A reread counts again, by a direct log too.
 - What is undone counts on no day: an undone eye, a deleted attempt, a deleted log.
