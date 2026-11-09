@@ -26,11 +26,6 @@ def music_picks_apply(item):
     )
 
 
-def is_curator(user):
-    """Admins and artwork curators curate artwork for everyone."""
-    return bool(user and user.is_authenticated and (user.is_staff or user.is_artwork_curator))
-
-
 _CURATORS = Q(user__is_staff=True) | Q(user__is_artwork_curator=True)
 # Admin picks first, then artwork curators' picks; newest first within each.
 _CURATED_ORDER = ("-user__is_staff", "-updated_at")
