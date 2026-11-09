@@ -14,7 +14,6 @@ from api.serializers.common import (
     media_ref_from_item,
 )
 from api.services import media as media_service
-from app.curation import is_curator
 from app.models import HomePicture
 from app.providers import services as provider_services
 from social.models import SocialAuditLog
@@ -49,7 +48,7 @@ def _envelope(request):
     return Response(
         {
             "picture": _picture_dict(picture) if picture else None,
-            "can_change": is_curator(request.user),
+            "can_change": request.user.is_staff,
         },
     )
 
@@ -131,7 +130,7 @@ class HomePictureView(APIView):
         return _envelope(request)
 
     def put(self, request):
-        if not is_curator(request.user):
+        if not request.user.is_staff:
             return _forbidden()
         serializer = HomePictureSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -156,7 +155,7 @@ class HomePictureView(APIView):
         return _envelope(request)
 
     def delete(self, request):
-        if not is_curator(request.user):
+        if not request.user.is_staff:
             return _forbidden()
         existing = HomePicture.objects.select_related("item").filter(pk=1).first()
         if existing:

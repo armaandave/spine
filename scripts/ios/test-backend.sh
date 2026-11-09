@@ -25,6 +25,10 @@
 #   fill-metadata [--apply]  run the metadata fill (fill_item_metadata) in the checkout being served,
 #                   on its database: a dry run with no provider calls, or --apply (paced, in this
 #                   process); for the ship that brings the stats data foundation (SHIP.md)
+#   dev-staff       make the dev sign-in user (claude) staff on its lasting test database, so
+#                   Spine Dev can do what only staff can (choose Home's picture, curate artwork)
+#   seed-up-next    catch the dev user up on a few airing shows through its API, so Spine Dev's Up next
+#                   has rows (shows move to In progress as episodes air; run it again then)
 #   install [ref]   create its checkout (at origin/myapp-main, or ref) and launchd job; once
 #   uninstall       stop it and remove the launchd job; the checkout and database stay
 #   serve           what launchd runs; not for direct use
@@ -253,6 +257,25 @@ repair_tv() {
   uv run --locked python manage.py reconcile_tv ${apply:+"$apply"}
 }
 
+# The dev sign-in user as staff on the lasting test database (test accounts only), so Spine Dev can try
+# staff-only things such as choosing Home's picture. A branch served with "use" gets a copy that has it.
+dev_staff() {
+  installed
+  [ -z "${DB_HOST:-}" ] || die "DB_HOST is set, which would point this at Postgres. Unset it."
+  cd "$test_checkout/src"
+  export REDIS_URL=redis://localhost:6379/5 CELERY_REDIS_URL=redis://localhost:6379/5
+  export REDIS_PREFIX="local-$(basename "$test_checkout"):"
+  local vendor
+  vendor=$(uv run --locked python manage.py shell -c 'from django.db import connection; print(connection.vendor)' 2>/dev/null | tail -n 1)
+  [ "$vendor" = sqlite ] || die "the settings use '$vendor', not the test backend's SQLite database"
+  uv run --locked python manage.py shell -c '
+from django.contrib.auth import get_user_model
+from api.views.auth import DEV_SIGN_IN_USERNAME
+changed = get_user_model().objects.filter(username=DEV_SIGN_IN_USERNAME).update(is_staff=True)
+print(f"{DEV_SIGN_IN_USERNAME}: staff" if changed else f"no {DEV_SIGN_IN_USERNAME} user yet: open Spine Dev once, then run this again")
+'
+}
+
 # The metadata fill (src/app/metadata_fill.py) in the checkout being served: a branch's during "use"
 # (on its copy of the test database), else myapp-main's. Only SQLite, and Redis DB 5 under that
 # checkout's own prefix, the one its backend uses, so the fill shares its pacing and lock.
@@ -293,9 +316,11 @@ case "${1:-}" in
   update) update ;;
   repair-tv) repair_tv "${2:-}" ;;
   fill-metadata) fill_metadata "${2:-}" ;;
+  dev-staff) dev_staff ;;
+  seed-up-next) installed; python3 -I "$here/seed_up_next.py" ;;
   install) install "${2:-}" ;;
   uninstall) uninstall ;;
   serve) serve ;;
-  -h|--help|"") sed -n '2,30p' "$0" ;;
+  -h|--help|"") sed -n '2,34p' "$0" ;;
   *) echo "Unknown command: $1" >&2; exit 2 ;;
 esac

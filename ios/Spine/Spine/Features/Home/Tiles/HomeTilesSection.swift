@@ -330,6 +330,7 @@ struct TileOutline: View {
                 // The crescent lives in the corner's height; a strip that tall is all that is ever redrawn.
                 .frame(height: corner + TileStyle.highlightWidth)
         }
+        .opacity(TileStyle.outlineStrength)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -384,6 +385,9 @@ private struct TileArt: View {
                     Color.clear
                 }
             }
+            // The feed card's sheen on the art, as the card has it: under the posters and the words, so only the glass
+            // catches the light. It stretches and fades with the art as the tile opens.
+            FeedCardSheen()
         }
         .frame(width: side, height: height)
         .clipped()

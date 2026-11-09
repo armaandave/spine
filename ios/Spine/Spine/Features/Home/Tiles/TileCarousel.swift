@@ -102,7 +102,6 @@ struct PosterFold: ViewModifier, Animatable {
 struct PosterOpenFold: ViewModifier, Animatable {
     var gain: CGFloat
     let glow: HomeGlowModel
-    let contentWidth: CGFloat
 
     var animatableData: CGFloat {
         get { gain }
@@ -113,18 +112,25 @@ struct PosterOpenFold: ViewModifier, Animatable {
         let progress = gain == 0
             ? 0
             : gain * TileGeometry.openFoldProgress(scroll: glow.scrollOffset, rowBottom: glow.openRowBottom)
-        let contentWidth = contentWidth
         content.visualEffect { content, proxy in
             // One chain whatever the progress (the closure has a single return type); at 0 every step below is the
-            // identity, and the frame is not even read.
-            let slots = progress > 0
-                ? (proxy.frame(in: .scrollView(axis: .horizontal)).midX - contentWidth / 2) / TileGeometry.step
-                : 0
+            // identity, and nothing is measured.
+            // How far this poster's center is from the middle of what the carousel shows, in poster steps: the
+            // carousel's visible bounds in the poster's own space. Its frame in the scroll view's space was measured
+            // from the content's leading margin, which put the focused poster most of a step off center, so it slid
+            // aside instead of staying while its neighbors folded in behind it.
+            let slots: CGFloat
+            if progress > 0, let visible = proxy.bounds(of: .scrollView(axis: .horizontal)) {
+                slots = (proxy.size.width / 2 - visible.midX) / TileGeometry.step
+            } else {
+                slots = 0
+            }
             let weight = TileGeometry.openFoldWeight(slotsFromFocus: slots) * progress
             return content
                 .brightness(Double(-TileGeometry.foldDim * weight))
                 .scaleEffect(1 - (1 - TileGeometry.foldScale) * weight)
                 .offset(x: TileGeometry.openFoldOffset(slotsFromFocus: slots, progress: progress))
+                .opacity(TileGeometry.openFoldOpacity(slotsFromFocus: slots, progress: progress))
         }
     }
 }
@@ -199,7 +205,7 @@ private struct TilePosterCell: View {
             anchor: foldAnchor,
             slide: TileGeometry.foldSlide(role: role, contentWidth: contentWidth)
         ))
-        .modifier(PosterOpenFold(gain: isOpen ? 1 : 0, glow: glow, contentWidth: contentWidth))
+        .modifier(PosterOpenFold(gain: isOpen ? 1 : 0, glow: glow))
         // The innermost of these two that applies wins, so an open or a close (a flight) beats a change of focus
         // that happens in the same update. Opening zooms out of the fan and closing zooms back into it, on the same curve.
         .transaction(value: isOpen) { transaction in

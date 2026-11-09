@@ -12,6 +12,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.serializers.common import media_summary_from_item
+from app.curation import picked_image_urls
 from app.models import (
     CustomBackdropPreference,
     CustomLogoPreference,
@@ -387,6 +388,90 @@ class CuratedArtworkTests(TestCase):
             [episode["image_url"] for episode in response.data["episodes"]],
             ["https://example.com/still-1.jpg", CURATED_BACKDROP],
         )
+
+
+class ArtworkCuratorTests(TestCase):
+    """An artwork curator's picks reach everyone, but an admin's pick always wins."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        users = get_user_model().objects
+        self.admin = users.create_user(username="admin", password="strong-password-123", is_staff=True)
+        self.artist = users.create_user(username="artist", password="strong-password-123", is_artwork_curator=True)
+        self.viewer = users.create_user(username="viewer", password="strong-password-123")
+        self.item = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.MOVIE.value,
+            media_id="550",
+            title="Fight Club",
+            image=PROVIDER_POSTER,
+            poster_accent_color="#aa0000",
+        )
+
+    def _pick(self, user, model, url):
+        return model.objects.create(user=user, item=self.item, custom_image_url=url)
+
+    @patch("app.providers.tmdb.get_title_logos", return_value=[])
+    @patch("app.providers.tmdb.get_title_logo", return_value=AUTOMATIC_LOGO)
+    @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
+    @patch("app.providers.mdblist.get_media_ratings", return_value={})
+    @patch("api.services.media.provider_services.get_media_metadata", return_value=_movie_metadata())
+    def test_curator_picks_reach_everyone_until_an_admin_picks(self, *_mocks):
+        artist_logo = "https://image.tmdb.org/t/p/w500/artist-logo.png"
+        for model, url in (
+            (CustomPosterPreference, "https://example.com/artist-poster.jpg"),
+            (CustomBackdropPreference, "https://example.com/artist-backdrop.jpg"),
+            (CustomLogoPreference, artist_logo),
+        ):
+            self._pick(self.artist, model, url)
+        self.client.force_authenticate(self.viewer)
+
+        response = self.client.get("/api/v1/media/tmdb/movie/550/")
+
+        self.assertEqual(response.data["poster_url"], "https://example.com/artist-poster.jpg")
+        self.assertEqual(response.data["backdrop_url"], "https://example.com/artist-backdrop.jpg")
+        self.assertEqual(response.data["logo_url"], artist_logo)
+
+    def test_admin_pick_wins_whichever_came_first(self):
+        other = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.MOVIE.value,
+            media_id="551",
+            title="Other",
+            image=PROVIDER_POSTER,
+        )
+        # On self.item the admin picked first; on the other title the curator did.
+        self._pick(self.admin, CustomPosterPreference, CURATED_POSTER)
+        self._pick(self.artist, CustomPosterPreference, "https://example.com/artist-poster.jpg")
+        self._pick(self.artist, CustomBackdropPreference, "https://example.com/artist-backdrop.jpg")
+        self._pick(self.admin, CustomBackdropPreference, CURATED_BACKDROP)
+        CustomPosterPreference.objects.create(user=self.artist, item=other, custom_image_url="https://example.com/a.jpg")
+        CustomPosterPreference.objects.create(user=self.admin, item=other, custom_image_url=CURATED_POSTER)
+
+        self.assertEqual(media_summary_from_item(self.item, user=self.viewer)["poster_url"], CURATED_POSTER)
+        self.assertEqual(media_summary_from_item(self.item, user=self.viewer)["backdrop_url"], CURATED_BACKDROP)
+        self.assertEqual(get_user_poster_image(other, self.viewer), CURATED_POSTER)
+        self.assertEqual(
+            picked_image_urls([self.item, other], CustomPosterPreference, self.viewer),
+            {self.item.pk: CURATED_POSTER, other.pk: CURATED_POSTER},
+        )
+
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#445566")
+    def test_curator_poster_pick_leaves_the_titles_own_cover(self, _accent_mock):
+        self.client.force_authenticate(self.artist)
+
+        response = self.client.put(
+            "/api/v1/media/tmdb/movie/550/poster/",
+            {"poster_url": "https://example.com/artist-poster.jpg"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.image, PROVIDER_POSTER)
+        self.assertEqual(media_summary_from_item(self.item, user=self.viewer)["poster_url"],
+                         "https://example.com/artist-poster.jpg")
 
 
 class CuratedArtworkWebTests(TestCase):

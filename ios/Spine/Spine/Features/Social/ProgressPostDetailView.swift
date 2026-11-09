@@ -18,16 +18,36 @@ final class ProgressPostDetailViewModel {
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository?
     private let onUnauthorized: () -> Void
+    /// The feed card this page was opened from; nil from anywhere else.
+    private let feedCard: FeedCardModel?
+    /// Where the person stands on the title now, loaded here when the card did not bring it (or there is no card), and
+    /// whether this day is their newest on the title. A standing is where they are now, so only the newest day has one.
+    private var standing: FeedStanding?
+    private var isNewestOfTitle: Bool?
+    @ObservationIgnored private var standings: FriendStandings?
+    @ObservationIgnored private var standingTask: Task<Void, Never>?
+
+    /// What the page says about the day: the card's own model when it has one, else the same presenter run on the
+    /// page's own row and the standing loaded here.
+    var pageContent: ProgressPageContent? {
+        activity.map {
+            ProgressPageContent(model: ProgressPageContent.model(
+                for: $0, card: feedCard, standing: standing, isNewestOfTitle: isNewestOfTitle
+            ))
+        }
+    }
 
     init(
         progressId: Int,
         activityRepository: ActivityRepository,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository? = nil,
+        feedCard: FeedCardModel? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.progressId = progressId
         self.trackingRepository = trackingRepository
+        self.feedCard = feedCard
         self.activityRepository = activityRepository
         self.mediaRepository = mediaRepository
         self.onUnauthorized = onUnauthorized
@@ -58,6 +78,8 @@ final class ProgressPostDetailViewModel {
                     onUnauthorized: onUnauthorized
                 )
             }
+            standingTask?.cancel()
+            standingTask = Task { [weak self] in await self?.loadStanding(for: loaded) }
             if let ref = loaded.media?.ref {
                 mediaDetail = try? await mediaRepository.detail(ref: ref)
             }
@@ -69,6 +91,33 @@ final class ProgressPostDetailViewModel {
                 onUnauthorized()
             }
         }
+    }
+
+    /// Where the person stands on the title, from the lists the feed reads (`FriendStandings`), when the page was not
+    /// opened from a card that already had it. Only the person's newest day on the title gets one, as on the feed, so
+    /// their recent activity is read first to see whether this is it. Anything that fails leaves the page with just
+    /// the day's own amount.
+    private func loadStanding(for loaded: ActivityItem) async {
+        guard let trackingRepository,
+              FriendStandings.want(for: loaded) != nil,
+              !ProgressPageContent.hasStanding(feedCard)
+        else { return }
+        let recent = (try? await activityRepository.userActivity(username: loaded.actor.username, limit: 50)) ?? []
+        guard !Task.isCancelled else { return }
+        let newest = ProgressPageContent.isNewestOfTitle(loaded, among: recent)
+        isNewestOfTitle = newest
+        guard newest else { return }
+        let provider = FriendStandings(
+            trackingRepository: trackingRepository,
+            seasonPages: mediaRepository,
+            onUnauthorized: onUnauthorized
+        )
+        provider.setOnChange { [weak self] in
+            guard let self else { return }
+            standing = standings?.standing(for: loaded, isNewestOfTitle: true)
+        }
+        standings = provider
+        provider.prepare(for: [loaded])
     }
 }
 
@@ -89,8 +138,6 @@ struct ProgressPostDetailView: View {
     private let trackingRepository: TrackingRepository
     private let currentUserId: Int?
     private let selectedTab: AppTab
-    /// The feed card this page was opened from; its meter is drawn under the headline. Nil from anywhere else.
-    private let feedCard: FeedCardModel?
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
 
@@ -106,7 +153,6 @@ struct ProgressPostDetailView: View {
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
     ) {
-        self.feedCard = feedCard
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
@@ -119,6 +165,7 @@ struct ProgressPostDetailView: View {
             activityRepository: activityRepository,
             mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
+            feedCard: feedCard,
             onUnauthorized: onUnauthorized
         ))
     }
@@ -328,20 +375,25 @@ struct ProgressPostDetailView: View {
     }
 
     private func content(_ activity: ActivityItem) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
+        let page = viewModel.pageContent
+        return VStack(alignment: .leading, spacing: 18) {
             if let media = activity.media {
-                hero(activity, media: media)
+                hero(activity, media: media, page: page)
             }
 
             VStack(alignment: .leading, spacing: 18) {
-                Text(ActivityFeedPresentation.progressHeadline(for: activity))
-                    .font(.system(size: 21, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let page, page.hasHeadline {
+                    headline(page, activity: activity)
+                } else {
+                    Text(ActivityFeedPresentation.progressHeadline(for: activity))
+                        .font(.system(size: 21, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-                // The bar this day's card drew, when Home had a standing for it.
-                if let card = feedCard, let meter = card.meter {
-                    PostProgressMeterView(meter: meter, art: card.art)
+                // The bar the day's card draws, once the person's place on the title is known.
+                if let page, let meter = page.meter {
+                    PostProgressMeterView(meter: meter, art: page.art)
                 }
 
                 PostHairline()
@@ -357,7 +409,62 @@ struct ProgressPostDetailView: View {
         }
     }
 
-    private func hero(_ activity: ActivityItem, media: MediaSummary) -> some View {
+    /// What the card says under its title, with room to say all of it: the amount in the poster's accent (or "Started"),
+    /// the status pills beside it, then where the person stands in a muted line, even next to pills.
+    private func headline(_ page: ProgressPageContent, activity: ActivityItem) -> some View {
+        let ink = ArtInk.dark
+        let accent = ink.accent(posterAccentHex: page.art.accentHex)
+        let lead = HStack(alignment: .center, spacing: 10) {
+            if let amount = page.amount {
+                Text(amount)
+                    .font(.system(size: 21, weight: .heavy))
+                    .foregroundStyle(accent)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .layoutPriority(2)
+            }
+            if page.isStart {
+                Text("Started")
+                    .font(.system(size: 21, weight: .heavy))
+                    .foregroundStyle(accent)
+            }
+            if let words = page.words {
+                Text(words)
+                    .font(.system(size: 21, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        let pills = HStack(alignment: .center, spacing: 10) {
+            ForEach(page.pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            // Beside each other when they fit; a long amount with two pills drops the pills under it.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 10) { lead; pills }
+                VStack(alignment: .leading, spacing: 8) { lead; pills }
+            }
+
+            if page.isStart {
+                // Which verb it was: "Started reading".
+                Text(ActivityFeedPresentation.progressHeadline(for: activity))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+
+            if let standing = page.standing {
+                Text(standing)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(page.spokenHeadline)
+    }
+
+    private func hero(_ activity: ActivityItem, media: MediaSummary, page: ProgressPageContent?) -> some View {
         HStack(alignment: .bottom, spacing: 14) {
             PostHeroPoster(
                 url: viewModel.mediaDetail?.displayPosterURL ?? media.displayPosterURL,
@@ -377,7 +484,14 @@ struct ProgressPostDetailView: View {
                         .foregroundStyle(.white.opacity(0.86))
                 }
 
-                PostHeroTitle(text: media.displayTitle)
+                PostHeroTitle(text: page?.title ?? media.displayTitle)
+
+                // "S2 E7", "E7", "Season 2": which part of the show the day was.
+                if let tag = page?.tag {
+                    Text(tag)
+                        .font(PostPageStyle.subtitleFont)
+                        .foregroundStyle(.white.opacity(0.78))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

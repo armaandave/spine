@@ -67,7 +67,6 @@ from app import (
 )
 from app.curation import (
     curated_image_url,
-    is_curator,
     music_picks_apply,
     picked_image_urls,
     prime_curated_artwork,
@@ -3666,7 +3665,9 @@ def save_poster_preference(*, source, media_type, media_id, poster_url, user, se
         item=item,
         defaults={"custom_image_url": poster_url, "accent_color": palette["accent"]},
     )
-    if is_curator(user):
+    # Only an admin's pick becomes the title's own cover; an artwork curator's
+    # still shows for everyone through the curated picks.
+    if user.is_staff:
         item.image = poster_url
         item.poster_accent_color = palette["accent"]
         item.save(update_fields=["image", "poster_accent_color"])
