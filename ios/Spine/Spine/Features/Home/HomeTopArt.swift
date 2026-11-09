@@ -220,17 +220,17 @@ enum HomeTopArtSpec {
     static let headerToTiles: CGFloat = 16
 
     /// Black over the picture: (opacity, location). A light shade keeps the status bar readable; from the picture's
-    /// foot (about where the header row starts) the colors fade out gradually, eased, through the header and the
-    /// tiles, so they meet the black page with no flat block of color and no edge.
+    /// lower part the colors (already dimmed in the image, `HomeBackdropArt.dim`) fade out gradually, eased, through
+    /// the header and the tiles, so they meet the black page with no flat block of color and no edge.
     static let shade: [(opacity: Double, location: CGFloat)] = [
         (0.35, 0),
         (0, 0.16),
-        (0.08, 0.45),
-        (0.3, 0.56),
-        (0.55, 0.67),
-        (0.78, 0.78),
-        (0.92, 0.88),
-        (1, 0.97),
+        (0.1, 0.4),
+        (0.35, 0.52),
+        (0.62, 0.64),
+        (0.82, 0.76),
+        (0.94, 0.86),
+        (1, 0.95),
         (1, 1),
     ]
 

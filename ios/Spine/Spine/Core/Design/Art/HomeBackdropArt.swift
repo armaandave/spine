@@ -23,6 +23,11 @@ nonisolated enum HomeBackdropArt {
     static let washSaturation: Double = 0.9
     /// The wash is made at this share of the size, then scaled back up smoothly: the same look for far less work.
     static let washScale: CGFloat = 0.125
+    /// How bright the colors under the picture are, against the picture itself: a dim tint of its own colors, so the
+    /// picture fades out into them instead of turning into a pale haze.
+    static let dim: CGFloat = 0.45
+    /// How much of the strip, from its bottom up, dims down to `dim` (eased), so the dimming has no edge either.
+    static let dimSpan: CGFloat = 0.45
 
     static var processors: [any ImageProcessing] { [HomeBackdropMeltProcessor()] }
 
@@ -35,13 +40,14 @@ nonisolated enum HomeBackdropArt {
 /// Crops the image to the media page's 3:2 strip around its center and puts it at the top of a frame of
 /// `HomeBackdropArt.aspect`. Under it is a wash: the strip with its reflection below it, blurred until only its colors
 /// are left, so the colors under the picture are the ones of its lower part, carried on down and changing as they go
-/// rather than one row smeared into a flat block. The strip's lower `fade` dissolves smoothly into that wash. The
-/// output is one opaque bitmap.
+/// rather than one row smeared into a flat block. The strip's lower `fade` dissolves smoothly into that wash, and the
+/// whole is dimmed toward the bottom to a dark tint of those colors (`dim`), so there is no pale haze under the picture.
+/// The output is one opaque bitmap.
 nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
     var identifier: String {
         "com.armaan.spine.homebackdrop?aspect=\(HomeBackdropArt.aspect)&strip=\(HomeBackdropArt.stripAspect)"
             + "&fade=\(HomeBackdropArt.fade)&wash=\(HomeBackdropArt.wash)&washsat=\(HomeBackdropArt.washSaturation)"
-            + "&mirror=1"
+            + "&mirror=1&dim=\(HomeBackdropArt.dim)&dimspan=\(HomeBackdropArt.dimSpan)"
     }
 
     /// The part of a `width` x `height` image with the strip's shape, centered.
@@ -114,8 +120,21 @@ nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
             kCIInputBackgroundImageKey: sharp.composited(over: wash),
             kCIInputMaskImageKey: ramp,
         ])
+
+        // Dimmed toward the bottom: full brightness above the strip's lower `dimSpan`, eased down to `dim` at the strip's
+        // bottom edge, and `dim` from there down (the working space is sRGB, so this is the plain value times `dim`).
+        let dim = CGFloat(HomeBackdropArt.dim)
+        guard let dimming = CIFilter(name: "CISmoothLinearGradient", parameters: [
+            "inputPoint0": CIVector(x: 0, y: stripBottom + crop.height * HomeBackdropArt.dimSpan),
+            "inputPoint1": CIVector(x: 0, y: stripBottom),
+            "inputColor0": CIColor(red: 1, green: 1, blue: 1, alpha: 1),
+            "inputColor1": CIColor(red: dim, green: dim, blue: dim, alpha: 1),
+        ])?.outputImage?.cropped(to: extent) else { return nil }
+        let dimmed = dimming.applyingFilter("CIMultiplyCompositing", parameters: [
+            kCIInputBackgroundImageKey: blended,
+        ])
         guard let output = BlurredArt.context.createCGImage(
-            blended,
+            dimmed,
             from: extent,
             format: .RGBA8,
             colorSpace: CGColorSpace(name: CGColorSpace.sRGB)

@@ -480,8 +480,12 @@ final class BlurredArtTests: XCTestCase {
             let step = abs(Int(pixels.red(10, row + 1)) - Int(pixels.red(10, row)))
             XCTAssertLessThan(step, 10, "rows \(row) and \(row + 1) blend smoothly")
         }
+        // Dimmed to a dark tint of those colors (`HomeBackdropArt.dim`): never brighter than white times the dim (an
+        // undimmed wash of this black and white source reaches about 240 at the bottom), and still not black.
+        let brightest = Int((255 * HomeBackdropArt.dim).rounded(.up))
         for row in [100, output.height - 1] {
-            XCTAssertGreaterThan(Int(pixels.red(10, row)), 60, "row \(row) has the picture's color, not black")
+            XCTAssertGreaterThan(Int(pixels.red(10, row)), 30, "row \(row) has the picture's color, not black")
+            XCTAssertLessThanOrEqual(Int(pixels.red(10, row)), brightest, "row \(row) is a dim tint, not a pale haze")
         }
     }
 
@@ -489,7 +493,7 @@ final class BlurredArtTests: XCTestCase {
         let identifier = HomeBackdropMeltProcessor().identifier
         XCTAssertEqual(identifier, HomeBackdropMeltProcessor().identifier)
         XCTAssertTrue(identifier.hasPrefix("com.armaan.spine.homebackdrop?"))
-        for part in ["aspect=", "strip=1.5", "fade=0.6", "wash=0.22", "washsat=", "mirror=1"] {
+        for part in ["aspect=", "strip=1.5", "fade=0.6", "wash=0.22", "washsat=", "mirror=1", "dim=0.45", "dimspan=0.45"] {
             XCTAssertTrue(identifier.contains(part), "\(identifier) lacks \(part)")
         }
         XCTAssertNotEqual(identifier, BlurredArt.Style.glow.processor.identifier)
