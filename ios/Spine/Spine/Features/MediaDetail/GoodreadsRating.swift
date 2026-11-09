@@ -52,7 +52,8 @@ enum GoodreadsRating {
         guard let range = html.range(of: key + #"\{[^}]*\}"#, options: .regularExpression),
               let object = try? JSONSerialization.jsonObject(with: Data(html[range].dropFirst(key.count).utf8)),
               let fields = object as? [String: Any],
-              let value = (fields["ratingValue"] as? NSNumber)?.doubleValue,
+              let value = (fields["ratingValue"] as? NSNumber)?.doubleValue
+                ?? (fields["ratingValue"] as? String).flatMap(Double.init),
               (0...5).contains(value)
         else {
             return nil

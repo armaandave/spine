@@ -4839,6 +4839,9 @@ def _goodreads_link(item):
     Goodreads turns away requests from the server, so the app reads the rating
     from this page on the phone.
     """
+    definition = RATING_SOURCES["goodreads"]
+    if item.source not in definition["item_sources"] or item.media_type not in definition["media_types"]:
+        return None
     url = (
         item.external_ratings.filter(rating_source="goodreads")
         .exclude(canonical_url__isnull=True)
