@@ -330,6 +330,7 @@ struct TileOutline: View {
                 // The crescent lives in the corner's height; a strip that tall is all that is ever redrawn.
                 .frame(height: corner + TileStyle.highlightWidth)
         }
+        .opacity(TileStyle.outlineStrength)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

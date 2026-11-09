@@ -278,6 +278,14 @@ nonisolated enum TileGeometry {
         -slotsFromFocus * step * progress
     }
 
+    /// How much of a poster still shows as the open carousel folds: the focused poster and its two neighbors stay, as
+    /// the closed fan has one poster and two behind it; one more step out it fades with the fold, so the posters that
+    /// sat off screen don't fly in and crowd behind the focused one.
+    static func openFoldOpacity(slotsFromFocus: CGFloat, progress: CGFloat) -> Double {
+        let beyondNeighbor = min(max(abs(slotsFromFocus) - 1, 0), 1)
+        return Double(1 - beyondNeighbor * progress)
+    }
+
     /// A folded back poster is this much of its size, and this much darker.
     static let foldScale: CGFloat = 0.82
     static let foldDim: CGFloat = 0.45
@@ -347,6 +355,9 @@ nonisolated enum TileGeometry {
 /// The colors and strokes of a tile that the mock draws and `HomeDesign` has no token for. Everything else a tile
 /// uses comes from `HomeDesign`.
 nonisolated enum TileStyle {
+    /// The tiles' border (the ring and the top line, `TileOutline`, and the loading tiles' ring) at this share of the
+    /// mock's: half, so the tiles' edges are quiet.
+    static let outlineStrength = 0.5
     /// rgba(18, 18, 18, 0.3) under the baked art.
     static let veil = Color(red: 18.0 / 255, green: 18.0 / 255, blue: 18.0 / 255).opacity(0.3)
     /// What shows while a tile's art loads.

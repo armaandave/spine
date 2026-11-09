@@ -49,7 +49,9 @@ struct HomeTilesSkeleton: View {
                 .clipShape(RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous)
-                        .strokeBorder(TileStyle.stroke, lineWidth: TileStyle.strokeWidth)
+                        .strokeBorder(
+                            TileStyle.stroke.opacity(TileStyle.outlineStrength), lineWidth: TileStyle.strokeWidth
+                        )
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Loading \(tile.title)")
