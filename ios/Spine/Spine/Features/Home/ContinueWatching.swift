@@ -17,6 +17,8 @@ final class ContinueWatchingTicks {
     private(set) var closedAnimeEpisodes: AnimeEpisodes?
     /// A write changed a card since the rail last loaded: the screen re-sorts the rail on its next visit.
     private(set) var needsReload = false
+    /// A quick tick (the tile's primary button) whose write has not settled yet. A second one is ignored until it has.
+    private(set) var isQuickTicking = false
     /// Recognizes this screen's own state-change posts, the sheet's included.
     let changeOrigin = UUID()
     /// Puts a card's new show state in place in the screen's rail.
@@ -35,6 +37,8 @@ final class ContinueWatchingTicks {
     @ObservationIgnored private var destination: MediaBrowsingSelection?
     /// A page asked for while a write was on its way, waiting for that write.
     @ObservationIgnored private(set) var opening: Task<Void, Never>?
+    /// The quick tick in flight, until its write has settled.
+    @ObservationIgnored private(set) var quickTickSettling: Task<Void, Never>?
 
     init(
         mediaRepository: MediaRepository,
@@ -53,10 +57,10 @@ final class ContinueWatchingTicks {
         item.media.ref.mediaType == "tv" ? item.tracking.tv : nil
     }
 
-    /// Opens an anime card's episode sheet (AN-701): its up next's row at once from the card, while the rest load.
-    private func openAnimeEpisodes(for item: LibraryItem) {
-        guard item.tracking.anime?.upNext != nil else { return }
-        let sheet = AnimeEpisodes(item: item) { [
+    /// An anime card's episode model: its up next's row at once from the card, while the rest load (AN-701). The sheet
+    /// and the quick tick both build it, so a write from either reaches the rail the same way.
+    private func makeAnimeEpisodes(for item: LibraryItem, todayCount: Int? = nil) -> AnimeEpisodes {
+        let sheet = AnimeEpisodes(item: item, todayCount: todayCount) { [
             mediaRepository, trackingRepository, diaryRepository, onUnauthorized, changeOrigin
         ] ref in
             // The title's page model, posting as this screen, so the screen keeps the card where it is.
@@ -74,6 +78,13 @@ final class ContinueWatchingTicks {
             needsReload = true
             onAnimeUpdate(ref, anime)
         }
+        return sheet
+    }
+
+    /// Opens an anime card's episode sheet (AN-701): its up next's row at once from the card, while the rest load.
+    private func openAnimeEpisodes(for item: LibraryItem, todayCount: Int?) {
+        guard item.tracking.anime?.upNext != nil else { return }
+        let sheet = makeAnimeEpisodes(for: item, todayCount: todayCount)
         sheet.onOpen = { [weak self, weak sheet] selection in
             guard let self, let sheet else { return }
             open(selection, from: sheet)
@@ -111,15 +122,9 @@ final class ContinueWatchingTicks {
         return destination
     }
 
-    /// Opens the card's episode sheet on up next's season. A show without up next has nothing to open there: its
-    /// card opens the show.
-    func openEpisodes(for item: LibraryItem) {
-        if item.media.ref.isAnime {
-            openAnimeEpisodes(for: item)
-            return
-        }
-        guard let upNext = Self.state(of: item)?.upNext else { return }
-        let sheet = ContinueWatchingEpisodes(item: item, upNext: upNext) { [
+    /// A show's episode model on up next's season, wired to the rail as the sheet's is.
+    private func makeEpisodes(for item: LibraryItem, upNext: TVEpisodePointer, todayCount: Int? = nil) -> ContinueWatchingEpisodes {
+        let sheet = ContinueWatchingEpisodes(item: item, upNext: upNext, todayCount: todayCount) { [
             mediaRepository, trackingRepository, diaryRepository, onUnauthorized, changeOrigin
         ] ref in
             // The season page's own model, posting as this screen, so the screen keeps the card where it is.
@@ -137,12 +142,62 @@ final class ContinueWatchingTicks {
             needsReload = true
             onUpdate(item.id, tv)
         }
+        return sheet
+    }
+
+    /// Opens the card's episode sheet on up next's season. A show without up next has nothing to open there: its
+    /// card opens the show. `todayCount` is how many episodes the person watched today before the sheet opened; nil
+    /// counts only what is ticked in the sheet.
+    func openEpisodes(for item: LibraryItem, todayCount: Int? = nil) {
+        if item.media.ref.isAnime {
+            openAnimeEpisodes(for: item, todayCount: todayCount)
+            return
+        }
+        guard let upNext = Self.state(of: item)?.upNext else { return }
+        let sheet = makeEpisodes(for: item, upNext: upNext, todayCount: todayCount)
         sheet.onOpen = { [weak self, weak sheet] selection in
             guard let self, let sheet else { return }
             open(selection, from: sheet)
         }
         presented = sheet
         episodes = sheet
+    }
+
+    /// Whether a quick tick would write now: none is in flight and no earlier answer's question is waiting.
+    var canQuickTick: Bool {
+        !isQuickTicking && closedEpisodes?.season.tvFollowUp.isActive != true
+            && closedAnimeEpisodes?.page.tvFollowUp.isActive != true
+    }
+
+    /// Ticks the card's up next once, with no sheet (the tile's primary button). The write goes through the same
+    /// model and queue as a tick in the sheet, so the card is patched in place, the screen is told to reload, and
+    /// what the write asks next (the earlier-episodes question, a finale's Log Season) or its failure shows over the
+    /// screen from `closedEpisodes` or `closedAnimeEpisodes`. A second call before the first write has settled is
+    /// ignored.
+    func quickTick(for item: LibraryItem) {
+        // A tick whose write asked a question or opened Log Season on a card waits for that to be answered.
+        guard canQuickTick else { return }
+        let settled: () async -> Bool
+        if item.media.ref.isAnime {
+            guard let upNext = item.tracking.anime?.upNext?.tvPointer else { return }
+            let sheet = makeAnimeEpisodes(for: item)
+            sheet.page.toggleTVUpNext(upNext)
+            closedAnimeEpisodes = sheet
+            let page = sheet.page
+            settled = { await page.settledForScreen() }
+        } else {
+            guard let upNext = Self.state(of: item)?.upNext else { return }
+            let sheet = makeEpisodes(for: item, upNext: upNext)
+            sheet.season.toggleTVUpNext(upNext)
+            closedEpisodes = sheet
+            let season = sheet.season
+            settled = { await season.settledForScreen() }
+        }
+        isQuickTicking = true
+        quickTickSettling = Task { [weak self] in
+            _ = await settled()
+            self?.isQuickTicking = false
+        }
     }
 
     /// Closes the sheet for a page it asked for. A write still on its way may yet ask the earlier-episodes question
@@ -186,7 +241,10 @@ final class ContinueWatchingTicks {
         items.map { item in
             guard item.id == id else { return item }
             var tracking = item.tracking
-            tracking.tv = tv
+            // The write's answer has no season poster; the card keeps the one it had until the rail reloads.
+            var answer = tv
+            answer.upNext = tv.upNext?.keepingSeasonPoster(from: item.tracking.tv?.upNext)
+            tracking.tv = answer
             return LibraryItem(media: item.media, tracking: tracking)
         }
     }
@@ -228,10 +286,20 @@ final class ContinueWatchingEpisodes: Identifiable {
     @ObservationIgnored var onOpen: (MediaBrowsingSelection) -> Void = { _ in }
 
     @ObservationIgnored private let makeSeason: (MediaRef) -> MediaDetailViewModel
+    /// Episodes watched today before the sheet opened, when the screen knows; nil counts only this sheet's ticks.
+    @ObservationIgnored private var todayBase: Int?
+    /// How many of the season's episodes were watched when it loaded: the header lights the ticks made since.
+    @ObservationIgnored private var watchedBaseline: Int?
 
-    init(item: LibraryItem, upNext: TVEpisodePointer, makeSeason: @escaping (MediaRef) -> MediaDetailViewModel) {
+    init(
+        item: LibraryItem,
+        upNext: TVEpisodePointer,
+        todayCount: Int? = nil,
+        makeSeason: @escaping (MediaRef) -> MediaDetailViewModel
+    ) {
         self.item = item
         self.upNext = upNext
+        self.todayBase = todayCount
         self.makeSeason = makeSeason
         show = ContinueWatchingTicks.state(of: item)
         season = makeSeason(Self.seasonRef(show: item.media.ref, seasonNumber: upNext.seasonNumber))
@@ -240,6 +308,9 @@ final class ContinueWatchingEpisodes: Identifiable {
 
     var id: String { item.id }
     var seasonNumber: Int { upNext.seasonNumber }
+
+    /// How many episodes the season has, when the card knows, for the sheet's height before its header is measured.
+    var estimatedEpisodeCount: Int? { show?.season?.episodeCount ?? show?.season?.airedCount }
     var seasonRef: MediaRef { Self.seasonRef(show: item.media.ref, seasonNumber: seasonNumber) }
 
     /// "The Crown · Season 2", or the season's own name once its page names it (`season_title`, which the season
@@ -315,6 +386,102 @@ final class ContinueWatchingEpisodes: Identifiable {
         season.toggleTVEpisode(episode)
     }
 
+    // MARK: Header block (R3SheetTV)
+
+    /// Remembers what the freshly loaded season had watched, so the header can light what the sheet ticks after it.
+    /// The listed state is the server's, before any write.
+    func captureBaseline() {
+        watchedBaseline = seasonRows.filter { $0.tv?.watched == true }.count
+    }
+
+    /// What the header shows, once the season's episodes have loaded; nil before, and for a season whose episodes
+    /// carry no tracking state.
+    var tickModel: EpisodeTickModel? {
+        let rows = seasonRows
+        guard rows.contains(where: { $0.tv != nil }) else { return nil }
+        let viewer = season.viewer
+        let episodes = rows.map { row -> EpisodeTickModel.Episode in
+            let name = row.summary?.title
+            let title = name == "Episode \(row.episodeNumber)" ? nil : name
+            guard let tv = season.tvEpisodeState(row.tv) else {
+                return .init(number: row.episodeNumber, state: .unlisted, title: title)
+            }
+            let watched = viewer?.tvIsWatched(tv) ?? season.tvIsWatched(tv)
+            let state: EpisodeTickModel.EpisodeState = if watched {
+                .watched
+            } else if !row.listed {
+                .unlisted
+            } else if !tv.aired {
+                .unaired
+            } else {
+                .unwatched
+            }
+            return .init(number: row.episodeNumber, state: state, title: title)
+        }
+        return Self.tickModel(
+            episodes: episodes,
+            todayBase: todayBase,
+            baseline: watchedBaseline,
+            seasonNumber: seasonNumber
+        )
+    }
+
+    /// The header's accent: the show's poster color as a pastel.
+    var accent: Color { ArtAccent.pastel(fromHex: item.media.posterAccentColor) }
+
+    /// The state of one episode of the loaded season, as its row has it.
+    private func episodeState(_ number: Int) -> TVEpisodeState? {
+        let rows = seasonRows
+        let row = rows.first { $0.episodeNumber == number && $0.listed } ?? rows.first { $0.episodeNumber == number }
+        return season.tvEpisodeState(row?.tv)
+    }
+
+    /// A tick of the header was tapped.
+    func headerTap(_ number: Int) {
+        guard let model = tickModel else { return }
+        perform(model.sheetTap(number, state: episodeState))
+    }
+
+    /// The white button: ticks up next, through the same toggle as a row's tick.
+    func headerPrimary() {
+        guard let model = tickModel, let next = model.upNext, let state = episodeState(next) else { return }
+        toggle(state)
+    }
+
+    /// An episode number typed in the window asks for everything up to it.
+    func headerType(_ number: Int) {
+        guard let model = tickModel else { return }
+        perform(model.sheetTyped(number, state: episodeState))
+    }
+
+    private func perform(_ tap: EpisodeSheetTap) {
+        switch tap {
+        case let .toggle(state): toggle(state)
+        case let .askUpTo(state): season.askMarkTVUpTo(state)
+        case .none: break
+        }
+    }
+
+    /// The header's model from the sheet's episodes: up next is the first aired, listed, unwatched one, and the
+    /// ticks lit as today's are the ones watched since the season loaded, on top of what the screen already counted.
+    static func tickModel(
+        episodes: [EpisodeTickModel.Episode],
+        todayBase: Int?,
+        baseline: Int?,
+        seriesTotal: Int? = nil,
+        seasonNumber: Int? = nil
+    ) -> EpisodeTickModel {
+        let watched = episodes.filter { $0.state == .watched }.count
+        let sinceLoad = watched - (baseline ?? watched)
+        return EpisodeTickModel(
+            episodes: episodes,
+            upNext: episodes.filter { $0.state == .unwatched }.map(\.number).min(),
+            todayCount: max(0, (todayBase ?? 0) + sinceLoad),
+            seriesTotal: seriesTotal,
+            seasonNumber: seasonNumber
+        )
+    }
+
     /// The dialog a long press's Mark watched up to here asks was confirmed (TV-108).
     func confirm(_ confirmation: TVPageConfirmation) {
         failureTitle = Self.tickFailureTitle
@@ -326,6 +493,8 @@ final class ContinueWatchingEpisodes: Identifiable {
     /// finished has no up next, so the sheet stays on the season it finished, every tick filled.
     func composerClosed() {
         guard !season.tvFollowUp.isActive, let next = show?.upNext, next.seasonNumber > upNext.seasonNumber else { return }
+        // Ticks made in the season being left stay in today's count.
+        if let count = tickModel?.todayCount { todayBase = count }
         upNext = next
         season = makeSeason(Self.seasonRef(show: item.media.ref, seasonNumber: next.seasonNumber))
         attach(season)
@@ -365,6 +534,138 @@ final class ContinueWatchingEpisodes: Identifiable {
     static func episodeRef(show: MediaRef, seasonNumber: Int, episodeNumber: Int) -> MediaRef {
         MediaRef(itemId: nil, source: show.source, mediaType: "episode", mediaId: show.mediaId,
                  seasonNumber: seasonNumber, episodeNumber: episodeNumber)
+    }
+}
+
+/// What a tap in an update sheet's header block asks of its host. It only names the existing pipeline: a row's tick
+/// toggle, or the "Mark watched up to here" question.
+enum EpisodeSheetTap {
+    case toggle(TVEpisodeState)
+    case askUpTo(TVEpisodeState)
+    case none
+}
+
+extension EpisodeTickModel {
+    /// A tick or window bar tapped: ticks or unticks through the toggle, asks before marking up to a later episode.
+    func sheetTap(_ number: Int, state: (Int) -> TVEpisodeState?) -> EpisodeSheetTap {
+        guard let episode = state(number) else { return .none }
+        switch action(for: number) {
+        case .tick, .untick: return .toggle(episode)
+        case .markUpTo: return .askUpTo(episode)
+        case .none: return .none
+        }
+    }
+
+    /// A number typed in the window: a request to mark everything up to it, so only an episode past where the
+    /// person is asks, with the same question a long press asks. A number at or below it changes nothing.
+    func sheetTyped(_ number: Int, state: (Int) -> TVEpisodeState?) -> EpisodeSheetTap {
+        guard number > upTo, let episode = state(number) else { return .none }
+        switch action(for: number) {
+        case .tick: return .toggle(episode)
+        case .markUpTo: return .askUpTo(episode)
+        case .untick, .none: return .none
+        }
+    }
+}
+
+/// The compact height of an update sheet: the header block plus the bars around it. Before the header has been
+/// measured, the height a strip of ticks takes.
+nonisolated enum EpisodeSheetDetent {
+    /// The sheet's top edge and navigation bar, and the home indicator's room under the button, for a strip's header.
+    /// Measured on the simulator (iOS 26.5) against R3SheetTV: it leaves the white button 34 pt above the sheet's
+    /// edge, as in the mock, and the list a few points, which it hides.
+    static let chrome: CGFloat = 71
+    /// The same for a long series' window header (same simulator, against R3SheetLong), which wants about 12 pt more.
+    static let windowChrome: CGFloat = 83
+    static let estimatedHeader: CGFloat = 244
+    /// The window header (more than `EpisodeTickModel.stripLimit` episodes) before it has been measured.
+    static let estimatedWindowHeader: CGFloat = 390
+    /// The list below the header stays hidden until the sheet has pulled up this far past the header, so a row
+    /// never peeks out under the home indicator at the compact height.
+    static let listRevealHeight: CGFloat = 60
+
+    /// The header's height before it has been measured: a strip of ticks, or the taller window when the title is
+    /// known to have more episodes than a strip holds.
+    static func estimate(episodeCount: Int?) -> CGFloat {
+        (episodeCount ?? 0) > EpisodeTickModel.stripLimit ? estimatedWindowHeader : estimatedHeader
+    }
+
+    /// Whether the sheet is still waiting for the data its header is drawn from: no header yet, nothing loaded and no
+    /// failure. A failed load stops waiting, so the list (and the failure alert) shows as before.
+    static func isLoadingHeader(hasHeader: Bool, isLoaded: Bool, hasFailed: Bool) -> Bool {
+        !hasHeader && !isLoaded && !hasFailed
+    }
+
+    /// The compact height for `header`: the header, or its estimate before it is measured, and the bars around it.
+    static func compact(header: CGFloat, episodeCount: Int? = nil) -> PresentationDetent {
+        let isWindow = (episodeCount ?? 0) > EpisodeTickModel.stripLimit
+        return .height((header > 0 ? header : estimate(episodeCount: episodeCount)) + (isWindow ? windowChrome : chrome))
+    }
+}
+
+extension View {
+    /// On an update sheet's content: gives it exactly the room the sheet has under its navigation bar, pinned to the
+    /// top. A compact sheet is shorter than its header and list want, and they would otherwise spill out of both ends
+    /// and move the header up under the bar; pinned, they spill out of the bottom, where the list is hidden.
+    func pinnedToEpisodeSheetTop() -> some View {
+        GeometryReader { room in
+            frame(height: room.size.height, alignment: .top)
+        }
+    }
+
+    /// An update sheet's detents: compact hugging the header, and large. SwiftUI leaves a resting sheet where it is
+    /// when a detent's value changes, so the selection is driven here: once the header has been measured, a sheet
+    /// resting at its compact detent moves to the measured height.
+    func episodeSheetDetents(headerHeight: CGFloat, episodeCount: Int?) -> some View {
+        modifier(EpisodeSheetDetents(headerHeight: headerHeight, episodeCount: episodeCount))
+    }
+
+    /// Hides an update sheet's list while the sheet is compact (`height` is the list's own height), and while the
+    /// header is still on its way (`isLoading`), so the old single up-next row never shows ahead of the header.
+    func episodeSheetListReveal(hasHeader: Bool, isLoading: Bool = false, height: Binding<CGFloat>) -> some View {
+        let shown = !isLoading && (!hasHeader || height.wrappedValue > EpisodeSheetDetent.listRevealHeight)
+        return self
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height.wrappedValue = $0 }
+            .opacity(shown ? 1 : 0)
+            .allowsHitTesting(shown)
+            .accessibilityHidden(!shown)
+            .animation(.easeOut(duration: 0.15), value: shown)
+    }
+}
+
+/// Stands where an update sheet's header will be while its data loads, at the header's estimated height.
+struct EpisodeSheetHeaderPlaceholder: View {
+    let episodeCount: Int?
+
+    var body: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .frame(height: EpisodeSheetDetent.estimate(episodeCount: episodeCount))
+            .padding(.bottom, 12)
+    }
+}
+
+private struct EpisodeSheetDetents: ViewModifier {
+    let headerHeight: CGFloat
+    let episodeCount: Int?
+    @State private var detent: PresentationDetent
+
+    init(headerHeight: CGFloat, episodeCount: Int?) {
+        self.headerHeight = headerHeight
+        self.episodeCount = episodeCount
+        _detent = State(initialValue: EpisodeSheetDetent.compact(header: headerHeight, episodeCount: episodeCount))
+    }
+
+    func body(content: Content) -> some View {
+        let compact = EpisodeSheetDetent.compact(header: headerHeight, episodeCount: episodeCount)
+        content
+            .presentationDetents([compact, .large], selection: $detent)
+            .onChange(of: headerHeight) { _, height in
+                guard detent != .large else { return }
+                withAnimation {
+                    detent = EpisodeSheetDetent.compact(header: height, episodeCount: episodeCount)
+                }
+            }
     }
 }
 
@@ -475,9 +776,10 @@ private struct ContinueWatchingPresentations: ViewModifier {
     }
 }
 
-/// Continue Watching's episode sheet (TV-701): half height, with the season's episodes in the season page's rows,
-/// ✕ to close, and a ··· menu with Log Season… and Open Show. It opens with up next's row at the top, which shows at
-/// once from the card while the rest of the season loads.
+/// Continue Watching's episode sheet (TV-701): the tick header (R3SheetTV) over the season's episodes in the season
+/// page's rows, ✕ to close, and a ··· menu with Log Season… and Open Show. It opens hugging the header and pulls up
+/// to the list, which opens with up next's row at the top, shown at once from the card while the rest of the season
+/// loads.
 private struct ContinueWatchingEpisodesSheet: View {
     let episodes: ContinueWatchingEpisodes
     let trackingRepository: TrackingRepository
@@ -487,41 +789,67 @@ private struct ContinueWatchingEpisodesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isLogPresented = false
     @State private var failures = 0
+    @State private var headerHeight: CGFloat = 0
+    @State private var listHeight: CGFloat = 0
 
     var body: some View {
         let season = episodes.season
+        let headerModel = episodes.tickModel
+        let hasHeader = headerModel != nil
+        let isLoading = EpisodeSheetDetent.isLoadingHeader(
+            hasHeader: hasHeader, isLoaded: season.detail != nil, hasFailed: season.errorMessage != nil
+        )
         NavigationStack {
-            ContinueWatchingEpisodeList(episodes: episodes)
-                // A new season is a new list: its rows don't animate from the last season's ticks.
-                .id(episodes.seasonNumber)
-                .navigationTitle(episodes.title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(role: .close) {
-                            dismiss()
-                        } label: {
-                            Label("Close", systemImage: "xmark")
-                        }
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            Button("Log \(TVTrackingPresentation.seasonTitle(episodes.seasonNumber))…",
-                                   systemImage: "square.and.pencil") {
-                                openLog()
-                            }
-                            .disabled(!episodes.canLogSeason)
-                            Button("Open Show", systemImage: "tv") {
-                                episodes.openShow()
-                            }
-                        } label: {
-                            Label("More", systemImage: "ellipsis")
-                        }
-                        .accessibilityIdentifier("continue-watching.episodes.more")
+            VStack(spacing: 0) {
+                if let model = headerModel {
+                    EpisodeSheetHeaderView(
+                        model: model,
+                        accent: episodes.accent,
+                        height: $headerHeight,
+                        onTap: { episodes.headerTap($0) },
+                        onPrimary: { episodes.headerPrimary() },
+                        onType: { episodes.headerType($0) }
+                    )
+                    // The header is never squeezed by the list below it, and the list starts a little under it.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 12)
+                } else if isLoading {
+                    EpisodeSheetHeaderPlaceholder(episodeCount: episodes.estimatedEpisodeCount)
+                }
+                ContinueWatchingEpisodeList(episodes: episodes)
+                    // A new season is a new list: its rows don't animate from the last season's ticks.
+                    .id(episodes.seasonNumber)
+                    .episodeSheetListReveal(hasHeader: hasHeader, isLoading: isLoading, height: $listHeight)
+            }
+            .pinnedToEpisodeSheetTop()
+            .navigationTitle(episodes.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Log \(TVTrackingPresentation.seasonTitle(episodes.seasonNumber))…",
+                               systemImage: "square.and.pencil") {
+                            openLog()
+                        }
+                        .disabled(!episodes.canLogSeason)
+                        Button("Open Show", systemImage: "tv") {
+                            episodes.openShow()
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis")
+                    }
+                    .accessibilityIdentifier("continue-watching.episodes.more")
+                }
+            }
         }
-        .presentationDetents([.medium, .large])
+        .episodeSheetDetents(headerHeight: headerHeight, episodeCount: episodes.estimatedEpisodeCount)
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
         .task(id: episodes.seasonNumber) {
@@ -530,6 +858,7 @@ private struct ContinueWatchingEpisodesSheet: View {
             let season = episodes.season
             guard season.detail == nil else { return }
             await season.load()
+            episodes.captureBaseline()
         }
         .alert(episodes.failureTitle, isPresented: Binding(
             get: { season.quickActionErrorMessage != nil },

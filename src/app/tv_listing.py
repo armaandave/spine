@@ -207,6 +207,16 @@ class ShowListing:
             return None
         return min(candidates, key=lambda airing: (airing[0], airing[1] or 0))
 
+    def latest_aired_season(self, *, today) -> int | None:
+        """Return the highest regular season with an aired episode, or None (UN-002)."""
+        for season_number in reversed(self.regular_seasons()):
+            if any(
+                self.is_aired(season_number, listed.episode_number, today=today)
+                for listed in self.episodes.get(season_number, ())
+            ):
+                return season_number
+        return None
+
     def premiere(self, *, today) -> tuple[int, date | None] | None:
         """Return (season, premiere date) while no regular episode has aired, else None."""
         regular = self.regular_seasons()
@@ -383,6 +393,20 @@ def stored_listing(show_item):
     if copy.fetched_at is None:
         return None
     return copy.listing(show_item)
+
+
+def stored_listings(show_items):
+    """Return {item id: listing} for shows with a stored copy, in one query, never fetching.
+
+    Manual shows have no stored copy and are left out.
+    """
+    items = {item.pk: item for item in show_items if item.source != Sources.MANUAL.value}
+    listings = {}
+    for row in TVListing.objects.filter(item_id__in=items):
+        copy = _Copy.from_row(row)
+        if copy.fetched_at is not None:
+            listings[row.item_id] = copy.listing(items[row.item_id])
+    return listings
 
 
 def update_from_metadata(show_item, metadata, *, season_number=None):

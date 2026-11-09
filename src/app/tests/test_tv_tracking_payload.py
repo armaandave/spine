@@ -127,9 +127,21 @@ class PayloadShapeTests(TVTrackingTestCase):
         self.assertEqual(set(state["eye"]), EYE_KEYS)
         self.assertEqual(
             set(state["up_next"]),
-            {"season_number", "episode_number", "title", "air_date", "is_new", "image_url"},
+            {
+                "season_number",
+                "episode_number",
+                "title",
+                "air_date",
+                "is_new",
+                "image_url",
+                "season_poster_url",
+                "season_poster_accent_color",
+            },
         )
         self.assertEqual(state["up_next"]["title"], "Episode 2")
+        # Only Continue Watching sends up next's season poster (TV-701); the show page sends null.
+        self.assertIsNone(state["up_next"]["season_poster_url"])
+        self.assertIsNone(state["up_next"]["season_poster_accent_color"])
         for target in state["composer"]["targets"]:
             self.assertEqual(set(target), TARGET_KEYS)
         self.assertEqual(set(tv_tracking.state_payload(self.user, show, detail=False)), SHOW_LIST_KEYS)

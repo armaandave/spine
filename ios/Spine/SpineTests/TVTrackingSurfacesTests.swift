@@ -558,8 +558,9 @@ final class TVTrackingSurfacesTests: XCTestCase {
         let states = sheet.rows.compactMap { sheet.season.tvEpisodeState($0.tv) }
         XCTAssertEqual(states.count, 10)
         XCTAssertTrue(states.allSatisfy { sheet.season.tvIsWatched($0) }, "Every tick filled")
-        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "Caught up · S3 on Mar 12",
-                       "The card reads as its Library card until Home loads again")
+        // A show the tick caught up is not on the server's In progress list either, so its card leaves the rail now
+        // instead of reading as its Library card until Home loads again.
+        XCTAssertTrue(viewModel.inProgressItems.isEmpty)
     }
 
     func testTV107TheSheetsTickAsksTheEarlierEpisodesQuestionFirstAndItsYesReachesTheCard() async throws {
@@ -1543,6 +1544,9 @@ final class SurfacesMediaRepository: MediaRepository {
     func savePoster(ref: MediaRef, posterURL: String) async throws -> PosterSaveResponse { fatalError("Not used") }
     func backdrops(ref: MediaRef) async throws -> [PosterOption] { fatalError("Not used") }
     func saveBackdrop(ref: MediaRef, backdropURL: String) async throws -> BackdropSaveResponse { fatalError("Not used") }
+    func homePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
+    func setHomePicture(ref _: MediaRef, backdropURL _: String) async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
+    func clearHomePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
     func logos(ref: MediaRef) async throws -> [LogoOption] { fatalError("Not used") }
     func saveLogo(ref: MediaRef, logoURL: String) async throws -> LogoSaveResponse { fatalError("Not used") }
 }

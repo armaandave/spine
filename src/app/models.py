@@ -298,6 +298,29 @@ class Item(CalendarTriggerMixin, models.Model):
             events.tasks.reload_calendar(items_to_process=items_to_process)
 
 
+class HomePicture(models.Model):
+    """The one site-wide picture on every user's Home, chosen by an admin (single row, pk=1)."""
+
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name="+")
+    backdrop_url = models.URLField(max_length=1000)
+    set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            CheckConstraint(
+                condition=Q(pk=1),
+                name="home_picture_single_row",
+            ),
+        ]
+
+
 class ExternalRating(models.Model):
     """Cached external rating outcome for an exact item identity."""
 

@@ -44,7 +44,16 @@ SHOW_DETAIL_KEYS = SHOW_LIST_KEYS | {
     "season",
     "episode",
 }
-UP_NEXT_KEYS = {"season_number", "episode_number", "title", "air_date", "is_new", "image_url"}
+UP_NEXT_KEYS = {
+    "season_number",
+    "episode_number",
+    "title",
+    "air_date",
+    "is_new",
+    "image_url",
+    "season_poster_url",
+    "season_poster_accent_color",
+}
 NEXT_AIRING_KEYS = {"season_number", "episode_number", "air_date"}
 PREMIERE_KEYS = {"season_number", "air_date"}
 REWATCH_KEYS = {"scope", "season_number", "started_at"}
@@ -134,7 +143,7 @@ SHOW_DETAIL_EXAMPLE = json.loads(
  "selected_action": "watching", "started": true, "finished": false, "caught_up": false,
  "watched_count": 13, "aired_count": 20,
  "up_next": {"season_number": 2, "episode_number": 4, "title": "Fly", "air_date": "2010-05-23", "is_new": false,
-             "image_url": null},
+             "image_url": null, "season_poster_url": null, "season_poster_accent_color": null},
  "next_airing": null, "premiere": null, "rewatch": null, "last_watched_on": "2026-10-25", "remove_count": 13,
  "rating_source_diary_entry_id": null, "like_source_diary_entry_id": null, "like_is_independent": true,
  "eye": {"filled": false, "tap": "mark_confirm", "count": 20, "prompt": "Mark all 20 aired episodes watched?",

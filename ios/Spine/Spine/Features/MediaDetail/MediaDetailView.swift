@@ -2111,6 +2111,8 @@ struct MediaDetailView: View {
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
     private let onReturnToOriginSeason: (() -> Void)?
+    /// What Home's Trending rail left for this page to finish with its own screens, run once after the first load.
+    private let railHandoff: RailHandoff?
 
     init(
         ref: MediaRef,
@@ -2126,9 +2128,11 @@ struct MediaDetailView: View {
         selectedTab: AppTab = .home,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {},
-        onReturnToOriginSeason: (() -> Void)? = nil
+        onReturnToOriginSeason: (() -> Void)? = nil,
+        railHandoff: RailHandoff? = nil
     ) {
         self.ref = ref
+        self.railHandoff = railHandoff
         self.browsingContext = browsingContext
         self.mediaRepository = mediaRepository
         self.musicRepository = musicRepository
@@ -2228,7 +2232,8 @@ struct MediaDetailView: View {
             onOpenPoster: presentPoster,
             onSelectTab: onSelectTab,
             onUnauthorized: onUnauthorized,
-            onReturnToOriginSeason: onReturnToOriginSeason
+            onReturnToOriginSeason: onReturnToOriginSeason,
+            railHandoff: ref.id == self.ref.id ? railHandoff : nil
         )
     }
 
@@ -2340,6 +2345,7 @@ private struct MediaDetailPageView: View {
     @State private var edgeDragOffset: CGFloat = 0
     @State private var ratingPicker = MediaRatingPickerState()
     @State private var albumBackdropTint: Color?
+    @State private var didRunRailHandoff = false
 
     private let mediaRepository: MediaRepository
     private let musicRepository: MusicRepository
@@ -2359,6 +2365,7 @@ private struct MediaDetailPageView: View {
     private let ref: MediaRef
     private let shouldLoad: Bool
     private let topSafeAreaInsetOverride: CGFloat?
+    private let railHandoff: RailHandoff?
 
     init(
         ref: MediaRef,
@@ -2378,9 +2385,11 @@ private struct MediaDetailPageView: View {
         onOpenPoster: @escaping (PosterViewerItem) -> Void,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {},
-        onReturnToOriginSeason: (() -> Void)? = nil
+        onReturnToOriginSeason: (() -> Void)? = nil,
+        railHandoff: RailHandoff? = nil
     ) {
         self.ref = ref
+        self.railHandoff = railHandoff
         self.shouldLoad = shouldLoad
         topSafeAreaInsetOverride = topSafeAreaInset
         self.mediaRepository = mediaRepository
@@ -2964,6 +2973,7 @@ private struct MediaDetailPageView: View {
         .task(id: shouldLoad) {
             if shouldLoad, viewModel.detail == nil {
                 await viewModel.load()
+                await runRailHandoff()
             }
         }
         .task(id: viewModel.externalRatingsPollingID) {
@@ -3231,6 +3241,21 @@ private struct MediaDetailPageView: View {
     private func logComposerDismissed() {
         presentDeferredAlerts()
         viewModel.releaseDeferredTVFollowUp()
+    }
+
+    /// Home's Trending rail left a tap for this page (a log composer, a sheet): run it once, after the page has loaded
+    /// and its writes have settled, with the page's own routing.
+    private func runRailHandoff() async {
+        guard let handoff = railHandoff, !didRunRailHandoff, viewModel.detail != nil else { return }
+        didRunRailHandoff = true
+        _ = await viewModel.settled()
+        guard let detail = viewModel.detail else { return }
+        handoff.run(
+            track: { trackAction(for: detail) },
+            eye: { eyeAction(for: detail) },
+            like: { likeAction(for: detail) },
+            rate: { ratingAction(for: detail, halfSteps: $0) }
+        )
     }
 
     private func tvTrackAction(for detail: MediaDetail) {
@@ -5950,315 +5975,6 @@ struct BackdropArtwork: View {
             )
         }
         .clipped()
-    }
-}
-
-private struct ActionRail: View {
-    private static let buttonSize: CGFloat = 48
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isPressing = false
-    @State private var pressHaptics = UIImpactFeedbackGenerator(style: .light)
-    @State private var actionHaptics = UISelectionFeedbackGenerator()
-
-    @Binding var ratingPicker: MediaRatingPickerState
-    let isLiked: Bool
-    var showsEye = true
-    var showsRating = false
-    var offersRatingAfterBaseAction = false
-    var trackLabel: String?
-    var eyeLabel: String?
-    /// What the eye does, for VoiceOver. Without one, an eye that opens the rating picker says so.
-    var eyeHint: String?
-    var isEyeSelected = false
-    var isEyeLoading = false
-    var isLikeLoading = false
-    /// Overrides the star's fill, for stars that aren't a current rating (an episode's newest rated log, TV-502).
-    var isRatingFilled: Bool?
-    /// When set, the star runs this instead of opening the rating picker.
-    var onRatingTap: (() -> Void)?
-    let onTrack: () -> Void
-    let onLike: () -> Void
-    var onEye: () -> Void = {}
-    var onRating: (Int) -> Void = { _ in }
-
-    var body: some View {
-        VStack(spacing: -10) {
-            if showsEye, ratingPicker.isPresented {
-                ratingComposer
-                    .transition(.opacity)
-            }
-
-            rail
-        }
-        .frame(width: surfaceWidth)
-        .glassEffect(.regular.interactive(), in: glassShape)
-        .onAppear {
-            pressHaptics.prepare()
-            actionHaptics.prepare()
-        }
-    }
-
-    private var surfaceWidth: CGFloat {
-        let buttonCount = 2 + (showsEye ? 1 : 0) + (showsRating ? 1 : 0)
-        let railWidth = CGFloat(buttonCount) * Self.buttonSize + 10
-        return ratingPicker.isPresented ? max(railWidth, 183) : railWidth
-    }
-
-    private var glassShape: RoundedRectangle {
-        RoundedRectangle(
-            cornerRadius: ratingPicker.isPresented ? 26 : 29,
-            style: .continuous
-        )
-    }
-
-    private var rail: some View {
-        HStack(spacing: 0) {
-            railButton(
-                systemName: "plus",
-                // The + opens a new log for these types, whether or not they're tracked.
-                label: trackLabel ?? "Log",
-                usesLargePlus: true,
-                action: handleTrack
-            )
-            if showsEye {
-                railButton(
-                    systemName: isEyeSelected || ratingPicker.hasLocallyWatched ? "eye.slash.fill" : "eye",
-                    label: eyeLabel ?? "Mark as watched",
-                    usesLargePlus: false,
-                    isLoading: isEyeLoading && !ratingPicker.isPresented,
-                    action: handleEye
-                )
-                .accessibilityValue(offersRatingAfterBaseAction ? (ratingPicker.isPresented ? "Expanded" : "Collapsed") : "")
-                .accessibilityHint(eyeAccessibilityHint)
-            }
-            if showsRating {
-                let isFilled = isRatingFilled ?? (ratingPicker.confirmedHalfSteps > 0)
-                railButton(
-                    systemName: isFilled ? "star.fill" : "star",
-                    label: isFilled ? "Edit rating" : "Rate",
-                    usesLargePlus: false,
-                    action: handleRating
-                )
-            }
-            railButton(
-                systemName: isLiked ? "heart.fill" : "heart",
-                label: isLiked ? "Unlike" : "Like",
-                usesLargePlus: false,
-                isLoading: isLikeLoading,
-                action: handleLike
-            )
-        }
-        .padding(5)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard !isPressing else { return }
-                    isPressing = true
-                    pressHaptics.impactOccurred()
-                    pressHaptics.prepare()
-                }
-                .onEnded { _ in isPressing = false }
-        )
-        .accessibilityIdentifier("media-detail.actions")
-    }
-
-    private var ratingComposer: some View {
-        ZStack {
-            StarRatingPill(halfSteps: $ratingPicker.draftHalfSteps)
-
-            if ratingPicker.showsConfirm {
-                Button(action: confirmRating) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isEyeLoading || isLikeLoading)
-                .offset(x: 86)
-                .transition(.offset(x: 23.75).combined(with: .opacity))
-                .accessibilityLabel("Confirm rating")
-                .accessibilityIdentifier("media-detail.rating-confirm")
-            }
-        }
-        .frame(width: 280, height: 60)
-        .offset(x: ratingPicker.showsConfirm ? -9.75 : 0)
-        .animation(
-            reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.84),
-            value: ratingPicker.showsConfirm
-        )
-        .accessibilityIdentifier("media-detail.rating-picker")
-    }
-
-    private func handleTrack() {
-        dismissRatingPickerIfNeeded()
-        onTrack()
-    }
-
-    private func handleEye() {
-        guard offersRatingAfterBaseAction else {
-            dismissRatingPickerIfNeeded()
-            onEye()
-            return
-        }
-        if isEyeSelected {
-            dismissRatingPickerIfNeeded()
-            onEye()
-        } else if ratingPicker.isPresented {
-            animate { ratingPicker.dismiss() }
-        } else {
-            let shouldTrack = !isEyeSelected && !ratingPicker.hasLocallyWatched
-            animate { ratingPicker.open() }
-            if shouldTrack {
-                onEye()
-            }
-        }
-    }
-
-    private func handleLike() {
-        if !isLiked, offersRatingAfterBaseAction, !ratingPicker.isPresented {
-            animate { ratingPicker.open() }
-        } else {
-            dismissRatingPickerIfNeeded()
-        }
-        onLike()
-    }
-
-    private var eyeAccessibilityHint: String {
-        if let eyeHint { return eyeHint }
-        guard offersRatingAfterBaseAction, !isEyeSelected else { return "" }
-        return ratingPicker.isPresented ? "Closes the rating picker" : "Opens the rating picker"
-    }
-
-    private func handleRating() {
-        if let onRatingTap {
-            dismissRatingPickerIfNeeded()
-            onRatingTap()
-            return
-        }
-        if ratingPicker.isPresented {
-            animate { ratingPicker.dismiss() }
-        } else {
-            animate { ratingPicker.open(markLocallyWatched: false) }
-        }
-    }
-
-    private func confirmRating() {
-        let halfSteps = ratingPicker.draftHalfSteps
-        actionHaptics.selectionChanged()
-        actionHaptics.prepare()
-        animate { ratingPicker.confirm() }
-        onRating(halfSteps)
-    }
-
-    private func dismissRatingPickerIfNeeded() {
-        guard ratingPicker.isPresented else { return }
-        animate { ratingPicker.dismiss() }
-    }
-
-    private func animate(_ changes: () -> Void) {
-        withAnimation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.84)) {
-            changes()
-        }
-    }
-
-    private func railButton(
-        systemName: String,
-        label: String,
-        usesLargePlus: Bool,
-        isLoading: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            actionHaptics.selectionChanged()
-            actionHaptics.prepare()
-            action()
-        } label: {
-            ZStack {
-                Group {
-                    if isLoading {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: systemName)
-                            .font(.system(size: usesLargePlus ? 22 : 16, weight: .semibold))
-                            .foregroundStyle(railIconColor(systemName: systemName))
-                    }
-                }
-                .spineContentTransition(value: isLoading)
-            }
-            .frame(width: Self.buttonSize, height: Self.buttonSize)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(isLoading)
-        .accessibilityLabel(label)
-    }
-
-    private func railIconColor(systemName: String) -> Color {
-        if systemName == "heart.fill" { return .pink }
-        if systemName == "star.fill" { return .yellow }
-        return .white.opacity(0.84)
-    }
-}
-
-private struct StarRatingPill: View {
-    @Binding var halfSteps: Int
-    @State private var haptics = UISelectionFeedbackGenerator()
-
-    private let duneGold = Color(red: 0.94, green: 0.64, blue: 0.24)
-
-    var body: some View {
-        GeometryReader { proxy in
-            HStack(spacing: 1.25) {
-                ForEach(1...5, id: \.self) { value in
-                    Image(systemName: starSymbol(for: value))
-                        .font(.system(size: 17.5, weight: .medium))
-                        .foregroundStyle(halfSteps >= value * 2 - 1 ? duneGold : .white.opacity(0.28))
-                        .frame(width: 22.5, height: 30)
-                }
-            }
-            .accessibilityHidden(true)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Capsule())
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { gesture in
-                        let clamped = min(max(gesture.location.x, 0), proxy.size.width)
-                        let nextValue = min(
-                            max(Int(ceil((clamped / proxy.size.width) * 10)), 0),
-                            10
-                        )
-                        setRating(nextValue)
-                    }
-            )
-        }
-        .frame(width: 127.5, height: 30)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 15)
-        .onAppear { haptics.prepare() }
-        .accessibilityRepresentation {
-            Slider(value: Binding(get: { Double(halfSteps) }, set: { setRating(Int($0)) }), in: 0...10, step: 1) {
-                Text("Your rating")
-            }
-            .accessibilityValue(Text(verbatim: halfSteps == 0 ? "Not rated" : "\(Double(halfSteps) / 2) out of 5"))
-            .accessibilityIdentifier("media-detail.star-rating")
-        }
-    }
-
-    private func starSymbol(for value: Int) -> String {
-        if halfSteps >= value * 2 { return "star.fill" }
-        if halfSteps == value * 2 - 1 { return "star.leadinghalf.filled" }
-        return "star"
-    }
-
-    private func setRating(_ newValue: Int) {
-        guard newValue != halfSteps else { return }
-        halfSteps = newValue
-        haptics.selectionChanged()
-        haptics.prepare()
     }
 }
 

@@ -79,15 +79,16 @@ final class InProgressUpdates {
         self.onUnauthorized = onUnauthorized
     }
 
-    /// A card's title and "Update progress ›". Returns the page to open instead, if any. It replaces a card still
-    /// waiting for its page.
-    func updateProgress(for item: LibraryItem) async -> MediaRef? {
+    /// A tile's Update button. Returns the page to open instead, if any. It replaces a card still waiting for its page.
+    /// `todayCount` is how many episodes were watched today before a show's or an anime's sheet opens (nil counts only
+    /// what is ticked in the sheet).
+    func updateProgress(for item: LibraryItem, todayCount: Int? = nil) async -> MediaRef? {
         // A second tap before the first's sheet is up, or while one slides away, opens nothing.
         if let update, update.isPresenting || update.isClosing { return nil }
         cancelPendingOpen()
         switch Self.route(for: item) {
         case .episodes:
-            continueWatching.openEpisodes(for: item)
+            continueWatching.openEpisodes(for: item, todayCount: todayCount)
             return nil
         case .page:
             return item.media.ref
@@ -546,112 +547,6 @@ enum InProgressCardPresentation {
     private static func fraction(_ value: Double?, of total: Double?) -> Double? {
         guard let value, let total, value > 0, total > 0 else { return nil }
         return min(value / total, 1)
-    }
-}
-
-/// A card in Home's In progress rail (TV-701): the poster opens the title's page; the title and "Update progress ›"
-/// are one button, at least 44 points tall, that opens its progress UI over Home. Every media type reads the same.
-/// A thin bar along the poster's bottom fills to how far along the title is, when that is known, with Library's badge
-/// just above it. Profile's In progress rail shows posters only.
-struct InProgressCard: View {
-    /// Room under the poster for a two-line title and the line, so every card in the rail is the same height and no
-    /// title is cut short.
-    @ScaledMetric(relativeTo: .caption) private var labelHeight: CGFloat = 56
-
-    let item: LibraryItem
-    /// The title's page is loading before its progress UI opens.
-    var isLoading = false
-    let onOpen: () -> Void
-    let onUpdateProgress: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button(action: onOpen) {
-                MediaArtwork(
-                    url: item.media.displayPosterURL,
-                    title: item.media.title,
-                    slot: .carousel,
-                    mediaType: item.media.ref.mediaType,
-                    orientation: item.media.posterOrientation
-                )
-                .overlay(alignment: .bottom) {
-                    VStack(spacing: 4) {
-                        if let badge = LibraryPosterBadge.text(for: item) {
-                            // A game's percent and time can run wider than the poster: "58.25% · 120h 30m" needs 0.76.
-                            PosterBadgeLabel(text: badge)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                                .padding(.horizontal, 4)
-                        }
-                        if let progressFraction {
-                            InProgressBar(fraction: progressFraction)
-                        }
-                    }
-                    .padding(.bottom, PosterSlot.carousel.cornerRadius * 0.75)
-                }
-                // A save from the card's progress UI moves the bar where it is.
-                .animation(.smooth(duration: 0.3), value: progressFraction)
-                .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("View \(item.media.displayTitle)")
-
-            Button(action: onUpdateProgress) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.media.displayTitle)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    // The chevron keeps to "progress" when the line wraps.
-                    Text("\(InProgressCardPresentation.line)\u{00A0}\(Image(systemName: "chevron.forward"))")
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.62))
-                        .lineLimit(2)
-                }
-                .padding(.top, 8)
-                .frame(maxWidth: .infinity, minHeight: max(44, labelHeight), alignment: .topLeading)
-                .contentShape(Rectangle())
-                .opacity(isLoading ? 0.45 : 1)
-            }
-            .buttonStyle(InProgressCardButtonStyle())
-            .disabled(isLoading)
-            .accessibilityLabel(InProgressCardPresentation.accessibilityLabel(for: item))
-            .accessibilityIdentifier("in-progress.update")
-        }
-        .frame(width: PosterSlot.carousel.size.width, alignment: .leading)
-    }
-
-    private var progressFraction: Double? {
-        InProgressCardPresentation.progressFraction(for: item)
-    }
-}
-
-/// The hairline on a card's poster: a translucent dark track inset from the corners, filled with the app's tint to
-/// how far along the title is. VoiceOver skips it; the card's label already reads the progress.
-private struct InProgressBar: View {
-    private static let inset = PosterSlot.carousel.cornerRadius
-    private static let width = PosterSlot.carousel.size.width - 2 * inset
-    private static let height: CGFloat = 3
-
-    let fraction: Double
-
-    var body: some View {
-        ZStack(alignment: .leading) {
-            Capsule().fill(.black.opacity(0.45))
-            // At least a dot, so a first page or episode shows.
-            Capsule().fill(.tint).frame(width: max(Self.height, Self.width * fraction))
-        }
-        .frame(width: Self.width, height: Self.height)
-        .accessibilityHidden(true)
-    }
-}
-
-/// A card's title and line, one button: it dims while pressed.
-private struct InProgressCardButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.45 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

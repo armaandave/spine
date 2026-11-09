@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 extension Notification.Name {
@@ -217,7 +218,7 @@ struct DiaryLogDetailView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            SpinePageBackground()
+            PostPageBackground(url: pageArtURL, accentHex: pageAccentHex)
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
@@ -403,8 +404,22 @@ struct DiaryLogDetailView: View {
             }
     }
 
+    /// The art behind the whole page: the log's own poster, which the title's details never replace, so the page does
+    /// not change tint when they arrive.
+    private var pageArtURL: URL? {
+        guard let entry = viewModel.entry else { return nil }
+        return PostPageStyle.artURL(
+            posterURL: entry.media.displayPosterURL,
+            detailPosterURL: viewModel.mediaDetail?.displayPosterURL
+        )
+    }
+
+    private var pageAccentHex: String? {
+        viewModel.mediaDetail?.posterAccentColor
+    }
+
     private func content(_ entry: DiaryEntry) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             hero(entry)
             logSection(entry)
         }
@@ -412,41 +427,38 @@ struct DiaryLogDetailView: View {
 
     private func hero(_ entry: DiaryEntry) -> some View {
         HStack(alignment: .bottom, spacing: 14) {
-            MediaArtwork(
+            PostHeroPoster(
                 url: viewModel.mediaDetail?.displayPosterURL ?? entry.media.displayPosterURL,
                 title: entry.media.title,
-                slot: .hero,
                 mediaType: entry.media.ref.mediaType,
                 orientation: viewModel.mediaDetail?.posterOrientation ?? entry.media.posterOrientation
             )
-            .shadow(color: .black.opacity(0.48), radius: 22, y: 12)
 
-            VStack(alignment: .leading, spacing: 10) {
-                PostAuthorLink(user: entry.user, avatarSize: 24, spacing: 7, font: .system(size: 14, weight: .semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                PostHeroAuthorLine(user: entry.user)
 
-                Text(mediaTypeLabel(entry.media.ref.mediaType))
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.56))
-                    .textCase(.uppercase)
+                PostHeroTypeLabel(text: mediaTypeLabel(entry.media.ref.mediaType))
 
                 if let logged = DiaryLogFormat.dateLabel(entry.consumedAt) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        if entry.isTrueReread ?? entry.isRewatch {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white.opacity(0.74))
-                                .accessibilityLabel(entry.media.ref.repeatLabel)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            if entry.isTrueReread ?? entry.isRewatch {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.white.opacity(0.86))
+                                    .accessibilityLabel(entry.media.ref.repeatLabel)
+                            }
+
+                            Text("Logged \(logged)")
+                                .font(PostPageStyle.loggedFont)
+                                .foregroundStyle(.white.opacity(0.86))
                         }
 
-                        Text("Logged \(logged)")
-                            .font(.system(size: 13, weight: .heavy))
-                            .foregroundStyle(.white.opacity(0.72))
-                    }
-
-                    if let age = DiaryLogFormat.ageLabel(entry.consumedAt) {
-                        Text(age)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.58))
+                        if let age = DiaryLogFormat.ageLabel(entry.consumedAt) {
+                            Text(age)
+                                .font(PostPageStyle.timeFont)
+                                .foregroundStyle(.white.opacity(0.72))
+                        }
                     }
                 }
 
@@ -461,7 +473,7 @@ struct DiaryLogDetailView: View {
                             detail: detail,
                             title: parts.title,
                             showsLogo: .constant(true),
-                            font: .system(size: 31, weight: .black),
+                            font: PostPageStyle.titleFont,
                             lineLimit: 4,
                             minimumScaleFactor: 0.72,
                             maxLogoHeight: 48,
@@ -470,19 +482,15 @@ struct DiaryLogDetailView: View {
                             onLongPress: nil
                         )
                     } else {
-                        Text(parts.title)
-                            .font(.system(size: 31, weight: .black))
-                            .foregroundStyle(.white)
-                            .lineLimit(4)
-                            .minimumScaleFactor(0.72)
+                        PostHeroTitle(text: parts.title)
                     }
 
                 }
 
                 if let metadata = heroMetadata(entry) {
                     Text(metadata)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.66))
+                        .font(PostPageStyle.subtitleFont)
+                        .foregroundStyle(.white.opacity(0.78))
                         .lineLimit(2)
                 }
             }
@@ -495,18 +503,10 @@ struct DiaryLogDetailView: View {
         // The top bar ends 50 pt below the safe area; the artwork starts 18 pt under it, whatever its shape.
         .padding(.top, topSafeAreaInset + 68)
         .padding(.bottom, 22)
-        .background {
-            LogHeroArtwork(
-                mediaType: entry.media.ref.mediaType,
-                posterURL: entry.media.displayPosterURL,
-                detail: viewModel.mediaDetail
-            )
-            .offset(y: BackdropLayout.topOffset)
-        }
     }
 
     private func logSection(_ entry: DiaryEntry) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             if hasRatingOrLike(entry) {
                 ratingLikeLine(entry)
             }
@@ -537,6 +537,9 @@ struct DiaryLogDetailView: View {
                 )
             }
 
+            PostHairline()
+                .padding(.top, 8)
+
             PostCommentsSection(model: viewModel.engagement, hidesComments: hidesComments(entry))
 
             Color.clear
@@ -556,21 +559,7 @@ struct DiaryLogDetailView: View {
     }
 
     private func ratingLikeLine(_ entry: DiaryEntry) -> some View {
-        HStack(spacing: 10) {
-            if let rating = clean(entry.rating) {
-                DiaryStarRating(
-                    rating: rating,
-                    fontSize: 17
-                )
-            }
-
-            if entry.liked {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.pink)
-                    .accessibilityLabel("Liked")
-            }
-        }
+        PostRatingLine(rating: clean(entry.rating), liked: entry.liked)
     }
 
     /// "Favorite song" over a slim glass bar: a play button when the song has a preview, then its name. Episodes read
@@ -644,11 +633,7 @@ struct DiaryLogDetailView: View {
             }
             .buttonStyle(.plain)
         } else if let review {
-            Text(review)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.white.opacity(0.78))
-                .lineSpacing(5)
-                .fixedSize(horizontal: false, vertical: true)
+            PostReviewBody(text: review)
         } else {
             Text("No review text.")
                 .font(.system(size: 14, weight: .semibold))
@@ -738,65 +723,254 @@ struct DiaryLogDetailNavigationCover: View {
     }
 }
 
-/// The blurred artwork behind the top of a log's or a day's progress page.
-struct LogHeroArtwork: View {
-    let mediaType: String
-    let posterURL: String?
-    let detail: MediaDetail?
+// MARK: - Post page style (a log's page and a day's progress page)
+
+/// The numbers and rules both post pages share: one baked blurred art layer behind the whole page, a 120x180 poster
+/// with the text column beside it, and the review, tags and comments below.
+enum PostPageStyle {
+    /// The baked art style behind the page.
+    static let artStyle = BlurredArt.Style.page
+
+    /// The black wash over the art: clear at the top, 0.14 at 45 percent, 0.48 at the bottom.
+    static let washStops: [(opacity: Double, location: Double)] = [(0, 0), (0.14, 0.45), (0.48, 1)]
+
+    static let chipHeight: CGFloat = 30
+    static let posterShadowRadius: CGFloat = 22
+    static let posterShadowOffset: CGFloat = 22
+
+    static let loggedFont = Font.system(size: 13, weight: .heavy)
+    static let timeFont = Font.system(size: 12, weight: .semibold)
+    static let titleFont = Font.system(size: 30, weight: .black)
+    static let subtitleFont = Font.system(size: 13, weight: .semibold)
+
+    /// The art for a progress post: what its feed card draws (the poster, or an episode's still).
+    static func artURL(for media: MediaSummary) -> URL? {
+        URL(string: FeedCardPresenter.artURL(for: media) ?? "")
+    }
+
+    /// The art for a log: its own poster; the title's details only stand in when the log has none.
+    static func artURL(posterURL: String?, detailPosterURL: String?) -> URL? {
+        URL(string: posterURL ?? detailPosterURL ?? "")
+    }
+
+    /// The tint under the page: the row's own, the title's details only when the row has none, so it never changes
+    /// once shown.
+    static func accentHex(summary: String?, detail: String?) -> String? {
+        summary ?? detail
+    }
+
+    /// The request the page's art loads, so a prefetch can ask for exactly the same bitmap.
+    static func artRequest(url: URL?) -> ImageRequest? {
+        BlurredArt.request(url: url, style: artStyle)
+    }
+
+    /// One filled star per whole point and a half star for a half: a 4.5 rating draws four and a half.
+    static func starSymbols(rating: String) -> [String] {
+        let value = Double(rating.ratingHalfSteps) / 2
+        return (0..<5).compactMap { index in
+            let remainder = value - Double(index)
+            if remainder >= 1 { return "star.fill" }
+            if remainder >= 0.5 { return "star.leadinghalf.filled" }
+            return nil
+        }
+    }
+
+    /// A review's paragraphs, split at blank lines.
+    static func paragraphs(_ review: String) -> [String] {
+        review
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+}
+
+/// The page behind a post: the title's baked blurred art over black, with a wash that deepens toward the bottom.
+/// Nothing is blurred live, and nothing grey shows before the title loads.
+struct PostPageBackground: View {
+    let url: URL?
+    let accentHex: String?
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                Color(red: 0.07, green: 0.07, blue: 0.065)
+        ZStack {
+            HomeDesign.Palette.pageBackground
 
-                SpineAsyncImage(url: artworkURL) { phase in
-                    switch phase {
-                    case let .success(image):
+            if url != nil || accentHex != nil {
+                BlurredArtBackground(url: url, accentHex: accentHex, style: PostPageStyle.artStyle)
+            }
+
+            LinearGradient(
+                stops: PostPageStyle.washStops.map { .init(color: .black.opacity($0.opacity), location: $0.location) },
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+}
+
+/// The 120x180 poster on a post page. It is one poster on a page that never repeats, so it takes a real shadow.
+struct PostHeroPoster: View {
+    let url: String?
+    let title: String
+    var mediaType: String?
+    var orientation: PosterOrientation?
+
+    var body: some View {
+        MediaArtwork(url: url, title: title, slot: .postHero, mediaType: mediaType, orientation: orientation)
+            .overlay {
+                RoundedRectangle(cornerRadius: PosterSlot.postHero.cornerRadius, style: .continuous)
+                    .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.5), radius: PostPageStyle.posterShadowRadius, y: PostPageStyle.posterShadowOffset)
+    }
+}
+
+/// Who posted it: a 24 pt avatar (requested as a thumbnail) and the username; opens their profile.
+struct PostHeroAuthorLine: View {
+    let user: UserSummary
+
+    var body: some View {
+        NavigationLink {
+            UserProfileDestination(username: user.username)
+        } label: {
+            HStack(spacing: 7) {
+                SpineAsyncImage(
+                    url: URL(string: user.avatarUrl ?? ""),
+                    thumbnailSize: CGSize(width: 24, height: 24)
+                ) { phase in
+                    if case let .success(image) = phase {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(width: proxy.size.width, height: proxy.size.height)
-                            .blur(radius: usesBackdrop ? 16 : 28)
-                            .scaleEffect(usesBackdrop ? 1.08 : 1.24)
-                            .opacity(0.62)
-                    default:
-                        LinearGradient(
-                            colors: MediaTypeTheme.theme(for: mediaType).gradientColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .opacity(0.28)
+                    } else {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.54))
                     }
                 }
+                .frame(width: 24, height: 24)
+                .background(.white.opacity(0.10), in: Circle())
+                .clipShape(Circle())
+                .accessibilityHidden(true)
 
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.12), location: 0),
-                        .init(color: .black.opacity(0.3), location: 0.42),
-                        .init(color: Color(red: 0.07, green: 0.07, blue: 0.065).opacity(0.78), location: 0.78),
-                        .init(color: Color(red: 0.07, green: 0.07, blue: 0.065), location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                Text(user.username)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height)
-            .clipped()
+            .contentShape(Rectangle())
         }
-        .clipped()
+        .buttonStyle(.plain)
+        .accessibilityLabel(user.username)
+        .accessibilityHint("Opens \(user.username)'s profile")
     }
+}
 
-    private var artworkURL: URL? {
-        URL(string: backdropURL ?? detail?.displayPosterURL ?? posterURL ?? "")
+/// "MOVIE", "TV", "BOOK": small, heavy, tracked.
+struct PostHeroTypeLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .heavy))
+            .tracking(0.88)
+            .foregroundStyle(.white.opacity(0.72))
+            .textCase(.uppercase)
     }
+}
 
-    private var backdropURL: String? {
-        guard ["movie", "tv"].contains(mediaType) else { return nil }
-        return detail?.displayBackdropURL
+/// The title when it has no logo: 30 black, pulled in a little.
+struct PostHeroTitle: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(PostPageStyle.titleFont)
+            .tracking(-0.6)
+            .lineSpacing(-3)
+            .foregroundStyle(.white)
+            .lineLimit(4)
+            .minimumScaleFactor(0.72)
     }
+}
 
-    private var usesBackdrop: Bool {
-        backdropURL != nil
+/// A log's stars (24 pt gold, none empty) and heart (20 pt).
+struct PostRatingLine: View {
+    let rating: String?
+    let liked: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let rating {
+                let symbols = PostPageStyle.starSymbols(rating: rating)
+                HStack(spacing: 2) {
+                    ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in
+                        Image(systemName: symbol)
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(HomeDesign.Palette.starGold)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Rating \(Double(rating.ratingHalfSteps) / 2) out of 5 stars")
+            }
+
+            if liked {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(HomeDesign.Palette.heart)
+                    .accessibilityLabel("Liked")
+            }
+        }
+    }
+}
+
+/// A review at 17 pt with 1.5 line height, paragraph by paragraph.
+struct PostReviewBody: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(PostPageStyle.paragraphs(text).enumerated()), id: \.offset) { _, paragraph in
+                Text(paragraph)
+                    .font(.system(size: 17))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .lineSpacing(5)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// A tag under a review: 30 pt tall, fully rounded, a light fill with a hairline edge.
+struct PostTagChip: View {
+    let text: String
+
+    var body: some View {
+        Label {
+            Text(text)
+                .lineLimit(1)
+        } icon: {
+            Image(systemName: "tag")
+                .font(.system(size: 11, weight: .bold))
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .frame(height: PostPageStyle.chipHeight)
+        .background(.white.opacity(0.14), in: Capsule())
+        .overlay { Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.5) }
+    }
+}
+
+/// The line between a post and its comments.
+struct PostHairline: View {
+    var body: some View {
+        Rectangle()
+            .fill(.white.opacity(0.25))
+            .frame(height: 0.5)
+            .accessibilityHidden(true)
     }
 }
 
@@ -1128,7 +1302,7 @@ private struct DiaryLogTagsView: View {
     @State private var isExpanded = false
     @State private var fullHeight: CGFloat = 0
 
-    private let rowHeight: CGFloat = 30
+    private let rowHeight = PostPageStyle.chipHeight
     private let spacing: CGFloat = 8
 
     private var collapsedHeight: CGFloat {
@@ -1186,7 +1360,7 @@ private struct DiaryLogTagsView: View {
                         onUnauthorized: onUnauthorized
                     )
                 } label: {
-                    DiaryLogChip(text: tag, systemImage: "tag")
+                    PostTagChip(text: tag)
                 }
                 .buttonStyle(.plain)
             }
@@ -1196,7 +1370,7 @@ private struct DiaryLogTagsView: View {
     private var tagChips: some View {
         FlowLayout(spacing: spacing) {
             ForEach(tags, id: \.self) { tag in
-                DiaryLogChip(text: tag, systemImage: "tag")
+                PostTagChip(text: tag)
             }
         }
     }

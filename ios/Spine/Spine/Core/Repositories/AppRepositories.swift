@@ -47,6 +47,9 @@ protocol MediaRepository {
     func savePoster(ref: MediaRef, posterURL: String) async throws -> PosterSaveResponse
     func backdrops(ref: MediaRef) async throws -> [PosterOption]
     func saveBackdrop(ref: MediaRef, backdropURL: String) async throws -> BackdropSaveResponse
+    func homePicture() async throws -> HomePictureResponse
+    func setHomePicture(ref: MediaRef, backdropURL: String) async throws -> HomePictureResponse
+    func clearHomePicture() async throws -> HomePictureResponse
     func logos(ref: MediaRef) async throws -> [LogoOption]
     func saveLogo(ref: MediaRef, logoURL: String) async throws -> LogoSaveResponse
 }
@@ -191,6 +194,8 @@ protocol TrackingRepository {
     func continueWatchingAnime(page: String?) async throws -> PagedResponse<LibraryItem>
     /// A title's state and rows, for Home's sheet: `GET tracking/{source}/anime/{id}/rows/` (AN-701).
     func animeRows(ref: MediaRef) async throws -> AnimeRowsResponse
+    /// Home's Up next: dated TV and anime episodes that haven't aired yet, soonest first (UN-001).
+    func upNext() async throws -> [UpNextItem]
 }
 
 extension TrackingRepository {
@@ -212,6 +217,11 @@ extension TrackingRepository {
 
     func animeRows(ref _: MediaRef) async throws -> AnimeRowsResponse {
         fatalError("Not implemented")
+    }
+
+    /// A repository with no Up next has nothing coming up.
+    func upNext() async throws -> [UpNextItem] {
+        []
     }
 
     func updateSeriesProgress(ref _: MediaRef, value _: Int, mutationId _: UUID) async throws -> TrackingState { fatalError("Not implemented") }
@@ -1097,6 +1107,22 @@ struct APIMediaRepository: MediaRepository {
         )
     }
 
+    func homePicture() async throws -> HomePictureResponse {
+        try await client.get("/home-picture/", authenticated: true)
+    }
+
+    func setHomePicture(ref: MediaRef, backdropURL: String) async throws -> HomePictureResponse {
+        try await client.put(
+            "/home-picture/",
+            body: HomePictureSaveRequest(ref: ref, backdropUrl: backdropURL),
+            authenticated: true
+        )
+    }
+
+    func clearHomePicture() async throws -> HomePictureResponse {
+        try await client.delete("/home-picture/", authenticated: true)
+    }
+
     func logos(ref: MediaRef) async throws -> [LogoOption] {
         let response: LogoOptionsResponse = try await client.get(
             "/media/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/logos/",
@@ -1322,6 +1348,11 @@ struct APITrackingRepository: TrackingRepository {
 
     func animeRows(ref: MediaRef) async throws -> AnimeRowsResponse {
         try await client.get("/tracking/\(ref.source)/anime/\(ref.mediaId)/rows/", authenticated: true)
+    }
+
+    func upNext() async throws -> [UpNextItem] {
+        let response: UpNextResponse = try await client.get("/tracking/up-next/", authenticated: true)
+        return response.results
     }
 
     private func continueWatching(mediaType: String, status: String? = nil, page: String?) async throws -> PagedResponse<LibraryItem> {

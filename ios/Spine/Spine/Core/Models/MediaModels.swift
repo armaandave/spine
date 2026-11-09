@@ -214,6 +214,9 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
     /// list opened from a number sends them.
     var showTitle: String? = nil
     var episodeTitle: String? = nil
+    /// The shown poster's biggest colors by share of its pixels; nil until the server has counted them (or sends them
+    /// on this payload at all).
+    var posterPalette: [PosterSwatch]? = nil
 
     var id: String { ref.id }
 
@@ -265,6 +268,7 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         case userState
         case showTitle
         case episodeTitle
+        case posterPalette
     }
 
     init(
@@ -338,6 +342,7 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        let posterPalette = container.decodeLossily([PosterSwatch].self, forKey: .posterPalette)
         self.init(
             ref: try container.decode(MediaRef.self, forKey: .ref),
             title: try container.decode(String.self, forKey: .title),
@@ -372,6 +377,7 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
             showTitle: try? container.decodeIfPresent(String.self, forKey: .showTitle),
             episodeTitle: try? container.decodeIfPresent(String.self, forKey: .episodeTitle)
         )
+        self.posterPalette = posterPalette
     }
 }
 
@@ -999,6 +1005,9 @@ struct MediaDetail: Decodable, Identifiable {
     var tvUnlistedEpisodes: [TVUnlistedEpisode]? = nil
     /// An anime title's episode rows for the viewer (AN-101). Anime pages only, signed in.
     var animeRows: AnimeRows? = nil
+    /// The shown poster's biggest colors by share of its pixels. Null until the server has counted them (the first
+    /// open of a page queues the count).
+    var posterPalette: [PosterSwatch]? = nil
 
     var id: String { ref.id }
 
@@ -1071,6 +1080,7 @@ struct MediaDetail: Decodable, Identifiable {
         case tvUnlistedSeasons
         case tvUnlistedEpisodes
         case animeRows
+        case posterPalette
     }
 
     init(
@@ -1218,6 +1228,7 @@ struct MediaDetail: Decodable, Identifiable {
             tvUnlistedEpisodes: try container.decodeIfPresent([TVUnlistedEpisode].self, forKey: .tvUnlistedEpisodes),
             animeRows: container.decodeLossily(AnimeRows.self, forKey: .animeRows)
         )
+        posterPalette = container.decodeLossily([PosterSwatch].self, forKey: .posterPalette)
     }
 
     func replacingPoster(with response: PosterSaveResponse) -> MediaDetail {

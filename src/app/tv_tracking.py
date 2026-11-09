@@ -4365,23 +4365,32 @@ def refresh_after_calendar(show_item):
             logger.exception("Could not work out TV row %s after the calendar refresh", tv_id)
 
 
-def refresh_due(tv):
+def refresh_due(tv, *, fetch=True):
     """Work out a show whose next episode may have aired (the hourly job). Returns changed.
 
     Uses the stored listing; when the next episode is known only from the provider's
     next episode to air and its season isn't stored, that season is fetched first.
+    With fetch=False (a request is waiting) it never calls the provider and leaves
+    those cases to the hourly job.
     """
     if tv.legacy_pending:
         return False
     show_item = tv.item
     listing = tv_listing.stored_listing(show_item)
     if listing is None:
+        if not fetch:
+            return False
         try:
             listing = tv_listing.get_listing(show_item)
         except TVDetailsUnavailable:
             return False
     next_to_air = listing.next_episode_to_air
-    if next_to_air is not None and next_to_air[1] is not None and not listing.is_listed(next_to_air[0], next_to_air[1]):
+    if (
+        fetch
+        and next_to_air is not None
+        and next_to_air[1] is not None
+        and not listing.is_listed(next_to_air[0], next_to_air[1])
+    ):
         try:
             listing = tv_listing.get_listing(show_item, seasons=[next_to_air[0]], max_age=timedelta(0))
         except TVDetailsUnavailable:
@@ -5039,6 +5048,9 @@ class _View:
                 "is_new": calc.up_next_is_new,
                 # The show page shows up next as a row of its season's episode list.
                 "image_url": self.listing.episode_still(*calc.up_next) if self.listing else None,
+                # Only Continue Watching sends its season's poster (api prime_up_next_season_posters).
+                "season_poster_url": None,
+                "season_poster_accent_color": None,
             }
         next_airing = None
         if calc.next_airing is not None:
@@ -5236,6 +5248,8 @@ def list_payload(tv):
     if not legacy and tv.up_next_season is not None:
         # Continue Watching primes the episode's title and still (prime_up_next_episodes).
         title, image_url = getattr(tv, "_tv_up_next_episode", (None, None))
+        # ...and, for the In progress tile, the up next season's poster and its accent.
+        season_poster, season_accent = getattr(tv, "_tv_up_next_season_poster", (None, None))
         up_next = {
             "season_number": tv.up_next_season,
             "episode_number": tv.up_next_episode,
@@ -5243,6 +5257,8 @@ def list_payload(tv):
             "air_date": _iso(tv.up_next_air_date),
             "is_new": tv.up_next_is_new,
             "image_url": image_url,
+            "season_poster_url": season_poster,
+            "season_poster_accent_color": season_accent,
         }
     next_airing = None
     if not legacy and tv.next_air_season is not None:
@@ -5435,6 +5451,8 @@ def prime_up_next_episodes(rows):
         TVListing.objects.filter(item_id__in={row.item_id for row in tv_rows}).values_list("item_id", "seasons"),
     )
     for row in tv_rows:
+        # Kept for the season posters (api prime_up_next_season_posters): no second read.
+        row._tv_stored_seasons = _json(stored.get(row.item_id))
         row._tv_up_next_episode = tv_listing.stored_episode(
             _json(stored.get(row.item_id)),
             row.up_next_season,

@@ -48,7 +48,16 @@ def refresh_aired_shows(now=None):
     return summary
 
 
-def _refresh_due_shows(now):
+def refresh_due_for_user(user):
+    """Work out this user's due shows now, so Continue Watching never waits for the hourly job.
+
+    A request is waiting, so this works from stored listings only and never calls the
+    provider; the hourly job fetches what is missing.
+    """
+    return _refresh_due_shows(timezone.now(), user=user, fetch=False)[1]
+
+
+def _refresh_due_shows(now, user=None, fetch=True):
     """Work out every due show; return (the ids worked, how many changed)."""
     horizon = timezone.localdate(now) + timedelta(days=1)
     season_next = (
@@ -68,6 +77,8 @@ def _refresh_due_shows(now):
         .select_related("item", "user")
         .order_by("next_air_date", "pk")
     )
+    if user is not None:
+        candidates = candidates.filter(user=user)
     worked = set()
     changed = 0
     for tv in candidates:
@@ -77,7 +88,7 @@ def _refresh_due_shows(now):
             continue
         worked.add(tv.pk)
         try:
-            if tv_tracking.refresh_due(tv):
+            if tv_tracking.refresh_due(tv, fetch=fetch):
                 changed += 1
         except RETRYABLE:
             logger.warning("TV details unavailable; %s is left for the next run", tv.item)

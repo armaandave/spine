@@ -181,6 +181,27 @@ struct BackdropPickerView: View {
         ))
     }
 
+    /// For a pick that is saved by something other than a title or a profile (Home's site-wide picture).
+    init(
+        ref: MediaRef,
+        currentBackdropURL: String?,
+        mediaRepository: MediaRepository,
+        onUnauthorized: @escaping () -> Void,
+        saveAction: @escaping (MediaRef, String) async throws -> Void,
+        onSaved: @escaping () -> Void
+    ) {
+        _viewModel = State(initialValue: BackdropPickerViewModel(
+            ref: ref,
+            mediaRepository: mediaRepository,
+            currentBackdropURL: currentBackdropURL,
+            onUnauthorized: onUnauthorized,
+            saveAction: { ref, backdropURL in
+                try await saveAction(ref, backdropURL)
+                onSaved()
+            }
+        ))
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {

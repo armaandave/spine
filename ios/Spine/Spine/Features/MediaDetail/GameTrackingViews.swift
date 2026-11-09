@@ -181,6 +181,11 @@ struct FitsSheetToContent: ViewModifier {
     @State private var height: CGFloat = 320
     @State private var hasMeasured = false
 
+    /// A grouped list ends with about 40 pt of its own space under the last row. A sheet on the number pad leaves most
+    /// of it out, so the last row sits a comfortable distance above the keys instead of a band of nothing; the form
+    /// reaches under the pad, so nothing scrolls.
+    static let aboveKeyboardSlack: CGFloat = 28
+
     func body(content: Content) -> some View {
         content
             .listSectionSpacing(.compact)
@@ -193,7 +198,8 @@ struct FitsSheetToContent: ViewModifier {
                 guard newHeight > 0 else { return }
                 // While the keyboard rises the bar's inset reads zero for a moment; a sheet on the keyboard only
                 // grows, so that reading can't leave its last row under the keyboard.
-                height = aboveKeyboard && hasMeasured ? max(height, newHeight) : newHeight
+                let fitted = aboveKeyboard ? max(newHeight - Self.aboveKeyboardSlack, 1) : newHeight
+                height = aboveKeyboard && hasMeasured ? max(height, fitted) : fitted
                 hasMeasured = true
             }
             .presentationDetents([.height(height)])
@@ -278,6 +284,16 @@ struct GameActionSheet: View {
     }
 }
 
+/// What −1h and +1h on a game's hours do: one hour from the number typed, else from the last saved hours, never below
+/// nothing and never past what the field holds (five digits).
+nonisolated enum GameHoursStep {
+    static let maximum = 99_999
+
+    static func hours(typed: Int?, last: Int?, change: Int) -> Int {
+        min(max((typed ?? last ?? 0) + change, 0), maximum)
+    }
+}
+
 /// Update Progress for a game, laid out like the book's sheet (`ProgressSheetForm`): hours played or percent
 /// complete against the last saved value, and Finished Playing. Pause, Edit Dates, Drop, Restart and Delete sit in ⋯.
 struct GameProgressSheet: View {
@@ -304,6 +320,12 @@ struct GameProgressSheet: View {
     @State private var pending: PendingAction?
     /// The day this save is on, today until the date row says otherwise.
     @State private var date = Date()
+    /// What the game had today before the save that is on its way, in the unit it is counted in. Home's tile moves with
+    /// the write, so the lit part keeps this until the sheet has gone.
+    @State private var todayBeforeSave: Decimal?
+    /// Counts taps on −1h and +1h, for their haptic.
+    @State private var hourSteps = 0
+    @Environment(\.progressSheetTodayPart) private var todayPart
 
     init(title: String, ref: MediaRef, playthrough: GamePlaythroughState,
          onSave: @escaping (GamePlaythroughWriteRequest) async -> Bool, onAction: @escaping (String) -> Void,
@@ -342,8 +364,59 @@ struct GameProgressSheet: View {
         return "Enter a percentage from 0 to 100."
     }
 
+    private var meterUnit: MeterUnit { mode == .hours ? .minutes : .percent }
+
+    private var accent: Color { HomeDesign.Palette.starGold }
+
+    /// Hours are saved as whole hours: the minutes on record, the minutes typed.
+    private var lastMinutes: Decimal? { playthrough.totalMinutes.map { Decimal($0) } }
+    private var newMinutes: Decimal? { newHours.map { Decimal($0 * 60) } }
+
+    /// What the game already had today, in this sheet's unit, before the number typed here.
+    private var todayBefore: Decimal {
+        todayBeforeSave ?? ProgressSheetToday.before(
+            part: todayPart?(ref),
+            unit: meterUnit,
+            total: nil,
+            last: mode == .hours ? lastMinutes : playthrough.completion
+        )
+    }
+
+    /// Percent mode only: hours have no bar, since a game has no set length. Its lit part is all of today's progress on
+    /// the game, as Home's tile shows it, and follows what is typed.
+    private var progressBar: ProgressSheetBar? {
+        guard mode == .percent else { return nil }
+        return ProgressSheetBar.make(
+            unit: .percent,
+            last: playthrough.completion,
+            typed: newPercent,
+            total: 100,
+            accent: accent,
+            todayBefore: todayBefore
+        )
+    }
+
+    /// "+3h today" for hours, which have no bar to carry it, or the bar's own words for percent.
+    private func todayLine(bar: ProgressSheetBar?) -> ProgressSheetTodayLine? {
+        if let bar { return bar.todayLine.map { ProgressSheetTodayLine(text: $0, accent: accent) } }
+        let lit = mode == .hours
+            ? ProgressSheetToday.lit(before: todayBefore, last: lastMinutes, typed: newMinutes)
+            : ProgressSheetToday.lit(before: todayBefore, last: playthrough.completion, typed: newPercent)
+        return ProgressSheetToday.line(
+            forAmountText: ProgressSheetToday.amountText(unit: meterUnit, lit: lit.amount, movedBack: lit.movedBack)
+        ).map { ProgressSheetTodayLine(text: $0, accent: accent) }
+    }
+
+    /// −1h and +1h from the number typed, else from the last saved hours.
+    private func stepHours(_ change: Int) {
+        let lastHours = playthrough.totalMinutes.map { $0 / 60 }
+        input = String(GameHoursStep.hours(typed: newHours, last: lastHours, change: change))
+        hourSteps += 1
+    }
+
     var body: some View {
         let warning = validation ?? error
+        let bar = progressBar
         ProgressSheetForm(
             title: title,
             subtitle: playthrough.status == "Paused" ? "Paused" : nil,
@@ -361,6 +434,9 @@ struct GameProgressSheet: View {
             onSave: save,
             onFinish: { finish() }
         ) {
+            if mode == .hours {
+                hourButtons
+            }
             Picker("Track by", selection: $mode) {
                 ForEach(GameProgressMode.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -380,6 +456,9 @@ struct GameProgressSheet: View {
                 Button("Delete Playthrough", systemImage: "trash", role: .destructive) { pending = .delete }
             }
         }
+        .environment(\.progressSheetBar, bar)
+        .environment(\.progressSheetTodayLine, todayLine(bar: bar))
+        .environment(\.progressSheetSetNumber, { input = ProgressPercent.text($0) })
         .onChange(of: mode) { input = "" }
         .onChange(of: input) { _, value in
             let text = mode == .hours ? String(value.filter(\.isNumber).prefix(5)) : ProgressPercent.sanitized(value)
@@ -414,11 +493,30 @@ struct GameProgressSheet: View {
             return
         }
         let savedMode = mode
+        todayBeforeSave = todayBefore
         run {
             let saved = await onSave(request)
-            if saved { ProgressDisplayPreferences.setGameMode(savedMode, for: ref) }
+            if saved { ProgressDisplayPreferences.setGameMode(savedMode, for: ref) } else { todayBeforeSave = nil }
             return saved
         }
+    }
+
+    /// −1h and +1h under the number: two equal capsules, as the mock has them. A native bordered button each, so the
+    /// row does not turn into one button.
+    private var hourButtons: some View {
+        HStack(spacing: 10) {
+            Button { stepHours(-1) } label: { Text(verbatim: "\u{2212}1h").frame(maxWidth: .infinity) }
+                .accessibilityLabel("Subtract an hour")
+            Button { stepHours(1) } label: { Text(verbatim: "+1h").frame(maxWidth: .infinity) }
+                .accessibilityLabel("Add an hour")
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .tint(.white)
+        .font(.body.weight(.semibold))
+        .sensoryFeedback(.selection, trigger: hourSteps)
+        .listRowSeparator(.hidden, edges: .top)
     }
 
     private var confirmationTitle: String {

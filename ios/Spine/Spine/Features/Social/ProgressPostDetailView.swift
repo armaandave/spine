@@ -89,6 +89,8 @@ struct ProgressPostDetailView: View {
     private let trackingRepository: TrackingRepository
     private let currentUserId: Int?
     private let selectedTab: AppTab
+    /// The feed card this page was opened from; its meter is drawn under the headline. Nil from anywhere else.
+    private let feedCard: FeedCardModel?
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
 
@@ -100,9 +102,11 @@ struct ProgressPostDetailView: View {
         trackingRepository: TrackingRepository,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
+        feedCard: FeedCardModel? = nil,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
     ) {
+        self.feedCard = feedCard
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
@@ -121,7 +125,7 @@ struct ProgressPostDetailView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            SpinePageBackground()
+            PostPageBackground(url: pageArtURL, accentHex: pageAccentHex)
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
@@ -153,20 +157,7 @@ struct ProgressPostDetailView: View {
                 }
             }
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .bold))
-                    .frame(width: 38, height: 38)
-            }
-            .buttonStyle(.plain)
-            .contentShape(.circle)
-            .glassEffect(.regular.interactive(), in: .circle)
-            .accessibilityLabel("Back")
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
+            topButtons
         }
         // Inside the bar's inset, so the swipe's edge doesn't cover the heart.
         .overlay(alignment: .leading) {
@@ -182,23 +173,8 @@ struct ProgressPostDetailView: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeAreaInset = $0 }
         .navigationBarBackButtonHidden()
-        .toolbar {
-            // Your own book, manga, comic or game row: the server says what the page offers (AC-9).
-            if viewModel.controls.showsEdit {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Edit") { isEditing = true }
-                        .disabled(viewModel.editor?.isDeleting == true)
-                }
-            }
-            if viewModel.controls.showsDelete {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Delete", systemImage: "trash", role: .destructive) {
-                        isDeleteConfirmationPresented = true
-                    }
-                    .disabled(viewModel.editor?.isDeleting == true)
-                }
-            }
-        }
+        // The buttons are drawn by the page, so no navigation bar adds an inset of its own.
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .dismissExplorationOnReturnHome()
         .offset(x: edgeDragOffset)
@@ -260,6 +236,60 @@ struct ProgressPostDetailView: View {
         }
     }
 
+    /// Back, and for your own book, manga, comic or game row Edit and Delete (the server says what the page offers,
+    /// AC-9): one row at one inset, as on a log's page.
+    private var topButtons: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .bold))
+                        .frame(width: 38, height: 38)
+                }
+                .buttonStyle(.plain)
+                .contentShape(.circle)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Back")
+
+                Spacer()
+
+                if viewModel.controls.showsEdit {
+                    Button {
+                        isEditing = true
+                    } label: {
+                        Text("Edit")
+                            .font(.system(size: 14, weight: .heavy))
+                            .padding(.horizontal, 13)
+                            .frame(height: 38)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(.capsule)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .disabled(viewModel.editor?.isDeleting == true)
+                }
+
+                if viewModel.controls.showsDelete {
+                    Button(role: .destructive) {
+                        isDeleteConfirmationPresented = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(width: 38, height: 38)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(.circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Delete")
+                    .disabled(viewModel.editor?.isDeleting == true)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+    }
+
     /// An edit or a delete went through: Stats, the list and Home were told, and the row may be gone, so the page closes.
     private func leaveIfChanged() {
         if viewModel.editor?.didChange == true {
@@ -284,6 +314,19 @@ struct ProgressPostDetailView: View {
             }
     }
 
+    /// The art behind the whole page: the card's own art for the title, which the title's details never replace, so the
+    /// page does not change tint when they arrive.
+    private var pageArtURL: URL? {
+        viewModel.activity?.media.flatMap(PostPageStyle.artURL(for:))
+    }
+
+    private var pageAccentHex: String? {
+        PostPageStyle.accentHex(
+            summary: viewModel.activity?.media?.posterAccentColor,
+            detail: viewModel.mediaDetail?.posterAccentColor
+        )
+    }
+
     private func content(_ activity: ActivityItem) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             if let media = activity.media {
@@ -295,6 +338,14 @@ struct ProgressPostDetailView: View {
                     .font(.system(size: 21, weight: .heavy))
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
+
+                // The bar this day's card drew, when Home had a standing for it.
+                if let card = feedCard, let meter = card.meter {
+                    PostProgressMeterView(meter: meter, art: card.art)
+                }
+
+                PostHairline()
+                    .padding(.top, 6)
 
                 PostCommentsSection(model: viewModel.engagement)
 
@@ -308,34 +359,25 @@ struct ProgressPostDetailView: View {
 
     private func hero(_ activity: ActivityItem, media: MediaSummary) -> some View {
         HStack(alignment: .bottom, spacing: 14) {
-            MediaArtwork(
+            PostHeroPoster(
                 url: viewModel.mediaDetail?.displayPosterURL ?? media.displayPosterURL,
                 title: media.title,
-                slot: .hero,
                 mediaType: media.ref.mediaType,
                 orientation: viewModel.mediaDetail?.posterOrientation ?? media.posterOrientation
             )
-            .shadow(color: .black.opacity(0.48), radius: 22, y: 12)
 
-            VStack(alignment: .leading, spacing: 10) {
-                PostAuthorLink(user: activity.actor, avatarSize: 24, spacing: 7, font: .system(size: 14, weight: .semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                PostHeroAuthorLine(user: activity.actor)
 
-                Text(media.ref.mediaType == "tv" ? "TV" : media.ref.mediaType.capitalized)
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.56))
-                    .textCase(.uppercase)
+                PostHeroTypeLabel(text: media.ref.mediaType == "tv" ? "TV" : media.ref.mediaType.capitalized)
 
                 if let date = ActivityTimestampFormatter.text(for: activity) {
                     Text(date)
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.72))
+                        .font(PostPageStyle.loggedFont)
+                        .foregroundStyle(.white.opacity(0.86))
                 }
 
-                Text(media.displayTitle)
-                    .font(.system(size: 31, weight: .black))
-                    .foregroundStyle(.white)
-                    .lineLimit(4)
-                    .minimumScaleFactor(0.72)
+                PostHeroTitle(text: media.displayTitle)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -347,14 +389,6 @@ struct ProgressPostDetailView: View {
         // The back button ends 50 pt below the safe area; the artwork starts 18 pt under it, as on a log's page.
         .padding(.top, topSafeAreaInset + 68)
         .padding(.bottom, 4)
-        .background {
-            LogHeroArtwork(
-                mediaType: media.ref.mediaType,
-                posterURL: media.displayPosterURL,
-                detail: viewModel.mediaDetail
-            )
-            .offset(y: BackdropLayout.topOffset)
-        }
     }
 }
 
@@ -366,6 +400,7 @@ struct ProgressPostNavigationCover: View {
     let trackingRepository: TrackingRepository
     let currentUserId: Int?
     let selectedTab: AppTab
+    var feedCard: FeedCardModel? = nil
     let onSelectTab: (AppTab) -> Void
     let onUnauthorized: () -> Void
 
@@ -379,6 +414,7 @@ struct ProgressPostNavigationCover: View {
                 trackingRepository: trackingRepository,
                 currentUserId: currentUserId,
                 selectedTab: selectedTab,
+                feedCard: feedCard,
                 onSelectTab: onSelectTab,
                 onUnauthorized: onUnauthorized
             )

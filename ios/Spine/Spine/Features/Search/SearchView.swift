@@ -330,12 +330,17 @@ struct ProfileBackdropSearchView: View {
     @State private var mediaLensStore: MediaLensStore
 
     private let mediaRepository: MediaRepository
-    private let profileRepository: ProfileRepository
+    private let profileRepository: ProfileRepository?
     private let currentBackdropURL: String?
     private let onUnauthorized: () -> Void
-    private let onSaved: (ProfileBackdropSaveResponse) -> Void
-
-    private let supportedTypes = ["movie", "tv", "game"]
+    private let onSaved: ((ProfileBackdropSaveResponse) -> Void)?
+    /// Set for a pick that is not the profile's (Home's site-wide picture): it saves the choice itself.
+    private let save: ((MediaRef, String) async throws -> Void)?
+    private let title: String
+    private let supportedTypes: [String]
+    /// A button under the search that undoes the pick (Home's "Use Daily Picture"); nil shows none.
+    private let resetTitle: String?
+    private let onReset: (() async -> Void)?
 
     init(
         mediaRepository: MediaRepository,
@@ -349,8 +354,39 @@ struct ProfileBackdropSearchView: View {
         self.currentBackdropURL = currentBackdropURL
         self.onUnauthorized = onUnauthorized
         self.onSaved = onSaved
+        save = nil
+        title = "Profile Backdrop"
+        supportedTypes = ["movie", "tv", "game"]
+        resetTitle = nil
+        onReset = nil
         _mediaLensStore = State(initialValue: MediaLensStore(
             defaults: UserDefaults(suiteName: "ProfileBackdropSearch") ?? .standard
+        ))
+    }
+
+    /// Home's site-wide picture: the given kinds of title, saved by `save`.
+    init(
+        title: String,
+        supportedMediaTypes: [String],
+        mediaRepository: MediaRepository,
+        currentBackdropURL: String?,
+        onUnauthorized: @escaping () -> Void,
+        resetTitle: String? = nil,
+        onReset: (() async -> Void)? = nil,
+        save: @escaping (MediaRef, String) async throws -> Void
+    ) {
+        self.mediaRepository = mediaRepository
+        profileRepository = nil
+        self.currentBackdropURL = currentBackdropURL
+        self.onUnauthorized = onUnauthorized
+        onSaved = nil
+        self.save = save
+        self.title = title
+        supportedTypes = supportedMediaTypes
+        self.resetTitle = resetTitle
+        self.onReset = onReset
+        _mediaLensStore = State(initialValue: MediaLensStore(
+            defaults: UserDefaults(suiteName: "HomePictureSearch") ?? .standard
         ))
     }
 
@@ -359,21 +395,51 @@ struct ProfileBackdropSearchView: View {
             mediaRepository: mediaRepository,
             mediaLensStore: mediaLensStore,
             supportedMediaTypes: supportedTypes,
-            title: "Profile Backdrop",
+            title: title,
             onCancel: { dismiss() },
             onUnauthorized: onUnauthorized,
             onSelect: { selectedMedia = $0 }
         )
+        .safeAreaInset(edge: .bottom) {
+            if let resetTitle, let onReset {
+                Button(role: .destructive) {
+                    Task {
+                        await onReset()
+                        dismiss()
+                    }
+                } label: {
+                    Text(resetTitle)
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
+        }
         .fullScreenCover(item: $selectedMedia, onDismiss: { selectedMedia = nil }) { media in
-            BackdropPickerView(
-                ref: media.ref,
-                currentBackdropURL: currentBackdropURL,
-                mediaRepository: mediaRepository,
-                profileRepository: profileRepository,
-                onUnauthorized: onUnauthorized
-            ) { response in
-                onSaved(response)
-                dismiss()
+            if let save {
+                BackdropPickerView(
+                    ref: media.ref,
+                    currentBackdropURL: currentBackdropURL,
+                    mediaRepository: mediaRepository,
+                    onUnauthorized: onUnauthorized,
+                    saveAction: save
+                ) {
+                    dismiss()
+                }
+            } else if let profileRepository, let onSaved {
+                BackdropPickerView(
+                    ref: media.ref,
+                    currentBackdropURL: currentBackdropURL,
+                    mediaRepository: mediaRepository,
+                    profileRepository: profileRepository,
+                    onUnauthorized: onUnauthorized
+                ) { response in
+                    onSaved(response)
+                    dismiss()
+                }
             }
         }
     }
