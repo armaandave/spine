@@ -4832,15 +4832,39 @@ def _compact_decimal(value):
     return text or "0"
 
 
-def _goodreads_link(item):
-    """Link-only Goodreads entry for a Hardcover book.
+OPENLIBRARY_GOODREADS_ID_TIMEOUT = 60 * 60 * 24 * 30
+
+
+def _openlibrary_goodreads_id(item, metadata):
+    """Goodreads ID of an Open Library book, through its ISBNs on Hardcover.
+
+    Kept under the book's own ID, since the ratings re-check has no ISBNs to hand.
+    """
+    cache_key = f"openlibrary_goodreads_id_v1_{item.media_id}"
+    if found := cache.get(cache_key):
+        return found
+    isbns = (metadata.get("details") or {}).get("isbn") or []
+    for isbn in isbns[:2]:
+        if found := hardcover.goodreads_id_for_isbn(isbn):
+            cache.set(cache_key, found, OPENLIBRARY_GOODREADS_ID_TIMEOUT)
+            return found
+    return None
+
+
+def _goodreads_link(item, metadata):
+    """Link-only Goodreads entry for a book.
 
     Goodreads turns away requests from the server, so the app reads the rating
     from this page on the phone.
     """
-    if item.source != Sources.HARDCOVER.value or item.media_type != MediaTypes.BOOK.value:
+    if item.media_type != MediaTypes.BOOK.value:
         return None
-    goodreads_id = hardcover.goodreads_id(item.media_id)
+    if item.source == Sources.HARDCOVER.value:
+        goodreads_id = hardcover.goodreads_id(item.media_id)
+    elif item.source == Sources.OPENLIBRARY.value:
+        goodreads_id = _openlibrary_goodreads_id(item, metadata)
+    else:
+        return None
     if not goodreads_id:
         return None
     return {
@@ -4919,7 +4943,7 @@ def _stored_external_ratings(item, metadata):  # noqa: C901
             "url": rating.canonical_url,
         }
 
-    if goodreads := _goodreads_link(item):
+    if goodreads := _goodreads_link(item, metadata):
         ratings["goodreads"] = goodreads
 
     return [

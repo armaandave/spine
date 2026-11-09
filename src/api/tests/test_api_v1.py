@@ -5491,6 +5491,31 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(goodreads["value"], "")
         self.assertEqual(goodreads["url"], "https://www.goodreads.com/book/show/54493401")
 
+    @patch("app.providers.hardcover.goodreads_id_for_isbn", return_value="62047984")
+    @patch("api.services.media.provider_services.get_media_metadata")
+    def test_openlibrary_book_links_goodreads_through_its_isbn_and_keeps_it(
+        self,
+        metadata_mock,
+        isbn_mock,
+    ):
+        metadata_mock.return_value = {
+            "media_id": "OL40183735M",
+            "media_type": "book",
+            "source": "openlibrary",
+            "title": "Yellowface",
+            "image": "https://example.com/yellowface.jpg",
+            "details": {"isbn": ["9780063250833"]},
+        }
+        detail = self.client.get("/api/v1/media/openlibrary/book/OL40183735M/")
+        # The ratings re-check has no ISBNs; the link comes from what the page found.
+        recheck = self.client.get("/api/v1/media/openlibrary/book/OL40183735M/external-ratings/")
+
+        for response in (detail, recheck):
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            urls = [rating["url"] for rating in response.data["external_ratings"] if rating["source"] == "Goodreads"]
+            self.assertEqual(urls, ["https://www.goodreads.com/book/show/62047984"])
+        isbn_mock.assert_called_once_with("9780063250833")
+
     def test_hardcover_rating_without_slug_uses_id_redirect_url(self):
         ratings = external_ratings(
             metadata={"score": 4.3, "score_count": 1234},

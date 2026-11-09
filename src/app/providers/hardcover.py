@@ -540,28 +540,71 @@ GOODREADS_ID_MISSING_TIMEOUT = 60 * 60 * 24 * 7
 GOODREADS_ID_FAILURE_TIMEOUT = 60 * 10
 
 
+GOODREADS_MAPPING_FIELDS = """
+book_mappings(
+  where: {platform_id: {_eq: $platform_id}}
+  order_by: {id: asc}
+  limit: 1
+) {
+  external_id
+}
+"""
+
+
 def goodreads_id(media_id):
     """Return the Goodreads book ID Hardcover links to this book, or None.
 
     Hardcover links a book to many Goodreads editions, which all show the same
     rating; the first one it linked is Goodreads' main page for the book.
     """
-    cache_key = f"{Sources.HARDCOVER.value}_goodreads_id_v1_{media_id}"
+    if not str(media_id).isdigit():
+        return None
+    query = f"""
+    query GoodreadsId($book_id: Int!, $platform_id: Int!) {{
+      books_by_pk(id: $book_id) {{ {GOODREADS_MAPPING_FIELDS} }}
+    }}
+    """
+    return _cached_goodreads_id(
+        f"{Sources.HARDCOVER.value}_goodreads_id_v1_{media_id}",
+        query,
+        {"book_id": int(media_id)},
+        lambda data: (data["books_by_pk"] or {}).get("book_mappings") or [],
+    )
+
+
+def goodreads_id_for_isbn(isbn):
+    """Return the Goodreads book ID of the Hardcover book with this edition ISBN, or None."""
+    normalized = str(isbn or "").replace("-", "").strip().upper()
+    if not normalized:
+        return None
+    query = f"""
+    query GoodreadsIdByISBN($isbn: String!, $platform_id: Int!) {{
+      editions(
+        where: {{_or: [{{isbn_13: {{_eq: $isbn}}}}, {{isbn_10: {{_eq: $isbn}}}}]}}
+        order_by: {{users_count: desc}}
+        limit: 1
+      ) {{
+        book {{ {GOODREADS_MAPPING_FIELDS} }}
+      }}
+    }}
+    """
+    return _cached_goodreads_id(
+        f"{Sources.HARDCOVER.value}_goodreads_id_isbn_v1_{normalized}",
+        query,
+        {"isbn": normalized},
+        lambda data: next(
+            ((edition.get("book") or {}).get("book_mappings") or [] for edition in data["editions"]),
+            [],
+        ),
+    )
+
+
+def _cached_goodreads_id(cache_key, query, variables, mappings):
+    """One quick Hardcover lookup (no waiting out rate limits), kept 30 days when found."""
     cached = cache.get(cache_key)
     if cached is not None:
         return cached or None
 
-    query = """
-    query GoodreadsId($book_id: Int!, $platform_id: Int!) {
-      book_mappings(
-        where: {book_id: {_eq: $book_id}, platform_id: {_eq: $platform_id}}
-        order_by: {id: asc}
-        limit: 1
-      ) {
-        external_id
-      }
-    }
-    """
     try:
         response = services.api_request(
             Sources.HARDCOVER.value,
@@ -569,18 +612,15 @@ def goodreads_id(media_id):
             base_url,
             params={
                 "query": query,
-                "variables": {
-                    "book_id": int(media_id),
-                    "platform_id": GOODREADS_PLATFORM_ID,
-                },
+                "variables": {**variables, "platform_id": GOODREADS_PLATFORM_ID},
             },
             headers={"Authorization": settings.HARDCOVER_API},
             timeout=3,
             retry_rate_limits=False,
         )
-        rows = response["data"]["book_mappings"]
+        rows = mappings(response["data"])
     except (requests.exceptions.RequestException, KeyError, TypeError, ValueError) as error:
-        logger.warning("Hardcover Goodreads ID lookup failed for %s: %s", media_id, error)
+        logger.warning("Hardcover Goodreads ID lookup failed for %s: %s", variables, error)
         cache.set(cache_key, "", GOODREADS_ID_FAILURE_TIMEOUT)
         return None
 

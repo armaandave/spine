@@ -83,6 +83,7 @@ final class EpisodeDetailTests: XCTestCase {
         XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "MusicBrainz", mediaType: "music"))
         XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "Google Books", mediaType: "book"))
         XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "Hardcover", mediaType: "book"))
+        XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "OpenLibrary", mediaType: "book"))
         XCTAssertTrue(MediaExternalRatingPresentation.includes(source: "Goodreads", mediaType: "book"))
     }
 
