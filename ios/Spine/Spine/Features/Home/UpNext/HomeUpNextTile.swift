@@ -39,10 +39,12 @@ struct HomeUpNextTile: View {
 
 /// The numbers of the tile, from the mock.
 private enum UpNextTileSpec {
-    static let height: CGFloat = 92
+    /// The posters (46 + the 9-point date band) with the same 12 points above, below and to their right: no more room
+    /// than that at the top and bottom.
+    static let height: CGFloat = 79
     static let corner: CGFloat = 26
     static let leading: CGFloat = 16
-    static let trailing: CGFloat = 14
+    static let trailing: CGFloat = 12
     static let posterGap: CGFloat = 6
     /// A whole 2:3 poster (27 x 40 made 15% bigger).
     static let poster = CGSize(width: 31, height: 46)
