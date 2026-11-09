@@ -2922,6 +2922,19 @@ private struct ProfileSettingsSheet: View {
                 )
             }
             .buttonStyle(.plain)
+
+            #if DEBUG
+            NavigationLink {
+                GoodreadsProbeView()
+            } label: {
+                SettingsNavigationRow(
+                    title: "Goodreads test",
+                    detail: "Can this phone read a Goodreads rating?",
+                    importSource: "Goodreads"
+                )
+            }
+            .buttonStyle(.plain)
+            #endif
         } else if importCoordinator.phase != .idle {
             VStack(alignment: .leading, spacing: 12) {
                 letterboxdImportStatus
