@@ -5469,6 +5469,28 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(rating["url"], "https://hardcover.app/books/the-great-gatsby")
         self.assertEqual(item.external_ratings.get().rating_source, "hardcover")
 
+    @patch("app.providers.hardcover.goodreads_id", return_value="54493401")
+    @patch("api.services.media.provider_services.get_media_metadata")
+    def test_hardcover_book_detail_links_goodreads_without_a_rating(self, metadata_mock, _goodreads_mock):
+        metadata_mock.return_value = {
+            "media_id": "427578",
+            "media_type": "book",
+            "source": "hardcover",
+            "title": "Project Hail Mary",
+            "image": "https://example.com/hail-mary.jpg",
+            "score": 4.5,
+            "score_count": 100,
+        }
+
+        response = self.client.get("/api/v1/media/hardcover/book/427578/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        goodreads = next(
+            rating for rating in response.data["external_ratings"] if rating["source"] == "Goodreads"
+        )
+        self.assertEqual(goodreads["value"], "")
+        self.assertEqual(goodreads["url"], "https://www.goodreads.com/book/show/54493401")
+
     def test_hardcover_rating_without_slug_uses_id_redirect_url(self):
         ratings = external_ratings(
             metadata={"score": 4.3, "score_count": 1234},

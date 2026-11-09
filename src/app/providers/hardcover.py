@@ -534,6 +534,64 @@ def book(media_id):
     return data
 
 
+GOODREADS_PLATFORM_ID = 1
+GOODREADS_ID_TIMEOUT = 60 * 60 * 24 * 30
+GOODREADS_ID_MISSING_TIMEOUT = 60 * 60 * 24 * 7
+GOODREADS_ID_FAILURE_TIMEOUT = 60 * 10
+
+
+def goodreads_id(media_id):
+    """Return the Goodreads book ID Hardcover links to this book, or None.
+
+    Hardcover links a book to many Goodreads editions, which all show the same
+    rating; the first one it linked is Goodreads' main page for the book.
+    """
+    cache_key = f"{Sources.HARDCOVER.value}_goodreads_id_v1_{media_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached or None
+
+    query = """
+    query GoodreadsId($book_id: Int!, $platform_id: Int!) {
+      book_mappings(
+        where: {book_id: {_eq: $book_id}, platform_id: {_eq: $platform_id}}
+        order_by: {id: asc}
+        limit: 1
+      ) {
+        external_id
+      }
+    }
+    """
+    try:
+        response = services.api_request(
+            Sources.HARDCOVER.value,
+            "POST",
+            base_url,
+            params={
+                "query": query,
+                "variables": {
+                    "book_id": int(media_id),
+                    "platform_id": GOODREADS_PLATFORM_ID,
+                },
+            },
+            headers={"Authorization": settings.HARDCOVER_API},
+            timeout=3,
+            retry_rate_limits=False,
+        )
+        rows = response["data"]["book_mappings"]
+    except (requests.exceptions.RequestException, KeyError, TypeError, ValueError) as error:
+        logger.warning("Hardcover Goodreads ID lookup failed for %s: %s", media_id, error)
+        cache.set(cache_key, "", GOODREADS_ID_FAILURE_TIMEOUT)
+        return None
+
+    found = str(rows[0].get("external_id") or "").strip() if rows else ""
+    if not found.isdigit():
+        cache.set(cache_key, "", GOODREADS_ID_MISSING_TIMEOUT)
+        return None
+    cache.set(cache_key, found, GOODREADS_ID_TIMEOUT)
+    return found
+
+
 def saved_book(media_id):
     """Return a basic page for a saved book while Hardcover is rate limited."""
     item = Item.objects.filter(

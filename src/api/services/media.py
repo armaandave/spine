@@ -4832,6 +4832,26 @@ def _compact_decimal(value):
     return text or "0"
 
 
+def _goodreads_link(item):
+    """Link-only Goodreads entry for a Hardcover book.
+
+    Goodreads turns away requests from the server, so the app reads the rating
+    from this page on the phone.
+    """
+    if item.source != Sources.HARDCOVER.value or item.media_type != MediaTypes.BOOK.value:
+        return None
+    goodreads_id = hardcover.goodreads_id(item.media_id)
+    if not goodreads_id:
+        return None
+    return {
+        "source": "Goodreads",
+        "value": "",
+        "vote_count": None,
+        "max_value": "5",
+        "url": f"https://www.goodreads.com/book/show/{goodreads_id}",
+    }
+
+
 def _stored_external_ratings(item, metadata):  # noqa: C901
     ratings = {}
     if metadata.get("score") is not None and rating_source_is_exposed(item.source):
@@ -4898,6 +4918,9 @@ def _stored_external_ratings(item, metadata):  # noqa: C901
             "max_value": max_value,
             "url": rating.canonical_url,
         }
+
+    if goodreads := _goodreads_link(item):
+        ratings["goodreads"] = goodreads
 
     return [
         ratings[source]

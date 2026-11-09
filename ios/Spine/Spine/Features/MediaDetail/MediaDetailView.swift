@@ -206,6 +206,29 @@ final class MediaDetailViewModel {
         return "\(detail?.id ?? ref.id):\(state)"
     }
 
+    /// The rating read from the book's Goodreads page, which the server sends as a link only.
+    private(set) var goodreadsRating: ExternalRating?
+
+    var goodreadsPage: URL? {
+        detail?.externalRatings?.first {
+            $0.source.caseInsensitiveCompare(GoodreadsRating.source) == .orderedSame
+        }?.destinationURL
+    }
+
+    func loadGoodreadsRating() async {
+        guard let page = goodreadsPage else {
+            goodreadsRating = nil
+            return
+        }
+        if goodreadsRating?.url != page.absoluteString {
+            goodreadsRating = nil
+        }
+        let rating = await GoodreadsRating.load(page)
+        if goodreadsPage == page {
+            goodreadsRating = rating
+        }
+    }
+
     func pollExternalRatingsIfNeeded() async {
         guard detail?.externalRatingsPreparation?.state == .pending else { return }
         let expectedID = detail?.id
@@ -1877,7 +1900,8 @@ enum MediaExternalRatingPresentation {
         case "steam": 4
         case "mal", "myanimelist": 5
         case "anilist": 6
-        default: 7
+        case "goodreads": 7
+        default: 8
         }
     }
 
@@ -2978,6 +3002,9 @@ private struct MediaDetailPageView: View {
         }
         .task(id: viewModel.externalRatingsPollingID) {
             await viewModel.pollExternalRatingsIfNeeded()
+        }
+        .task(id: viewModel.goodreadsPage) {
+            await viewModel.loadGoodreadsRating()
         }
         .task(id: albumArtworkURL) {
             var tint: Color?
@@ -4747,7 +4774,11 @@ private struct MediaDetailPageView: View {
 
     private func ratingChips(_ detail: MediaDetail) -> [RatingChip] {
         var chips: [RatingChip] = []
-        for rating in sortedExternalRatings(detail.externalRatings ?? []) where !rating.value.isEmpty {
+        let ratings = (detail.externalRatings ?? []).map { rating in
+            guard let goodreads = viewModel.goodreadsRating, goodreads.url == rating.url else { return rating }
+            return goodreads
+        }
+        for rating in sortedExternalRatings(ratings) where !rating.value.isEmpty {
             if !MediaExternalRatingPresentation.includes(
                 source: rating.source,
                 mediaType: detail.ref.mediaType
@@ -6222,7 +6253,7 @@ private struct RatingSourceBadge: View {
                 }
             }
             .frame(width: MediaDetailLayout.ratingBadgeSize, height: MediaDetailLayout.ratingBadgeSize)
-            .background(["RatingMAL", "RatingAniList", "RatingMetacritic", "RatingSteam"].contains(chip.assetName) ? .clear : .white, in: Circle())
+            .background(["RatingMAL", "RatingAniList", "RatingMetacritic", "RatingSteam", "RatingGoodreads"].contains(chip.assetName) ? .clear : .white, in: Circle())
             .clipShape(Circle())
         }
     }
@@ -6246,7 +6277,7 @@ private struct RatingSourceBadge: View {
                 .scaleEffect(1.1)
                 .frame(width: 24, height: 24)
                 .clipped()
-        case "RatingMAL", "RatingAniList":
+        case "RatingMAL", "RatingAniList", "RatingGoodreads":
             Image(assetName)
                 .resizable()
                 .scaledToFill()
@@ -9613,6 +9644,8 @@ extension ExternalRating {
             "RatingAniList"
         case "hardcover":
             "RatingHardcover"
+        case "goodreads":
+            "RatingGoodreads"
         case "metacritic":
             "RatingMetacritic"
         case "steam":
@@ -9655,7 +9688,7 @@ extension String {
 
     var ratingCountLabel: String {
         switch lowercased() {
-        case "letterboxd", "google books":
+        case "letterboxd", "google books", "goodreads":
             "ratings"
         case "rotten tomatoes", "rottentomatoes", "steam":
             "reviews"
@@ -9676,6 +9709,8 @@ extension String {
             "TM"
         case "hardcover":
             "HC"
+        case "goodreads":
+            "GR"
         case "igdb":
             "IG"
         case "metacritic":
