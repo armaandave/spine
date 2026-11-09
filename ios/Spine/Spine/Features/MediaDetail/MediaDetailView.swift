@@ -222,15 +222,16 @@ final class MediaDetailViewModel {
             goodreadsRating = nil
             return
         }
-        if let saved = GoodreadsRating.saved(page) {
-            goodreadsRating = saved
+        // The last rating read shows at once; a week-old one is read again behind it, and
+        // stays if that read fails.
+        let saved = GoodreadsRating.saved(page)
+        goodreadsRating = saved?.rating
+        if saved?.isFresh == true {
             return
         }
-        goodreadsRating = nil
-        isLoadingGoodreadsRating = true
+        isLoadingGoodreadsRating = saved == nil
         defer { isLoadingGoodreadsRating = false }
-        let rating = await GoodreadsRating.load(page)
-        if goodreadsPage == page {
+        if let rating = await GoodreadsRating.load(page), goodreadsPage == page {
             goodreadsRating = rating
         }
     }

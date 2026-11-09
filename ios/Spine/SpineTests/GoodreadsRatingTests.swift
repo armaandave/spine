@@ -21,7 +21,7 @@ final class GoodreadsRatingTests: XCTestCase {
         XCTAssertNil(GoodreadsRating.aggregateRating(in: Data("<html><body>Please wait</body></html>".utf8)))
     }
 
-    func testKeepsRatingForAWeek() async throws {
+    func testKeepsLastRatingUntilANewerOneReplacesIt() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "GoodreadsRatingTests"))
         defaults.removePersistentDomain(forName: "GoodreadsRatingTests")
         GoodreadsRatingStubProtocol.page = Data(#""aggregateRating":{"ratingValue":4.2,"ratingCount":10}"#.utf8)
@@ -33,21 +33,34 @@ final class GoodreadsRatingTests: XCTestCase {
 
         let noBrowser: (URL) async -> (value: Double, count: Int?)? = { _ in nil }
 
-        let first = await GoodreadsRating.load(
+        let eightDays = start.addingTimeInterval(8 * 86_400)
+
+        let loaded = await GoodreadsRating.load(
             page, session: session, defaults: defaults, now: start, readInBrowser: noBrowser
         )
-        GoodreadsRatingStubProtocol.page = Data()
-        let sixDaysLater = await GoodreadsRating.load(
-            page, session: session, defaults: defaults, now: start.addingTimeInterval(6 * 86_400), readInBrowser: noBrowser
-        )
-        let eightDaysLater = await GoodreadsRating.load(
-            page, session: session, defaults: defaults, now: start.addingTimeInterval(8 * 86_400), readInBrowser: noBrowser
+        let first = try XCTUnwrap(loaded)
+        XCTAssertEqual(first.value, "4.2")
+        XCTAssertEqual(first.voteCount, 10)
+        XCTAssertEqual(
+            GoodreadsRating.saved(page, defaults: defaults, now: start.addingTimeInterval(6 * 86_400)),
+            GoodreadsRating.Saved(rating: first, isFresh: true)
         )
 
-        XCTAssertEqual(first?.value, "4.2")
-        XCTAssertEqual(first?.voteCount, 10)
-        XCTAssertEqual(sixDaysLater, first)
-        XCTAssertNil(eightDaysLater)
+        // A week on it is read again; a failed read leaves the last rating in place.
+        GoodreadsRatingStubProtocol.page = Data()
+        let failedRead = await GoodreadsRating.load(
+            page, session: session, defaults: defaults, now: eightDays, readInBrowser: noBrowser
+        )
+        XCTAssertNil(failedRead)
+        XCTAssertEqual(
+            GoodreadsRating.saved(page, defaults: defaults, now: eightDays),
+            GoodreadsRating.Saved(rating: first, isFresh: false)
+        )
+
+        // A newer rating replaces it.
+        GoodreadsRatingStubProtocol.page = Data(#""aggregateRating":{"ratingValue":4.3,"ratingCount":12}"#.utf8)
+        _ = await GoodreadsRating.load(page, session: session, defaults: defaults, now: eightDays, readInBrowser: noBrowser)
+        XCTAssertEqual(GoodreadsRating.saved(page, defaults: defaults, now: eightDays)?.rating.value, "4.3")
     }
 
     func testBotCheckFallsBackToTheBrowserView() async throws {

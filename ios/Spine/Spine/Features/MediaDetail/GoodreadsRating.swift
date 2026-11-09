@@ -2,12 +2,20 @@ import Foundation
 
 /// A book's Goodreads rating, read on the phone. Goodreads turns away the server's
 /// requests, so the server sends only the book's Goodreads page (a rating with no value)
-/// and the app reads the rating from that page, keeping it for a week.
+/// and the app reads the rating from that page. The phone keeps the last rating it read
+/// until a newer one replaces it, and reads the page again once that rating is a week old.
 enum GoodreadsRating {
     static let source = "Goodreads"
-    private static let keepFor: TimeInterval = 7 * 24 * 60 * 60
+    private static let freshFor: TimeInterval = 7 * 24 * 60 * 60
     private static let defaultsKey = "goodreadsRatings.v1"
 
+    struct Saved: Equatable {
+        let rating: ExternalRating
+        /// Read within the last week; an older one shows while the page is read again.
+        let isFresh: Bool
+    }
+
+    /// Reads the rating from the Goodreads page and keeps it; nil when the page has none to give.
     static func load(
         _ page: URL,
         session: URLSession = .shared,
@@ -15,9 +23,6 @@ enum GoodreadsRating {
         now: Date = Date(),
         readInBrowser: (URL) async -> (value: Double, count: Int?)? = { await GoodreadsBrowserReader.shared.rating($0) }
     ) async -> ExternalRating? {
-        if let saved = saved(page, defaults: defaults, now: now) {
-            return saved
-        }
         // A plain request first; when Goodreads answers with its bot check, the hidden browser.
         var found = await plainRequest(page, session: session)
         if found == nil, !Task.isCancelled {
@@ -67,24 +72,26 @@ enum GoodreadsRating {
         )
     }
 
-    static func saved(_ page: URL, defaults: UserDefaults = .standard, now: Date = Date()) -> ExternalRating? {
+    /// The last rating read from this page, however old.
+    static func saved(_ page: URL, defaults: UserDefaults = .standard, now: Date = Date()) -> Saved? {
         guard let entry = entries(defaults)[page.absoluteString],
               let value = entry["value"] as? Double,
-              let savedAt = entry["savedAt"] as? Double,
-              now.timeIntervalSince1970 - savedAt < keepFor
+              let savedAt = entry["savedAt"] as? Double
         else {
             return nil
         }
-        return rating(value: value, count: entry["count"] as? Int, page: page)
+        return Saved(
+            rating: rating(value: value, count: entry["count"] as? Int, page: page),
+            isFresh: now.timeIntervalSince1970 - savedAt < freshFor
+        )
     }
 
     private static func save(_ found: (value: Double, count: Int?), for page: URL, defaults: UserDefaults, now: Date) {
-        let cutoff = now.timeIntervalSince1970 - keepFor
-        var kept = entries(defaults).filter { ($0.value["savedAt"] as? Double ?? 0) > cutoff }
+        var entries = entries(defaults)
         var entry: [String: Any] = ["value": found.value, "savedAt": now.timeIntervalSince1970]
         entry["count"] = found.count
-        kept[page.absoluteString] = entry
-        defaults.set(kept, forKey: defaultsKey)
+        entries[page.absoluteString] = entry
+        defaults.set(entries, forKey: defaultsKey)
     }
 
     private static func entries(_ defaults: UserDefaults) -> [String: [String: Any]] {
