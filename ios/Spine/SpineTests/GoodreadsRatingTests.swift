@@ -40,7 +40,7 @@ final class GoodreadsRatingTests: XCTestCase {
             page, session: session, defaults: defaults, now: start.addingTimeInterval(8 * 86_400)
         )
 
-        XCTAssertEqual(first?.value, "4.20")
+        XCTAssertEqual(first?.value, "4.2")
         XCTAssertEqual(first?.voteCount, 10)
         XCTAssertEqual(sixDaysLater, first)
         XCTAssertNil(eightDaysLater)

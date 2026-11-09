@@ -48,7 +48,9 @@ enum GoodreadsRating {
     private static func rating(value: Double, count: Int?, page: URL) -> ExternalRating {
         ExternalRating(
             source: source,
-            value: String(format: "%.2f", value),
+            // Goodreads' two decimals without trailing zeros: 4.51, 4.4, 4.
+            value: String(format: "%.2f", value)
+                .replacingOccurrences(of: #"\.?0+$"#, with: "", options: .regularExpression),
             voteCount: count,
             maxValue: "5",
             url: page.absoluteString

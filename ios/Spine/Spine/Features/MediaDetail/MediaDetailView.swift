@@ -1885,7 +1885,7 @@ enum MediaExternalRatingPresentation {
         if mediaType == "season" {
             return normalizedSource == "tmdb"
         }
-        if mediaType == "music" || ["spine", "google books", "igdb"].contains(normalizedSource) {
+        if mediaType == "music" || ["spine", "google books", "igdb", "hardcover"].contains(normalizedSource) {
             return false
         }
         if mediaType == "manga", normalizedSource == "mangaupdates" {
