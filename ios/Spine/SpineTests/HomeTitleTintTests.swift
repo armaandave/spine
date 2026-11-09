@@ -83,4 +83,32 @@ final class HomeTitleTintTests: XCTestCase {
         let orange = try XCTUnwrap(MeterTint.RGB(hex: "#D98A3C"))
         XCTAssertEqual(hex(HomeTitleTint.readable(orange)), "#D98A3C")
     }
+
+    func testOnADarkGlowTheColorsAreLeftAsTheyAre() {
+        let poster = [swatch("#D98A3C", 0.5), swatch("#3C8AD9", 0.2)]
+        let glow = [swatch("#050505", 0.7), swatch("#1A2A30", 0.3)]
+        XCTAssertEqual(HomeTitleTint.color(from: poster, against: glow), HomeTitleTint.color(from: poster))
+        XCTAssertEqual(HomeTitleTint.dateColor(from: poster, against: glow), HomeTitleTint.dateColor(from: poster))
+    }
+
+    func testOnAGlowOfTheSameColorTheColorIsBrightenedUntilItReadsAndKeepsItsHue() throws {
+        // A red poster on its own red glow: still red, lighter, never dropped to white.
+        let poster = [swatch("#B42A1C", 0.7), swatch("#C0391D", 0.3)]
+        let glow = try XCTUnwrap(HomeTitleTint.glowLuminance(of: poster))
+        let title = try XCTUnwrap(HomeTitleTint.color(from: poster, against: poster))
+        XCTAssertGreaterThanOrEqual(HomeTitleTint.contrast(title, glow), HomeTitleTint.backgroundContrast)
+        XCTAssertGreaterThan(title.red, title.blue + 0.1, "still a red")
+    }
+
+    func testTheGlowIsItsColorsAveragedByShareUnderTheShade() throws {
+        let dimmedWhite = MeterTint.RGB(red: 1, green: 1, blue: 1)
+            .mixed(toward: MeterTint.RGB(red: 0, green: 0, blue: 0), by: 1 - HomeTitleTint.glowDimming)
+        let glow = try XCTUnwrap(HomeTitleTint.glowLuminance(of: [swatch("#000000", 0.75), swatch("#FFFFFF", 0.25)]))
+        XCTAssertEqual(glow, TrendingOpenTint.luminance(dimmedWhite) / 4, accuracy: 0.001)
+    }
+
+    func testOnAVeryBrightGlowAColorIsLightenedOnlyHalfwayToWhite() throws {
+        let title = try XCTUnwrap(HomeTitleTint.color(from: [swatch("#D98A3C", 1)], against: [swatch("#FFFFFF", 1)]))
+        XCTAssertLessThan(title.blue, 0.8, "still an orange, not white")
+    }
 }

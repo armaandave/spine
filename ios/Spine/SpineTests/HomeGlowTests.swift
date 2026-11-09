@@ -243,8 +243,8 @@ final class HomeGlowTests: XCTestCase {
         XCTAssertEqual(GlowSpec.imageHeight, 720)
         XCTAssertEqual(GlowSpec.imageTop, -170)
         XCTAssertEqual(GlowSpec.restHeight, 318)
-        XCTAssertEqual(GlowSpec.gradientStops.map(\.opacity), [0.22, 0.08, 0.70, 1.0])
-        XCTAssertEqual(GlowSpec.gradientStops.map(\.location), [0, 0.35, 0.78, 1.0])
+        XCTAssertEqual(GlowSpec.gradientStops.map(\.opacity), [0.42, 0.36, 0.08, 0.70, 1.0])
+        XCTAssertEqual(GlowSpec.gradientStops.map(\.location), [0, 0.27, 0.45, 0.78, 1.0])
     }
 
     // MARK: Model

@@ -28,15 +28,30 @@ nonisolated enum HomeTitleTint {
     /// With no color different enough, the date takes the title's color mixed this far toward white.
     static let dateFallbackMix = 0.45
 
-    /// The title's color for a picture's swatches, or nil when every one of them is black or near-black.
-    static func color(from swatches: [PosterSwatch]) -> MeterTint.RGB? {
-        colors(from: swatches).first
+    /// While a tile is open the header sits on the glow, the blurred art of the same poster, so a color is brightened
+    /// until it stands out from the glow by this contrast ratio (WCAG's 3:1 for large text).
+    static let backgroundContrast = 3.0
+    /// A color is never mixed more than this far toward white, so it stays its own color on the brightest glow.
+    static let maximumWhiteMix = 0.5
+    /// The black gradient over the glow where the open header sits (`GlowSpec.gradientStops` at about 0.2 to 0.27 of
+    /// its height), and the glow's own opacity over the black page: together, how much the glow is darkened there.
+    static let glowDimming = GlowSpec.imageOpacity * (1 - GlowSpec.headerShade)
+
+    /// The title's color for a picture's swatches, or nil when every one of them is black or near-black. With
+    /// `background` (the glow's swatches), the same color, brightened until it reads on the glow.
+    static func color(from swatches: [PosterSwatch], against background: [PosterSwatch]? = nil) -> MeterTint.RGB? {
+        standingOut(colors(from: swatches).first, against: background)
     }
 
     /// The date's color: the most common of the picture's other real colors that is clearly a different color from the
     /// title's (`dateHueGap` round the wheel, `dateMinimumChroma` of color), compared as they are shown, after being made
-    /// readable. With none, a lighter shade of the title's color. Nil only when the title has no color (all dark).
-    static func dateColor(from swatches: [PosterSwatch]) -> MeterTint.RGB? {
+    /// readable. With none, a lighter shade of the title's color. Nil only when the title has no color (all dark). With
+    /// `background`, the same color, brightened until it reads on the glow.
+    static func dateColor(from swatches: [PosterSwatch], against background: [PosterSwatch]? = nil) -> MeterTint.RGB? {
+        standingOut(pickedDateColor(from: swatches), against: background)
+    }
+
+    private static func pickedDateColor(from swatches: [PosterSwatch]) -> MeterTint.RGB? {
         let found = colors(from: swatches)
         guard let title = found.first else { return nil }
         let titleTone = lab(of: title)
@@ -49,6 +64,45 @@ nonisolated enum HomeTitleTint {
             }
         }
         return title.mixed(toward: .white, by: dateFallbackMix)
+    }
+
+    /// `color` as it is when it already stands out from the glow; else brightened first (full brightness keeps all its
+    /// color), then mixed toward white a step at a time, until it does or is halfway to white (`maximumWhiteMix`).
+    /// Never dropped: a poster's color stays its color, only lighter.
+    static func standingOut(_ color: MeterTint.RGB?, against background: [PosterSwatch]?) -> MeterTint.RGB? {
+        guard var result = color, let glow = glowLuminance(of: background) else { return color }
+        if contrast(result, glow) >= backgroundContrast { return result }
+        let hsb = result.hsb
+        for step in 1...4 where contrast(result, glow) < backgroundContrast {
+            let brightness = hsb.brightness + (1 - hsb.brightness) * Double(step) / 4
+            result = MeterTint.RGB(hue: hsb.hue, saturation: hsb.saturation, brightness: brightness)
+        }
+        let bright = result
+        let steps = Int((maximumWhiteMix * 10).rounded())
+        for step in 1...steps where contrast(result, glow) < backgroundContrast {
+            result = bright.mixed(toward: .white, by: Double(step) * 0.1)
+        }
+        return result
+    }
+
+    /// How light the glow is behind the header: the glow's own baked image (`PosterPaletteStore.homeGlow`), blurred
+    /// far past its shapes, so its colors averaged by share (in linear light, as the eye adds light), then darkened by
+    /// the shade over it there (`glowDimming`).
+    static func glowLuminance(of swatches: [PosterSwatch]?) -> Double? {
+        let weighted = (swatches ?? []).compactMap { swatch in
+            MeterTint.RGB(hex: swatch.hex).map {
+                (TrendingOpenTint.luminance($0.mixed(toward: MeterTint.RGB(red: 0, green: 0, blue: 0), by: 1 - glowDimming)), swatch.share)
+            }
+        }
+        let total = weighted.reduce(0) { $0 + $1.1 }
+        guard total > 0 else { return nil }
+        return weighted.reduce(0) { $0 + $1.0 * $1.1 } / total
+    }
+
+    /// The WCAG contrast ratio of a color against a luminance, 1 to 21.
+    static func contrast(_ color: MeterTint.RGB, _ luminance: Double) -> Double {
+        let own = TrendingOpenTint.luminance(color)
+        return (max(own, luminance) + 0.05) / (min(own, luminance) + 0.05)
     }
 
     static func chroma(_ tone: (lightness: Double, a: Double, b: Double)) -> Double {
@@ -104,5 +158,12 @@ extension PosterPaletteStore {
     /// Home's picture, counted into `HomeTitleTint.candidateCount` colors and kept apart from the posters' five.
     nonisolated static let homePicture = PosterPaletteStore {
         await PosterPaletteExtractor.load(url: $0, limit: HomeTitleTint.candidateCount)
+    }
+
+    /// Home's glow as it is drawn: the same baked, darkened image the glow shows (one cache entry with it), so the
+    /// header is checked against what is really behind it, not the raw poster.
+    nonisolated static let homeGlow = PosterPaletteStore { url in
+        guard let request = BlurredArt.request(url: url, style: .glow) else { return nil }
+        return await PosterPaletteExtractor.load(request: request, limit: HomeTitleTint.candidateCount)
     }
 }

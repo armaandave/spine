@@ -171,11 +171,11 @@ private struct HomeTopHeader: View {
                     .foregroundStyle(tints.date?.color ?? .white.opacity(0.84))
                     // The same glow as the title's, in the date's own color (the picture's second one).
                     .shadow(
-                        color: tints.date?.color.opacity(HomeTopSpec.titleGlowTightOpacity) ?? .clear,
+                        color: (tints.date?.color ?? .white).opacity(HomeTopSpec.titleGlowTightOpacity),
                         radius: HomeTopSpec.dateGlowTightRadius
                     )
                     .shadow(
-                        color: tints.date?.color.opacity(HomeTopSpec.titleGlowWideOpacity) ?? .clear,
+                        color: (tints.date?.color ?? .white).opacity(HomeTopSpec.titleGlowWideOpacity),
                         radius: HomeTopSpec.dateGlowWideRadius
                     )
                     .lineLimit(1)
@@ -184,9 +184,9 @@ private struct HomeTopHeader: View {
                     .font(HomeTopSpec.titleFont)
                     .tracking(HomeTopSpec.titleTracking)
                     .foregroundStyle(tints.title?.color ?? .white)
-                    // A soft glow in the same color: a tight one and a wide one, faint. None while the title is white.
-                    .shadow(color: tints.title?.color.opacity(HomeTopSpec.titleGlowTightOpacity) ?? .clear, radius: 6)
-                    .shadow(color: tints.title?.color.opacity(HomeTopSpec.titleGlowWideOpacity) ?? .clear, radius: 16)
+                    // A soft glow in the same color: a tight one and a wide one, faint. White while the title is white.
+                    .shadow(color: (tints.title?.color ?? .white).opacity(HomeTopSpec.titleGlowTightOpacity), radius: 6)
+                    .shadow(color: (tints.title?.color ?? .white).opacity(HomeTopSpec.titleGlowWideOpacity), radius: 16)
                     .lineLimit(1)
                     .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
             }
@@ -230,27 +230,49 @@ private struct HomeTopHeader: View {
         }
         // Restarts when the picture changes (and drops the old count). The colors are counted once per picture, off
         // the main thread; the title is white until the new color is known, then fades to it.
-        .task(id: viewModel.topArt.art?.backdrop) {
-            await updateTitleTint(for: viewModel.topArt.art?.backdrop)
+        .task(id: tintSource) {
+            await updateTitleTint(for: tintSource)
         }
     }
 
-    private func updateTitleTint(for url: URL?) async {
-        guard let url else {
+    /// Where the header's colors come from: the poster a tile's carousel is on while one is open, counted the same way
+    /// as the picture and checked against the glow behind the header; else the picture.
+    private var tintSource: TintSource? {
+        let glow = viewModel.glowModel
+        if let poster = glow.focused?.displayPosterURL, let url = URL(string: poster) {
+            return TintSource(colors: url, glow: glow.activeURL)
+        }
+        return (viewModel.topArt.art?.backdrop).map { TintSource(colors: $0, glow: nil) }
+    }
+
+    private func updateTitleTint(for source: TintSource?) async {
+        guard let source else {
             tints = HeaderTints()
             return
         }
+        let store = PosterPaletteStore.homePicture
+        let glowStore = PosterPaletteStore.homeGlow
         // Already counted: the colors are set at once (they still fade in from white after the first frame).
-        if let known = PosterPaletteStore.homePicture.known(server: nil, url: url) {
-            tints = HeaderTints(swatches: known)
+        if let known = store.known(server: nil, url: source.colors),
+           source.glow == nil || glowStore.known(server: nil, url: source.glow) != nil {
+            tints = HeaderTints(swatches: known, glow: glowStore.known(server: nil, url: source.glow))
             return
         }
         // Not counted yet: the old picture's colors don't belong on this one, so the header goes back to white first.
         tints = HeaderTints()
-        let counted = await PosterPaletteStore.homePicture.swatches(server: nil, url: url)
+        async let counted = store.swatches(server: nil, url: source.colors)
+        async let glow = glowStore.swatches(server: nil, url: source.glow)
+        let (swatches, glowSwatches) = await (counted, glow)
         guard !Task.isCancelled else { return }
-        tints = counted.map(HeaderTints.init(swatches:)) ?? HeaderTints()
+        tints = swatches.map { HeaderTints(swatches: $0, glow: glowSwatches) } ?? HeaderTints()
     }
+}
+
+/// The image the header's colors are counted from, and the glow image behind the header they must stand out from
+/// (nil at rest, where the picture is darkened under the header).
+private struct TintSource: Hashable {
+    let colors: URL
+    let glow: URL?
 }
 
 /// The header's colors from the picture: the title takes its most common real color, the date the next one.
@@ -260,9 +282,9 @@ private struct HeaderTints: Equatable {
 
     init() {}
 
-    init(swatches: [PosterSwatch]) {
-        title = HomeTitleTint.color(from: swatches)
-        date = HomeTitleTint.dateColor(from: swatches)
+    init(swatches: [PosterSwatch], glow: [PosterSwatch]? = nil) {
+        title = HomeTitleTint.color(from: swatches, against: glow)
+        date = HomeTitleTint.dateColor(from: swatches, against: glow)
     }
 }
 
