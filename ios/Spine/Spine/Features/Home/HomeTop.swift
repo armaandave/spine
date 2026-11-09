@@ -171,11 +171,11 @@ private struct HomeTopHeader: View {
                     .foregroundStyle(tints.date?.color ?? .white.opacity(0.84))
                     // The same glow as the title's, in the date's own color (the picture's second one).
                     .shadow(
-                        color: tints.date?.color.opacity(HomeTopSpec.titleGlowTightOpacity) ?? .clear,
+                        color: (tints.date?.color ?? .white).opacity(HomeTopSpec.titleGlowTightOpacity),
                         radius: HomeTopSpec.dateGlowTightRadius
                     )
                     .shadow(
-                        color: tints.date?.color.opacity(HomeTopSpec.titleGlowWideOpacity) ?? .clear,
+                        color: (tints.date?.color ?? .white).opacity(HomeTopSpec.titleGlowWideOpacity),
                         radius: HomeTopSpec.dateGlowWideRadius
                     )
                     .lineLimit(1)
@@ -184,9 +184,9 @@ private struct HomeTopHeader: View {
                     .font(HomeTopSpec.titleFont)
                     .tracking(HomeTopSpec.titleTracking)
                     .foregroundStyle(tints.title?.color ?? .white)
-                    // A soft glow in the same color: a tight one and a wide one, faint. None while the title is white.
-                    .shadow(color: tints.title?.color.opacity(HomeTopSpec.titleGlowTightOpacity) ?? .clear, radius: 6)
-                    .shadow(color: tints.title?.color.opacity(HomeTopSpec.titleGlowWideOpacity) ?? .clear, radius: 16)
+                    // A soft glow in the same color: a tight one and a wide one, faint. White while the title is white.
+                    .shadow(color: (tints.title?.color ?? .white).opacity(HomeTopSpec.titleGlowTightOpacity), radius: 6)
+                    .shadow(color: (tints.title?.color ?? .white).opacity(HomeTopSpec.titleGlowWideOpacity), radius: 16)
                     .lineLimit(1)
                     .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
             }

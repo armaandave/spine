@@ -28,22 +28,26 @@ nonisolated enum HomeTitleTint {
     /// With no color different enough, the date takes the title's color mixed this far toward white.
     static let dateFallbackMix = 0.45
 
-    /// While a tile is open the header sits on the glow, the blurred art of the same poster, so a color must stand out
-    /// from the glow's main color by at least this contrast ratio (WCAG's 3:1 for large text).
+    /// While a tile is open the header sits on the glow, the blurred art of the same poster, so a color is brightened
+    /// until it stands out from the glow by this contrast ratio (WCAG's 3:1 for large text).
     static let backgroundContrast = 3.0
 
     /// The title's color for a picture's swatches, or nil when every one of them is black or near-black. With
-    /// `background` (the glow's swatches), only a color that stands out from the glow's main color.
+    /// `background` (the glow's swatches), the same color, brightened until it reads on the glow.
     static func color(from swatches: [PosterSwatch], against background: [PosterSwatch]? = nil) -> MeterTint.RGB? {
-        colors(from: swatches, against: background).first
+        standingOut(colors(from: swatches).first, against: background)
     }
 
     /// The date's color: the most common of the picture's other real colors that is clearly a different color from the
     /// title's (`dateHueGap` round the wheel, `dateMinimumChroma` of color), compared as they are shown, after being made
     /// readable. With none, a lighter shade of the title's color. Nil only when the title has no color (all dark). With
-    /// `background`, the same, from the colors that stand out from the glow.
+    /// `background`, the same color, brightened until it reads on the glow.
     static func dateColor(from swatches: [PosterSwatch], against background: [PosterSwatch]? = nil) -> MeterTint.RGB? {
-        let found = colors(from: swatches, against: background)
+        standingOut(pickedDateColor(from: swatches), against: background)
+    }
+
+    private static func pickedDateColor(from swatches: [PosterSwatch]) -> MeterTint.RGB? {
+        let found = colors(from: swatches)
         guard let title = found.first else { return nil }
         let titleTone = lab(of: title)
         for candidate in found.dropFirst() {
@@ -54,36 +58,42 @@ nonisolated enum HomeTitleTint {
                 return candidate
             }
         }
-        let fallback = title.mixed(toward: .white, by: dateFallbackMix)
-        if let glow = mainColor(of: background), contrast(fallback, glow) < backgroundContrast { return nil }
-        return fallback
+        return title.mixed(toward: .white, by: dateFallbackMix)
     }
 
-    /// The picture's real colors, made readable, keeping only those that stand out from the glow's main color. When
-    /// none does, the first one lightened until it does; when even that can't (a very light glow), none, and the header
-    /// stays white.
-    static func colors(from swatches: [PosterSwatch], against background: [PosterSwatch]?) -> [MeterTint.RGB] {
-        let found = colors(from: swatches)
-        guard let glow = mainColor(of: background) else { return found }
-        let standing = found.filter { contrast($0, glow) >= backgroundContrast }
-        if !standing.isEmpty { return standing }
-        guard var lifted = found.first else { return [] }
-        for _ in 0..<8 where contrast(lifted, glow) < backgroundContrast {
-            lifted = lifted.mixed(toward: .white, by: 0.15)
+    /// `color` as it is when it already stands out from the glow; else brightened first (full brightness keeps all its
+    /// color), then mixed toward white a step at a time, until it does or is nearly white. Never dropped: a poster's
+    /// color stays its color, only lighter.
+    static func standingOut(_ color: MeterTint.RGB?, against background: [PosterSwatch]?) -> MeterTint.RGB? {
+        guard var result = color, let glow = glowLuminance(of: background) else { return color }
+        if contrast(result, glow) >= backgroundContrast { return result }
+        let hsb = result.hsb
+        for step in 1...4 where contrast(result, glow) < backgroundContrast {
+            let brightness = hsb.brightness + (1 - hsb.brightness) * Double(step) / 4
+            result = MeterTint.RGB(hue: hsb.hue, saturation: hsb.saturation, brightness: brightness)
         }
-        return contrast(lifted, glow) >= backgroundContrast ? [lifted] : []
+        let bright = result
+        for step in 1...9 where contrast(result, glow) < backgroundContrast {
+            result = bright.mixed(toward: .white, by: Double(step) * 0.1)
+        }
+        return result
     }
 
-    /// The glow's main color: the biggest of its swatches, black included, as it is (not made readable).
-    static func mainColor(of swatches: [PosterSwatch]?) -> MeterTint.RGB? {
-        swatches?.max(by: { $0.share < $1.share }).flatMap { MeterTint.RGB(hex: $0.hex) }
+    /// How light the glow is behind the header: the glow is the image blurred far past its shapes, so it is close to
+    /// the image's colors averaged, each by its share (in linear light, as the eye adds light).
+    static func glowLuminance(of swatches: [PosterSwatch]?) -> Double? {
+        let weighted = (swatches ?? []).compactMap { swatch in
+            MeterTint.RGB(hex: swatch.hex).map { (TrendingOpenTint.luminance($0), swatch.share) }
+        }
+        let total = weighted.reduce(0) { $0 + $1.1 }
+        guard total > 0 else { return nil }
+        return weighted.reduce(0) { $0 + $1.0 * $1.1 } / total
     }
 
-    /// The WCAG contrast ratio of two colors, 1 to 21.
-    static func contrast(_ first: MeterTint.RGB, _ second: MeterTint.RGB) -> Double {
-        let one = TrendingOpenTint.luminance(first)
-        let two = TrendingOpenTint.luminance(second)
-        return (max(one, two) + 0.05) / (min(one, two) + 0.05)
+    /// The WCAG contrast ratio of a color against a luminance, 1 to 21.
+    static func contrast(_ color: MeterTint.RGB, _ luminance: Double) -> Double {
+        let own = TrendingOpenTint.luminance(color)
+        return (max(own, luminance) + 0.05) / (min(own, luminance) + 0.05)
     }
 
     static func chroma(_ tone: (lightness: Double, a: Double, b: Double)) -> Double {

@@ -84,23 +84,25 @@ final class HomeTitleTintTests: XCTestCase {
         XCTAssertEqual(hex(HomeTitleTint.readable(orange)), "#D98A3C")
     }
 
-    func testOnTheGlowAColorTooCloseToItsMainColorGivesWayToTheNext() {
-        // The glow is the same poster: its blue is behind the header, so the title takes the light gold.
-        let poster = [swatch("#3C6EB4", 0.6), swatch("#F0D890", 0.4)]
-        XCTAssertEqual(hex(HomeTitleTint.color(from: poster)), hex(HomeTitleTint.readable(MeterTint.RGB(hex: "#3C6EB4")!)))
-        XCTAssertEqual(hex(HomeTitleTint.color(from: poster, against: poster)), "#F0D890")
+    func testOnADarkGlowTheColorsAreLeftAsTheyAre() {
+        let poster = [swatch("#D98A3C", 0.5), swatch("#3C8AD9", 0.2)]
+        let glow = [swatch("#050505", 0.7), swatch("#1A2A30", 0.3)]
+        XCTAssertEqual(HomeTitleTint.color(from: poster, against: glow), HomeTitleTint.color(from: poster))
+        XCTAssertEqual(HomeTitleTint.dateColor(from: poster, against: glow), HomeTitleTint.dateColor(from: poster))
     }
 
-    func testOnTheGlowWithNoColorThatStandsOutTheFirstIsLightenedUntilItDoes() throws {
-        let poster = [swatch("#3C6EB4", 0.7), swatch("#4A7CC0", 0.3)]
-        let glow = try XCTUnwrap(MeterTint.RGB(hex: "#3C6EB4"))
+    func testOnAGlowOfTheSameColorTheColorIsBrightenedUntilItReadsAndKeepsItsHue() throws {
+        // A red poster on its own red glow: still red, lighter, never dropped to white.
+        let poster = [swatch("#B42A1C", 0.7), swatch("#C0391D", 0.3)]
+        let glow = try XCTUnwrap(HomeTitleTint.glowLuminance(of: poster))
         let title = try XCTUnwrap(HomeTitleTint.color(from: poster, against: poster))
         XCTAssertGreaterThanOrEqual(HomeTitleTint.contrast(title, glow), HomeTitleTint.backgroundContrast)
+        XCTAssertGreaterThan(title.red, title.blue + 0.1, "still a red")
     }
 
-    func testOnAVeryLightGlowTheHeaderStaysWhite() {
-        let glow = [swatch("#F4F4F4", 1)]
-        XCTAssertNil(HomeTitleTint.color(from: [swatch("#D98A3C", 1)], against: glow))
-        XCTAssertNil(HomeTitleTint.dateColor(from: [swatch("#D98A3C", 1)], against: glow))
+    func testTheGlowIsThePostersColorsAveragedByShare() throws {
+        let white = try XCTUnwrap(MeterTint.RGB(hex: "#FFFFFF"))
+        let glow = try XCTUnwrap(HomeTitleTint.glowLuminance(of: [swatch("#000000", 0.75), swatch("#FFFFFF", 0.25)]))
+        XCTAssertEqual(glow, TrendingOpenTint.luminance(white) / 4, accuracy: 0.001)
     }
 }
