@@ -381,7 +381,7 @@ final class FeedCardRenderTests: XCTestCase {
             XCTAssertTrue(sheen.contains(stop), "The sheen lost \(stop)")
         }
         let edge = try section("struct FeedCardEdge", to: "/// Light on the glass")
-        XCTAssertEqual(edge.components(separatedBy: "Color.white.opacity(0.28)").count - 1, 2)
+        XCTAssertEqual(edge.components(separatedBy: "Color.white.opacity(0.14)").count - 1, 2)
     }
 
     func testTheCountsReserveFollowsTheirDigits() {
