@@ -251,16 +251,17 @@ private struct HomeTopHeader: View {
             return
         }
         let store = PosterPaletteStore.homePicture
+        let glowStore = PosterPaletteStore.homeGlow
         // Already counted: the colors are set at once (they still fade in from white after the first frame).
         if let known = store.known(server: nil, url: source.colors),
-           source.glow == nil || store.known(server: nil, url: source.glow) != nil {
-            tints = HeaderTints(swatches: known, glow: store.known(server: nil, url: source.glow))
+           source.glow == nil || glowStore.known(server: nil, url: source.glow) != nil {
+            tints = HeaderTints(swatches: known, glow: glowStore.known(server: nil, url: source.glow))
             return
         }
         // Not counted yet: the old picture's colors don't belong on this one, so the header goes back to white first.
         tints = HeaderTints()
         async let counted = store.swatches(server: nil, url: source.colors)
-        async let glow = store.swatches(server: nil, url: source.glow)
+        async let glow = glowStore.swatches(server: nil, url: source.glow)
         let (swatches, glowSwatches) = await (counted, glow)
         guard !Task.isCancelled else { return }
         tints = swatches.map { HeaderTints(swatches: $0, glow: glowSwatches) } ?? HeaderTints()

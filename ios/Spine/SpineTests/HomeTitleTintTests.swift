@@ -100,9 +100,15 @@ final class HomeTitleTintTests: XCTestCase {
         XCTAssertGreaterThan(title.red, title.blue + 0.1, "still a red")
     }
 
-    func testTheGlowIsThePostersColorsAveragedByShare() throws {
-        let white = try XCTUnwrap(MeterTint.RGB(hex: "#FFFFFF"))
+    func testTheGlowIsItsColorsAveragedByShareUnderTheShade() throws {
+        let dimmedWhite = MeterTint.RGB(red: 1, green: 1, blue: 1)
+            .mixed(toward: MeterTint.RGB(red: 0, green: 0, blue: 0), by: 1 - HomeTitleTint.glowDimming)
         let glow = try XCTUnwrap(HomeTitleTint.glowLuminance(of: [swatch("#000000", 0.75), swatch("#FFFFFF", 0.25)]))
-        XCTAssertEqual(glow, TrendingOpenTint.luminance(white) / 4, accuracy: 0.001)
+        XCTAssertEqual(glow, TrendingOpenTint.luminance(dimmedWhite) / 4, accuracy: 0.001)
+    }
+
+    func testOnAVeryBrightGlowAColorIsLightenedOnlyHalfwayToWhite() throws {
+        let title = try XCTUnwrap(HomeTitleTint.color(from: [swatch("#D98A3C", 1)], against: [swatch("#FFFFFF", 1)]))
+        XCTAssertLessThan(title.blue, 0.8, "still an orange, not white")
     }
 }
