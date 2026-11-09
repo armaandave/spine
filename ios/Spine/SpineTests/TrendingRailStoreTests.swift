@@ -398,7 +398,6 @@ final class RailMediaRepository: MediaRepository {
         return homePictureAnswer
     }
     func setHomePicture(ref _: MediaRef, backdropURL _: String) async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
-    func clearHomePicture() async throws -> HomePictureResponse { HomePictureResponse(picture: nil, canChange: false) }
     func logos(ref: MediaRef) async throws -> [LogoOption] { fatalError("Not used") }
     func saveLogo(ref: MediaRef, logoURL: String) async throws -> LogoSaveResponse { fatalError("Not used") }
 }

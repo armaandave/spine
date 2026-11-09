@@ -42,6 +42,8 @@ struct PlanningTitlesView: View {
     @State private var presentedRef: MediaRef?
 
     private let headline: String
+    /// Who added them, as the card shows: their avatar and name, which open their profile.
+    private let actor: UserSummary
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
@@ -66,6 +68,7 @@ struct PlanningTitlesView: View {
         onClose: (() -> Void)? = nil
     ) {
         headline = PlanningWords.headline(for: activity)
+        actor = activity.actor
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
@@ -163,20 +166,23 @@ struct PlanningTitlesView: View {
     }
 
     private func header(_ day: PlanningDay) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(headline)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.white)
-            if let date = ActivityTimestampFormatter.logDateText(from: day.consumedAt) {
-                Text(date)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+        VStack(alignment: .leading, spacing: 10) {
+            PostHeroAuthorLine(user: actor)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(headline)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.white)
+                if let date = ActivityTimestampFormatter.logDateText(from: day.consumedAt) {
+                    Text(date)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
             }
+            .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, 4)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
     }
 }
 

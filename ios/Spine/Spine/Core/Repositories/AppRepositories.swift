@@ -49,7 +49,6 @@ protocol MediaRepository {
     func saveBackdrop(ref: MediaRef, backdropURL: String) async throws -> BackdropSaveResponse
     func homePicture() async throws -> HomePictureResponse
     func setHomePicture(ref: MediaRef, backdropURL: String) async throws -> HomePictureResponse
-    func clearHomePicture() async throws -> HomePictureResponse
     func logos(ref: MediaRef) async throws -> [LogoOption]
     func saveLogo(ref: MediaRef, logoURL: String) async throws -> LogoSaveResponse
 }
@@ -1117,10 +1116,6 @@ struct APIMediaRepository: MediaRepository {
             body: HomePictureSaveRequest(ref: ref, backdropUrl: backdropURL),
             authenticated: true
         )
-    }
-
-    func clearHomePicture() async throws -> HomePictureResponse {
-        try await client.delete("/home-picture/", authenticated: true)
     }
 
     func logos(ref: MediaRef) async throws -> [LogoOption] {

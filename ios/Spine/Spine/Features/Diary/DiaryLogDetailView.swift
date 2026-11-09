@@ -441,18 +441,10 @@ struct DiaryLogDetailView: View {
 
                 if let logged = DiaryLogFormat.dateLabel(entry.consumedAt) {
                     VStack(alignment: .leading, spacing: 1) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            if entry.isTrueReread ?? entry.isRewatch {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(.white.opacity(0.86))
-                                    .accessibilityLabel(entry.media.ref.repeatLabel)
-                            }
-
-                            Text("Logged \(logged)")
-                                .font(PostPageStyle.loggedFont)
-                                .foregroundStyle(.white.opacity(0.86))
-                        }
+                        // The rewatch arrow sits with the stars and heart, as on the card.
+                        Text("Logged \(logged)")
+                            .font(PostPageStyle.loggedFont)
+                            .foregroundStyle(.white.opacity(0.86))
 
                         if let age = DiaryLogFormat.ageLabel(entry.consumedAt) {
                             Text(age)
@@ -511,6 +503,10 @@ struct DiaryLogDetailView: View {
                 ratingLikeLine(entry)
             }
 
+            if entry.containsSpoilers, clean(entry.review) != nil {
+                PostSpoilerChip()
+            }
+
             if let favorite = entry.favorite, !hidesFavorite(entry) {
                 favoriteLine(favorite)
             }
@@ -555,11 +551,22 @@ struct DiaryLogDetailView: View {
     }
 
     private func hasRatingOrLike(_ entry: DiaryEntry) -> Bool {
-        clean(entry.rating) != nil || entry.liked
+        clean(entry.rating) != nil || entry.liked || isRepeat(entry)
+    }
+
+    /// A rewatch or reread. The card draws the arrow when the log says rewatch, so the page does too, and also for a
+    /// true reread, so no card's arrow goes missing here.
+    private func isRepeat(_ entry: DiaryEntry) -> Bool {
+        entry.isRewatch || entry.isTrueReread == true
     }
 
     private func ratingLikeLine(_ entry: DiaryEntry) -> some View {
-        PostRatingLine(rating: clean(entry.rating), liked: entry.liked)
+        PostRatingLine(
+            rating: clean(entry.rating),
+            liked: entry.liked,
+            rewatch: isRepeat(entry),
+            repeatLabel: entry.media.ref.repeatLabel
+        )
     }
 
     /// "Favorite song" over a slim glass bar: a play button when the song has a preview, then its name. Episodes read
@@ -896,10 +903,26 @@ struct PostHeroTitle: View {
     }
 }
 
-/// A log's stars (24 pt gold, none empty) and heart (20 pt).
+/// A log's stars (24 pt, none empty), heart (20 pt) and rewatch arrow (20 pt), the card's own marks with their soft glow
+/// (`FeedMarkView`) drawn bigger. The page is always light text on darkened art, so they take the dark art's look.
 struct PostRatingLine: View {
     let rating: String?
     let liked: Bool
+    /// A rewatch, reread, replay or relisten, named for VoiceOver by `repeatLabel`.
+    var rewatch = false
+    var repeatLabel = "Rewatch"
+
+    static let starSize: CGFloat = 24
+    static let heartSize: CGFloat = 20
+    static let rewatchSize: CGFloat = 20
+
+    /// The marks in the order the card draws them: each star (its own mark), then the heart, then the arrow.
+    static func marks(rating: String?, liked: Bool, rewatch: Bool) -> [FeedMark] {
+        var marks = (rating.map { PostPageStyle.starSymbols(rating: $0) } ?? []).compactMap(FeedMark.init(starSymbol:))
+        if liked { marks.append(.heart) }
+        if rewatch { marks.append(.rewatch) }
+        return marks
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -907,9 +930,9 @@ struct PostRatingLine: View {
                 let symbols = PostPageStyle.starSymbols(rating: rating)
                 HStack(spacing: 2) {
                     ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in
-                        Image(systemName: symbol)
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundStyle(HomeDesign.Palette.starGold)
+                        if let mark = FeedMark(starSymbol: symbol) {
+                            FeedMarkView(mark: mark, ink: .dark, size: Self.starSize)
+                        }
                     }
                 }
                 .accessibilityElement(children: .ignore)
@@ -917,12 +940,36 @@ struct PostRatingLine: View {
             }
 
             if liked {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(HomeDesign.Palette.heart)
+                // The mark hides itself from VoiceOver, so the label sits on a wrapper around it.
+                ZStack { FeedMarkView(mark: .heart, ink: .dark, size: Self.heartSize) }
+                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Liked")
             }
+
+            if rewatch {
+                // The mark hides itself from VoiceOver, so the label sits on a wrapper around it.
+                ZStack { FeedMarkView(mark: .rewatch, ink: .dark, size: Self.rewatchSize) }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(repeatLabel)
+            }
         }
+    }
+}
+
+/// "Contains spoilers" with the eye, as the card's chip says it, above a log's review.
+struct PostSpoilerChip: View {
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "eye.slash")
+                .font(.system(size: 12, weight: .semibold))
+            Text("Contains spoilers")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(.white.opacity(0.9))
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(.white.opacity(0.12), in: Capsule())
+        .overlay { Capsule().strokeBorder(.white.opacity(0.2), lineWidth: 0.5) }
     }
 }
 
