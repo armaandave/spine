@@ -208,6 +208,8 @@ final class MediaDetailViewModel {
 
     /// The rating read from the book's Goodreads page, which the server sends as a link only.
     private(set) var goodreadsRating: ExternalRating?
+    /// True while the phone reads a Goodreads page it hasn't kept, so the row shows the loading chip.
+    private(set) var isLoadingGoodreadsRating = false
 
     var goodreadsPage: URL? {
         detail?.externalRatings?.first {
@@ -220,9 +222,13 @@ final class MediaDetailViewModel {
             goodreadsRating = nil
             return
         }
-        if goodreadsRating?.url != page.absoluteString {
-            goodreadsRating = nil
+        if let saved = GoodreadsRating.saved(page) {
+            goodreadsRating = saved
+            return
         }
+        goodreadsRating = nil
+        isLoadingGoodreadsRating = true
+        defer { isLoadingGoodreadsRating = false }
         let rating = await GoodreadsRating.load(page)
         if goodreadsPage == page {
             goodreadsRating = rating
@@ -4807,6 +4813,19 @@ private struct MediaDetailPageView: View {
                 providerName: "External ratings",
                 isLoading: true
             ))
+        } else if viewModel.isLoadingGoodreadsRating {
+            // In Goodreads' own place in the row, so its chip fades in where the shadow was.
+            let goodreadsOrder = MediaExternalRatingPresentation.order(for: GoodreadsRating.source)
+            let slot = chips.firstIndex {
+                MediaExternalRatingPresentation.order(for: $0.providerName) > goodreadsOrder
+            } ?? chips.count
+            chips.insert(RatingChip(
+                source: "",
+                value: "",
+                assetName: nil,
+                providerName: GoodreadsRating.source,
+                isLoading: true
+            ), at: slot)
         }
         return chips
     }

@@ -55,7 +55,7 @@ enum GoodreadsRating {
         )
     }
 
-    private static func saved(_ page: URL, defaults: UserDefaults, now: Date) -> ExternalRating? {
+    static func saved(_ page: URL, defaults: UserDefaults = .standard, now: Date = Date()) -> ExternalRating? {
         guard let entry = entries(defaults)[page.absoluteString],
               let value = entry["value"] as? Double,
               let savedAt = entry["savedAt"] as? Double,
