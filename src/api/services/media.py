@@ -4832,47 +4832,27 @@ def _compact_decimal(value):
     return text or "0"
 
 
-OPENLIBRARY_GOODREADS_ID_TIMEOUT = 60 * 60 * 24 * 30
-
-
-def _openlibrary_goodreads_id(item, metadata):
-    """Goodreads ID of an Open Library book, through its ISBNs on Hardcover.
-
-    Kept under the book's own ID, since the ratings re-check has no ISBNs to hand.
-    """
-    cache_key = f"openlibrary_goodreads_id_v1_{item.media_id}"
-    if found := cache.get(cache_key):
-        return found
-    isbns = (metadata.get("details") or {}).get("isbn") or []
-    for isbn in isbns[:2]:
-        if found := hardcover.goodreads_id_for_isbn(isbn):
-            cache.set(cache_key, found, OPENLIBRARY_GOODREADS_ID_TIMEOUT)
-            return found
-    return None
-
-
-def _goodreads_link(item, metadata):
-    """Link-only Goodreads entry for a book.
+def _goodreads_link(item):
+    """Link-only Goodreads entry for a book, as the ratings task stored it.
 
     Goodreads turns away requests from the server, so the app reads the rating
     from this page on the phone.
     """
-    if item.media_type != MediaTypes.BOOK.value:
-        return None
-    if item.source == Sources.HARDCOVER.value:
-        goodreads_id = hardcover.goodreads_id(item.media_id)
-    elif item.source == Sources.OPENLIBRARY.value:
-        goodreads_id = _openlibrary_goodreads_id(item, metadata)
-    else:
-        return None
-    if not goodreads_id:
+    url = (
+        item.external_ratings.filter(rating_source="goodreads")
+        .exclude(canonical_url__isnull=True)
+        .exclude(canonical_url="")
+        .values_list("canonical_url", flat=True)
+        .first()
+    )
+    if not url:
         return None
     return {
-        "source": "Goodreads",
+        "source": source_label("goodreads"),
         "value": "",
         "vote_count": None,
-        "max_value": "5",
-        "url": f"https://www.goodreads.com/book/show/{goodreads_id}",
+        "max_value": max_rating_value("goodreads"),
+        "url": url,
     }
 
 
@@ -4943,7 +4923,7 @@ def _stored_external_ratings(item, metadata):  # noqa: C901
             "url": rating.canonical_url,
         }
 
-    if goodreads := _goodreads_link(item, metadata):
+    if goodreads := _goodreads_link(item):
         ratings["goodreads"] = goodreads
 
     return [

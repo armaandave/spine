@@ -45,6 +45,7 @@ class ExternalRatingServiceTests(TestCase):
                 "steam",
                 "openlibrary",
                 "hardcover",
+                "goodreads",
                 "musicbrainz",
             },
         )
@@ -573,8 +574,8 @@ class ExternalRatingServiceTests(TestCase):
             refresh_external_ratings(manual, ["tmdb"]),
             {"tmdb": "skipped"},
         )
-        with self.assertRaisesMessage(ValueError, "Unknown rating source: goodreads"):
-            refresh_external_ratings(manual, ["goodreads"])
+        with self.assertRaisesMessage(ValueError, "Unknown rating source: storygraph"):
+            refresh_external_ratings(manual, ["storygraph"])
         metadata_mock.assert_not_called()
         self.assertFalse(manual.external_ratings.exists())
 
@@ -589,3 +590,64 @@ class ExternalRatingServiceTests(TestCase):
 
         self.assertEqual(eligible_rating_sources(item), [])
         self.assertFalse(rating_source_is_exposed("musicbrainz"))
+
+
+class GoodreadsLinkTests(TestCase):
+    """The ratings task stores each book's Goodreads page; the app reads its rating."""
+
+    @patch("app.providers.hardcover.goodreads_id", return_value="54493401")
+    def test_hardcover_book_stores_its_goodreads_page_without_a_value(self, _goodreads_mock):
+        item = Item.objects.create(
+            source=Sources.HARDCOVER.value,
+            media_type=MediaTypes.BOOK.value,
+            media_id="427578",
+            title="Project Hail Mary",
+        )
+
+        refresh_external_ratings(item, ["goodreads"])
+
+        rating = item.external_ratings.get(rating_source="goodreads")
+        self.assertEqual(rating.status, ExternalRating.Status.UNAVAILABLE)
+        self.assertIsNone(rating.value)
+        self.assertEqual(rating.canonical_url, "https://www.goodreads.com/book/show/54493401")
+        self.assertFalse(rating_source_is_exposed("goodreads"))
+
+    @patch("app.providers.hardcover.goodreads_id_for_isbn", return_value="62047984")
+    def test_open_library_book_finds_goodreads_through_its_isbn(self, isbn_mock):
+        item = Item.objects.create(
+            source=Sources.OPENLIBRARY.value,
+            media_type=MediaTypes.BOOK.value,
+            media_id="OL40183735M",
+            title="Yellowface",
+        )
+
+        refresh_external_ratings(
+            item,
+            ["goodreads"],
+            metadata={"details": {"isbn": ["9780063250833"]}},
+        )
+
+        isbn_mock.assert_called_once_with("9780063250833")
+        self.assertEqual(
+            item.external_ratings.get(rating_source="goodreads").canonical_url,
+            "https://www.goodreads.com/book/show/62047984",
+        )
+
+    def test_hardcover_rate_limit_is_retried(self):
+        item = Item.objects.create(
+            source=Sources.HARDCOVER.value,
+            media_type=MediaTypes.BOOK.value,
+            media_id="427578",
+            title="Project Hail Mary",
+        )
+        response = requests.Response()
+        response.status_code = 429
+
+        with (
+            patch(
+                "app.providers.hardcover.goodreads_id",
+                side_effect=requests.exceptions.HTTPError(response=response),
+            ),
+            self.assertRaises(TransientExternalRatingError),
+        ):
+            refresh_external_ratings(item, ["goodreads"], raise_transient=True)

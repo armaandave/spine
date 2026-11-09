@@ -537,7 +537,6 @@ def book(media_id):
 GOODREADS_PLATFORM_ID = 1
 GOODREADS_ID_TIMEOUT = 60 * 60 * 24 * 30
 GOODREADS_ID_MISSING_TIMEOUT = 60 * 60 * 24 * 7
-GOODREADS_ID_FAILURE_TIMEOUT = 60 * 10
 
 
 GOODREADS_MAPPING_FIELDS = """
@@ -600,30 +599,26 @@ def goodreads_id_for_isbn(isbn):
 
 
 def _cached_goodreads_id(cache_key, query, variables, mappings):
-    """One quick Hardcover lookup (no waiting out rate limits), kept 30 days when found."""
+    """Look up a Goodreads ID on Hardcover, kept 30 days when found.
+
+    Runs in the background ratings task, so it waits out Hardcover's rate limits;
+    a failed request raises for the task to retry.
+    """
     cached = cache.get(cache_key)
     if cached is not None:
         return cached or None
 
-    try:
-        response = services.api_request(
-            Sources.HARDCOVER.value,
-            "POST",
-            base_url,
-            params={
-                "query": query,
-                "variables": {**variables, "platform_id": GOODREADS_PLATFORM_ID},
-            },
-            headers={"Authorization": settings.HARDCOVER_API},
-            timeout=3,
-            retry_rate_limits=False,
-        )
-        rows = mappings(response["data"])
-    except (requests.exceptions.RequestException, KeyError, TypeError, ValueError) as error:
-        logger.warning("Hardcover Goodreads ID lookup failed for %s: %s", variables, error)
-        cache.set(cache_key, "", GOODREADS_ID_FAILURE_TIMEOUT)
-        return None
-
+    response = services.api_request(
+        Sources.HARDCOVER.value,
+        "POST",
+        base_url,
+        params={
+            "query": query,
+            "variables": {**variables, "platform_id": GOODREADS_PLATFORM_ID},
+        },
+        headers={"Authorization": settings.HARDCOVER_API},
+    )
+    rows = mappings(response["data"])
     found = str(rows[0].get("external_id") or "").strip() if rows else ""
     if not found.isdigit():
         cache.set(cache_key, "", GOODREADS_ID_MISSING_TIMEOUT)

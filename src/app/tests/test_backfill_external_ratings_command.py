@@ -244,7 +244,7 @@ class BackfillExternalRatingsCommandTests(TestCase):
 
     def test_invalid_options_are_rejected(self):
         cases = (
-            ({"rating_sources": ["goodreads"]}, "Unknown rating source"),
+            ({"rating_sources": ["storygraph"]}, "Unknown rating source"),
             ({"media_types": ["podcast"]}, "Unknown media type"),
             ({"item_sources": ["goodreads"]}, "Unknown item source"),
             ({"batch_size": 0}, "batch-size must be between 1 and 100"),

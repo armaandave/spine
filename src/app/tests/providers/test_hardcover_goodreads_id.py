@@ -30,10 +30,11 @@ class HardcoverGoodreadsIdTests(TestCase):
         self.assertEqual(api_request_mock.call_count, 1)
 
     @patch("app.providers.hardcover.services.api_request")
-    def test_failed_lookup_returns_none(self, api_request_mock):
+    def test_failed_lookup_raises_for_the_ratings_task_to_retry(self, api_request_mock):
         api_request_mock.side_effect = requests.exceptions.ConnectionError("down")
 
-        self.assertIsNone(hardcover.goodreads_id("427578"))
+        with self.assertRaises(requests.exceptions.ConnectionError):
+            hardcover.goodreads_id("427578")
 
     @patch("app.providers.hardcover.services.api_request")
     def test_isbn_finds_the_goodreads_id_of_its_hardcover_book(self, api_request_mock):
