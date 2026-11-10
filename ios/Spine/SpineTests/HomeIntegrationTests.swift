@@ -361,6 +361,24 @@ final class HomeIntegrationTests: XCTestCase {
         XCTAssertEqual(home.glowModel.idle?.title, "Perf Movie")
     }
 
+    func testTheFeedLoadsWithoutWaitingForTheRailAndTheGlowWaitsForTheRail() async throws {
+        let item = book("b1", pages: 10)
+        tracking.items["book"] = [item]
+        tracking.holdsRail = true
+        activity.feedPages[nil] = page([try log(1)])
+        let home = makeHome()
+
+        let loading = Task { await home.load() }
+        await waitUntil { !home.feed.items.isEmpty }
+        XCTAssertTrue(home.tiles.inProgress.isEmpty, "The rail is still on its way")
+        XCTAssertNil(home.glowModel.idle, "The newest post does not light the glow before the rail answers")
+
+        tracking.releaseRail()
+        await loading.value
+        XCTAssertEqual(home.tiles.inProgress.count, 1)
+        XCTAssertEqual(home.glowModel.idle, item.media)
+    }
+
     func testTheFollowCountDecidesWhetherEmptyTrendingOffersToFindPeople() async {
         let none = makeHome(following: 0)
         await none.load()
@@ -720,9 +738,19 @@ final class HomeRecordingTrackingRepository: TrackingRepository {
     private(set) var bookCalls: [Decimal] = []
     private(set) var updateCalls: [(ref: MediaRef, status: String?)] = []
     var updateError: Error?
+    /// Holds the rail's reads until `releaseRail()`, to see what Home does while the rail is on its way.
+    var holdsRail = false
+    private var heldRail: [CheckedContinuation<Void, Never>] = []
+
+    func releaseRail() {
+        holdsRail = false
+        heldRail.forEach { $0.resume() }
+        heldRail = []
+    }
 
     func list(mediaType: String, page: String?, status: String?, query: String?) async throws -> PagedResponse<Spine.LibraryItem> {
         listCalls += 1
+        if holdsRail { await withCheckedContinuation { heldRail.append($0) } }
         let results = items[mediaType] ?? []
         return PagedResponse(count: results.count, next: nil, previous: nil, results: results)
     }

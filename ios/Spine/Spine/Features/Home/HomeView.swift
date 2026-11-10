@@ -206,14 +206,24 @@ final class HomeViewModel {
         tiles.isLoadingTrending = tiles.trending.isEmpty
         // The site-wide picture is asked for on the side: the first paint never waits for it.
         Task { [topArt, seasonPages] in await topArt.loadSitePicture(using: seasonPages) }
-        guard await loadProfileAndInProgress() else { return }
+        guard await loadProfile() else { return }
+        // The feed needs only the profile, so it is asked for alongside the rail and Up next, not after them.
+        async let railLoad: Void = loadInProgressAndUpNext()
         async let friendsLoad: Void = loadFriends()
         await loadActivity()
         await friendsLoad
+        await railLoad
     }
 
     /// Returns whether the profile loaded.
     private func loadProfileAndInProgress() async -> Bool {
+        guard await loadProfile() else { return false }
+        await loadInProgressAndUpNext()
+        return true
+    }
+
+    /// Returns whether the profile loaded.
+    private func loadProfile() async -> Bool {
         isLoading = true
         profileErrorMessage = nil
         defer { isLoading = false }
@@ -227,11 +237,13 @@ final class HomeViewModel {
             handleUnauthorized(error)
             return false
         }
+        return true
+    }
 
+    private func loadInProgressAndUpNext() async {
         async let upNextLoad: Void = upNext.load()
         await loadInProgress(forceToday: true)
         await upNextLoad
-        return true
     }
 
     /// The first load, when the screen appears: nothing happens once the profile is in.
@@ -311,9 +323,10 @@ final class HomeViewModel {
             return
         } catch {
             inProgressErrorMessage = error.localizedDescription
-            // The rail failed, so Trending may supply the picture.
+            // The rail failed, so Trending may supply the picture, and the newest post the glow.
             inProgressLoaded = true
             updateTopArt()
+            syncGlowIdle()
             handleUnauthorized(error)
         }
     }
@@ -509,9 +522,10 @@ final class HomeViewModel {
         )
     }
 
-    /// The glow rests on the first In progress title, else the newest post's art.
+    /// The glow rests on the first In progress title, else the newest post's art. The post waits for the rail to
+    /// answer, so a feed that comes back first does not light the glow for a moment.
     private func syncGlowIdle() {
-        let media = tiles.inProgress.first?.inProgressMedia ?? feed.items.first?.media
+        let media = tiles.inProgress.first?.inProgressMedia ?? (inProgressLoaded ? feed.items.first?.media : nil)
         if glowModel.idle != media { glowModel.idle = media }
     }
 
