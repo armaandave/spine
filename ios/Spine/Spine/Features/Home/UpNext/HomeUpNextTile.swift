@@ -39,8 +39,7 @@ struct HomeUpNextTile: View {
 
 /// The numbers of the tile, from the mock.
 private enum UpNextTileSpec {
-    /// The posters (46 + the 9-point date band) with the same 12 points above, below and to their right: no more room
-    /// than that at the top and bottom.
+    /// Unchanged since the posters lost their date band, so Home doesn't shift; the posters sit centered in it.
     static let height: CGFloat = 79
     static let corner: CGFloat = 26
     static let leading: CGFloat = 16
@@ -48,11 +47,7 @@ private enum UpNextTileSpec {
     static let posterGap: CGFloat = 6
     /// A whole 2:3 poster (27 x 40 made 15% bigger).
     static let poster = CGSize(width: 31, height: 46)
-    /// The strip under the poster holding its date.
-    static let band: CGFloat = 9
     static let posterCorner: CGFloat = 5
-    static let dateFont = Font.system(size: 5.5, weight: .bold, design: .rounded)
-    static let dateInk = Color.white.opacity(0.9)
     static let maxPosters = 5
     static let titleFont = Font.system(size: 17, weight: .heavy)
     static let chevronFont = Font.system(size: 14, weight: .bold)
@@ -104,80 +99,32 @@ private struct UpNextTileFace: View {
     }
 }
 
-/// One small poster, whole, with a band under it holding the day it airs: the poster runs on into the band and
-/// fades into a soft see-through dark, so the date sits on the poster's own colors. The tiles' hairline and shadow go
-/// round both.
+/// One small poster, whole, with the tiles' hairline and shadow round it.
 private struct UpNextTilePoster: View {
     let item: UpNextItem
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: UpNextTileSpec.posterCorner, style: .continuous)
         let poster = UpNextTileSpec.poster
-        let band = UpNextTileSpec.band
         SpineAsyncImage(
             url: URL(string: item.media.displayPosterURL ?? ""),
             thumbnailSize: poster
         ) { phase in
-            VStack(spacing: 0) {
-                if case let .success(image) = phase {
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: poster.width, height: poster.height)
-                        .clipped()
-                    UpNextTileBand(image: image)
-                } else {
-                    TileStyle.artBase
-                        .frame(width: poster.width, height: poster.height + band)
-                }
+            if case let .success(image) = phase {
+                image
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                TileStyle.artBase
             }
         }
-        .frame(width: poster.width, height: poster.height + band)
-        .overlay(alignment: .bottom) {
-            Text(UpNextPresentation.shortDate(item.airing.airDate))
-                .font(UpNextTileSpec.dateFont)
-                .tracking(0.1)
-                .foregroundStyle(UpNextTileSpec.dateInk)
-                .lineLimit(1)
-                .fixedSize()
-                .frame(width: poster.width, height: band)
-        }
+        .frame(width: poster.width, height: poster.height)
         .clipShape(shape)
         .overlay { shape.strokeBorder(TileStyle.posterHairline, lineWidth: TileStyle.strokeWidth) }
         .shadow(color: .black.opacity(0.35), radius: 6, y: 5)
         .accessibilityHidden(true)
     }
 }
-
-/// The poster's last row carried down over the band, softened, then fading into a see-through dark.
-private struct UpNextTileBand: View {
-    let image: Image
-
-    var body: some View {
-        let poster = UpNextTileSpec.poster
-        let band = UpNextTileSpec.band
-        image
-            .resizable()
-            .scaledToFill()
-            .frame(width: poster.width, height: poster.height)
-            .clipped()
-            // Only the last row, in a one-point strip, then the strip stretched down to the band's height.
-            .frame(width: poster.width, height: 1, alignment: .bottom)
-            .clipped()
-            .scaleEffect(x: 1, y: band, anchor: .top)
-            .frame(width: poster.width, height: band, alignment: .top)
-            .blur(radius: 2)
-            .overlay {
-                LinearGradient(
-                    colors: [.black.opacity(0.2), .black.opacity(0.55)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .clipped()
-    }
-}
-
 
 /// The first title's art, blurred, saturated and darkened in the image cache as the tiles' is.
 private struct UpNextTileArt: View {

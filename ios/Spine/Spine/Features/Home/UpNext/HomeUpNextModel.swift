@@ -148,16 +148,6 @@ nonisolated enum UpNextPresentation {
         return "\(calendar.standaloneMonthSymbols[calendar.component(.month, from: day) - 1]) \(calendar.component(.day, from: day))"
     }
 
-    /// "11/6": the tile's date under each poster, in the phone's numeric month-and-day order.
-    static func shortDate(_ airDate: String, calendar: Calendar = .autoupdatingCurrent) -> String {
-        guard let day = day(of: airDate, calendar: calendar) else { return "" }
-        var style = Date.FormatStyle(date: .omitted, time: .omitted).month(.defaultDigits).day()
-        style.calendar = calendar
-        style.timeZone = calendar.timeZone
-        if let locale = calendar.locale { style.locale = locale }
-        return day.formatted(style)
-    }
-
     /// "1 coming up", "5 coming up".
     static func countLine(_ count: Int) -> String {
         "\(count) coming up"
