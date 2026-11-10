@@ -16,6 +16,7 @@
 set -euo pipefail
 
 device=${SPINE_DEVICE_ID:-5717B25A-53E3-532D-8303-931EE324948F}
+all_args=("$@")
 build_only=0
 on_laptop=0
 use_laptop=0
@@ -107,7 +108,21 @@ if [ $on_laptop -eq 1 ]; then
   kc=$HOME/Library/Keychains/spine-agent.keychain-db
   [ -f "$kc" ] && [ -s "$HOME/spine-agent/.keychain-pass" ] ||
     die "the laptop can't sign phone builds yet. Armaan runs this once in Terminal on the laptop: $top/scripts/ios/laptop-signing-setup.sh"
+  # One laptop phone build at a time, since they change the keychain search list.
+  if [ -z "${SPINE_LAPTOP_SIGNING:-}" ]; then
+    SPINE_LAPTOP_SIGNING=1 exec lockf -s "$HOME/spine-agent/.signing.lock" "$0" "${all_args[@]}"
+  fi
   security unlock-keychain -p "$(cat "$HOME/spine-agent/.keychain-pass")" "$kc"
+  # codesign only finds the key while its keychain is on the search list (with
+  # --keychain alone it still fails with errSecInternalComponent), so list it first for
+  # this build and put the list back afterwards, even if the build fails.
+  original_keychains=()
+  while IFS= read -r line; do
+    line=${line#"${line%%[![:space:]]*}"}; line=${line#\"}; line=${line%\"}
+    [ -n "$line" ] && original_keychains+=("$line")
+  done < <(security list-keychains -d user)
+  trap 'security list-keychains -d user -s "${original_keychains[@]}"' EXIT
+  security list-keychains -d user -s "$kc" "${original_keychains[@]}"
   sign_args=("OTHER_CODE_SIGN_FLAGS=--keychain $kc")
 fi
 
