@@ -6,8 +6,13 @@ enum FeedStandingMath {
     /// - Parameters:
     ///   - position: where the friend stands now, from `InProgressTilePresenter.position(for:)`.
     ///   - told: the card's day, in its own unit. Nil for a status-only day.
+    ///   - place: where the day ended, by unit, as the server sent it (`object.place`). A log that finished the read
+    ///     after the day took the rest, so the day stops here, not at the end. Nil (an older server, or no number in
+    ///     the position's unit) keeps where the friend stands now.
     /// - Returns: nil when there is neither an end for a meter nor words to say.
-    static func standing(position: TilePosition, told: TodayPart?) -> FeedStanding? {
+    static func standing(position: TilePosition, told: TodayPart?, place: [String: Double]? = nil) -> FeedStanding? {
+        var position = position
+        if let end = dayEnd(place, in: position) { position.current = end }
         let to = whole(position.current)
         let total = position.total.map(whole)
 
@@ -50,6 +55,30 @@ enum FeedStandingMath {
         )
     }
 
+    /// The day's end in the position's unit: the server's number in that unit, else pages and percent turned into
+    /// each other through the page count. Nil when it cannot be said.
+    static func dayEnd(_ place: [String: Double]?, in position: TilePosition) -> Double? {
+        guard let place else { return nil }
+        let key: String? = switch position.unit {
+        case .pages: "pages"
+        case .percent: "percent"
+        case .chapters: "chapters"
+        case .issues: "issues"
+        case .minutes: "minutes"
+        case .episodes: nil
+        }
+        if let key, let value = place[key], value.isFinite { return value }
+        guard let pages = position.pagesTotal, pages > 0 else { return nil }
+        switch position.unit {
+        case .pages:
+            return place["percent"].map { ($0 / 100 * pages).rounded() }
+        case .percent:
+            return place["pages"].map { ($0 / pages * 100 * 100).rounded() / 100 }
+        default:
+            return nil
+        }
+    }
+
     private static func whole(_ value: Double) -> Int {
         Int(max(0, value).rounded())
     }
@@ -80,6 +109,8 @@ final class FriendStandings: FeedStandingProviding {
         let title: String?
         /// The card's day, in its own unit; nil for a status-only day.
         let told: TodayPart?
+        /// Where the day ended, by unit (`object.place`); nil from an older server.
+        var place: [String: Double]? = nil
     }
 
     enum Phase: Equatable {
@@ -217,7 +248,8 @@ final class FriendStandings: FeedStandingProviding {
             pair: Pair(username: item.actor.username, mediaType: mediaType, status: status),
             titleKey: FeedEntries.titleKey(for: ref),
             title: ActivityFeedPresentation.clean(item.media?.title),
-            told: told
+            told: told,
+            place: item.object.place
         )
     }
 
@@ -277,7 +309,7 @@ final class FriendStandings: FeedStandingProviding {
             )
         }
         guard let position = entry.positions[want.titleKey] else { return nil }
-        return FeedStandingMath.standing(position: position, told: want.told)
+        return FeedStandingMath.standing(position: position, told: want.told, place: want.place)
     }
 
     func prepare(for items: [ActivityItem]) {

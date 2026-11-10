@@ -56,6 +56,7 @@ PROGRESS_OBJECT = {
     "time_label": (str, NONE),
     "moves": list,
     "percent": (*NUMBER, NONE),
+    "place": (dict, NONE),
 }
 LOG_OBJECT = {
     "type": str,

@@ -240,6 +240,32 @@ final class FeedCardPresenterTests: XCTestCase {
         XCTAssertLessThanOrEqual(FeedDetailPlanner.bottom(of: card.details, hasHeadline: false), 103)
     }
 
+    func testALogThatAddedPagesSaysSoAfterItsMarks() throws {
+        let item = try FeedTestItems.item(
+            objectFields: "\"rating\": \"4\", \"liked\": true, \"is_rewatch\": false, \"label\": \"99 pages\", \"amount\": 99, \"unit\": \"pages\"",
+            source: "hardcover", mediaType: "book", title: "A Storm of Swords"
+        )
+        XCTAssertEqual(
+            model(item).headline,
+            .marks(starSymbols: fullStars, liked: true, rewatch: false, repeatLabel: "Reread", amount: "+99 pages")
+        )
+        let pagesOnly = try FeedTestItems.item(
+            objectFields: "\"label\": \"200 pages\"", source: "hardcover", mediaType: "book"
+        )
+        XCTAssertEqual(
+            model(pagesOnly).headline,
+            .marks(starSymbols: [], liked: false, rewatch: false, repeatLabel: "Reread", amount: "+200 pages")
+        )
+        let episode = try FeedTestItems.item(
+            objectFields: "\"rating\": \"4\", \"label\": \"1 episode\"", mediaType: "episode", season: 1, episode: 3
+        )
+        XCTAssertEqual(
+            model(episode).headline,
+            .marks(starSymbols: fullStars, liked: false, rewatch: false, repeatLabel: "Rewatch", amount: nil),
+            "An episode's tag already says which one"
+        )
+    }
+
     func testARewatchAloneIsAHeadline() throws {
         let card = model(try FeedTestItems.log(rewatch: true, mediaType: "book", source: "hardcover"))
         XCTAssertEqual(card.headline, .marks(starSymbols: [], liked: false, rewatch: true, repeatLabel: "Reread"))
@@ -541,7 +567,7 @@ final class FeedCardPresenterTests: XCTestCase {
                     XCTAssertFalse(string.lowercased().contains(word), "'\(string)' contains \(word) (log \(item.id))")
                 }
             }
-            if case let .marks(symbols, _, _, repeatLabel)? = card.headline {
+            if case let .marks(symbols, _, _, repeatLabel, _)? = card.headline {
                 XCTAssertFalse(symbols.contains { $0.lowercased().contains("watched") })
                 XCTAssertFalse(repeatLabel.lowercased().contains("watched"))
             }

@@ -120,12 +120,16 @@ enum FeedCardPresenter {
         let summary = ActivityFeedPresentation.ratingSummary(for: item)
         let symbols = summary.starSymbols
         let rewatch = ActivityFeedPresentation.isRewatch(item)
-        guard !symbols.isEmpty || summary.liked || rewatch else { return nil }
+        // An episode's own log says nothing more than its tag ("S1 E3") already does.
+        let isEpisode = item.media?.ref.episodeNumber != nil
+        let amount = isEpisode ? nil : ActivityFeedPresentation.clean(item.object.label).map { "+\($0)" }
+        guard !symbols.isEmpty || summary.liked || rewatch || amount != nil else { return nil }
         return .marks(
             starSymbols: symbols,
             liked: summary.liked,
             rewatch: rewatch,
-            repeatLabel: item.media?.ref.repeatLabel ?? "Rewatch"
+            repeatLabel: item.media?.ref.repeatLabel ?? "Rewatch",
+            amount: amount
         )
     }
 
@@ -315,9 +319,9 @@ enum FeedCardPresenter {
 
     private static func headlineWords(_ headline: FeedHeadline?, item: ActivityItem) -> String? {
         switch headline {
-        case .marks(_, _, let rewatch, let repeatLabel):
+        case .marks(_, _, let rewatch, let repeatLabel, let amount):
             let summary = ActivityFeedPresentation.ratingSummary(for: item)
-            return [summary.isEmpty ? nil : summary.accessibilityLabel, rewatch ? repeatLabel : nil]
+            return [summary.isEmpty ? nil : summary.accessibilityLabel, rewatch ? repeatLabel : nil, amount]
                 .compactMap { $0 }
                 .joined(separator: ", ")
         case let .progress(amount, tail, pills):
