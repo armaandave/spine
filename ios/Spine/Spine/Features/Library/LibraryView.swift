@@ -1061,6 +1061,7 @@ struct PosterBadgeLabel: View {
         Text(text)
             .font(.system(size: 9, weight: .black))
             .foregroundStyle(.white)
+            .multilineTextAlignment(.center)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .background(.black.opacity(0.76), in: Capsule())
@@ -1074,9 +1075,15 @@ enum LibraryPosterBadge {
     static let unfinishedStatuses = ["In progress", "Paused", "Dropped"]
 
     /// The badge on the Library grid's small poster, which has about 58 pt of room. A manga's or a comic's leaves out
-    /// the unit, so it stays on one line at full size: "120/380", "12/54", "Ch. 120" (MC-006). Rows and Home have room
-    /// for the words, and a book's badge stays as it is.
+    /// the unit, so it stays on one line at full size: "120/380", "12/54", "Ch. 120" (MC-006). A book's pages do the
+    /// same: "212/448", "p. 212"; its percent stays as it is. Rows and Home have room for the words.
     static func gridText(for item: LibraryItem) -> String? {
+        if item.media.ref.mediaType == "book", let text = text(for: item),
+           text.hasSuffix(" pages") || text.hasSuffix(" page"),
+           let space = text.lastIndex(of: " ") {
+            let place = String(text[..<space])
+            return place.contains("/") ? place : "p. \(place)"
+        }
         guard item.media.ref.isSeries else { return text(for: item) }
         guard text(for: item) != nil, let progress = item.tracking.progress, let value = progress.value else { return nil }
         let place = ProgressPercent.text(value)

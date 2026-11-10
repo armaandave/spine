@@ -100,9 +100,26 @@ final class LibraryPosterBadgeTests: XCTestCase {
         XCTAssertEqual(grid(series("comic", status: "In progress", value: 12, max: nil, unit: "issue")), "Iss. 12")
         XCTAssertNil(grid(series("manga", status: "In progress", value: 0, max: 380, unit: "chapter")), "A place of zero")
         XCTAssertNil(grid(series("manga", status: "Completed", value: 380, max: 380, unit: "chapter")), "Finished")
-        let book = series("book", status: "In progress", value: 120, max: 380, unit: "page")
-        XCTAssertEqual(grid(book), badge(book))
         XCTAssertEqual(badge(series("manga", status: "In progress", value: 120, max: 380, unit: "chapter")), "120/380 chapters")
+    }
+
+    // A book's pages leave out the unit on the grid too, so the badge stays on one line. A percent is already short.
+    func testTheGridBadgeOfABookHasNoUnit() {
+        func grid(_ item: Spine.LibraryItem) -> String? { LibraryPosterBadge.gridText(for: item) }
+        let pages = book(status: "In progress", progress: ProgressState(kind: "pages", value: 212, max: 448, unit: "page"))
+        XCTAssertEqual(grid(pages), "212/448")
+        XCTAssertEqual(badge(pages), "212/448 pages", "Home keeps the words")
+        XCTAssertEqual(
+            grid(book(status: "Paused", progress: ProgressState(kind: "pages", value: 212, max: nil, unit: "page"))),
+            "p. 212"
+        )
+        XCTAssertEqual(
+            grid(book(status: "In progress", progress: ProgressState(
+                kind: "percentage", value: Decimal(string: "28.7"), max: 100, unit: "percent"
+            ))),
+            "28.7%"
+        )
+        XCTAssertNil(grid(book(status: "Completed", progress: ProgressState(kind: "pages", value: 448, max: 448, unit: "page"))))
     }
 
     private func series(_ mediaType: String, status: String, value: Decimal, max: Decimal?, unit: String) -> Spine.LibraryItem {
