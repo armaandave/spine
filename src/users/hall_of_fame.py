@@ -33,6 +33,9 @@ def set_picks(user, items):
     if len({item.pk for item in items}) != len(items):
         raise HallOfFameError("A title can be in the Hall of Fame only once.")
     with transaction.atomic():
+        # One save at a time per user: two at once would both delete, then collide on the
+        # (user, position) constraint when inserting.
+        User.objects.select_for_update().filter(pk=user.pk).exists()
         HallOfFamePick.objects.filter(user=user).delete()
         HallOfFamePick.objects.bulk_create(
             HallOfFamePick(user=user, item=item, position=position) for position, item in enumerate(items)
