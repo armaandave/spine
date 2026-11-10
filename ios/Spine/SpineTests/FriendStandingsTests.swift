@@ -336,6 +336,41 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertNil(standing.from)
     }
 
+    func testADayAFinishingLogFollowedStopsAtItsOwnPlace() throws {
+        // Read 248 pages to p. 893, then Finished: the log took the last 99, and the friend now stands at the end.
+        let position = TilePosition(unit: .pages, current: 992, total: 992, pagesTotal: 992)
+        let standing = try XCTUnwrap(FeedStandingMath.standing(
+            position: position, told: TodayPart(unit: .pages, amount: 248), place: ["pages": 893]
+        ))
+        XCTAssertEqual(standing, FeedStanding(unit: .pages, from: 645, to: 893, total: 992, whereText: "p. 893"))
+    }
+
+    func testADaysPlaceInPercentGoesOnAPageBarThroughThePageCount() throws {
+        let position = TilePosition(unit: .pages, current: 400, total: 400, pagesTotal: 400)
+        let standing = try XCTUnwrap(FeedStandingMath.standing(
+            position: position, told: TodayPart(unit: .pages, amount: 40), place: ["percent": 75]
+        ))
+        XCTAssertEqual(standing.to, 300)
+        XCTAssertEqual(standing.from, 260)
+        XCTAssertNil(FeedStandingMath.dayEnd(["percent": 75], in: TilePosition(unit: .pages, current: 1, total: nil, pagesTotal: nil)))
+    }
+
+    func testTheProviderReadsTheDaysPlaceFromTheCard() async throws {
+        root.set("a", "book", rows: [])
+        root.set("a", "book", "Completed", rows: [bookRow("7", page: 992, of: 992)])
+        let item = try FeedTestItems.item(
+            type: "progress_updated", objectType: "progress_day", objectID: 10,
+            objectFields: "\"label\": \"248 pages\", \"unit\": \"pages\", \"place\": {\"pages\": 893}",
+            username: "a", source: "manual", mediaType: "book", mediaID: "7", title: "Perf My Book"
+        )
+        let provider = provider()
+        provider.prepare(for: [item])
+        await landed(provider)
+        let standing = try XCTUnwrap(provider.standing(for: item, isNewestOfTitle: true))
+        XCTAssertEqual(standing.whereText, "p. 893")
+        XCTAssertEqual(standing.from, 645)
+    }
+
     func testAPercentBookWithNoPageCountLightsNothing() throws {
         let position = TilePosition(unit: .percent, current: 71, total: 100, pagesTotal: nil)
         let standing = try XCTUnwrap(FeedStandingMath.standing(position: position, told: TodayPart(unit: .pages, amount: 20)))

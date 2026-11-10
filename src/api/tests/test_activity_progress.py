@@ -103,6 +103,7 @@ class DailyProgressTests(TestCase):
                 "time_label": "3h",
                 "moves": [],
                 "percent": None,
+                "place": None,
             },
         )
 

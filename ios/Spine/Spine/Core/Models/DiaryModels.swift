@@ -495,6 +495,10 @@ struct ActivityObject: Codable {
     var moves: [String]? = nil
     var percent: Double? = nil
     var timeLabel: String? = nil
+    /// Where a book, manga, comic or game day ended, by unit ("pages", "percent", "chapters", "issues", "minutes"):
+    /// a log that finished the read later took the rest, so this can be short of where the person stands now.
+    /// Older servers don't send it.
+    var place: [String: Double]? = nil
     /// A day of Planning adds (AC-8): how many titles, and the one type they share. Only a request that asks with
     /// `include=planning` gets such a row.
     var count: Int? = nil

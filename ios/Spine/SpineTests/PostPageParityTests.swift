@@ -262,7 +262,7 @@ final class PostPageParityTests: XCTestCase {
             let item = try FeedTestItems.log(rating: rating, liked: liked, rewatch: rewatch)
             let onCard = card(item)
             var expected: [FeedMark] = []
-            if case let .marks(symbols, cardLiked, cardRewatch, _)? = onCard.headline {
+            if case let .marks(symbols, cardLiked, cardRewatch, _, _)? = onCard.headline {
                 expected = symbols.compactMap(FeedMark.init(starSymbol:))
                 if cardLiked { expected.append(.heart) }
                 if cardRewatch { expected.append(.rewatch) }
@@ -278,7 +278,7 @@ final class PostPageParityTests: XCTestCase {
     func testEveryMediaTypesLogShowsItsRepeatMarkOnThePage() throws {
         for type in ["movie", "tv", "anime", "music", "book", "manga", "comic", "game"] {
             let item = try FeedTestItems.log(rating: "4", rewatch: true, mediaType: type)
-            guard case let .marks(_, _, rewatch, label)? = card(item).headline else { return XCTFail(type) }
+            guard case let .marks(_, _, rewatch, label, _)? = card(item).headline else { return XCTFail(type) }
             XCTAssertTrue(rewatch, type)
             XCTAssertTrue(PostRatingLine.marks(rating: "4", liked: false, rewatch: rewatch).contains(.rewatch), type)
             XCTAssertFalse(label.isEmpty, type)

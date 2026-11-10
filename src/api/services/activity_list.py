@@ -167,12 +167,22 @@ def row_fields(row):
     }
 
 
+PLACE_UNITS = {
+    activity_rows.PAGE: "pages",
+    "chapter": "chapters",
+    "issue": "issues",
+    activity_rows.MINUTE: "minutes",
+    activity_rows.PERCENT: "percent",
+}
+
+
 def progress_fields(row):
-    """Return a progress row's added fields: moves and a percent told with no length."""
+    """Return a progress row's moves, a percent with no length, and the day's place."""
     return {
         **row_fields(row),
         "moves": [activity_rows.MOVE_KEYS[move] for move in row.moves],
         "percent": plain_number(row.told) if row.told_unit == activity_rows.PERCENT else None,
+        "place": {PLACE_UNITS[unit]: plain_number(value) for unit, value in row.place.items()} if row.place else None,
     }
 
 

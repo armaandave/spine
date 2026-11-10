@@ -242,7 +242,7 @@ struct FeedCardView: View, Equatable {
     private func headlineRow(_ headline: FeedHeadline, ink: ArtInk) -> some View {
         HStack(spacing: isMarks(headline) ? HomeDesign.FeedDepth.markGroupSpacing : 6) {
             switch headline {
-            case let .marks(starSymbols, liked, rewatch, _):
+            case let .marks(starSymbols, liked, rewatch, _, amount):
                 if !starSymbols.isEmpty {
                     HStack(spacing: HomeDesign.FeedDepth.markStarSpacing) {
                         ForEach(Array(starSymbols.enumerated()), id: \.offset) { _, symbol in
@@ -261,6 +261,13 @@ struct FeedCardView: View, Equatable {
                 }
                 if rewatch {
                     FeedMarkView(mark: .rewatch, ink: ink)
+                }
+                if let amount {
+                    Text(amount)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .feedTextLift(ink)
+                        .foregroundStyle(ink.muted)
                 }
             case let .progress(amount, tail, pills):
                 Text(amount)

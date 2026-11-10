@@ -124,6 +124,8 @@ class Row:
     unknown_told: Decimal = ZERO
     # A TV episode counted at its season's or show's runtime, not its own.
     approximate: bool = False
+    # A progress day's place at its end, by unit (Note.place); None on TV, anime, logs.
+    place: dict | None = None
 
     @property
     def counts_title(self):
@@ -211,6 +213,9 @@ class Note:
     moves: list = field(default_factory=list)
     change_ids: list = field(default_factory=list)
     status_ids: list = field(default_factory=list)
+    # Where the read stood after the day's last numbered save, by unit. A log's pages
+    # come after it, so a finished read's day still says where that day stopped.
+    place: dict | None = None
 
 
 @dataclass
@@ -233,6 +238,10 @@ class Reading:
             note.status_ids.append(change.pk)
         else:
             note.change_ids.append(change.pk)
+
+    def stood_at(self, day, place):
+        """Note where the read stood after a numbered save on its (touched) day."""
+        self.notes[day].place = place
 
     def finish(self, log_id, day, at, target):
         """Add what's left on a log's date (decision 10).
@@ -313,6 +322,8 @@ class Title:
             row.moves.extend(note.moves)
             row.last_at = max(filter(None, (row.last_at, note.at)))
             row.progress_id = min(filter(None, (row.progress_id, *(note.change_ids or note.status_ids))), default=None)
+            if note.place:
+                row.place = note.place
 
     def _amount_row(self, amount):
         """Return the row an amount lands on, or None if it went to the pile."""
@@ -509,8 +520,10 @@ def _walk_journey(reading, session, saves, length, zone, *, continues, finished)
             pages = _pages_of(saved, length)
             if pages is None:
                 reading.percents.move_to(value, day, change.created_at)
+                reading.stood_at(day, {PERCENT: value})
             else:
                 reading.counted.move_to(pages, day, change.created_at)
+                reading.stood_at(day, {PAGE: pages})
 
 
 def marked_between(prior, later, marked_at):
@@ -769,7 +782,7 @@ def _logs_by_title(owners, media_type, only, *, with_item=True):
 # Games
 
 
-def _walk_playthrough(title, session, saves, zone):  # noqa: C901
+def _walk_playthrough(title, session, saves, zone):  # noqa: C901, PLR0912
     """Fold one playthrough, its own total (GM-006, GM-102), into rows.
 
     Saves and the log are read in the order they were saved, so a save after a log stays
@@ -782,6 +795,8 @@ def _walk_playthrough(title, session, saves, zone):  # noqa: C901
     if entry:
         title.add_log(entry, day_of_log, known=session.total_minutes is not None)
     logged = entry is None
+    # The units this playthrough has a number in; a day's place reads each as it stands.
+    held = []
     for change in saves:
         if not logged and change.created_at > entry.created_at:
             reading.finish(entry.pk, day_of_log, entry.created_at, None)
@@ -797,6 +812,9 @@ def _walk_playthrough(title, session, saves, zone):  # noqa: C901
             reading.touch(day, change)
         elif kind in ("minutes", "percentage"):
             position = reading.counted if kind == "minutes" else reading.percents
+            unit = MINUTE if kind == "minutes" else PERCENT
+            if unit not in held:
+                held.append(unit)
             if entry and saved.get("log_id") == entry.pk:
                 before = len(position.amounts)
                 position.move_to(Decimal(str(saved["value"])), day_of_log, change.created_at)
@@ -805,6 +823,8 @@ def _walk_playthrough(title, session, saves, zone):  # noqa: C901
             else:
                 reading.touch(day, change)
                 position.move_to(Decimal(str(saved["value"])), day, change.created_at)
+                values = {MINUTE: reading.counted.value, PERCENT: reading.percents.value}
+                reading.stood_at(day, {unit: values[unit] for unit in held})
     if not logged:
         reading.finish(entry.pk, day_of_log, entry.created_at, None)
     if session.total_minutes is not None and Decimal(session.total_minutes) != reading.counted.value:
@@ -924,7 +944,7 @@ def _carries_on_series(reading, attempt, opening):
     return opening > 0 or (attempt.completion_diary_entry_id is not None and not attempt.pre_completion)
 
 
-def _walk_attempt_saves(reading, saves, zone, *, carried):
+def _walk_attempt_saves(reading, saves, zone, unit, *, carried):
     started = not carried and not _first_move_picks_up(saves)
     for change in saves:
         saved = change.current_progress
@@ -939,6 +959,7 @@ def _walk_attempt_saves(reading, saves, zone, *, carried):
             # Only a count holds a number: a status row's 0 would wipe the read.
             reading.touch(day, change)
             reading.counted.move_to(Decimal(saved["value"]), day, change.created_at)
+            reading.stood_at(day, {unit: reading.counted.value})
 
 
 def _log_on_read(title, reading, entry, total, zone, sees):
@@ -991,7 +1012,7 @@ def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, see
             # A place with no day: an import's, on no date (MC-400).
             reading.counted.move_to(opening, None, None)
         by_attempt[attempt.pk] = reading
-        _walk_attempt_saves(reading, attempt_saves, zone, carried=carried)
+        _walk_attempt_saves(reading, attempt_saves, zone, unit, carried=carried)
         if entry:
             linked.add(entry.pk)
             _log_on_read(title, reading, entry, total, zone, sees)
