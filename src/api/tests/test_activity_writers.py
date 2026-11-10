@@ -44,6 +44,8 @@ NAMING = {
     "api/services/activity_rows.py",
     "api/services/stats_scope.py",
     "api/services/tracking.py",
+    # Reads only: the tracking list's updated_at takes a row's latest change.
+    "api/views/tracking.py",
     "app/anime_tracking.py",
     "app/book_tracking.py",
     "app/game_tracking.py",

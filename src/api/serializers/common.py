@@ -1341,6 +1341,17 @@ def _tv_updated_at(media):
     )
 
 
+def _updated_at(media):
+    """Return when a row last moved, which Home's In progress sorts by.
+
+    Book, game, manga and comic progress is saved on their journeys, leaving the row's
+    progressed_at behind, so the list's latest progress change counts too.
+    """
+    moved = getattr(media, "progressed_at", None) or getattr(media, "created_at", None)
+    changed = getattr(media, "last_progress_change_at", None)
+    return max(filter(None, (moved, changed)), default=None)
+
+
 def _tv_viewing_dates(media):
     """Return a TV or Season row's (start_date, end_date) in one query (A-47).
 
@@ -1391,11 +1402,7 @@ def tracking_state(media, *, tv=None, tv_detail=False):
             else end_date
         ),
         "notes": getattr(media, "notes", ""),
-        "updated_at": (
-            _tv_updated_at(media)
-            if isinstance(media, TV)
-            else getattr(media, "progressed_at", None) or getattr(media, "created_at", None)
-        ),
+        "updated_at": _tv_updated_at(media) if isinstance(media, TV) else _updated_at(media),
         "latest_progress_change": progress_change_payload(latest_progress_change_for(media)),
     }
     if tv_tracking.supports(media.item):
