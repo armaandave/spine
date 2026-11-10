@@ -124,7 +124,7 @@ class Row:
     unknown_told: Decimal = ZERO
     # A TV episode counted at its season's or show's runtime, not its own.
     approximate: bool = False
-    # A progress day's place at its end, by unit (Note.place); None on TV, anime, logs.
+    # Where a progress day ended, by unit (Note.place; a show's furthest tick).
     place: dict | None = None
 
     @property
