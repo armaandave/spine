@@ -40,7 +40,11 @@ struct HomeTilesSection: View {
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
         } action: { width in
-            if width > 0 { contentWidth = width }
+            guard width > 0 else { return }
+            // Taken at once: the tiles' frames animate, and they would grow from the stand-in width to the page's.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { contentWidth = width }
         }
         .modifier(HomeGlowTilesAnchor(glow: glow))
         .background {
@@ -66,7 +70,7 @@ struct HomeTilesSection: View {
     // MARK: Open and close
 
     private func openTile(_ tile: HomeTileID) {
-        guard state.open == nil, model.face(for: tile) == .items else { return }
+        guard state.open == nil, model.shownFace(for: tile) == .items else { return }
         openTicks += 1
         let posters = model.posters(for: tile)
         let rest = state.restIndex(tile)
@@ -151,7 +155,9 @@ private struct HomeTile: View {
         // Nothing open: the tiles are closing (or at rest), and everything that moves does so at the close's pace.
         let closing = state.open == nil
         let frame = TileGeometry.frame(tile: tile.index, open: state.open?.index, contentWidth: contentWidth)
-        let face = model.face(for: tile)
+        // What the data says, and what the tile shows: titles stay behind the loading look until revealed.
+        let dataFace = model.face(for: tile)
+        let face = model.shownFace(for: tile)
         let posters = model.posters(for: tile)
         let shape = RoundedRectangle(cornerRadius: HomeDesign.Metric.tileCorner, style: .continuous)
 
@@ -191,6 +197,18 @@ private struct HomeTile: View {
             .accessibilityAction(.escape) {
                 if isOpen { onClose() }
             }
+            .task(id: dataFace) { await reveal(dataFace) }
+    }
+
+    /// Titles that have just arrived show once the fan's posters and its art are in the image cache (a second at
+    /// most), all fading in together instead of one by one.
+    private func reveal(_ face: TileFace) async {
+        guard face == .items, !model.revealed.contains(tile) else { return }
+        await TileReveal.warm(TileReveal.requests(for: model.posters(for: tile), rest: state.restIndex(tile)))
+        guard !Task.isCancelled else { return }
+        withAnimation(TileMotion.reveal(reduceMotion: reduceMotion)) {
+            _ = model.revealed.insert(tile)
+        }
     }
 
     // MARK: Layers
@@ -218,7 +236,9 @@ private struct HomeTile: View {
                     onOpenTitle: openTitle
                 )
             case .loading:
-                TileSkeletonFace(contentWidth: contentWidth)
+                // The tile's own glass and its title: nothing stands in for the posters.
+                FeedCardSheen()
+                    .frame(width: side, height: TileGeometry.closedHeight)
             case .offer:
                 TileOfferGlyph(symbol: tile == .inProgress ? "plus" : "person.badge.plus", side: side)
             case .message:
@@ -226,7 +246,7 @@ private struct HomeTile: View {
             }
             TileLabel(
                 title: tile.title,
-                subtitle: isOpen && face == .items ? "Swipe to browse" : model.subtitle(for: tile),
+                subtitle: isOpen && face == .items ? "Swipe to browse" : face == .loading ? "" : model.subtitle(for: tile),
                 isOpen: isOpen,
                 closedWidth: side - 2 * TileGeometry.labelLeading
             )
@@ -306,7 +326,7 @@ private struct HomeTile: View {
 // MARK: - Pieces
 
 /// A URL for a string that may be missing or blank.
-private enum TileURL {
+enum TileURL {
     static func make(_ string: String?) -> URL? {
         guard let string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return URL(string: string)
@@ -430,6 +450,8 @@ private struct TileLabel: View {
                 .foregroundStyle(TileStyle.subtitle)
                 .lineLimit(1)
                 .contentTransition(.identity)
+                // A count that arrives with the posters fades in with them.
+                .opacity(subtitle.isEmpty ? 0 : 1)
                 .frame(maxWidth: closedWidth, alignment: .leading)
                 .offset(x: TileGeometry.labelLeading, y: TileGeometry.subtitleTop(isOpen: isOpen))
         }

@@ -496,6 +496,11 @@ enum TileMotion {
         }
     }
 
+    /// A tile's first posters and art fading in together, and Up next's place opening or closing: 0.4 s.
+    static func reveal(reduceMotion: Bool) -> Animation {
+        reduceMotion ? HomeDesign.Motion.reduced : ease(0.4)
+    }
+
     /// A poster growing or shrinking as the focus passes: 0.45 s.
     static func focus(reduceMotion: Bool) -> Animation {
         HomeDesign.Motion.transform(reduceMotion: reduceMotion)

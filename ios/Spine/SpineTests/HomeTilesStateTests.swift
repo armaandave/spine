@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 import XCTest
 @testable import Spine
@@ -487,7 +488,7 @@ final class HomeTilesStateTests: XCTestCase {
 
     private static let tileFiles = [
         "HomeTilesSection.swift", "HomeTilesState.swift", "HomeTilesModel.swift", "TileGeometry.swift",
-        "TileCarousel.swift", "TileDetailPanel.swift", "HomeTilesSkeleton.swift",
+        "TileCarousel.swift", "TileDetailPanel.swift",
     ]
 
     private func tileSource(_ name: String) throws -> String {
@@ -534,7 +535,7 @@ final class HomeTilesStateTests: XCTestCase {
         let openBody = carousel[openFold.upperBound ..< next.lowerBound]
         XCTAssertEqual(closedBody.components(separatedBy: "glow.scrollOffset").count - 1, 1)
         XCTAssertEqual(openBody.components(separatedBy: "glow.scrollOffset").count - 1, 1)
-        for name in ["HomeTilesSection.swift", "TileGeometry.swift", "HomeTilesSkeleton.swift", "TileDetailPanel.swift"] {
+        for name in ["HomeTilesSection.swift", "TileGeometry.swift", "TileDetailPanel.swift"] {
             XCTAssertFalse(try tileSource(name).contains("scrollOffset"), name)
         }
         // The folds are transforms, one brightness and (the open fold's far posters) an opacity: no new view, no
@@ -659,6 +660,27 @@ final class HomeTilesStateTests: XCTestCase {
         XCTAssertEqual(model.face(for: .trending), .loading)
         model.trending = [title("x")]
         XCTAssertEqual(model.face(for: .trending), .items)
+    }
+
+    func testTitlesShowOnlyOnceRevealed() {
+        let model = HomeTilesModel()
+        model.inProgress = [item("a")]
+        XCTAssertEqual(model.face(for: .inProgress), .items)
+        XCTAssertEqual(model.shownFace(for: .inProgress), .loading, "New titles wait behind the loading look")
+        model.revealed.insert(.inProgress)
+        XCTAssertEqual(model.shownFace(for: .inProgress), .items)
+        XCTAssertEqual(model.shownFace(for: .trending), .message("Nothing yet"), "A tile with no titles is not held")
+    }
+
+    func testARevealWaitsForTheFansPostersAndTheFrontPostersArt() throws {
+        let posters = ["a", "b", "c", "d", "e"].map { TilePoster(id: id($0), media: media($0)) }
+        // Resting on the third: it is in front, the second and fourth behind it.
+        let requests = TileReveal.requests(for: posters, rest: 2)
+        let fan = [posters[2], posters[1], posters[3]].map { TilePosterArt.request(for: $0.media)?.url }
+        let art = BlurredArt.request(url: URL(string: "https://example.com/c.jpg"), style: .tile)
+        XCTAssertEqual(requests.map(\.url), fan + [art?.url])
+        XCTAssertFalse(try XCTUnwrap(requests.last).processors.isEmpty, "The art is the blurred one")
+        XCTAssertTrue(TileReveal.requests(for: [], rest: 0).isEmpty)
     }
 
     func testSubtitlesAndLabels() {

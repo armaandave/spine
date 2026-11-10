@@ -28,6 +28,13 @@ struct HomeUpNextTile: View {
                 .accessibilityIdentifier("home.upNext")
                 .padding(.top, HomeDesign.Metric.tileGap)
                 .transition(.opacity)
+            } else if model.holdsPlace {
+                // Its place while the first read is on its way: the tile's glass and its title.
+                UpNextTileFace(items: [])
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Loading Up next")
+                    .padding(.top, HomeDesign.Metric.tileGap)
+                    .transition(.opacity)
             }
         }
         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: items.isEmpty)
@@ -68,9 +75,11 @@ private struct UpNextTileFace: View {
                         .font(UpNextTileSpec.chevronFont)
                 }
                 .foregroundStyle(.white)
+                // Its line is kept while loading, so the title sits where it will.
                 Text(UpNextPresentation.countLine(items.count))
                     .font(HomeDesign.Text.tileSubtitle)
                     .foregroundStyle(TileStyle.subtitle)
+                    .opacity(items.isEmpty ? 0 : 1)
             }
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -87,9 +96,14 @@ private struct UpNextTileFace: View {
         .frame(maxWidth: .infinity)
         .frame(height: UpNextTileSpec.height)
         .background {
-            // The feed card's sheen on the art, under the posters and the words, as the card has it.
-            UpNextTileArt(url: items.first.flatMap { URL(string: $0.media.displayPosterURL ?? "") })
-                .overlay { FeedCardSheen() }
+            // The feed card's sheen on the art, under the posters and the words, as the card has it. A tile still
+            // loading is the glass and the sheen alone.
+            if items.isEmpty {
+                FeedCardSheen()
+            } else {
+                UpNextTileArt(url: items.first.flatMap { URL(string: $0.media.displayPosterURL ?? "") })
+                    .overlay { FeedCardSheen() }
+            }
         }
         .background(TileStyle.veil)
         .clipShape(shape)

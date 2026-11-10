@@ -7,7 +7,6 @@ final class HomeViewModel {
         didSet { tiles.followsNobody = (profile?.counts.following ?? 0) == 0 }
     }
 
-    var isLoading = true
     var profileErrorMessage: String?
     /// Why a write from a tile failed, for an alert. Nil when there is nothing to say.
     var writeFailure: String?
@@ -95,6 +94,11 @@ final class HomeViewModel {
     /// Your own recent activity and the fallback titles, kept for Trending.
     @ObservationIgnored private var ownActivity: [ActivityItem] = []
     @ObservationIgnored private var fallbackTitles: [MediaSummary] = []
+    /// The read of your own activity, asked for alongside the feed.
+    @ObservationIgnored private var ownActivityLoad: Task<Void, Never>?
+    /// While a load's feed, your own activity and the fallback are on their way, Trending keeps what it shows: built
+    /// a step at a time, its posters would trade places as each step landed.
+    @ObservationIgnored private var holdsTrending = false
     /// A write from a tile changed a card since the rail loaded: the rail re-sorts on its next visit.
     @ObservationIgnored private var railNeedsResort = false
 
@@ -167,6 +171,8 @@ final class HomeViewModel {
             onUnauthorized: onUnauthorized
         )
         tiles.railStore = railStore
+        // Both tiles are drawn from the first frame, before anything has been asked for: they start loading.
+        tiles.isLoadingInProgress = true
         tiles.isLoadingTrending = true
         // The glow behind the page knows whether today's picture covers it at rest, including one restored at launch.
         glowModel.hasRestPicture = topArt.art != nil
@@ -207,7 +213,9 @@ final class HomeViewModel {
         // The site-wide picture is asked for on the side: the first paint never waits for it.
         Task { [topArt, seasonPages] in await topArt.loadSitePicture(using: seasonPages) }
         guard await loadProfile() else { return }
-        // The feed needs only the profile, so it is asked for alongside the rail and Up next, not after them.
+        // The feed needs only the profile, so it is asked for alongside the rail and Up next, not after them, and
+        // your own activity with it, for Trending.
+        loadOwnActivity()
         async let railLoad: Void = loadInProgressAndUpNext()
         async let friendsLoad: Void = loadFriends()
         await loadActivity()
@@ -224,10 +232,7 @@ final class HomeViewModel {
 
     /// Returns whether the profile loaded.
     private func loadProfile() async -> Bool {
-        isLoading = true
         profileErrorMessage = nil
-        defer { isLoading = false }
-
         do {
             profile = try await profileRepository.me()
         } catch is CancellationError {
@@ -460,33 +465,43 @@ final class HomeViewModel {
 
     // MARK: Trending and the glow
 
-    /// The first page of the feed is in: friends' standings start loading, and Trending reads what it can now and
-    /// fills in from your own activity and the fallback list as they arrive.
+    /// Asks for your own recent activity, for Trending, without waiting for it. Trending keeps what it shows until
+    /// this, the feed and any fallback are in (`fillTrending`).
+    private func loadOwnActivity() {
+        guard loadsTileExtras, let username = profile?.username else { return }
+        holdsTrending = true
+        ownActivityLoad = Task { [weak self, activityRepository] in
+            guard let page = try? await activityRepository.userActivityPage(username: username, pageSize: 25, cursorLink: nil),
+                  !Task.isCancelled else { return }
+            self?.ownActivity = page.results
+        }
+    }
+
+    /// The first page of the feed is in: friends' standings start loading, and Trending is worked out once your own
+    /// activity and, when there are too few titles, the fallback list are in too.
     private func feedDidLoad() {
         standing.reload(for: feed.items)
         friends.reorder(feed: feed.items)
         recomputeTrending()
-        guard loadsTileExtras, let username = profile?.username else {
+        guard loadsTileExtras else {
             tiles.isLoadingTrending = false
             return
         }
         trendingFill?.cancel()
-        trendingFill = Task { [weak self] in await self?.fillTrending(username: username) }
+        trendingFill = Task { [weak self] in await self?.fillTrending() }
     }
 
-    private func fillTrending(username: String) async {
-        defer { tiles.isLoadingTrending = false }
-        if let page = try? await activityRepository.userActivityPage(username: username, pageSize: 25, cursorLink: nil),
-           !Task.isCancelled {
-            ownActivity = page.results
-            recomputeTrending()
-        }
-        guard !Task.isCancelled, let trendingFallback,
-              TrendingAggregator.needsFallback(feed: feed.items, own: ownActivity, you: youSummary) else { return }
-        let titles = await trendingFallback.load()
+    private func fillTrending() async {
+        await ownActivityLoad?.value
         guard !Task.isCancelled else { return }
-        fallbackTitles = titles
+        if let trendingFallback, TrendingAggregator.needsFallback(feed: feed.items, own: ownActivity, you: youSummary) {
+            let titles = await trendingFallback.load()
+            guard !Task.isCancelled else { return }
+            fallbackTitles = titles
+        }
+        holdsTrending = false
         recomputeTrending()
+        tiles.isLoadingTrending = false
     }
 
     /// The feed's items changed: Trending and the glow follow, and the cards were rebuilt before this.
@@ -501,15 +516,29 @@ final class HomeViewModel {
     }
 
     private func recomputeTrending() {
+        guard !holdsTrending else { return }
         let result = TrendingAggregator.titles(
             feed: feed.items,
             own: ownActivity,
             you: youSummary,
             fallback: fallbackTitles
         )
-        if tiles.trending != result.titles { tiles.trending = result.titles }
+        if tiles.trending != result.titles { showTrending(result.titles) }
         if tiles.trendingSubtitle != result.subtitle { tiles.trendingSubtitle = result.subtitle }
         updateTopArt()
+    }
+
+    /// A closed Trending tile that is already showing glides its posters to their new places, as long as the title it
+    /// rests on keeps its place: the carousel under the fan stays put. Otherwise they are set at once.
+    private func showTrending(_ titles: [TrendingTitle]) {
+        guard !tiles.trending.isEmpty, tilesState.open == nil,
+              tilesState.keepsRestPlace(.trending, in: titles.map(\.id)) else {
+            tiles.trending = titles
+            return
+        }
+        withAnimation(TileMotion.focus(reduceMotion: UIAccessibility.isReduceMotionEnabled)) {
+            tiles.trending = titles
+        }
     }
 
     /// Offers the rail and Trending to today's picture. Only a page that loads the tiles' extras chooses one: a view

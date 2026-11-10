@@ -167,6 +167,31 @@ final class UpNextTests: XCTestCase {
         XCTAssertTrue(signedOut)
     }
 
+    func testTheTileKeepsItsPlaceWhileLoadingWhenItHadSomethingLastTime() async throws {
+        let suite = "UpNextTests.holdsPlace"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let repository = UpNextRepository(result: .success([try item("Pluribus")]))
+        let first = HomeUpNextModel(repository: repository, defaults: defaults, onUnauthorized: {})
+        XCTAssertFalse(first.holdsPlace, "Nothing known yet")
+        await first.load()
+
+        let next = HomeUpNextModel(repository: repository, defaults: defaults, onUnauthorized: {})
+        XCTAssertTrue(next.holdsPlace, "It had something last time")
+        XCTAssertFalse(HomeUpNextModel(repository: nil, defaults: defaults, onUnauthorized: {}).holdsPlace, "No read, no place")
+        repository.result = .success([])
+        await next.load()
+        XCTAssertFalse(next.holdsPlace, "The answer takes the place over")
+        XCTAssertFalse(HomeUpNextModel(repository: repository, defaults: defaults, onUnauthorized: {}).holdsPlace)
+
+        defaults.set(true, forKey: HomeUpNextModel.hadItemsKey)
+        repository.result = .failure(URLError(.notConnectedToInternet))
+        let failing = HomeUpNextModel(repository: repository, defaults: defaults, onUnauthorized: {})
+        await failing.load()
+        XCTAssertFalse(failing.holdsPlace, "A read that fails gives the place up")
+    }
+
     func testAHomeWithoutExtrasMakesNoRead() async {
         let repository = UpNextRepository(result: .success([]))
         let model = HomeUpNextModel(repository: nil, onUnauthorized: {})

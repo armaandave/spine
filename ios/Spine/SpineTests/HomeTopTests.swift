@@ -163,9 +163,10 @@ final class HomeTopTests: XCTestCase {
         XCTAssertEqual(home.tiles.inProgress.first?.tracking.progress?.value, 200)
     }
 
-    func testTheLastTitleLeavingEmptiesTheRailAndClosesAnOpenTile() {
+    func testTheLastTitleLeavingEmptiesTheRailAndClosesAnOpenTile() async {
         let only = book("b1")
         let home = makeHome()
+        await home.loadInProgress()
         home.inProgressItems = [only]
         home.tilesState.sync(home.tiles.ids(for: .inProgress), for: .inProgress)
         home.tilesState.openTile(.inProgress)

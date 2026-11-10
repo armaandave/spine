@@ -21,6 +21,42 @@ enum TilePosterArt {
     }
 }
 
+/// What a tile waits for before its titles first show: the fan's three posters and the blurred art behind them, so
+/// they arrive together instead of one by one over placeholders.
+enum TileReveal {
+    /// The longest a tile waits. Whatever is still loading then fills in on its own.
+    static let longestWait: Duration = .seconds(1)
+
+    /// The fan's posters when it rests on `rest`, and its front poster's art: what the closed tile draws.
+    static func requests(for posters: [TilePoster], rest: Int) -> [ImageRequest] {
+        guard !posters.isEmpty else { return [] }
+        let fan = TileGeometry.fanSlots(rest: rest, count: posters.count)
+        let shown = [fan.front, fan.left, fan.right].compactMap { $0 }
+        let art = BlurredArt.request(url: TileURL.make(posters[fan.front].media.displayPosterURL), style: .tile)
+        return shown.compactMap { TilePosterArt.request(for: posters[$0].media) } + [art].compactMap { $0 }
+    }
+
+    /// Loads `requests` into the image cache and returns once they are all in, or after `longestWait`. Loads still
+    /// running then carry on.
+    static func warm(_ requests: [ImageRequest]) async {
+        guard !requests.isEmpty else { return }
+        let wait = longestWait
+        let loads = Task {
+            await withTaskGroup(of: Void.self) { group in
+                for request in requests {
+                    group.addTask { _ = try? await ImagePipeline.shared.image(for: request) }
+                }
+            }
+        }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await loads.value }
+            group.addTask { try? await Task.sleep(for: wait) }
+            await group.next()
+            group.cancelAll()
+        }
+    }
+}
+
 /// A poster's place in the fan or the carousel as one animatable value. The poster view never changes its frame: it
 /// moves by offset, scale and rotation, and the corner radius is worked out from the scale on every frame so the
 /// poster reads 12 pt at every size. The hairline and the baked shadow come with it, so nothing is a live effect.
@@ -181,7 +217,9 @@ private struct TilePosterCell: View {
                 title: media.displayTitle,
                 slot: .homeCarousel,
                 mediaType: media.ref.mediaType,
-                orientation: media.posterOrientation
+                orientation: media.posterOrientation,
+                // Dark, not the media type's colors, while a poster is still loading.
+                placeholderFill: TileStyle.artBase
             )
             .overlay {
                 Color.black.opacity(pose.dim)
