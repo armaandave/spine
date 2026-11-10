@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -491,3 +492,42 @@ class StartedActivityTests(TestCase):
         tracked = book_tracking.start(self.user, book)
 
         self.assertIsNone(latest_progress_change_for(tracked))
+
+
+class InProgressOrderTests(TestCase):
+    """A listed title's updated_at is when it last moved: Home's In progress order."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="reader", password="strong-password-123")
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def started(self, media_type, start, when):
+        item = Item.objects.create(
+            source=Sources.MANUAL.value,
+            media_type=media_type,
+            media_id=f"{media_type}-1",
+            title=media_type,
+        )
+        with patch("django.utils.timezone.now", return_value=when):
+            start(self.user, item)
+        # progressed_at's default reads the real clock.
+        apps.get_model("app", media_type).objects.filter(item=item).update(progressed_at=when)
+        return item
+
+    def updated_at(self, media_type):
+        response = self.client.get("/api/v1/tracking/", {"media_type": media_type, "status": "In progress"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        [row] = response.data["results"]
+        return row["tracking"]["updated_at"]
+
+    def test_a_progress_update_moves_the_title(self):
+        book = self.started(MediaTypes.BOOK.value, book_tracking.start, at(20))
+        game = self.started(MediaTypes.GAME.value, game_tracking.start, at(20))
+
+        with patch("django.utils.timezone.now", return_value=at(24)):
+            book_tracking.update_progress(self.user, book, progress_type="pages", value=40)
+            game_tracking.update_progress(self.user, game, total_minutes=90)
+
+        self.assertEqual(self.updated_at(MediaTypes.BOOK.value), at(24))
+        self.assertEqual(self.updated_at(MediaTypes.GAME.value), at(24))

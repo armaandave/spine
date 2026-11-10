@@ -54,6 +54,7 @@ from app.models import (
     MediaTypes,
     Status,
 )
+from social.models import ProgressChange
 from streaming import filters as streaming_filters
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,7 @@ class TrackingListView(MediaExposureMixin, APIView):
         queryset = _tv_list_filters(queryset, media_type, continue_watching=continue_watching)
         if media_type == MediaTypes.TV.value:
             queryset = _tv_viewing_dates(queryset)
+        queryset = _last_progress_change(queryset, media_type)
         rating_scope_queryset = queryset
         filter_service.ensure_filter_metadata(queryset, request.query_params)
         queryset = filter_service.apply_item_filters(queryset, request.query_params)
@@ -533,6 +535,19 @@ def _tv_viewing_dates(queryset):
     return queryset.prefetch_related(None).annotate(
         tv_first_viewing_end=Subquery(viewings.order_by("end_date").values("end_date")[:1]),
         tv_last_viewing_end=Subquery(viewings.order_by("-end_date").values("end_date")[:1]),
+    )
+
+
+def _last_progress_change(queryset, media_type):
+    """Add when each row's progress last changed; TV uses its last activity (TV-701)."""
+    if media_type == MediaTypes.TV.value:
+        return queryset
+    return queryset.annotate(
+        last_progress_change_at=Subquery(
+            ProgressChange.objects.filter(actor=OuterRef("user"), item=OuterRef("item"))
+            .order_by("-created_at")
+            .values("created_at")[:1],
+        ),
     )
 
 
