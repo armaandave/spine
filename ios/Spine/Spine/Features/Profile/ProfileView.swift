@@ -1937,8 +1937,7 @@ struct ProfileRecentActivityRailItem: Identifiable {
 
 enum ProfileRecentActivityRailModel {
     /// Each title once, at its newest activity, so a show watched every day fills one poster, not the rail. A show's
-    /// season and episode logs count as the show (activity contract AC-1). A log takes the place of that day's progress,
-    /// since its stars say more than a count.
+    /// season and episode logs count as the show (activity contract AC-1). A log takes the place of that day's progress.
     static func items(from activities: [ActivityItem]) -> [ProfileRecentActivityRailItem] {
         var items: [ProfileRecentActivityRailItem] = []
         var titleIndexes: [String: Int] = [:]
@@ -1990,78 +1989,6 @@ enum ProfileRecentActivityRailModel {
         }
         return heights.max() ?? PosterSlot.profileRail.size.height
     }
-
-    static func progressDeltaText(for activity: ActivityItem, media: MediaSummary) -> String? {
-        guard
-            activity.type == "progress_updated",
-            let previous = activity.object.previous,
-            let current = activity.object.current
-        else {
-            return nil
-        }
-
-        return ProgressChangeState(
-            id: activity.object.id,
-            previous: previous,
-            current: current,
-            createdAt: activity.createdAt
-        )
-        .compactDeltaText(preferredMode: ProgressDisplayPreferences.mode(for: media.ref))
-    }
-
-    static func rating(for activity: ActivityItem) -> String? {
-        clean(activity.object.rating)
-    }
-
-    /// A log's stars to the nearest half, shown beside one star: "4.5" or "2".
-    static func starValueText(for activity: ActivityItem) -> String? {
-        guard let halfSteps = rating(for: activity)?.ratingHalfSteps, halfSteps > 0 else { return nil }
-        return halfSteps.isMultiple(of: 2) ? "\(halfSteps / 2)" : "\(halfSteps / 2).5"
-    }
-
-    static func isLikedDiary(_ activity: ActivityItem) -> Bool {
-        isDiary(activity) && activity.object.liked == true
-    }
-
-    static func isRewatchDiary(_ activity: ActivityItem) -> Bool {
-        isDiary(activity) && activity.object.isRewatch == true
-    }
-
-    /// A day's progress as a gain, "+230 pages", with episodes shortened to fit: "+3 eps.", "+1 ep.".
-    static func progressGainText(_ label: String?) -> String? {
-        guard let label = clean(label) else { return nil }
-        guard label != "Started" else { return label }
-        if label.hasSuffix(" episodes") {
-            return "+\(label.dropLast(" episodes".count)) eps."
-        }
-        if label.hasSuffix(" episode") {
-            return "+\(label.dropLast(" episode".count)) ep."
-        }
-        return "+\(label)"
-    }
-
-    static func fallbackLabel(for activity: ActivityItem) -> String? {
-        switch activity.type {
-        case "progress_updated":
-            progressGainText(activity.object.label)
-        case "list_created":
-            clean(activity.object.name)
-        case "list_item_added":
-            clean(activity.object.name) ?? "List"
-        default:
-            nil
-        }
-    }
-
-    static func isDiary(_ activity: ActivityItem) -> Bool {
-        activity.type == "diary_created" || activity.type == "diary_updated"
-    }
-
-    private static func clean(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
 }
 
 private struct RecentActivityRail: View {
@@ -2097,7 +2024,7 @@ private struct RecentActivityRail: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: ProfileRecentActivityRailModel.artworkHeight(for: shownItems) + 7 + 12.5)
+        .frame(height: ProfileRecentActivityRailModel.artworkHeight(for: shownItems))
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
@@ -2177,16 +2104,13 @@ private struct RecentActivityPoster: View {
     private var subjectContent: some View {
         switch item.subject {
         case let .media(media):
-            VStack(alignment: .leading, spacing: 7) {
-                MediaArtwork(
-                    url: media.displayPosterURL,
-                    title: media.title,
-                    slot: .profileRail,
-                    mediaType: media.ref.mediaType,
-                    orientation: media.posterOrientation
-                )
-                mediaMetadataLine(media)
-            }
+            MediaArtwork(
+                url: media.displayPosterURL,
+                title: media.title,
+                slot: .profileRail,
+                mediaType: media.ref.mediaType,
+                orientation: media.posterOrientation
+            )
         case let .person(person):
             VStack(alignment: .center, spacing: 3) {
                 PersonArtwork(
@@ -2215,68 +2139,6 @@ private struct RecentActivityPoster: View {
                         .frame(width: PosterSlot.profileRail.size.width)
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private func mediaMetadataLine(_ media: MediaSummary) -> some View {
-        if let progressDeltaText = ProfileRecentActivityRailModel.progressDeltaText(for: item.activity, media: media) {
-            Text(progressDeltaText)
-                .font(.system(size: 12.5, weight: .bold))
-                .foregroundStyle(.white.opacity(0.54))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(width: PosterSlot.profileRail.size.width, height: 12.5, alignment: .leading)
-        } else if ProfileRecentActivityRailModel.isDiary(item.activity),
-                  ProfileRecentActivityRailModel.starValueText(for: item.activity) != nil
-                  || ProfileRecentActivityRailModel.isLikedDiary(item.activity)
-                  || ProfileRecentActivityRailModel.isRewatchDiary(item.activity) {
-            // "4.5★ ♥ ↻": one icon size, centered on the line, and the same visible 3pt between every piece.
-            // Each piece is trimmed to its ink by the empty space it carries beside it, measured for SF Pro
-            // Bold 12.5 (a trailing "1" leaves more) and the 9.5pt bold symbols.
-            HStack(spacing: 3) {
-                if let stars = ProfileRecentActivityRailModel.starValueText(for: item.activity) {
-                    HStack(spacing: 3) {
-                        Text(stars)
-                            .font(.system(size: 12.5, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.54))
-                            .padding(.trailing, stars.hasSuffix("1") ? -1.375 : -0.75)
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(.yellow.opacity(0.92))
-                            .padding(.leading, -0.875)
-                            .padding(.trailing, -1.375)
-                    }
-                    .fixedSize()
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Rating \(stars) out of 5 stars")
-                }
-
-                if ProfileRecentActivityRailModel.isLikedDiary(item.activity) {
-                    Image(systemName: "heart.fill")
-                        .foregroundStyle(.pink)
-                        .padding(.leading, -1.125)
-                        .padding(.trailing, -1.25)
-                        .accessibilityLabel("Liked")
-                }
-
-                if ProfileRecentActivityRailModel.isRewatchDiary(item.activity) {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.leading, -0.875)
-                        .padding(.trailing, -1.625)
-                        .accessibilityLabel(media.ref.repeatLabel)
-                }
-            }
-            .font(.system(size: 9.5, weight: .bold))
-            .lineLimit(1)
-            .frame(width: PosterSlot.profileRail.size.width, height: 12.5, alignment: .leading)
-        } else if let label = ProfileRecentActivityRailModel.fallbackLabel(for: item.activity) {
-            Text(label)
-                .font(.system(size: 12.5, weight: .bold))
-                .foregroundStyle(.white.opacity(0.54))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(width: PosterSlot.profileRail.size.width, height: 12.5, alignment: .leading)
         }
     }
 

@@ -676,6 +676,7 @@ def update_progress(
     else:
         progress_day = saved_on
     previous = _journey_progress(session)
+    previous_percentage = session.percentage_read
     session.pages_read = pages
     session.percentage_read = percentage
     session.progressed_on = progress_day
@@ -685,7 +686,13 @@ def update_progress(
     )
     _set_book_from_session(book, session)
     current = _journey_progress(session)
-    if previous != current:
+    # A percent that moves within one page is still a move.
+    moved = previous != current or (progress_type == "percentage" and percentage != previous_percentage)
+    if moved:
+        if progress_type == "percentage" and current["kind"] == "pages":
+            # Its page is rounded, so the save keeps the percent as typed: activity
+            # tells its day in percent (AC-2).
+            current = {**current, "percentage_exact": float(percentage)}
         _record_progress_change(user, item, previous, current, saved_on)
     return book
 

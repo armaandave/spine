@@ -6,6 +6,7 @@ purpose, so these work on any day.
 """
 
 from datetime import date
+from decimal import Decimal
 
 from django.core.cache import cache
 from django.db import connection
@@ -78,6 +79,12 @@ FAMILIES = {
         lambda item: GameSession.objects.get(related_game__item=item, status=Status.IN_PROGRESS.value).total_minutes,
     ),
 }
+PERCENT_BOOK = Family(
+    MediaTypes.BOOK.value,
+    {"total_pages": 400},
+    lambda value, day: {"progress_type": "percentage", "value": value, "progressed_on": str(day)},
+    _place_book,
+)
 
 
 class RowEditBase(StatusRowBase):
@@ -177,6 +184,13 @@ class DeleteTests(RowEditBase):
                 self.assertEqual((again["like_count"], again["comment_count"]), (0, 0))
                 self.assertEqual(self.told(item), {"2025-11-02": 100, "2025-12-20": 20})
                 ProgressChange.objects.all().delete()
+
+    def test_it_goes_back_to_the_percent_typed_before_it(self):
+        item = self.sheet(PERCENT_BOOK, (("30.3", NOV_2),))
+        self.save(FAMILIES["book"], item, 200, DEC_20)
+        self.assertEqual(self.page(self.rows(item)["2025-12-20"], method="delete").status_code, 204)
+        session = Book.objects.get(item=item).current_session
+        self.assertEqual((session.pages_read, session.percentage_read), (121, Decimal("30.3")))
 
     def test_a_delete_with_comments_removes_them_too(self):
         family = FAMILIES["book"]
@@ -353,6 +367,14 @@ class FixTests(RowEditBase):
         self.assertEqual([c.current_progress["value"] for c in changes], [100, 110, 200])
         book = Book.objects.get(item=item)
         self.assertEqual(book.current_session.progressed_on, DEC_27)
+
+    def test_a_row_typed_in_percent_and_fixed_in_pages_is_told_in_pages(self):
+        item = self.sheet(PERCENT_BOOK, ((25, NOV_2), ("30.25", DEC_20), (50, DEC_27)))
+        response = self.page(self.rows(item)["2025-12-20"], method="patch", value=110)
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = activity_rows.rows_for([self.user], self.user, titles=[item.pk], piles=False).rows
+        fixed = next(row for row in rows if row.day == DEC_20)
+        self.assertEqual((fixed.told_unit, fixed.told), ("page", 10))
 
     def test_a_row_is_not_fixable_when_the_next_save_made_belongs_to_an_earlier_day(self):
         family = FAMILIES["game"]

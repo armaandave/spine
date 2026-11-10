@@ -595,6 +595,10 @@ class BackdatedLogTests(BookCalcBase):
 class LengthTests(BookCalcBase):
     """Percent saves, unknown lengths, and a length that arrives or changes."""
 
+    def day(self, day):
+        """Return a day's progress row."""
+        return next(row for row in self.calc().rows if row.day == day and not row.log_id)
+
     def test_a_percent_with_a_length_reads_in_pages(self):
         item = self.book("percent")
         self.begin(item, d(2026, 3, 1))
@@ -626,6 +630,59 @@ class LengthTests(BookCalcBase):
         self.assert_numbers(100, 100, 200)
         self.save(item, 250, d(2026, 2, 2))
         self.assert_numbers(100, 150, 250)
+
+    def test_a_day_typed_in_percent_is_told_in_percent_with_its_pages_kept(self):
+        item = self.book("typed")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, "30.25", d(2026, 3, 2), kind="percentage")
+        self.save(item, "35.5", d(2026, 3, 3), kind="percentage")
+        first, second = self.day(d(2026, 3, 2)), self.day(d(2026, 3, 3))
+        self.assertEqual(
+            (first.told_unit, first.told, first.amount, first.place),
+            ("percent", Decimal("30.25"), 121, {"percent": Decimal("30.25")}),
+        )
+        self.assertEqual((second.told_unit, second.told, second.amount), ("percent", Decimal("5.25"), 21))
+        self.assert_numbers(0, 142, 142)
+
+    def test_a_percent_within_one_page_still_moves_and_a_retype_does_not(self):
+        item = self.book("page")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, "30.25", d(2026, 3, 2), kind="percentage")
+        self.save(item, "30.3", d(2026, 3, 3), kind="percentage")
+        row = self.day(d(2026, 3, 3))
+        self.assertEqual((row.told_unit, row.told, row.amount, row.is_event), ("percent", Decimal("0.05"), 0, True))
+        saves = ProgressChange.objects.filter(item=item).count()
+        self.save(item, "30.30", d(2026, 3, 4), kind="percentage")
+        self.assertEqual(ProgressChange.objects.filter(item=item).count(), saves)
+
+    def test_a_day_is_told_the_way_its_last_save_was_typed(self):
+        item = self.book("mixed")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 100, d(2026, 3, 2))
+        self.save(item, "30", d(2026, 3, 2), kind="percentage")
+        self.save(item, "40", d(2026, 3, 3), kind="percentage")
+        self.save(item, 200, d(2026, 3, 3))
+        first, second = self.day(d(2026, 3, 2)), self.day(d(2026, 3, 3))
+        self.assertEqual((first.told_unit, first.told), ("percent", 30))
+        self.assertEqual((second.told_unit, second.told, second.place), ("page", 80, {"page": 200}))
+
+    def test_a_log_after_a_percent_tells_what_it_added_in_percent(self):
+        item = self.book("finished")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, "80.5", d(2026, 3, 2), kind="percentage")
+        self.finish(item, d(2026, 3, 3))
+        log = next(row for row in self.calc().rows if row.log_id)
+        self.assertEqual((log.told_unit, log.told, log.amount), ("percent", Decimal("19.5"), 78))
+
+    def test_a_save_from_before_kept_no_percent_and_stays_in_pages(self):
+        item = self.book("older")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, "30.25", d(2026, 3, 2), kind="percentage")
+        change = ProgressChange.objects.get(item=item, current_progress__kind="pages")
+        del change.current_progress["percentage_exact"]
+        change.save(update_fields=["current_progress"])
+        row = self.day(d(2026, 3, 2))
+        self.assertEqual((row.told_unit, row.told), ("page", 121))
 
     def test_a_typed_finish_with_no_length_is_flagged_and_grows_later(self):
         item = self.book("typed", pages=None)
