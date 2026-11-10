@@ -918,6 +918,34 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertEqual(tail, "S1 \u{00B7} 3/12")
     }
 
+    func testAShowDayThatSaysWhereItEndedIsCountedByThatSeasonWithNoListRequest() async throws {
+        // Ticked S1 E1 to E3, then logged Season 1 the next day: the friend is in season 2 now, the card's day is not.
+        root.set("a", "tv", rows: [seasonShowRow("5", watched: 12, aired: 22, upNext: (2, 1))])
+        let media = StandingsSeasonPages()
+        serveSeason(media, show: "5", season: 1, episodes: 12)
+        let item = try FeedTestItems.item(
+            type: "progress_updated", objectType: "progress_day", objectID: 10,
+            objectFields: "\"label\": \"3 episodes\", \"unit\": \"minutes\", \"place\": {\"season\": 1, \"episodes\": 3}",
+            username: "a", source: "tmdb", mediaType: "tv", mediaID: "5"
+        )
+        let provider = provider(seasons: media)
+        provider.prepare(for: [item])
+        await until(provider.standing(for: item, isNewestOfTitle: true) != nil)
+
+        let standing = try XCTUnwrap(provider.standing(for: item, isNewestOfTitle: true))
+        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 0, to: 3, total: 12, whereText: "S1 \u{00B7} 3/12"))
+        XCTAssertTrue(root.requests.isEmpty, "The card says its season: the friend's list is not asked")
+        XCTAssertEqual(media.detailRequests.map(\.seasonNumber), [1])
+    }
+
+    func testAnAnimeDayStopsAtItsOwnEpisode() throws {
+        let position = TilePosition(unit: .episodes, current: 12, total: 12, pagesTotal: nil)
+        let standing = try XCTUnwrap(FeedStandingMath.standing(
+            position: position, told: TodayPart(unit: .episodes, amount: 3), place: ["episodes": 3]
+        ))
+        XCTAssertEqual(standing, FeedStanding(unit: .episodes, from: 0, to: 3, total: 12, whereText: "3/12"))
+    }
+
     func testUntilTheSeasonIsKnownTheCardHasNoMeterAndNoWords() async throws {
         root.set("a", "tv", rows: [seasonShowRow("5", upNext: (1, 4))])
         let media = StandingsSeasonPages()

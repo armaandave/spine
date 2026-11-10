@@ -223,10 +223,11 @@ the shape installed apps read. `consumed_at` is the item's calendar day
   lower case and carries the moves: "read 40 pages, paused", "picked back up".
   `object.place` is where the read stood at the end of that day, after its last save,
   by unit (a game gives each number it has, as it stood then): `{"pages": 893}`, `{"percent": 45.5}`, `{"chapters": 41}`, `{"issues": 12}`, or
-  a game's `{"minutes": 840, "percent": 80}`. A log that finished the read afterwards
-  took the rest on its own row, so `place` can be short of where the person stands now;
-  the feed card's bar and "p. 893" read it. It is null on TV and anime days and on a day
-  with no number saved (a start or a status move alone).
+  a game's `{"minutes": 840, "percent": 80}`. On TV it is the furthest episode the day's
+  ticks reached, `{"season": 2, "episodes": 7}`, and on anime `{"episodes": 12}`. A log
+  afterwards took what it added on its own row, so `place` can be short of where the
+  person stands now; the feed card's bar and "p. 893" or "S2 · 7/10" read it. It is null
+  on a day with no number saved (a start or a status move alone).
 - A log's `object` also has `amount`, `unit`, `time_label` and `label`, what the log
   added in the units it was told in with no plus sign ("200 pages", "3 episodes", "2h");
   movie and album logs send no `label`.

@@ -1374,6 +1374,9 @@ def _watch_rows(result, key, placed, changes, zone, *, piles, logs_known=True): 
         for watch in watches:
             _tell(row, watch)
             row.last_at = max(filter(None, (row.last_at, watch.created_at)))
+        # The day's furthest episode: a log's fills come after it on the log's own row.
+        season, episode = max(watch.pos for watch in watches)
+        row.place = {SEASON_LEVEL: season, EPISODE: episode} if bucket == MediaTypes.TV.value else {EPISODE: episode}
     log_rows = []
     for log in placed.logs.values():
         row = Row(LOG, actor_id, log.day, title_key, title_id, title_id, bucket)

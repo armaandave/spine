@@ -4,9 +4,13 @@ A log that finishes a read adds what's left on its own row, so the day before it
 says where that day stopped, not where the finished read ends.
 """
 
+from api.services import activity_list
+from api.services.activity_rows import rows_for
+from api.tests.test_activity_calc_anime import ANIME, AnimeCalcBase
 from api.tests.test_activity_calc_books import d
 from api.tests.test_activity_calc_games import GameCalcBase, h
 from api.tests.test_activity_calc_series import SeriesCalcBase
+from api.tests.test_activity_calc_tv import TV, TVCalcBase
 from api.tests.test_activity_rows_wire import WireBase
 
 
@@ -67,3 +71,32 @@ class GameDayPlaceTests(GameCalcBase):
         self.finish(item, d(2026, 3, 4))
         day = next(row for row in self.calc().rows if str(row.day) == "2026-03-03" and not row.log_id)
         self.assertEqual(day.place, {"minute": h(10), "percent": 40})
+
+
+class TVDayPlaceTests(TVCalcBase):
+    """A show's day stops at its furthest tick; a season log's fills stay on the log."""
+
+    def test_ticks_then_a_season_log(self):
+        show = self.show(12, 10)
+        self.on(d(2026, 3, 2))
+        self.tick(show, 1, 2, 3)
+        self.on(d(2026, 3, 3))
+        self.log(self.season(show))
+        self.tick(show, 1, 2, season=2)
+        rows = rows_for([self.user], self.user, types=[TV]).rows
+        days = {str(row.day): row for row in rows if not row.log_id}
+        self.assertEqual(activity_list.progress_fields(days["2026-03-02"])["place"], {"season": 1, "episodes": 3})
+        self.assertEqual(activity_list.progress_fields(days["2026-03-03"])["place"], {"season": 2, "episodes": 2})
+
+
+class AnimeDayPlaceTests(AnimeCalcBase):
+    """An anime's day stops at its furthest tick, before a log fills the rest."""
+
+    def test_ticks_then_a_log(self):
+        item = self.title()
+        self.on(d(2026, 3, 2))
+        self.tick(item, 1, 2, 3)
+        self.on(d(2026, 3, 3))
+        self.log(item, day=d(2026, 3, 3))
+        day = next(row for row in rows_for([self.user], self.user, types=[ANIME]).rows if row.told and not row.log_id)
+        self.assertEqual(activity_list.progress_fields(day)["place"], {"episodes": 3})
