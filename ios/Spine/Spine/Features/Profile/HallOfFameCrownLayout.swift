@@ -50,21 +50,16 @@ struct HallOfFameCrownLayout {
         return smallCrownLift * CGFloat(fullCrownCount - count) / CGFloat(fullCrownCount - 3)
     }
 
+    /// The row under the avatar always has an odd number of cards, so it has a middle one: an odd count is all
+    /// row, left to right, and an even count lifts the card at `count / 2` above the avatar.
     static func arrangement(for slots: [FavoriteSlot]) -> HallOfFameCrownArrangement {
-        guard let musicIndex = slots.firstIndex(where: { $0.id == "music" }) else {
+        guard !slots.isEmpty, slots.count.isMultiple(of: 2) else {
             return HallOfFameCrownArrangement(above: nil, below: slots)
         }
 
-        let music = slots[musicIndex]
         var below = slots
-        below.remove(at: musicIndex)
-
-        if slots.count.isMultiple(of: 2) {
-            return HallOfFameCrownArrangement(above: music, below: below)
-        }
-
-        below.insert(music, at: below.count / 2)
-        return HallOfFameCrownArrangement(above: nil, below: below)
+        let above = below.remove(at: slots.count / 2)
+        return HallOfFameCrownArrangement(above: above, below: below)
     }
 
     static func placements(
@@ -128,8 +123,7 @@ struct HallOfFameCrownLayout {
     }
 
     static func visualSize(for slot: FavoriteSlot, cardSize: CGSize) -> CGSize {
-        let isSquare = slot.id == "music"
-            || slot.item?.ref.mediaType == "music"
+        let isSquare = slot.item?.ref.mediaType == "music"
             || slot.item?.posterOrientation == .square
         return isSquare ? CGSize(width: cardSize.width, height: cardSize.width) : cardSize
     }
@@ -139,6 +133,12 @@ struct HallOfFameCrownLayout {
     static func avatarTopClearance(collapseProgress: CGFloat) -> CGFloat {
         (cardSize.width + musicAvatarGap(forLowerCount: fullCrownCount))
             * (1 - clampedCollapseProgress(collapseProgress))
+    }
+
+    /// Room above the avatar for the tallest card that can sit there: a poster at a full crown's gap, scaled up
+    /// from its bottom edge. `avatarTopClearance` only fits a square album card.
+    static var posterTopClearance: CGFloat {
+        cardSize.height * 1.04 + musicAvatarGap(forLowerCount: fullCrownCount)
     }
 
     /// How far below the crown's top the lowest card reaches, counting its scale and tilt.

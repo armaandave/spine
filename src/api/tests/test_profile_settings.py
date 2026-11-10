@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 
 from app.models import Item, MediaTypes, Music, Sources, Status
 from social.models import SocialAuditLog
+from users import hall_of_fame as hall_of_fame_service
 from users.models import DateFormatChoices, QuickWatchDateChoices
 
 
@@ -283,8 +284,7 @@ class ApiProfileSettingsTests(TestCase):
             Music(user=self.user, item=listened, status=Status.COMPLETED.value),
             Music(user=self.user, item=planned, status=Status.PLANNING.value),
         ])
-        self.user.hof_music = listened
-        self.user.save(update_fields=["hof_music"])
+        hall_of_fame_service.set_picks(self.user, [listened])
 
         profile = self.client.get(f"/api/v1/users/{self.user.username}/")
         hall_of_fame = self.client.get(f"/api/v1/users/{self.user.username}/hof/")
@@ -304,8 +304,7 @@ class ApiProfileSettingsTests(TestCase):
             title="Year Zero",
             image="https://example.com/year-zero.jpg",
         )
-        self.user.hof_music = item
-        self.user.save(update_fields=["hof_music"])
+        hall_of_fame_service.set_picks(self.user, [item])
 
         profile = self.client.get("/api/v1/me/")
         updated = self.client.patch(
@@ -321,7 +320,7 @@ class ApiProfileSettingsTests(TestCase):
         self.assertEqual(hidden_hof_write.status_code, status.HTTP_404_NOT_FOUND)
         self.user.refresh_from_db()
         self.assertTrue(self.user.music_enabled)
-        self.assertEqual(self.user.hof_music, item)
+        self.assertEqual(hall_of_fame_service.picks(self.user), [item])
 
     def test_password_change_success_and_failure(self):
         failed = self.client.post(

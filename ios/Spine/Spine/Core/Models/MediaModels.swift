@@ -1644,8 +1644,12 @@ struct HallOfFameItemWriteRequest: Codable, Equatable {
     let ref: MediaRef
 }
 
-struct HallOfFameItemsResponse: Codable, Equatable {
-    let items: [String: MediaSummary?]
+struct HallOfFameWriteRequest: Codable, Equatable {
+    let refs: [MediaRef]
+}
+
+struct HallOfFameResponse: Codable, Equatable {
+    let items: [MediaSummary]
 }
 
 nonisolated struct UserMediaState: Codable, Hashable {

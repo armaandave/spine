@@ -48,6 +48,7 @@ from app.models import (
 from app.providers import apple_music, musicbrainz, services
 from lists.models import CustomListItem
 from social.models import Activity, ProgressChange
+from users.models import HallOfFamePick
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,7 @@ def user_tables():
         ),
         _UserTable("social.activity", Activity, "item", "actor"),
         _UserTable("social.progresschange", ProgressChange, "item", "actor"),
+        _UserTable("users.halloffamepick", HallOfFamePick, "item", "user"),
         _UserTable("users.user.hof_music", user_model, "hof_music", "pk"),
         _UserTable("users.user.profile_backdrop_item", user_model, "profile_backdrop_item", "pk"),
     )

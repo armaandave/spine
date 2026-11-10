@@ -418,6 +418,41 @@ struct ProfileBackdropSearchView: View {
     }
 }
 
+/// Hall of Fame's Add Favorite and Change Favorite: the Search tab's own search, every type you track.
+/// Changing a pick also offers Remove.
+struct HallOfFameSearchView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var mediaLensStore = MediaLensStore(
+        defaults: UserDefaults(suiteName: "HallOfFameSearch") ?? .standard
+    )
+
+    let title: String
+    let mediaRepository: MediaRepository
+    let onUnauthorized: () -> Void
+    let onSelect: (MediaSummary) -> Void
+    var onRemove: (() -> Void)?
+
+    var body: some View {
+        SearchViewContent(
+            mediaRepository: mediaRepository,
+            mediaLensStore: mediaLensStore,
+            title: title,
+            onCancel: { dismiss() },
+            onRemove: onRemove.map { remove in
+                {
+                    remove()
+                    dismiss()
+                }
+            },
+            onUnauthorized: onUnauthorized,
+            onSelect: { media in
+                onSelect(media)
+                dismiss()
+            }
+        )
+    }
+}
+
 private struct SearchViewContent: View {
     @State private var viewModel: SearchViewModel
     @State private var isMediaLensExpanded = false
@@ -437,6 +472,8 @@ private struct SearchViewContent: View {
     let supportedMediaTypes: [String]?
     let title: String
     let onCancel: (() -> Void)?
+    /// A Remove button beside Cancel, for a picker that is changing something already picked.
+    let onRemove: (() -> Void)?
     let onFeaturedList: (FeaturedListSelection) -> Void
     let onSelect: (MediaSummary) -> Void
 
@@ -450,6 +487,7 @@ private struct SearchViewContent: View {
         supportedMediaTypes: [String]? = nil,
         title: String = "Search",
         onCancel: (() -> Void)? = nil,
+        onRemove: (() -> Void)? = nil,
         onUnauthorized: @escaping () -> Void,
         onFeaturedList: @escaping (FeaturedListSelection) -> Void = { _ in },
         onSelect: @escaping (MediaSummary) -> Void
@@ -470,6 +508,7 @@ private struct SearchViewContent: View {
         self.supportedMediaTypes = supportedMediaTypes
         self.title = title
         self.onCancel = onCancel
+        self.onRemove = onRemove
         self.onFeaturedList = onFeaturedList
         self.onSelect = onSelect
     }
@@ -556,6 +595,11 @@ private struct SearchViewContent: View {
                     if let onCancel {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Cancel", action: onCancel)
+                        }
+                    }
+                    if let onRemove {
+                        ToolbarItem(placement: .destructiveAction) {
+                            Button("Remove", role: .destructive, action: onRemove)
                         }
                     }
                 }

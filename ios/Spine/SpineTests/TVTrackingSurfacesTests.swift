@@ -1377,7 +1377,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
             avatarUrl: nil, profileBackdropUrl: nil, profileBackdropItem: nil, isPrivate: false,
             viewerRelationship: ViewerRelationship(following: false, followedBy: false, requested: false, blocked: false),
             counts: ProfileCounts(followers: 0, following: 0, diaryEntries: 0, lists: 0),
-            hof: [:],
             preferences: UserPreferences(enabledMediaTypes: enabled, dateFormat: nil, timeFormat: nil, weekStartDay: nil,
                                          quickWatchDate: quickWatchDate, releaseNotificationsEnabled: false,
                                          dailyDigestEnabled: false)
@@ -1579,8 +1578,7 @@ final class SurfacesProfileRepository: ProfileRepository {
     func saveProfileBackdrop(ref: MediaRef, backdropURL: String) async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
     func clearProfileBackdrop() async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
     func changePassword(_ request: PasswordChangeRequest) async throws { fatalError("Not used") }
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] { fatalError("Not used") }
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] { fatalError("Not used") }
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] { fatalError("Not used") }
 }
 
 struct SurfacesActivityRepository: ActivityRepository {

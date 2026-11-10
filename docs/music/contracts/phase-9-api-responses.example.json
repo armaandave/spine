@@ -980,6 +980,51 @@
       },
       "tv": null
     },
+    "hall_of_fame": [
+      {
+        "backdrop_url": null,
+        "custom_backdrop_url": null,
+        "custom_poster_url": null,
+        "default_source": "musicbrainz",
+        "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
+        "overview": null,
+        "poster_accent_color": null,
+        "poster_aspect_ratio": null,
+        "poster_height": null,
+        "poster_orientation": "unknown",
+        "poster_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
+        "poster_width": null,
+        "ref": {
+          "episode_number": null,
+          "item_id": 902,
+          "media_id": "3bd76d40-7f0e-36b7-9348-91a33afee20e",
+          "media_type": "music",
+          "season_number": null,
+          "source": "musicbrainz"
+        },
+        "release_date": null,
+        "subtitle": null,
+        "title": "Year Zero",
+        "user_state": {
+          "diary_consumed_at": "2026-07-16",
+          "diary_count": 1,
+          "diary_entry_id": 1,
+          "diary_rating": "4.5",
+          "direct_consumption": true,
+          "has_liked": true,
+          "in_lists": [
+            1
+          ],
+          "is_tracked": true,
+          "like_is_independent": false,
+          "like_source_diary_entry_id": 1,
+          "rating": "4.5",
+          "rating_source_diary_entry_id": 1,
+          "status": "Completed",
+          "tracking_id": 903
+        }
+      }
+    ],
     "id": 901,
     "is_private": false,
     "location": "",

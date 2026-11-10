@@ -892,12 +892,8 @@ struct GatedProfileRepository: ProfileRepository {
         try await base.changePassword(request)
     }
 
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] {
-        try await base.setHallOfFameItem(mediaType: mediaType, ref: ref)
-    }
-
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] {
-        try await base.clearHallOfFameItem(mediaType: mediaType)
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] {
+        try await base.saveHallOfFame(refs: refs)
     }
 }
 
@@ -1074,7 +1070,6 @@ class RefreshTestCase: XCTestCase {
             isPrivate: false,
             viewerRelationship: ViewerRelationship(following: false, followedBy: false, requested: false, blocked: false),
             counts: ProfileCounts(followers: 0, following: 0, diaryEntries: 0, lists: 0, reviews: 0, tags: 0),
-            hof: [:],
             preferences: UserPreferences(
                 enabledMediaTypes: ["movie"],
                 dateFormat: "Y-m-d",

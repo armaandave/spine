@@ -4,11 +4,10 @@ struct HallOfFameCrownView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let slots: [FavoriteSlot]
-    var savingSlotIDs: Set<String> = []
     var collapseProgress: CGFloat = 0
     let onTap: (FavoriteSlot) -> Void
-    var onEmptyTap: (FavoriteSlot) -> Void = { _ in }
-    var onFilledLongPress: (FavoriteSlot) -> Void = { _ in }
+    /// Your own profile's long-press menu: nil leaves the cards without one.
+    var menu: HallOfFameCrownMenu?
 
     @State private var crownRevealed = false
 
@@ -16,64 +15,60 @@ struct HallOfFameCrownView: View {
     private let crownWidth: CGFloat = 340
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(cards, id: \.slot.id) { card in
+                crownCard(card)
+            }
+        }
+        .frame(width: crownWidth, height: HallOfFameCrownLayout.crownHeight)
+        .allowsHitTesting(collapseProgress < 0.72)
+        // A reorder moves each card to its new place instead of swapping artwork in place.
+        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.84), value: slots.map(\.id))
+        .onAppear {
+            crownRevealed = true
+        }
+    }
+
+    /// Every card with its place, in one list, so a card moving between the row and the top keeps its identity.
+    private var cards: [HallOfFameCrownCardPlacement] {
         let arrangement = HallOfFameCrownLayout.arrangement(for: slots)
-        let cardSize = HallOfFameCrownLayout.cardSize
         let belowPlacements = HallOfFameCrownLayout.placements(
             count: arrangement.below.count,
             avatarDiameter: HallOfFameCrownLayout.avatarDiameter,
             collapseProgress: collapseProgress,
             position: .belowAvatar
         )
-
-        ZStack(alignment: .topLeading) {
-            ForEach(arrangement.below.indices, id: \.self) { index in
-                crownCard(
-                    arrangement.below[index],
-                    cardSize: cardSize,
-                    placement: belowPlacements[index],
-                    position: .belowAvatar
-                )
-            }
-
-            if let music = arrangement.above {
-                let musicSize = HallOfFameCrownLayout.visualSize(for: music, cardSize: cardSize)
-                crownCard(
-                    music,
-                    cardSize: cardSize,
-                    placement: HallOfFameCrownLayout.aboveMusicPlacement(
-                        cardSize: musicSize,
-                        lowerCount: arrangement.below.count,
-                        avatarDiameter: HallOfFameCrownLayout.avatarDiameter,
-                        collapseProgress: collapseProgress
-                    ),
-                    position: .aboveAvatar
-                )
-            }
+        var cards = zip(arrangement.below, belowPlacements).map { slot, placement in
+            HallOfFameCrownCardPlacement(slot: slot, placement: placement, position: .belowAvatar)
         }
-        .frame(width: crownWidth, height: HallOfFameCrownLayout.crownHeight)
-        .allowsHitTesting(collapseProgress < 0.72)
-        .onAppear {
-            crownRevealed = true
+        if let above = arrangement.above {
+            cards.append(HallOfFameCrownCardPlacement(
+                slot: above,
+                placement: HallOfFameCrownLayout.aboveMusicPlacement(
+                    cardSize: HallOfFameCrownLayout.visualSize(for: above, cardSize: HallOfFameCrownLayout.cardSize),
+                    lowerCount: arrangement.below.count,
+                    avatarDiameter: HallOfFameCrownLayout.avatarDiameter,
+                    collapseProgress: collapseProgress
+                ),
+                position: .aboveAvatar
+            ))
         }
+        return cards
     }
 
-    private func crownCard(
-        _ slot: FavoriteSlot,
-        cardSize: CGSize,
-        placement: HallOfFameCrownPlacement,
-        position: HallOfFameCrownPosition
-    ) -> some View {
-        let visualSize = HallOfFameCrownLayout.visualSize(for: slot, cardSize: cardSize)
+    private func crownCard(_ card: HallOfFameCrownCardPlacement) -> some View {
+        let slot = card.slot
+        let placement = card.placement
+        let position = card.position
+        let visualSize = HallOfFameCrownLayout.visualSize(for: slot, cardSize: HallOfFameCrownLayout.cardSize)
         let revealIndex = slots.firstIndex(where: { $0.id == slot.id }) ?? placement.index
 
         return HallOfFameCrownCard(
             slot: slot,
             visualSize: visualSize,
             borderOpacity: borderOpacity,
-            isSaving: savingSlotIDs.contains(slot.id),
             onTap: onTap,
-            onEmptyTap: onEmptyTap,
-            onFilledLongPress: onFilledLongPress
+            menu: menu
         )
         .scaleEffect(placement.scale, anchor: position.transformAnchor)
         .rotationEffect(crownRevealed ? placement.rotation : .zero, anchor: position.transformAnchor)
@@ -97,53 +92,55 @@ struct HallOfFameCrownView: View {
     }
 }
 
+/// What a long press on one of your own crown's cards offers.
+struct HallOfFameCrownMenu {
+    let onEdit: () -> Void
+    let onRemove: (FavoriteSlot) -> Void
+}
+
+private struct HallOfFameCrownCardPlacement {
+    let slot: FavoriteSlot
+    let placement: HallOfFameCrownPlacement
+    let position: HallOfFameCrownPosition
+}
+
 private struct HallOfFameCrownCard: View {
     let slot: FavoriteSlot
     let visualSize: CGSize
     let borderOpacity: Double
-    let isSaving: Bool
     let onTap: (FavoriteSlot) -> Void
-    let onEmptyTap: (FavoriteSlot) -> Void
-    let onFilledLongPress: (FavoriteSlot) -> Void
+    let menu: HallOfFameCrownMenu?
 
     var body: some View {
-        ZStack {
-            if let item = slot.item {
-                HallOfFameCrownFilledCard(item: item, visualSize: visualSize, borderOpacity: borderOpacity)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .onTapGesture {
-                        onTap(slot)
-                    }
-                    .onLongPressGesture {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        onFilledLongPress(slot)
-                    }
-                    .accessibilityLabel("Hall of Fame, \(item.title)")
-                    .accessibilityAddTraits(.isButton)
-            } else {
-                Button {
-                    onEmptyTap(slot)
-                } label: {
-                    HallOfFameCrownEmptyShell(visualSize: visualSize)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Add Hall of Fame \(slot.title)")
-            }
-
-            Group {
-                if isSaving {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(.black.opacity(0.52))
-                        .frame(width: visualSize.width, height: visualSize.height)
-                        .overlay {
-                            ProgressView()
-                                .tint(.white)
-                        }
-                }
-            }
-            .spineContentTransition(value: isSaving)
+        if let item = slot.item {
+            card(item)
+                .frame(width: visualSize.width, height: visualSize.height)
         }
-        .frame(width: visualSize.width, height: visualSize.height)
+    }
+
+    @ViewBuilder
+    private func card(_ item: MediaSummary) -> some View {
+        let filled = HallOfFameCrownFilledCard(item: item, visualSize: visualSize, borderOpacity: borderOpacity)
+            .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onTapGesture {
+                onTap(slot)
+            }
+            .accessibilityLabel("Hall of Fame, \(item.title)")
+            .accessibilityAddTraits(.isButton)
+
+        if let menu {
+            filled.contextMenu {
+                Button("Edit Hall of Fame", systemImage: "pencil") {
+                    menu.onEdit()
+                }
+                Button("Remove from Hall of Fame", systemImage: "trash", role: .destructive) {
+                    menu.onRemove(slot)
+                }
+            }
+        } else {
+            filled
+        }
     }
 }
 
@@ -171,65 +168,28 @@ private struct HallOfFameCrownFilledCard: View {
     }
 }
 
-private struct HallOfFameCrownEmptyShell: View {
-    let visualSize: CGSize
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(.white.opacity(0.04))
-            .frame(width: visualSize.width, height: visualSize.height)
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.white.opacity(0.10), lineWidth: 1)
-            }
-            .overlay {
-                Image(systemName: "plus")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.26))
-            }
-            .opacity(0.88)
-            .shadow(color: .black.opacity(0.16), radius: 8, y: 5)
-    }
+#Preview("1 pick") {
+    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["music"]))
 }
 
-#Preview("0 slots") {
-    HallOfFameCrownPreview(slots: [])
+#Preview("Even count, middle pick above") {
+    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["movie", "book", "music", "tv"]))
 }
 
-#Preview("8 empty shells") {
-    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"], filledIndexes: []))
+#Preview("Odd count, all in the row") {
+    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["movie", "tv", "music"]))
 }
 
-#Preview("Music only below") {
-    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["music"], filledIndexes: [0]))
-}
-
-#Preview("Even count, music above") {
-    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["movie", "music"], filledIndexes: [0, 1]))
-}
-
-#Preview("Odd count, music centered below") {
-    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["movie", "tv", "music"], filledIndexes: [0, 1, 2]))
-}
-
-#Preview("2 filled, 6 empty") {
-    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"], filledIndexes: [0, 7]))
-}
-
-#Preview("5 filled") {
-    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(filledIndexes: [0, 1, 2, 3, 4]))
-}
-
-#Preview("8 slots, 3 filled") {
-    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"], filledIndexes: [0, 2, 7]))
+#Preview("Full crown") {
+    HallOfFameCrownPreview(slots: HallOfFameCrownPreview.slots(keys: ["movie", "tv", "anime", "manga", "music", "game", "book", "comic"]))
 }
 
 private struct HallOfFameCrownPreview: View {
     let slots: [FavoriteSlot]
 
-    static func slots(keys: [String] = ["movie", "tv", "anime", "manga", "game"], filledIndexes: Set<Int>) -> [FavoriteSlot] {
+    static func slots(keys: [String]) -> [FavoriteSlot] {
         keys.enumerated().map { index, key in
-            FavoriteSlot(id: key, title: title(for: key), item: filledIndexes.contains(index) ? media(index: index, mediaType: key) : nil)
+            FavoriteSlot(id: "\(key)-\(index)", title: title(for: key), item: media(index: index, mediaType: key))
         }
     }
 

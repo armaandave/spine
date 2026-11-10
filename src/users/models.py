@@ -550,72 +550,20 @@ class User(AbstractUser):
         help_text="Hall of Fame music"
     )
 
-    # Hall of Fame helper methods
+    # Hall of Fame helper methods: the picks live in HallOfFamePick (users.hall_of_fame).
     def get_hall_of_fame_items(self):
-        """
-        Get all hall of fame items for this user.
-        
-        Returns:
-            dict: Dictionary mapping media types to their hall of fame items
-        """
-        return {
-            media_type: getattr(self, f"hof_{media_type}")
-            for media_type in PRIMARY_MEDIA_TYPES
-        }
-    
+        """Return {media type: first Hall of Fame pick of that type, or None}."""
+        from users import hall_of_fame
+
+        return hall_of_fame.type_map(self)
+
     def get_hall_of_fame_item(self, media_type):
-        """
-        Get the hall of fame item for a specific media type.
-        
-        Args:
-            media_type (str): The media type ('tv', 'movie', 'anime', etc.)
-            
-        Returns:
-            Item or None: The hall of fame item for the media type, or None if not set
-        """
-        field_name = f'hof_{media_type}'
-        if hasattr(self, field_name):
-            return getattr(self, field_name)
-        return None
-    
-    def set_hall_of_fame_item(self, media_type, item):
-        """
-        Set the hall of fame item for a specific media type.
-        
-        Args:
-            media_type (str): The media type ('tv', 'movie', 'anime', etc.)
-            item (Item or None): The item to set, or None to clear
-            
-        Returns:
-            bool: True if successfully set, False if invalid media type
-        """
-        field_name = f'hof_{media_type}'
-        if hasattr(self, field_name):
-            setattr(self, field_name, item)
-            return True
-        return False
-    
-    def clear_hall_of_fame_item(self, media_type):
-        """
-        Clear the hall of fame item for a specific media type.
-        
-        Args:
-            media_type (str): The media type to clear
-            
-        Returns:
-            bool: True if successfully cleared, False if invalid media type
-        """
-        return self.set_hall_of_fame_item(media_type, None)
-    
+        """Return the first Hall of Fame pick of a media type, or None."""
+        return self.get_hall_of_fame_items().get(media_type)
+
     def get_hall_of_fame_count(self):
-        """
-        Get the count of how many hall of fame items are set.
-        
-        Returns:
-            int: Number of hall of fame items that are not None
-        """
-        items = self.get_hall_of_fame_items()
-        return sum(1 for item in items.values() if item is not None)
+        """Return how many Hall of Fame picks the user has."""
+        return self.hall_of_fame_picks.count()
 
     class Meta:
         """Meta options for the model."""
@@ -925,3 +873,35 @@ class User(AbstractUser):
         """Regenerate the user's token."""
         self.token = generate_token()
         self.save(update_fields=["token"])
+
+
+HALL_OF_FAME_LIMIT = 8
+
+
+class HallOfFamePick(models.Model):
+    """One title in a user's Hall of Fame, kept in crown order."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="hall_of_fame_picks",
+    )
+    item = models.ForeignKey(
+        "app.Item",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    position = models.PositiveSmallIntegerField()
+
+    class Meta:
+        """Meta options for the model."""
+
+        ordering = ["position"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "item"], name="hof_pick_unique_item"),
+            models.UniqueConstraint(fields=["user", "position"], name="hof_pick_unique_position"),
+            models.CheckConstraint(
+                name="hof_pick_position_limit",
+                condition=models.Q(position__lt=HALL_OF_FAME_LIMIT),
+            ),
+        ]

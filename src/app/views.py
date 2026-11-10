@@ -30,6 +30,7 @@ from app.models import TV, BasicMedia, Item, MediaTypes, Season, Sources, Status
 
 from app.providers import igdb, manual, mdblist, services, tmdb
 from app.templatetags import app_tags
+from users import hall_of_fame
 from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices, User
 from app.curation import curated_image_url
 from app.forms import DiaryEntryForm
@@ -1461,31 +1462,18 @@ def toggle_hof(request):
         )
         store_item_metadata(item, metadata)
         
-        # Toggle the HOF status
-        user = request.user
-        hof_field = f"hof_{media_type}"
-        
-        if hasattr(user, hof_field):
-            current_hof_item = getattr(user, hof_field)
-            if current_hof_item == item:
-                # Remove from hall of fame
-                setattr(user, hof_field, None)
-                user.save()
-                added = False
-            else:
-                # Add to hall of fame
-                setattr(user, hof_field, item)
-                user.save()
-                added = True
-            
-            # Trigger HTMX update
-            from django.template.loader import render_to_string
-            from django.http import HttpResponse
-            
-            # Return a response that triggers the hofUpdated event
-            response = HttpResponse()
-            response['HX-Trigger'] = 'hofUpdated'
-            return response
+        # Toggle the HOF status: out if it is a pick, else in at the end.
+        picks = hall_of_fame.picks(request.user)
+        if any(pick.pk == item.pk for pick in picks):
+            picks = [pick for pick in picks if pick.pk != item.pk]
+        else:
+            picks.append(item)
+        hall_of_fame.set_picks(request.user, picks)
+
+        # Return a response that triggers the hofUpdated event
+        response = HttpResponse()
+        response['HX-Trigger'] = 'hofUpdated'
+        return response
     except Exception as e:
         print(f"HOF Toggle - Error: {e}")
         return JsonResponse({"error": str(e)}, status=400)

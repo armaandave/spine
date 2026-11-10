@@ -41,6 +41,7 @@ from app.services import set_media_like, update_diary_entry_tags
 from app.tests.anime_fixtures import FakeAnimeProvider
 from lists.models import CustomList, CustomListItem
 from social.models import Activity, ContentLike, ProgressChange, SocialAuditLog
+from users import hall_of_fame
 
 
 class ApiV1FoundationTests(TestCase):
@@ -2445,8 +2446,7 @@ class ApiV1FoundationTests(TestCase):
             media_id="680",
             title="Pulp Fiction",
         )
-        user.set_hall_of_fame_item(MediaTypes.MOVIE.value, first)
-        user.save(update_fields=["hof_movie"])
+        hall_of_fame.set_picks(user, [first])
         self.client.force_authenticate(user)
 
         response = self.client.put(
@@ -2477,8 +2477,7 @@ class ApiV1FoundationTests(TestCase):
             media_id="1399",
             title="Game of Thrones",
         )
-        user.set_hall_of_fame_item(MediaTypes.TV.value, item)
-        user.save(update_fields=["hof_tv"])
+        hall_of_fame.set_picks(user, [item])
         self.client.force_authenticate(user)
 
         response = self.client.delete("/api/v1/me/hof/tv/")

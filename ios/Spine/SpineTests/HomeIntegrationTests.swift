@@ -28,7 +28,7 @@ final class HomeIntegrationTests: XCTestCase {
             location: nil, avatarUrl: nil, profileBackdropUrl: nil, profileBackdropItem: nil, isPrivate: false,
             viewerRelationship: base.viewerRelationship,
             counts: ProfileCounts(followers: 0, following: following, diaryEntries: 0, lists: 0),
-            hof: [:], preferences: base.preferences
+            preferences: base.preferences
         )
     }
 
@@ -635,8 +635,7 @@ private struct FailingProfileRepository: ProfileRepository {
     func saveProfileBackdrop(ref: MediaRef, backdropURL: String) async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
     func clearProfileBackdrop() async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
     func changePassword(_ request: PasswordChangeRequest) async throws { fatalError("Not used") }
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] { fatalError("Not used") }
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] { fatalError("Not used") }
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] { fatalError("Not used") }
 }
 
 /// Records what Home asks the activity endpoints for, in order, and answers from what the test set up.
