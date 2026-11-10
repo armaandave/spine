@@ -79,13 +79,18 @@ enum GlowSpec {
     /// Where the image's top sits relative to the box's top.
     static let imageTop: CGFloat = -170
 
-    /// Black over the image: (opacity, location). The last stop is solid so the bottom meets the page.
+    /// Black over the image: (opacity, location). The last stop is solid so the bottom meets the page. The top is a
+    /// little darker down to where the open header sits (about 0.2 to 0.27), so the poster's colors in "Home" and the
+    /// date read on it at full strength; the glow is brightest below that, behind the posters.
     static let gradientStops: [(opacity: Double, location: CGFloat)] = [
-        (0.22, 0),
-        (0.08, 0.35),
+        (0.42, 0),
+        (0.36, 0.27),
+        (0.08, 0.45),
         (0.70, 0.78),
         (1.0, 1.0),
     ]
+    /// The gradient's shade where the open header sits, from the stops above.
+    static let headerShade: Double = 0.38
 
     /// Where the status bar's inset is until it has been measured.
     static let estimatedTopInset: CGFloat = 62

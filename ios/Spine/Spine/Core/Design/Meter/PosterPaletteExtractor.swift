@@ -21,6 +21,12 @@ nonisolated enum PosterPaletteExtractor {
     static func load(url: URL, limit: Int = paletteSize) async -> [PosterSwatch]? {
         var request = ImageRequest(url: url)
         request.thumbnail = ImageRequest.ThumbnailOptions(maxPixelSize: Float(side))
+        return await load(request: request, limit: limit)
+    }
+
+    /// The colors of the image `request` makes, as it is shown (after its processors), counted at 96 px.
+    @concurrent
+    static func load(request: ImageRequest, limit: Int = paletteSize) async -> [PosterSwatch]? {
         guard let image = try? await ImagePipeline.shared.image(for: request), let cgImage = image.cgImage else {
             return nil
         }

@@ -377,15 +377,15 @@ struct FeedCardBackground: View {
     }
 }
 
-/// The glass rim: a half-point line round the edge and a one-point highlight along the top, as two shapes, a little
-/// brighter than the mock's `0.22` / `0.16` so the see-through card keeps a clear edge.
+/// The glass rim: a half-point line round the edge and a one-point highlight along the top, as two shapes, at half
+/// the strength they were (0.28), close to the closed tiles' quiet edges.
 struct FeedCardEdge: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: HomeDesign.Metric.cardCorner, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.5)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
             FeedCardTopHighlight()
-                .fill(Color.white.opacity(0.28))
+                .fill(Color.white.opacity(0.14))
         }
         .allowsHitTesting(false)
     }
