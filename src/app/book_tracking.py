@@ -1,7 +1,7 @@
 """Authoritative book tracking and reading-journey transitions."""
 
 from datetime import UTC, date, datetime, time
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from uuid import UUID
 
 from django.core.exceptions import ValidationError
@@ -26,6 +26,7 @@ from social.models import ProgressChange
 
 UNSET = object()
 OPEN_STATUSES = {Status.IN_PROGRESS.value, Status.PAUSED.value}
+HUNDREDTH = Decimal("0.01")
 
 
 class BookTrackingConflict(Exception):
@@ -657,7 +658,8 @@ def update_progress(
     elif progress_type == "percentage":
         if amount > 100:
             raise ValidationError("Percentage cannot exceed 100.")
-        percentage = amount
+        # Two decimals, as the column keeps it, so the save's record agrees with it.
+        percentage = amount.quantize(HUNDREDTH, rounding=ROUND_HALF_UP)
         if total_pages:
             pages = int(round(float(amount / 100 * total_pages)))
     else:

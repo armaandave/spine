@@ -655,6 +655,16 @@ class LengthTests(BookCalcBase):
         self.save(item, "30.30", d(2026, 3, 4), kind="percentage")
         self.assertEqual(ProgressChange.objects.filter(item=item).count(), saves)
 
+    def test_every_percent_is_in_hundredths(self):
+        item = self.book("hundredths", pages=301)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 16, d(2026, 3, 2))
+        self.save(item, "5.33", d(2026, 3, 3), kind="percentage")
+        self.assertEqual(self.day(d(2026, 3, 3)).told, Decimal("0.01"))
+        self.save(item, "5.344", d(2026, 3, 4), kind="percentage")
+        change = ProgressChange.objects.filter(item=item).latest("id")
+        self.assertEqual(change.current_progress["percentage_exact"], 5.34)
+
     def test_a_day_is_told_the_way_its_last_save_was_typed(self):
         item = self.book("mixed")
         self.begin(item, d(2026, 3, 1))

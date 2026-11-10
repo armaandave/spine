@@ -18,7 +18,7 @@ commit.
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from functools import partial, reduce
 from operator import or_
 from types import SimpleNamespace
@@ -503,8 +503,16 @@ def _percent_of(snapshot, length):
     if snapshot.get("kind") == "percentage":
         return value
     if snapshot.get("kind") == "pages" and length:
-        return value * 100 / Decimal(length)
+        return _page_percent(value, length)
     return None
+
+
+def _page_percent(pages, length):
+    """Return pages as a percent of the length, to two decimals as a save keeps it.
+
+    So every place is in hundredths and a day's percent never reads "0%".
+    """
+    return (pages * 100 / Decimal(length)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def _book_target(snapshot, total):
@@ -561,8 +569,8 @@ def _walk_journey(reading, session, saves, length, zone, *, continues, finished)
     opening = _opening(session, saves, length, finished=finished)
     if opening and opening > reading.counted.value:
         reading.counted.move_to(opening, None, None)
-    if opening and length and opening * 100 / Decimal(length) > reading.exact.value:
-        reading.exact.move_to(opening * 100 / Decimal(length), None, None)
+    if opening and length and _page_percent(opening, length) > reading.exact.value:
+        reading.exact.move_to(_page_percent(opening, length), None, None)
     started = not continues and not _first_move_picks_up(saves)
     for change in saves:
         saved = change.current_progress
