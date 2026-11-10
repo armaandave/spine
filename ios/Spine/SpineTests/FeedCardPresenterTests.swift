@@ -256,6 +256,14 @@ final class FeedCardPresenterTests: XCTestCase {
             model(pagesOnly).headline,
             .marks(starSymbols: [], liked: false, rewatch: false, repeatLabel: "Reread", amount: "+200 pages")
         )
+        let episode = try FeedTestItems.item(
+            objectFields: "\"rating\": \"4\", \"label\": \"1 episode\"", mediaType: "episode", season: 1, episode: 3
+        )
+        XCTAssertEqual(
+            model(episode).headline,
+            .marks(starSymbols: fullStars, liked: false, rewatch: false, repeatLabel: "Rewatch", amount: nil),
+            "An episode's tag already says which one"
+        )
     }
 
     func testARewatchAloneIsAHeadline() throws {

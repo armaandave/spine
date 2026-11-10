@@ -221,8 +221,8 @@ the shape installed apps read. `consumed_at` is the item's calendar day
   `percent` (a percent told with no length) and `time_label` ("2h 15m", on TV, anime,
   movies and albums). `label` is null on a day with only a status move. `summary` is
   lower case and carries the moves: "read 40 pages, paused", "picked back up".
-  `object.place` is where the read stood at the end of that day, from its last save, by
-  unit: `{"pages": 893}`, `{"percent": 45.5}`, `{"chapters": 41}`, `{"issues": 12}`, or
+  `object.place` is where the read stood at the end of that day, after its last save,
+  by unit (a game gives each number it has, as it stood then): `{"pages": 893}`, `{"percent": 45.5}`, `{"chapters": 41}`, `{"issues": 12}`, or
   a game's `{"minutes": 840, "percent": 80}`. A log that finished the read afterwards
   took the rest on its own row, so `place` can be short of where the person stands now;
   the feed card's bar and "p. 893" read it. It is null on TV and anime days and on a day

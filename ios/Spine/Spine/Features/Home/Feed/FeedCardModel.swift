@@ -16,11 +16,13 @@ nonisolated enum FeedCardKind: Equatable, Sendable {
     case other
 }
 
-/// The line under a card's title. A log shows only its marks; no card says "Finished", "Watched" or "Listened".
+/// The line under a card's title. A log shows its marks and what it added; no card says "Finished", "Watched" or
+/// "Listened".
 nonisolated enum FeedHeadline: Equatable, Sendable {
     /// A log's stars, heart and rewatch glyph. `repeatLabel` names the glyph for VoiceOver ("Rewatch", "Reread").
     /// `amount` is what the log added, muted after the marks as the Activity list says it ("+99 pages": the pages a
-    /// finish took after the last save); nil when it added nothing or tells no amount (a film, an album).
+    /// finish took after the last save); nil when it added nothing, tells no amount (a film, an album) or is an
+    /// episode's own log, whose tag already names it.
     case marks(starSymbols: [String], liked: Bool, rewatch: Bool, repeatLabel: String, amount: String? = nil)
     /// A day's amount ("+3 episodes") in the card accent, then the muted real "where" when the friend's standing
     /// knows it, and the status pills. A card draws the pills when it has them, else the tail.

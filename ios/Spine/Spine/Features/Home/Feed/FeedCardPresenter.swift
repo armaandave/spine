@@ -120,7 +120,9 @@ enum FeedCardPresenter {
         let summary = ActivityFeedPresentation.ratingSummary(for: item)
         let symbols = summary.starSymbols
         let rewatch = ActivityFeedPresentation.isRewatch(item)
-        let amount = ActivityFeedPresentation.clean(item.object.label).map { "+\($0)" }
+        // An episode's own log says nothing more than its tag ("S1 E3") already does.
+        let isEpisode = item.media?.ref.episodeNumber != nil
+        let amount = isEpisode ? nil : ActivityFeedPresentation.clean(item.object.label).map { "+\($0)" }
         guard !symbols.isEmpty || summary.liked || rewatch || amount != nil else { return nil }
         return .marks(
             starSymbols: symbols,
