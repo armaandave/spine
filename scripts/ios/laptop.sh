@@ -4,7 +4,7 @@
 # (scripts/ios/LAPTOP.md). Code stays here: each job sends this checkout, uncommitted and
 # new files included, to the laptop's agent-only copy (~/spine-agent, never his own
 # ~/projects/spine) and runs there. Laptop jobs never use this Mac's ios queue; they wait in
-# their own line on the laptop, two at a time (one per checkout).
+# the laptop's agent-cleanup ios queue, two builds at a time (one per checkout).
 #
 # Usage: scripts/ios/laptop.sh <command>
 #   check              is the laptop reachable? prints LAPTOP: ok or STOPPED: ...
@@ -96,15 +96,17 @@ case "$cmd" in
     fi
     sync
     reap_sims
-    # Then the laptop's line: two jobs at once (it has 32 GB), in two slots. lockf frees a
-    # slot when its job ends or is hung up; it exits 75 when the slot is busy.
-    remote "$touch_sim; cd ~/$remote_dir && said=
+    # Then the laptop's line: the build lane of its agent-cleanup "ios" queue, which Armaan's
+    # own agents on the laptop share, two builds at once (it has 32 GB). lockf frees a slot
+    # when its job ends or is hung up; it exits 75 when the slot is busy.
+    queue_dir="~/.local/state/agent-cleanup/queues"
+    remote "$touch_sim; mkdir -p $queue_dir; cd ~/$remote_dir && said=
       while :; do
-        for s in 1 2; do
-          lockf -s -t 0 ~/$remote_repo/.slot\$s $(quote "$@"); rc=\$?
+        for slot in ios.build.lock ios.build.2.lock; do
+          lockf -s -t 0 $queue_dir/\$slot $(quote "$@"); rc=\$?
           [ \$rc -ne 75 ] && exit \$rc
         done
-        [ -n \"\$said\" ] || { echo 'Waiting:    two jobs are using the laptop; this one starts when one ends'; said=1; }
+        [ -n \"\$said\" ] || { echo 'Waiting:    two builds are using the laptop; this one starts when one ends'; said=1; }
         sleep 10
       done"
     ;;

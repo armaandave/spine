@@ -44,10 +44,10 @@ scripts/ios/machine.sh set laptop     # or: set homemac
 - Every `run` sends this checkout, including uncommitted and new files, to the laptop's
   agent-only copy `~/spine-agent/checkouts/<checkout name>` (no commit, no GitHub, no CI),
   then runs the command there.
-- Laptop jobs skip this Mac's `ios` queue. On the laptop two run at once (it has 32 GB); a
-  third waits for a free slot. Jobs from the same checkout go one at a time, so a sync never
-  rewrites files under a running build. Armaan's own agents on the laptop don't use these
-  slots, so a build of his can run at the same time.
+- Laptop jobs skip this Mac's `ios` queue. They take a build slot in the laptop's own
+  `agent-cleanup` `ios` queue, the one Armaan's agents on the laptop use too: two builds and
+  two simulators at once there (it has 32 GB), and a third waits. Jobs from the same checkout
+  go one at a time, so a sync never rewrites files under a running build.
 - Wrap long laptop jobs in `agent-cleanup run` **without** `--queue ios`, for the deadline;
   stopping the wrapper also stops the job on the laptop.
 - Simulators on the laptop are invisible (no Simulator window), one per checkout, named
