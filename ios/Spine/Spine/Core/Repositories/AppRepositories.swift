@@ -557,8 +557,8 @@ protocol ProfileRepository {
     func clearProfileBackdrop() async throws -> ProfileBackdropSaveResponse
     func updatePreferences(_ request: PreferencesUpdateRequest) async throws -> UserPreferences
     func changePassword(_ request: PasswordChangeRequest) async throws
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?]
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?]
+    /// Replaces the Hall of Fame with these picks, in crown order.
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary]
 }
 
 extension ProfileRepository {
@@ -1948,18 +1948,10 @@ struct APIProfileRepository: ProfileRepository {
         let _: EmptyResponse = try await client.post("/me/password/", body: request, authenticated: true)
     }
 
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] {
-        let response: HallOfFameItemsResponse = try await client.put(
-            "/me/hof/\(mediaType)/",
-            body: HallOfFameItemWriteRequest(ref: ref),
-            authenticated: true
-        )
-        return response.items
-    }
-
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] {
-        let response: HallOfFameItemsResponse = try await client.delete(
-            "/me/hof/\(mediaType)/",
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] {
+        let response: HallOfFameResponse = try await client.put(
+            "/me/hall-of-fame/",
+            body: HallOfFameWriteRequest(refs: refs),
             authenticated: true
         )
         return response.items

@@ -679,7 +679,6 @@ final class TVTrackingModelsTests: XCTestCase {
             avatarUrl: nil, profileBackdropUrl: nil, profileBackdropItem: nil, isPrivate: false,
             viewerRelationship: ViewerRelationship(following: false, followedBy: false, requested: false, blocked: false),
             counts: ProfileCounts(followers: 0, following: 0, diaryEntries: 0, lists: 0),
-            hof: [:],
             preferences: UserPreferences(enabledMediaTypes: enabled, dateFormat: nil, timeFormat: nil, weekStartDay: nil,
                                          quickWatchDate: nil, releaseNotificationsEnabled: false, dailyDigestEnabled: false)
         )

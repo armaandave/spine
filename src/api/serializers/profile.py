@@ -13,6 +13,7 @@ from app import exposure
 from app.curation import prime_curated_artwork
 from app.models import BasicMedia, DiaryEntry, MediaLike, MediaTypes, Status, Tag
 from social.models import Follow, FollowStatus
+from users import hall_of_fame
 from users.forms import PasswordChangeForm
 from users.models import (
     DateFormatChoices,
@@ -90,6 +91,7 @@ def profile_payload(user, request=None, viewer=None, *, restricted=False, with_a
             **({"activity": _activity_count(user, viewer)} if with_activity else {}),
         },
         "hof": {} if restricted else hof_payload(user, request=request),
+        "hall_of_fame": [] if restricted else hall_of_fame_payload(user, request=request),
         "preferences": preferences_payload(user),
     }
 
@@ -154,7 +156,7 @@ def preferences_payload(user):
 
 
 def hof_payload(user, request=None):
-    """Serialize Hall of Fame item map."""
+    """Serialize the Hall of Fame as {type: first pick or null}, for older builds."""
     items = user.get_hall_of_fame_items()
     prime_curated_artwork(items.values())
     return {
@@ -162,6 +164,14 @@ def hof_payload(user, request=None):
         for media_type, item in items.items()
         if media_type in exposure.media_types()
     }
+
+
+def hall_of_fame_payload(user, request=None):
+    """Serialize every pick in crown order, types the owner turned off included."""
+    allowed = set(exposure.media_types())
+    items = [item for item in hall_of_fame.picks(user) if item.media_type in allowed]
+    prime_curated_artwork(items)
+    return [media_summary_from_item(item, request=request, user=user) for item in items]
 
 
 class ProfileUpdateSerializer(serializers.Serializer):

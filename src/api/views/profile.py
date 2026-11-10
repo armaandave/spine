@@ -34,6 +34,8 @@ from app.models import MediaLike, MediaTypes
 from app.providers import services as provider_services
 from app.services import set_media_like
 from social.models import SocialAuditLog
+from users import hall_of_fame
+from users.models import HALL_OF_FAME_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -367,6 +369,67 @@ class UserSearchView(APIView):
         )
 
 
+def _hof_item(ref):
+    """Return the Item a ref names, creating it from provider metadata if needed."""
+    item = find_item(ref)
+    if item is None:
+        metadata = provider_services.get_media_metadata(
+            ref["media_type"],
+            ref["media_id"],
+            ref["source"],
+            [ref.get("season_number")] if ref.get("season_number") is not None else None,
+            ref.get("episode_number"),
+        )
+        item = get_or_create_item_from_metadata(ref, metadata)
+    return item
+
+
+def _hof_items_payload(user, request):
+    """Serialize the user's whole list in crown order, hidden types included."""
+    items = hall_of_fame.picks(user)
+    prime_curated_artwork(items)
+    return [media_summary_from_item(item, request=request, user=user) for item in items]
+
+
+class HOFListWriteSerializer(serializers.Serializer):
+    """Validate a whole Hall of Fame list."""
+
+    refs = MediaRefSerializer(many=True)
+
+
+class MeHOFListView(APIView):
+    """Current user's Hall of Fame list, in crown order."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"items": _hof_items_payload(request.user, request)})
+
+    def put(self, request):
+        serializer = HOFListWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        refs = serializer.validated_data["refs"]
+        if len(refs) > HALL_OF_FAME_LIMIT:
+            return Response(
+                {"refs": [f"The Hall of Fame holds at most {HALL_OF_FAME_LIMIT} titles."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        supported = set(exposure.primary_media_types())
+        if any(ref["media_type"] not in supported for ref in refs):
+            return Response({"refs": ["Unsupported Hall of Fame media type."]}, status=status.HTTP_400_BAD_REQUEST)
+        items = []
+        for ref in refs:
+            item = _hof_item(ref)
+            if any(item.pk == other.pk for other in items):
+                return Response(
+                    {"refs": ["A title can be in the Hall of Fame only once."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            items.append(item)
+        hall_of_fame.set_picks(request.user, items)
+        return Response({"items": _hof_items_payload(request.user, request)})
+
+
 class MeHOFView(APIView):
     """Current user's Hall of Fame map."""
 
@@ -377,7 +440,7 @@ class MeHOFView(APIView):
 
 
 class HOFItemView(APIView):
-    """Set or clear a Hall of Fame item."""
+    """Set or clear the first pick of a type (older app builds)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -390,26 +453,32 @@ class HOFItemView(APIView):
         ref = serializer.validated_data["ref"]
         if ref["media_type"] != media_type:
             return Response({"ref": ["media_type must match URL media_type."]}, status=status.HTTP_400_BAD_REQUEST)
-        item = find_item(ref)
-        if item is None:
-            metadata = provider_services.get_media_metadata(
-                ref["media_type"],
-                ref["media_id"],
-                ref["source"],
-                [ref.get("season_number")] if ref.get("season_number") is not None else None,
-                ref.get("episode_number"),
+        item = _hof_item(ref)
+        items = hall_of_fame.picks(request.user)
+        index = next((i for i, other in enumerate(items) if other.media_type == media_type), None)
+        if index is None:
+            items.append(item)
+        else:
+            items[index] = item
+        # The title may already sit elsewhere: it stays where this pick lands.
+        items = [other for i, other in enumerate(items) if other.pk != item.pk or other is item]
+        if len(items) > HALL_OF_FAME_LIMIT:
+            return Response(
+                {"refs": [f"The Hall of Fame holds at most {HALL_OF_FAME_LIMIT} titles."]},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            item = get_or_create_item_from_metadata(ref, metadata)
-        request.user.set_hall_of_fame_item(media_type, item)
-        request.user.save(update_fields=[f"hof_{media_type}"])
+        hall_of_fame.set_picks(request.user, items)
         return Response({"items": hof_payload(request.user, request=request)})
 
     def delete(self, request, media_type):
         exposure.require_media_type(media_type)
         if media_type not in exposure.primary_media_types():
             return Response({"media_type": ["Unsupported Hall of Fame media type."]}, status=status.HTTP_400_BAD_REQUEST)
-        request.user.clear_hall_of_fame_item(media_type)
-        request.user.save(update_fields=[f"hof_{media_type}"])
+        items = hall_of_fame.picks(request.user)
+        index = next((i for i, other in enumerate(items) if other.media_type == media_type), None)
+        if index is not None:
+            del items[index]
+            hall_of_fame.set_picks(request.user, items)
         return Response({"items": hof_payload(request.user, request=request)})
 
 

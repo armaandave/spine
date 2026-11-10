@@ -33,7 +33,7 @@ final class SocialTests: XCTestCase {
 
         XCTAssertTrue(restricted.isRestricted)
         XCTAssertFalse(older.isRestricted)
-        XCTAssertTrue(restricted.replacingHallOfFame([:]).isRestricted)
+        XCTAssertTrue(restricted.replacingHallOfFame([]).isRestricted)
     }
 
     func testFollowListRowsDecodeTheirConnectionToYou() throws {

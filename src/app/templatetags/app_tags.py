@@ -11,6 +11,7 @@ from unidecode import unidecode
 
 from app import config, exposure, helpers
 from app.models import MediaTypes, Sources, Status
+from users import hall_of_fame
 
 register = template.Library()
 
@@ -251,13 +252,9 @@ def get_sidebar_media_types(user):
 
 @register.simple_tag
 def get_exposed_hall_of_fame_items(user):
-    """Return Hall of Fame items for exposed media types."""
-    allowed = set(exposure.media_types())
-    return {
-        media_type: item
-        for media_type, item in user.get_hall_of_fame_items().items()
-        if media_type in allowed
-    }
+    """Return the Hall of Fame picks in crown order, less types turned off or not exposed."""
+    allowed = set(exposure.media_types()) & set(user.get_enabled_media_types())
+    return [item for item in hall_of_fame.picks(user) if item.media_type in allowed]
 
 
 @register.filter

@@ -819,6 +819,5 @@ private final class StatsShowAllRepositoryFake: ProfileRepository {
     func clearProfileBackdrop() async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
     func updatePreferences(_ request: PreferencesUpdateRequest) async throws -> UserPreferences { fatalError("Not used") }
     func changePassword(_ request: PasswordChangeRequest) async throws { fatalError("Not used") }
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] { fatalError("Not used") }
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] { fatalError("Not used") }
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] { fatalError("Not used") }
 }

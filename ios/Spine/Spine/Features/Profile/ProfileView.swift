@@ -15,7 +15,6 @@ final class ProfileViewModel {
     var activityErrorMessage: String?
     var inProgressErrorMessage: String?
     var hofErrorMessage: String?
-    var savingHallOfFameSlots: Set<String> = []
     /// What the Follow button on someone else's profile says.
     var followState = FollowState.none
     var socialMessage: SocialActionMessage?
@@ -175,10 +174,6 @@ final class ProfileViewModel {
         await load()
     }
 
-    func isSavingHallOfFameSlot(_ mediaType: String) -> Bool {
-        savingHallOfFameSlots.contains(mediaType)
-    }
-
     private func loadRecentActivity(generation: Int) async {
         guard let username = profile?.username else {
             recentActivityItems = []
@@ -249,39 +244,21 @@ final class ProfileViewModel {
         }
     }
 
-    @discardableResult
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async -> Bool {
-        guard !savingHallOfFameSlots.contains(mediaType) else { return false }
-        savingHallOfFameSlots.insert(mediaType)
+    /// Takes a pick off the Hall of Fame from the profile's long-press menu: gone at once, back if the save fails.
+    func removeHallOfFamePick(_ item: MediaSummary) async {
+        guard let profile else { return }
+        let before = profile.hallOfFamePicks
+        let remaining = before.filter { $0.id != item.id }
+        self.profile = profile.replacingHallOfFame(remaining)
         hofErrorMessage = nil
-        defer { savingHallOfFameSlots.remove(mediaType) }
 
         do {
-            let hof = try await profileRepository.setHallOfFameItem(mediaType: mediaType, ref: ref)
-            profile = profile?.replacingHallOfFame(hof)
-            return true
+            let saved = try await profileRepository.saveHallOfFame(refs: remaining.map(\.ref))
+            self.profile = self.profile?.replacingHallOfFame(saved)
         } catch {
+            self.profile = self.profile?.replacingHallOfFame(before)
             hofErrorMessage = error.localizedDescription
             handleUnauthorized(error)
-            return false
-        }
-    }
-
-    @discardableResult
-    func clearHallOfFameItem(mediaType: String) async -> Bool {
-        guard !savingHallOfFameSlots.contains(mediaType) else { return false }
-        savingHallOfFameSlots.insert(mediaType)
-        hofErrorMessage = nil
-        defer { savingHallOfFameSlots.remove(mediaType) }
-
-        do {
-            let hof = try await profileRepository.clearHallOfFameItem(mediaType: mediaType)
-            profile = profile?.replacingHallOfFame(hof)
-            return true
-        } catch {
-            hofErrorMessage = error.localizedDescription
-            handleUnauthorized(error)
-            return false
         }
     }
 }
@@ -615,7 +592,7 @@ struct ProfileView: View {
     @State private var selectedRef: MediaRef?
     @State private var selectedPerson: PersonRef?
     @State private var isSettingsPresented = false
-    @State private var hofPickerSlot: FavoriteSlot?
+    @State private var isHallOfFameEditorPresented = false
     @State private var heroScrollOffset: CGFloat = 0
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var isProfileBackdropSearchPresented = false
@@ -808,18 +785,27 @@ struct ProfileView: View {
                     )
                 }
             }
-            .sheet(item: $hofPickerSlot) { slot in
-                HallOfFamePickerSheet(
-                    slot: slot,
-                    mediaRepository: mediaRepository,
-                    isSaving: viewModel.isSavingHallOfFameSlot(slot.id),
-                    errorMessage: viewModel.hofErrorMessage,
-                    onSelect: { media in
-                        await viewModel.setHallOfFameItem(mediaType: slot.id, ref: media.ref)
-                    },
-                    onClear: clearHallOfFameAction(for: slot),
-                    onUnauthorized: onUnauthorized
-                )
+            .sheet(isPresented: $isHallOfFameEditorPresented) {
+                if let profile = viewModel.profile {
+                    NavigationStack {
+                        HallOfFameEditorView(
+                            profile: profile,
+                            profileRepository: profileRepository,
+                            mediaRepository: mediaRepository,
+                            onUnauthorized: onUnauthorized
+                        ) { picks in
+                            viewModel.profile = viewModel.profile?.replacingHallOfFame(picks)
+                        }
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done", systemImage: "checkmark") {
+                                    isHallOfFameEditorPresented = false
+                                }
+                            }
+                        }
+                    }
+                    .preferredColorScheme(.dark)
+                }
             }
             .fullScreenCover(isPresented: $isProfileBackdropSearchPresented) {
                 ProfileBackdropSearchView(
@@ -951,16 +937,9 @@ struct ProfileView: View {
         .onPreferenceChange(ProfileTopSafeAreaInsetKey.self) { topSafeAreaInset = $0 }
     }
 
-    private func clearHallOfFameAction(for slot: FavoriteSlot) -> (() async -> Bool)? {
-        guard slot.item != nil else { return nil }
-        return {
-            await viewModel.clearHallOfFameItem(mediaType: slot.id)
-        }
-    }
-
     private var hofErrorBinding: Binding<Bool> {
         Binding(
-            get: { viewModel.hofErrorMessage != nil && hofPickerSlot == nil },
+            get: { viewModel.hofErrorMessage != nil && !isHallOfFameEditorPresented },
             set: { if !$0 { viewModel.hofErrorMessage = nil } }
         )
     }
@@ -1054,8 +1033,7 @@ struct ProfileView: View {
     }
 
     private func hero(_ profile: UserProfile, collapseProgress: CGFloat, layoutProgress: CGFloat) -> some View {
-        // Empty slots are for adding favorites, so someone else's profile shows only the ones they picked.
-        let allSlots = favoriteSlots(from: profile).filter { isOwnProfile || $0.item != nil }
+        let allSlots = favoriteSlots(from: profile)
         let backdropURL = profileBackdropURL(from: profile)
         let topClearance = HallOfFameCrownLayout.avatarTopClearance(collapseProgress: layoutProgress)
         let crownHeight = ProfileHeroBackdropLayout.crownHeight(for: layoutProgress) + topClearance
@@ -1063,31 +1041,38 @@ struct ProfileView: View {
 
         return VStack(spacing: profileElementSpacing) {
             VStack(spacing: 8) {
-                // With no favorites to fan out (someone else who picked none), only the avatar shows, in the same
-                // place as on every profile.
+                // With no favorites to fan out, only the avatar shows, in the same place as on every profile.
                 if allSlots.isEmpty {
                     avatar(profile)
                         .padding(.top, topClearance)
                         .padding(.bottom, 8)
+
+                    if isOwnProfile, !profile.isRestricted {
+                        Button("Add Favorites", systemImage: "plus") {
+                            isHallOfFameEditorPresented = true
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                        .padding(.bottom, 4)
+                    }
                 } else {
                     ZStack(alignment: .top) {
                         HallOfFameCrownView(
                             slots: allSlots,
-                            savingSlotIDs: viewModel.savingHallOfFameSlots,
-                            collapseProgress: collapseProgress
-                        ) { slot in
-                            if let item = slot.item {
-                                selectedRef = item.ref
-                            }
-                        } onEmptyTap: { slot in
-                            if isOwnProfile {
-                                hofPickerSlot = slot
-                            }
-                        } onFilledLongPress: { slot in
-                            if isOwnProfile {
-                                hofPickerSlot = slot
-                            }
-                        }
+                            collapseProgress: collapseProgress,
+                            onTap: { slot in
+                                if let item = slot.item {
+                                    selectedRef = item.ref
+                                }
+                            },
+                            menu: isOwnProfile ? HallOfFameCrownMenu(
+                                onEdit: { isHallOfFameEditorPresented = true },
+                                onRemove: { slot in
+                                    guard let item = slot.item else { return }
+                                    Swift.Task<Void, Never> { await viewModel.removeHallOfFamePick(item) }
+                                }
+                            ) : nil
+                        )
                         .offset(y: -21 * collapseProgress)
                         .zIndex(0)
 
@@ -1180,7 +1165,7 @@ struct ProfileView: View {
         if let profileBackdropUrl = profile.profileBackdropUrl?.trimmedNonEmpty {
             return profileBackdropUrl
         }
-        guard let movie = profile.hof["movie"] ?? nil else { return nil }
+        guard let movie = profile.hallOfFamePicks.first(where: { $0.ref.mediaType == "movie" }) else { return nil }
         return movie.displayBackdropURL
     }
 
@@ -1611,33 +1596,52 @@ struct ProfileView: View {
     }
 
     private func favoriteSlots(from profile: UserProfile) -> [FavoriteSlot] {
-        ProfileFavorites.slots(from: profile.hof, enabledMediaTypes: profile.preferences.enabledMediaTypes)
-    }
-
-    private func favoriteSlotRank(_ key: String) -> Int {
-        ProfileFavorites.rank(key)
+        ProfileFavorites.slots(from: profile.hallOfFamePicks, enabledMediaTypes: profile.preferences.enabledMediaTypes)
     }
 }
 
-struct ProfileFavorites {
-    private static let defaultSlotKeys = ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"]
+enum ProfileFavorites {
+    /// The types a Hall of Fame pick can be, in the order pickers list them.
+    static let mediaTypes = ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"]
 
-    static func slots(from hof: [String: MediaSummary?], enabledMediaTypes: [String] = []) -> [FavoriteSlot] {
-        let enabled = enabledMediaTypes.filter { defaultSlotKeys.contains($0) }
-        let keys = enabled.isEmpty ? defaultSlotKeys : enabled
-        return keys.sorted { lhs, rhs in
-            let leftRank = rank(lhs)
-            let rightRank = rank(rhs)
-            return leftRank == rightRank ? lhs < rhs : leftRank < rightRank
-        }.map { key in
-            FavoriteSlot(id: key, title: key.profileSlotTitle, item: hof[key] ?? nil)
+    /// The crown's cards: the picks of the owner's turned-on types, in crown order.
+    static func slots(from picks: [MediaSummary], enabledMediaTypes: [String] = []) -> [FavoriteSlot] {
+        visible(picks, enabledMediaTypes: enabledMediaTypes).map { item in
+            FavoriteSlot(id: item.id, title: item.title, item: item)
         }
     }
 
-    static func rank(_ key: String) -> Int {
-        let normalized = key.lowercased()
-        let order = ["movie", "tv", "anime", "manga", "game", "book", "comic", "music", "boardgame"]
-        return order.firstIndex { normalized.contains($0) } ?? order.count
+    /// Picks the crown shows. Picks of a type the owner turned off stay saved, hidden until it's back on.
+    static func visible(_ picks: [MediaSummary], enabledMediaTypes: [String]) -> [MediaSummary] {
+        let types = pickTypes(enabledMediaTypes: enabledMediaTypes)
+        return picks.filter { types.contains($0.ref.mediaType) }
+    }
+
+    /// The owner's turned-on types a pick can be; none listed (an old payload) means every type.
+    static func pickTypes(enabledMediaTypes: [String]) -> [String] {
+        let enabled = mediaTypes.filter { enabledMediaTypes.contains($0) }
+        return enabled.isEmpty ? mediaTypes : enabled
+    }
+}
+
+/// The Hall of Fame editor's list against the crown's order. The list reads left to right across the crown, and
+/// an even count has one card above the photo, listed first. That card is the one at `count / 2` in crown order,
+/// so adding or removing a pick drops it into the middle of the row, or lifts the middle card, by itself.
+enum HallOfFameOrder {
+    static let limit = 8
+
+    static func listOrder<Element>(_ crown: [Element]) -> [Element] {
+        guard !crown.isEmpty, crown.count.isMultiple(of: 2) else { return crown }
+        var row = crown
+        let top = row.remove(at: crown.count / 2)
+        return [top] + row
+    }
+
+    static func crownOrder<Element>(_ list: [Element]) -> [Element] {
+        guard !list.isEmpty, list.count.isMultiple(of: 2) else { return list }
+        var row = Array(list.dropFirst())
+        row.insert(list[0], at: list.count / 2)
+        return row
     }
 }
 
@@ -1667,254 +1671,6 @@ enum ProfileHeroCollapse {
     private static func clampedProgress(for scrollOffset: CGFloat, over distance: CGFloat) -> CGFloat {
         min(1, max(0, scrollOffset / distance))
     }
-}
-
-@MainActor
-@Observable
-private final class HallOfFamePickerViewModel {
-    var query = ""
-    var results: [MediaSummary] = []
-    var isLoading = false
-    var errorMessage: String?
-    var resultRevision = 0
-
-    private let mediaRepository: MediaRepository
-    private let onUnauthorized: () -> Void
-    private var requestGeneration = 0
-
-    init(mediaRepository: MediaRepository, onUnauthorized: @escaping () -> Void) {
-        self.mediaRepository = mediaRepository
-        self.onUnauthorized = onUnauthorized
-    }
-
-    func invalidateSearch() {
-        requestGeneration += 1
-        isLoading = false
-    }
-
-    func search(mediaType: String) async {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        requestGeneration += 1
-        let generation = requestGeneration
-        guard !trimmed.isEmpty else {
-            results = []
-            errorMessage = nil
-            isLoading = false
-            return
-        }
-
-        isLoading = true
-        errorMessage = nil
-        defer {
-            if generation == requestGeneration {
-                isLoading = false
-            }
-        }
-
-        do {
-            let found = try await mediaRepository.search(query: trimmed, mediaType: mediaType)
-            guard generation == requestGeneration,
-                  trimmed == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-            results = found
-            resultRevision += 1
-        } catch is CancellationError {
-            return
-        } catch {
-            guard generation == requestGeneration else { return }
-            results = []
-            errorMessage = error.localizedDescription
-            if case APIError.unauthorized = error {
-                onUnauthorized()
-            }
-        }
-    }
-}
-
-private struct HallOfFamePickerSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var viewModel: HallOfFamePickerViewModel
-    @State private var savingMediaID: String?
-    @State private var isClearing = false
-
-    let slot: FavoriteSlot
-    let isSaving: Bool
-    let errorMessage: String?
-    let onSelect: (MediaSummary) async -> Bool
-    let onClear: (() async -> Bool)?
-
-    init(
-        slot: FavoriteSlot,
-        mediaRepository: MediaRepository,
-        isSaving: Bool,
-        errorMessage: String?,
-        onSelect: @escaping (MediaSummary) async -> Bool,
-        onClear: (() async -> Bool)?,
-        onUnauthorized: @escaping () -> Void
-    ) {
-        self.slot = slot
-        self.isSaving = isSaving
-        self.errorMessage = errorMessage
-        self.onSelect = onSelect
-        self.onClear = onClear
-        _viewModel = State(initialValue: HallOfFamePickerViewModel(mediaRepository: mediaRepository, onUnauthorized: onUnauthorized))
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if let errorMessage {
-                    Section {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                if let current = slot.item {
-                    Section("Current") {
-                        HallOfFamePickerRow(media: current)
-                        if onClear != nil {
-                            Button(role: .destructive) {
-                                Swift.Task<Void, Never> { await clear() }
-                            } label: {
-                                if isClearing {
-                                    Label("Removing", systemImage: "clock")
-                                } else {
-                                    Label("Remove Favorite", systemImage: "trash")
-                                }
-                            }
-                            .disabled(isSaving || isClearing)
-                        }
-                    }
-                }
-
-                Section("Results") {
-                    if viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        ContentUnavailableView("Search \(slot.title)", systemImage: "magnifyingglass")
-                            .listRowBackground(Color.clear)
-                    } else if !viewModel.results.isEmpty {
-                        ForEach(viewModel.results) { media in
-                            Button {
-                                Swift.Task<Void, Never> { await select(media) }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    HallOfFamePickerRow(media: media)
-                                    if savingMediaID == media.id {
-                                        ProgressView()
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(isSaving || savingMediaID != nil)
-                        }
-                    } else if viewModel.isLoading {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
-                        }
-                    } else if let error = viewModel.errorMessage {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.red)
-                    } else if viewModel.results.isEmpty {
-                        ContentUnavailableView("No Results", systemImage: "magnifyingglass")
-                            .listRowBackground(Color.clear)
-                    }
-                }
-                .spineContentTransition(value: resultsTransitionKey)
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(Color.black)
-            .navigationTitle("\(slot.title) Favorite")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $viewModel.query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search \(slot.title)")
-            .task(id: viewModel.query) {
-                viewModel.invalidateSearch()
-                try? await Task.sleep(for: .milliseconds(300))
-                guard !Task.isCancelled else { return }
-                await viewModel.search(mediaType: slot.id)
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-
-    private var resultsPhase: SpineContentPhase {
-        let hasQuery = !viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return .resolve(
-            isLoading: hasQuery && viewModel.isLoading,
-            hasContent: hasQuery && !viewModel.results.isEmpty,
-            hasError: hasQuery && viewModel.errorMessage != nil
-        )
-    }
-
-    private var resultsTransitionKey: ResultsTransitionKey {
-        ResultsTransitionKey(phase: resultsPhase, revision: viewModel.resultRevision)
-    }
-
-    private struct ResultsTransitionKey: Hashable {
-        let phase: SpineContentPhase
-        let revision: Int
-    }
-
-    private func select(_ media: MediaSummary) async {
-        savingMediaID = media.id
-        let didSave = await onSelect(media)
-        savingMediaID = nil
-        if didSave {
-            dismiss()
-        }
-    }
-
-    private func clear() async {
-        guard let onClear else { return }
-        isClearing = true
-        let didClear = await onClear()
-        isClearing = false
-        if didClear {
-            dismiss()
-        }
-    }
-}
-
-private struct HallOfFamePickerRow: View {
-    let media: MediaSummary
-
-    var body: some View {
-        HStack(spacing: 12) {
-            MediaArtwork(
-                url: media.displayPosterURL,
-                title: media.title,
-                slot: .searchRow,
-                mediaType: media.ref.mediaType,
-                orientation: media.posterOrientation
-            )
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(media.title)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-
-                if let subtitle = media.searchResultSubtitle {
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-    }
-
 }
 
 private struct ProfileStatChip: View {
@@ -2577,6 +2333,8 @@ private struct ProfileSettingsSheet: View {
     @State private var viewModel: ProfileSettingsViewModel
     @State private var importStatusSource: ImportStatusSource?
     @State private var isLogoutConfirmationPresented = false
+    /// The Hall of Fame page's last save, handed to the profile once you leave the page.
+    @State private var savedHallOfFame: [MediaSummary]?
 
     let profile: UserProfile?
     let onProfileUpdated: (UserProfile) -> Void
@@ -2805,6 +2563,34 @@ private struct ProfileSettingsSheet: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func hallOfFameLink(_ profile: UserProfile) -> some View {
+        let current = savedHallOfFame.map(profile.replacingHallOfFame) ?? profile
+        let count = current.hallOfFamePicks.count
+
+        return NavigationLink {
+            HallOfFameEditorView(
+                profile: current,
+                profileRepository: profileRepository,
+                mediaRepository: mediaRepository,
+                onUnauthorized: onUnauthorized
+            ) { picks in
+                savedHallOfFame = picks
+            }
+            .onDisappear {
+                if let savedHallOfFame {
+                    onProfileUpdated(profile.replacingHallOfFame(savedHallOfFame))
+                }
+            }
+        } label: {
+            SettingsNavigationRow(
+                title: "Hall of Fame",
+                detail: count == 0 ? "Pick the favorites on your profile" : "\(count) of \(HallOfFameOrder.limit) favorites",
+                systemName: "crown.fill"
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     private func accountLinks(_ profile: UserProfile) -> some View {
         SettingsGroup(title: "Your space") {
             SettingsCard {
@@ -2826,6 +2612,10 @@ private struct ProfileSettingsSheet: View {
                         )
                     }
                     .buttonStyle(.plain)
+
+                    SettingsDivider()
+
+                    hallOfFameLink(profile)
 
                     SettingsDivider()
 
@@ -3888,7 +3678,7 @@ struct SettingsDivider: View {
     }
 }
 
-private struct SettingsAvatar: View {
+struct SettingsAvatar: View {
     let profile: UserProfile
     let size: CGFloat
 

@@ -1781,7 +1781,7 @@ final class SpineTests: XCTestCase {
     /// TV-701: Continue Watching lists shows, so `tv` now maps to `tv` (loaded through Continue Watching) where it
     /// used to map to In progress seasons; seasons and episodes are never rows.
     func testInProgressLoaderMapsMediaTypesAndSortsWithLimit() {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie", "tv", "episode", "book", "music"])
+        let profile = profileFixture(enabledMediaTypes: ["movie", "tv", "episode", "book", "music"])
 
         XCTAssertEqual(InProgressLibraryLoader.mediaTypes(from: profile), ["movie", "tv", "book", "music"])
 
@@ -1796,7 +1796,7 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testHomeViewModelLoadsProfileInProgressAndActivity() async throws {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie", "music"])
+        let profile = profileFixture(enabledMediaTypes: ["movie", "music"])
         let tracking = ScriptedLibraryTrackingRepository(responses: [
             "movie:": PagedResponse(
                 count: 1,
@@ -1823,7 +1823,7 @@ final class SpineTests: XCTestCase {
             activityItem(id: 1, title: "Year Zero", type: "diary_created", mediaType: "music")
         ])
         let viewModel = HomeViewModel(
-            profileRepository: HallOfFameProfileRepository(profile: profile, setResponse: [:], clearResponse: [:]),
+            profileRepository: HallOfFameProfileRepository(profile: profile),
             trackingRepository: tracking,
             activityRepository: activity,
             onUnauthorized: {}
@@ -1849,9 +1849,9 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testHomeViewModelExposesEmptyState() async {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
+        let profile = profileFixture(enabledMediaTypes: ["movie"])
         let viewModel = HomeViewModel(
-            profileRepository: HallOfFameProfileRepository(profile: profile, setResponse: [:], clearResponse: [:]),
+            profileRepository: HallOfFameProfileRepository(profile: profile),
             trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
             activityRepository: ScriptedHomeActivityRepository(items: []),
             onUnauthorized: {}
@@ -1868,10 +1868,10 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testHomeViewModelUnauthorizedCallsHandler() async {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
+        let profile = profileFixture(enabledMediaTypes: ["movie"])
         var unauthorizedCount = 0
         let viewModel = HomeViewModel(
-            profileRepository: HallOfFameProfileRepository(profile: profile, setResponse: [:], clearResponse: [:]),
+            profileRepository: HallOfFameProfileRepository(profile: profile),
             trackingRepository: ThrowingTrackingRepository(error: APIError.unauthorized),
             activityRepository: ScriptedHomeActivityRepository(items: []),
             onUnauthorized: { unauthorizedCount += 1 }
@@ -2373,7 +2373,7 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testProfileSettingsViewModelSavesProfilePatch() async {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
+        let profile = profileFixture(enabledMediaTypes: ["movie"])
         let repository = RecordingProfileRepository(profile: profile)
         let viewModel = ProfileSettingsViewModel(
             profileRepository: repository,
@@ -2394,7 +2394,7 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testProfileSettingsPreferencesRequireOneMediaType() async {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
+        let profile = profileFixture(enabledMediaTypes: ["movie"])
         let repository = RecordingProfileRepository(profile: profile)
         let viewModel = ProfileSettingsViewModel(
             profileRepository: repository,
@@ -2413,7 +2413,7 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testProfileSettingsLoadsAndSavesMusicPreferenceFromMeta() async throws {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
+        let profile = profileFixture(enabledMediaTypes: ["movie"])
         let repository = RecordingProfileRepository(profile: profile)
         let meta = try JSONDecoder.api.decode(MetaResponse.self, from: Data("""
         {
@@ -2448,7 +2448,7 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testProfileSettingsKeepsSavedPreferencesWhenRootReappearsWithStaleProfile() async {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
+        let profile = profileFixture(enabledMediaTypes: ["movie"])
         let repository = RecordingProfileRepository(profile: profile)
         let viewModel = ProfileSettingsViewModel(
             profileRepository: repository,
@@ -2469,7 +2469,7 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testProfileSettingsFillsInWhenOpenedBeforeProfileLoaded() {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie", "tv"])
+        let profile = profileFixture(enabledMediaTypes: ["movie", "tv"])
         let viewModel = ProfileSettingsViewModel(
             profileRepository: RecordingProfileRepository(profile: profile),
             mediaRepository: FakeMediaRepository(),
@@ -2488,7 +2488,7 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testProfileSettingsAvatarUploadRecordsMime() async {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
+        let profile = profileFixture(enabledMediaTypes: ["movie"])
         let repository = RecordingProfileRepository(profile: profile)
         let viewModel = ProfileSettingsViewModel(
             profileRepository: repository,
@@ -4896,14 +4896,14 @@ final class SpineTests: XCTestCase {
                     "liked_items": 1,
                     "tags": 1
                   },
-                  "hof": {
-                    "music": \(TestFixtures.mediaSummaryJSON(
+                  "hall_of_fame": [
+                    \(TestFixtures.mediaSummaryJSON(
                       mediaId: "album",
                       source: "musicbrainz",
                       mediaType: "music",
                       title: "Year Zero"
                     ))
-                  },
+                  ],
                   "preferences": {
                     "enabled_media_types": ["movie", "music"],
                     "date_format": "Y-m-d",
@@ -4924,7 +4924,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(profile.counts.libraryItems, 2)
         XCTAssertEqual(profile.counts.likedItems, 1)
         XCTAssertEqual(profile.counts.tags, 1)
-        XCTAssertEqual(profile.hof["music"]??.ref.mediaType, "music")
+        XCTAssertEqual(profile.hallOfFamePicks.map(\.ref.mediaType), ["music"])
         XCTAssertEqual(profile.preferences.enabledMediaTypes, ["movie", "music"])
         client.tokenProvider.clear()
     }
@@ -5502,47 +5502,31 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(MediaCreditPresentation.make(for: malformed)?.people.map(\.name), ["Creator One"])
     }
 
-    func testHallOfFameItemsResponseDecodesMediaSummaryMap() throws {
-        let data = """
-        {
-          "items": {
-            "movie": {
-              "ref": {
-                "item_id": 42,
-                "source": "tmdb",
-                "media_type": "movie",
-                "media_id": "550",
-                "season_number": null,
-                "episode_number": null
-              },
-              "title": "Fight Club",
-              "image_url": "https://example.com/fight-club.jpg",
-              "poster_url": "https://example.com/fight-club.jpg",
-              "poster_orientation": "portrait"
-            },
-            "tv": null
-          }
-        }
-        """.data(using: .utf8)!
+    @MainActor
+    func testProfileViewModelRemovesHallOfFamePickAndSavesTheRest() async {
+        let movie = composerMedia("movie", itemID: 1, mediaType: "movie")
+        let album = composerMedia("album", itemID: 2, mediaType: "music")
+        let repository = HallOfFameProfileRepository(profile: profileFixture(hallOfFame: [movie, album]))
+        let viewModel = ProfileViewModel(
+            profileRepository: repository,
+            trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
+            activityRepository: ScriptedHomeActivityRepository(items: []),
+            onUnauthorized: {}
+        )
 
-        let response = try JSONDecoder.api.decode(HallOfFameItemsResponse.self, from: data)
+        await viewModel.load()
+        await viewModel.removeHallOfFamePick(movie)
 
-        XCTAssertEqual(response.items["movie"]??.title, "Fight Club")
-        XCTAssertEqual(response.items["movie"]??.ref.itemId, 42)
-        XCTAssertNil(response.items["tv"]!)
+        XCTAssertEqual(repository.savedRefs, [[album.ref]])
+        XCTAssertEqual(viewModel.profile?.hallOfFamePicks.map(\.id), [album.id])
     }
 
     @MainActor
-    func testProfileViewModelUpdatesHallOfFameLocally() async throws {
-        let movie = MediaSummary(
-            ref: MediaRef(itemId: 42, source: "tmdb", mediaType: "movie", mediaId: "550", seasonNumber: nil, episodeNumber: nil),
-            title: "Fight Club",
-            posterUrl: "https://example.com/fight-club.jpg"
-        )
+    func testProfileViewModelPutsHallOfFamePickBackWhenRemoveFails() async {
+        let movie = composerMedia("movie", itemID: 1, mediaType: "movie")
         let repository = HallOfFameProfileRepository(
-            profile: profileFixture(hof: ["movie": nil]),
-            setResponse: ["movie": movie],
-            clearResponse: ["movie": nil]
+            profile: profileFixture(hallOfFame: [movie]),
+            saveError: URLError(.notConnectedToInternet)
         )
         let viewModel = ProfileViewModel(
             profileRepository: repository,
@@ -5552,59 +5536,10 @@ final class SpineTests: XCTestCase {
         )
 
         await viewModel.load()
-        let didSet = await viewModel.setHallOfFameItem(mediaType: "movie", ref: movie.ref)
-        XCTAssertEqual(viewModel.profile?.hof["movie"]??.title, "Fight Club")
+        await viewModel.removeHallOfFamePick(movie)
 
-        let didClear = await viewModel.clearHallOfFameItem(mediaType: "movie")
-
-        XCTAssertTrue(didSet)
-        XCTAssertTrue(didClear)
-        XCTAssertEqual(repository.setMediaType, "movie")
-        XCTAssertEqual(repository.setRef, movie.ref)
-        XCTAssertEqual(repository.clearMediaType, "movie")
-        XCTAssertNil(viewModel.profile?.hof["movie"]!)
-    }
-
-    @MainActor
-    func testProfileHallOfFameSelectsAndClearsMusic() async {
-        let album = MediaSummary(
-            ref: MediaRef(
-                itemId: 902,
-                source: "musicbrainz",
-                mediaType: "music",
-                mediaId: "album",
-                seasonNumber: nil,
-                episodeNumber: nil
-            ),
-            title: "Year Zero",
-            posterOrientation: .square
-        )
-        let repository = HallOfFameProfileRepository(
-            profile: profileFixture(hof: ["music": nil], enabledMediaTypes: ["movie", "music"]),
-            setResponse: ["music": album],
-            clearResponse: ["music": nil]
-        )
-        let viewModel = ProfileViewModel(
-            profileRepository: repository,
-            trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
-            activityRepository: ScriptedHomeActivityRepository(items: []),
-            onUnauthorized: {}
-        )
-
-        await viewModel.load()
-        let slots = ProfileFavorites.slots(
-            from: viewModel.profile?.hof ?? [:],
-            enabledMediaTypes: viewModel.profile?.preferences.enabledMediaTypes ?? []
-        )
-        let didSet = await viewModel.setHallOfFameItem(mediaType: "music", ref: album.ref)
-        let didClear = await viewModel.clearHallOfFameItem(mediaType: "music")
-
-        XCTAssertEqual(slots.map(\.id), ["movie", "music"])
-        XCTAssertTrue(didSet)
-        XCTAssertTrue(didClear)
-        XCTAssertEqual(repository.setMediaType, "music")
-        XCTAssertEqual(repository.setRef, album.ref)
-        XCTAssertEqual(repository.clearMediaType, "music")
+        XCTAssertEqual(viewModel.profile?.hallOfFamePicks.map(\.id), [movie.id])
+        XCTAssertNotNil(viewModel.hofErrorMessage)
     }
 
     /// TV-701: Continue Watching lists shows, so the TV row is a show loaded through Continue Watching; it used to
@@ -5671,9 +5606,7 @@ final class SpineTests: XCTestCase {
         ])
         let viewModel = ProfileViewModel(
             profileRepository: HallOfFameProfileRepository(
-                profile: profileFixture(hof: [:], enabledMediaTypes: ["movie", "tv", "book", "music"]),
-                setResponse: [:],
-                clearResponse: [:]
+                profile: profileFixture(enabledMediaTypes: ["movie", "tv", "book", "music"])
             ),
             trackingRepository: trackingRepository,
             activityRepository: ScriptedHomeActivityRepository(items: []),
@@ -5710,9 +5643,7 @@ final class SpineTests: XCTestCase {
         ])
         let viewModel = ProfileViewModel(
             profileRepository: HallOfFameProfileRepository(
-                profile: profileFixture(hof: [:], enabledMediaTypes: ["movie"]),
-                setResponse: [:],
-                clearResponse: [:]
+                profile: profileFixture(enabledMediaTypes: ["movie"])
             ),
             trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
             activityRepository: activityRepository,
@@ -5783,12 +5714,10 @@ final class SpineTests: XCTestCase {
         let viewModel = ProfileViewModel(
             profileRepository: HallOfFameProfileRepository(
                 profile: profileFixture(
-                    hof: ["music": album],
+                    hallOfFame: [album],
                     enabledMediaTypes: ["movie", "music"],
                     isPrivate: true
-                ),
-                setResponse: [:],
-                clearResponse: [:]
+                )
             ),
             trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
             activityRepository: ScriptedHomeActivityRepository(items: []),
@@ -5800,17 +5729,16 @@ final class SpineTests: XCTestCase {
         XCTAssertTrue(viewModel.profile?.isPrivate == true)
         XCTAssertEqual(
             ProfileFavorites.slots(
-                from: viewModel.profile?.hof ?? [:],
+                from: viewModel.profile?.hallOfFamePicks ?? [],
                 enabledMediaTypes: viewModel.profile?.preferences.enabledMediaTypes ?? []
-            ).map(\.id),
-            ["movie", "music"]
+            ).map(\.item?.id),
+            [album.id]
         )
-        XCTAssertEqual(viewModel.profile?.hof["music"]??.ref.mediaType, "music")
     }
 
     @MainActor
     func testProfileViewModelCancellationPreservesLoadedProfile() async {
-        let profile = profileFixture(hof: [:], enabledMediaTypes: [])
+        let profile = profileFixture(enabledMediaTypes: [])
         let repository = ScriptedProfileRepository(results: [
             .success(profile),
             .failure(CancellationError()),
@@ -5842,9 +5770,7 @@ final class SpineTests: XCTestCase {
         ])
         let viewModel = ProfileViewModel(
             profileRepository: HallOfFameProfileRepository(
-                profile: profileFixture(hof: [:], enabledMediaTypes: ["book"]),
-                setResponse: [:],
-                clearResponse: [:]
+                profile: profileFixture(enabledMediaTypes: ["book"])
             ),
             trackingRepository: trackingRepository,
             activityRepository: ScriptedHomeActivityRepository(items: []),
@@ -5867,9 +5793,7 @@ final class SpineTests: XCTestCase {
         let activityRepository = ScriptedHomeActivityRepository(items: [])
         let viewModel = ProfileViewModel(
             profileRepository: HallOfFameProfileRepository(
-                profile: profileFixture(hof: [:], enabledMediaTypes: ["book"]),
-                setResponse: [:],
-                clearResponse: [:]
+                profile: profileFixture(enabledMediaTypes: ["book"])
             ),
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
@@ -8043,7 +7967,7 @@ final class SpineTests: XCTestCase {
     }
 
     private func profileFixture(
-        hof: [String: MediaSummary?],
+        hallOfFame: [MediaSummary] = [],
         enabledMediaTypes: [String] = ["movie"],
         isPrivate: Bool = false
     ) -> UserProfile {
@@ -8061,7 +7985,7 @@ final class SpineTests: XCTestCase {
             isPrivate: isPrivate,
             viewerRelationship: ViewerRelationship(following: false, followedBy: false, requested: false, blocked: false),
             counts: ProfileCounts(followers: 0, following: 0, diaryEntries: 0, lists: 0),
-            hof: hof,
+            hallOfFame: hallOfFame,
             preferences: UserPreferences(
                 enabledMediaTypes: enabledMediaTypes,
                 dateFormat: nil,
@@ -8754,7 +8678,6 @@ private struct FakeProfileRepository: ProfileRepository {
             isPrivate: false,
             viewerRelationship: ViewerRelationship(following: false, followedBy: false, requested: false, blocked: false),
             counts: ProfileCounts(followers: 0, following: 0, diaryEntries: 0, lists: 0, reviews: 0, tags: 0),
-            hof: [:],
             preferences: UserPreferences(
                 enabledMediaTypes: ["movie"],
                 dateFormat: "Y-m-d",
@@ -8773,8 +8696,7 @@ private struct FakeProfileRepository: ProfileRepository {
     func clearProfileBackdrop() async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
     func updatePreferences(_ request: PreferencesUpdateRequest) async throws -> UserPreferences { fatalError("Not used") }
     func changePassword(_ request: PasswordChangeRequest) async throws { fatalError("Not used") }
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] { fatalError("Not used") }
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] { fatalError("Not used") }
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] { fatalError("Not used") }
 }
 
 private final class RecordingProfileRepository: ProfileRepository {
@@ -8809,7 +8731,7 @@ private final class RecordingProfileRepository: ProfileRepository {
             isPrivate: request.isPrivate ?? profile.isPrivate,
             viewerRelationship: profile.viewerRelationship,
             counts: profile.counts,
-            hof: profile.hof,
+            hallOfFame: profile.hallOfFame,
             preferences: profile.preferences
         )
         return profile
@@ -8852,12 +8774,8 @@ private final class RecordingProfileRepository: ProfileRepository {
         passwordRequests.append(request)
     }
 
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] {
-        profile.hof
-    }
-
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] {
-        profile.hof
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] {
+        profile.hallOfFamePicks
     }
 }
 
@@ -9032,22 +8950,17 @@ private final class ScriptedProfileRepository: ProfileRepository {
     func clearProfileBackdrop() async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
     func updatePreferences(_ request: PreferencesUpdateRequest) async throws -> UserPreferences { fatalError("Not used") }
     func changePassword(_ request: PasswordChangeRequest) async throws { fatalError("Not used") }
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] { fatalError("Not used") }
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] { fatalError("Not used") }
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] { fatalError("Not used") }
 }
 
 private final class HallOfFameProfileRepository: ProfileRepository {
     let profile: UserProfile
-    let setResponse: [String: MediaSummary?]
-    let clearResponse: [String: MediaSummary?]
-    var setMediaType: String?
-    var setRef: MediaRef?
-    var clearMediaType: String?
+    var saveError: Error?
+    private(set) var savedRefs: [[MediaRef]] = []
 
-    init(profile: UserProfile, setResponse: [String: MediaSummary?], clearResponse: [String: MediaSummary?]) {
+    init(profile: UserProfile, saveError: Error? = nil) {
         self.profile = profile
-        self.setResponse = setResponse
-        self.clearResponse = clearResponse
+        self.saveError = saveError
     }
 
     func me() async throws -> UserProfile {
@@ -9082,15 +8995,12 @@ private final class HallOfFameProfileRepository: ProfileRepository {
         fatalError("Not used")
     }
 
-    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] {
-        setMediaType = mediaType
-        setRef = ref
-        return setResponse
-    }
-
-    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] {
-        clearMediaType = mediaType
-        return clearResponse
+    func saveHallOfFame(refs: [MediaRef]) async throws -> [MediaSummary] {
+        savedRefs.append(refs)
+        if let saveError {
+            throw saveError
+        }
+        return refs.compactMap { ref in profile.hallOfFamePicks.first { $0.ref == ref } }
     }
 }
 

@@ -73,48 +73,18 @@ final class HallOfFameCrownLayoutTests: XCTestCase {
         XCTAssertEqual(placements.count, 8)
     }
 
-    func testFavoriteSlotsSortOrderPreserved() {
-        let hof: [String: MediaSummary?] = [
-            "comic": nil,
-            "book": nil,
-            "movie": nil,
-            "anime": nil,
-            "game": nil,
-            "tv": nil,
-            "manga": nil,
-            "music": nil,
-        ]
+    func testFavoriteSlotsKeepCrownOrderAndHideTurnedOffTypes() {
+        let book = media(index: 1, mediaType: "book")
+        let movie = media(index: 2, mediaType: "movie")
+        let game = media(index: 3, mediaType: "game")
+        let otherMovie = media(index: 4, mediaType: "movie")
 
-        XCTAssertEqual(
-            ProfileFavorites.slots(from: hof).map(\.id),
-            ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"]
+        let slots = ProfileFavorites.slots(
+            from: [book, movie, game, otherMovie],
+            enabledMediaTypes: ["movie", "book"]
         )
-    }
 
-    func testFavoriteSlotsIncludeDefaultEmptyChoicesWhenAPIOnlySendsFilledItems() {
-        let movie = media(index: 1, mediaType: "movie")
-        let book = media(index: 2, mediaType: "book")
-        let slots = ProfileFavorites.slots(from: [
-            "movie": movie,
-            "book": book,
-        ])
-
-        XCTAssertEqual(slots.map(\.id), ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"])
-        XCTAssertEqual(slots.compactMap(\.item).map(\.id), [movie.id, book.id])
-    }
-
-    func testFavoriteSlotsPreserveEmptyAndFilledState() {
-        let movie = media(index: 1, mediaType: "movie")
-        let slots = ProfileFavorites.slots(from: [
-            "movie": movie,
-            "tv": nil,
-        ])
-
-        XCTAssertEqual(slots.count, 8)
-        XCTAssertEqual(slots[0].id, "movie")
-        XCTAssertEqual(slots[0].item?.id, movie.id)
-        XCTAssertEqual(slots[1].id, "tv")
-        XCTAssertNil(slots[1].item)
+        XCTAssertEqual(slots.map(\.item?.id), [book.id, movie.id, otherMovie.id])
     }
 
     func testCrownLayoutUsesGeometricArcForEightSlots() {
@@ -222,54 +192,27 @@ final class HallOfFameCrownLayoutTests: XCTestCase {
         XCTAssertEqual(midpoint[0].scale, (expanded[0].scale + 0.28) / 2, accuracy: 0.001)
     }
 
-    func testCrownArrangementPositionsMusicByEnabledSlotParity() {
-        let noMusic = HallOfFameCrownLayout.arrangement(for: slots(["movie", "tv", "book", "comic"]))
-        XCTAssertNil(noMusic.above)
-        XCTAssertEqual(noMusic.below.map(\.id), ["movie", "tv", "book", "comic"])
-
-        for ids in [
-            ["music"],
-            ["movie", "tv", "music"],
-            ["movie", "tv", "anime", "manga", "music"],
-            ["movie", "tv", "anime", "manga", "game", "book", "music"],
-        ] {
+    func testCrownArrangementLiftsTheMiddleCardOfAnEvenCount() {
+        for ids in [["movie"], ["movie", "tv", "music"], ["movie", "tv", "anime", "manga", "book"]] {
             let arrangement = HallOfFameCrownLayout.arrangement(for: slots(ids))
             XCTAssertNil(arrangement.above)
-            XCTAssertEqual(arrangement.below[arrangement.below.count / 2].id, "music")
+            XCTAssertEqual(arrangement.below.map(\.id), ids)
         }
 
-        for ids in [
-            ["movie", "music"],
-            ["movie", "tv", "anime", "music"],
-            ["movie", "tv", "anime", "manga", "game", "music"],
-            ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"],
-        ] {
-            let arrangement = HallOfFameCrownLayout.arrangement(for: slots(ids))
-            XCTAssertEqual(arrangement.above?.id, "music")
-            XCTAssertFalse(arrangement.below.contains(where: { $0.id == "music" }))
-            XCTAssertEqual(arrangement.below.map(\.id), ids.filter { $0 != "music" })
-        }
+        let two = HallOfFameCrownLayout.arrangement(for: slots(["movie", "tv"]))
+        XCTAssertEqual(two.above?.id, "tv")
+        XCTAssertEqual(two.below.map(\.id), ["movie"])
+
+        let eight = HallOfFameCrownLayout.arrangement(for: slots(["movie", "tv", "anime", "manga", "music", "game", "book", "comic"]))
+        XCTAssertEqual(eight.above?.id, "music")
+        XCTAssertEqual(eight.below.map(\.id), ["movie", "tv", "anime", "manga", "game", "book", "comic"])
     }
 
-    func testMusicFrameAndArrangementIgnoreFilledState() {
-        let emptySlots = slots(["movie", "music"])
-        let filledSlots = [
-            FavoriteSlot(id: "movie", title: "Movie", item: nil),
-            FavoriteSlot(id: "music", title: "Music", item: media(index: 9, mediaType: "music")),
-        ]
+    func testMusicCardsAreSquare() {
         let cardSize = CGSize(width: 70, height: 105)
 
-        XCTAssertEqual(HallOfFameCrownLayout.arrangement(for: emptySlots).above?.id, "music")
-        XCTAssertEqual(HallOfFameCrownLayout.arrangement(for: filledSlots).above?.id, "music")
-        XCTAssertEqual(
-            HallOfFameCrownLayout.visualSize(for: emptySlots[1], cardSize: cardSize),
-            CGSize(width: 70, height: 70)
-        )
-        XCTAssertEqual(
-            HallOfFameCrownLayout.visualSize(for: filledSlots[1], cardSize: cardSize),
-            CGSize(width: 70, height: 70)
-        )
-        XCTAssertEqual(HallOfFameCrownLayout.visualSize(for: emptySlots[0], cardSize: cardSize), cardSize)
+        XCTAssertEqual(HallOfFameCrownLayout.visualSize(for: slots(["music"])[0], cardSize: cardSize), CGSize(width: 70, height: 70))
+        XCTAssertEqual(HallOfFameCrownLayout.visualSize(for: slots(["movie"])[0], cardSize: cardSize), cardSize)
     }
 
     func testMusicPlacementMirrorsExistingCollapse() {
@@ -340,26 +283,10 @@ final class HallOfFameCrownLayoutTests: XCTestCase {
         }
     }
 
-    func testLowestCardEdgeCountsTheTiltOfEvenRows() {
-        // Four cards below: the inner two are the lowest, and their tilt drops one corner further.
-        let edge = HallOfFameCrownLayout.lowestCardEdge(for: slots(["movie", "tv", "anime", "manga"]))
-        let inner = HallOfFameCrownLayout.placements(count: 4, avatarDiameter: 128, position: .belowAvatar)[1]
-        let cardSize = HallOfFameCrownLayout.cardSize
-        let top = HallOfFameCrownLayout.crownHeight / 2 + inner.y - cardSize.height / 2
-        let untiltedEdge = top + cardSize.height * inner.scale
-
-        XCTAssertNotEqual(inner.rotation.degrees, 0)
-        XCTAssertEqual(edge, top + inner.scale * (
-            cardSize.height * cos(abs(inner.rotation.radians))
-                + cardSize.width / 2 * sin(abs(inner.rotation.radians))
-        ), accuracy: 0.001)
-        XCTAssertGreaterThan(edge, untiltedEdge)
-    }
-
     func testLowestCardEdgeUsesTheSquareMusicCardInTheMiddle() {
         // Music takes the middle of an odd row, and its square card is shorter than a poster.
-        let withMusic = HallOfFameCrownLayout.lowestCardEdge(for: slots(["movie", "tv", "music"]))
-        let withoutMusic = HallOfFameCrownLayout.lowestCardEdge(for: slots(["movie", "tv", "book"]))
+        let withMusic = HallOfFameCrownLayout.lowestCardEdge(for: slots(["movie", "music", "tv"]))
+        let withoutMusic = HallOfFameCrownLayout.lowestCardEdge(for: slots(["movie", "book", "tv"]))
 
         XCTAssertLessThan(withMusic, withoutMusic)
     }
@@ -427,6 +354,8 @@ final class HallOfFameCrownLayoutTests: XCTestCase {
     }
 
     private func slots(_ ids: [String]) -> [FavoriteSlot] {
-        ids.map { FavoriteSlot(id: $0, title: $0.capitalized, item: nil) }
+        ids.enumerated().map { index, id in
+            FavoriteSlot(id: id, title: id.capitalized, item: media(index: index, mediaType: id))
+        }
     }
 }

@@ -23,16 +23,21 @@ struct UserProfile: Codable, Identifiable {
     var restricted: Bool? = nil
     let viewerRelationship: ViewerRelationship
     let counts: ProfileCounts
-    let hof: [String: MediaSummary?]
+    /// Hall of Fame picks in crown order, including ones of types the owner turned off (the crown hides those).
+    var hallOfFame: [MediaSummary]? = nil
     let preferences: UserPreferences
 
     var isRestricted: Bool {
         restricted ?? false
     }
+
+    var hallOfFamePicks: [MediaSummary] {
+        hallOfFame ?? []
+    }
 }
 
 extension UserProfile {
-    func replacingHallOfFame(_ hof: [String: MediaSummary?]) -> UserProfile {
+    func replacingHallOfFame(_ hallOfFame: [MediaSummary]) -> UserProfile {
         UserProfile(
             id: id,
             username: username,
@@ -48,7 +53,7 @@ extension UserProfile {
             restricted: restricted,
             viewerRelationship: viewerRelationship,
             counts: counts,
-            hof: hof,
+            hallOfFame: hallOfFame,
             preferences: preferences
         )
     }
@@ -69,7 +74,7 @@ extension UserProfile {
             restricted: restricted,
             viewerRelationship: viewerRelationship,
             counts: counts,
-            hof: hof,
+            hallOfFame: hallOfFame,
             preferences: preferences
         )
     }
@@ -90,7 +95,7 @@ extension UserProfile {
             restricted: restricted,
             viewerRelationship: viewerRelationship,
             counts: counts,
-            hof: hof,
+            hallOfFame: hallOfFame,
             preferences: preferences
         )
     }
@@ -111,7 +116,7 @@ extension UserProfile {
             restricted: restricted,
             viewerRelationship: viewerRelationship,
             counts: counts,
-            hof: hof,
+            hallOfFame: hallOfFame,
             preferences: preferences
         )
     }
