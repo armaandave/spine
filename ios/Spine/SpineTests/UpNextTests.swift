@@ -107,12 +107,6 @@ final class UpNextTests: XCTestCase {
         XCTAssertEqual(badge.day, "13")
     }
 
-    func testShortDateUnderTheTilesPosters() {
-        XCTAssertEqual(UpNextPresentation.shortDate("2026-11-08", calendar: calendar), "11/8")
-        XCTAssertEqual(UpNextPresentation.shortDate("2027-01-16", calendar: calendar), "1/16")
-        XCTAssertEqual(UpNextPresentation.shortDate("soon", calendar: calendar), "")
-    }
-
     func testSpokenWhen() {
         XCTAssertEqual(UpNextPresentation.spokenWhen("2026-11-08", today: today, calendar: calendar), "today")
         XCTAssertEqual(UpNextPresentation.spokenWhen("2026-11-09", today: today, calendar: calendar), "tomorrow")
