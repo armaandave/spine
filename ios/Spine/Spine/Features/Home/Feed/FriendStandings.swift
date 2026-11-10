@@ -65,7 +65,7 @@ enum FeedStandingMath {
         case .chapters: "chapters"
         case .issues: "issues"
         case .minutes: "minutes"
-        case .episodes: nil
+        case .episodes: "episodes"
         }
         if let key, let value = place[key], value.isFinite { return value }
         guard let pages = position.pagesTotal, pages > 0 else { return nil }
@@ -87,7 +87,8 @@ enum FeedStandingMath {
 /// Where each friend stands on the titles their newest feed cards are about, loaded from the lists the profile's In
 /// progress rail already reads (`GET /users/<username>/tracking/`), one request per friend, type and status however many
 /// cards, a few at a time, after the feed's first page is in. A show is counted by the season the friend is in, whose
-/// episode count comes from the season's public page (one request per show and season). A title the friend finished
+/// episode count comes from the season's public page (one request per show and season); a show's card that says
+/// where its day ended (`object.place`) is counted by that season instead, with no list request. A title the friend finished
 /// that day is no longer in their In progress list, so a wanted title the list did not have is looked up by name in
 /// their Completed list (one small request each) and drawn where they ended. A card whose standing is not
 /// there yet is drawn without one and gets it when it lands; a card without a meter is a complete card, so a failure
@@ -111,6 +112,9 @@ final class FriendStandings: FeedStandingProviding {
         let told: TodayPart?
         /// Where the day ended, by unit (`object.place`); nil from an older server.
         var place: [String: Double]? = nil
+        /// A show's day: the season and episode it ended on, from `place`. Drawn from that season's page alone, so the
+        /// friend's list is not asked. Nil for anything else, or from an older server.
+        var daySeason: SeasonPlace? = nil
     }
 
     enum Phase: Equatable {
@@ -244,12 +248,18 @@ final class FriendStandings: FeedStandingProviding {
         let told = ToldAmount.parse(
             label: item.object.label, unit: item.object.unit, amount: item.object.amount, percent: item.object.percent
         )
+        var daySeason: SeasonPlace?
+        if mediaType == "tv", let season = item.object.place?["season"], let episode = item.object.place?["episodes"],
+           season.isFinite, episode.isFinite, season >= 0, episode >= 1 {
+            daySeason = SeasonPlace(show: ref.parentTVRef ?? ref, number: Int(season), watched: Int(episode))
+        }
         return Want(
             pair: Pair(username: item.actor.username, mediaType: mediaType, status: status),
             titleKey: FeedEntries.titleKey(for: ref),
             title: ActivityFeedPresentation.clean(item.media?.title),
             told: told,
-            place: item.object.place
+            place: item.object.place,
+            daySeason: daySeason
         )
     }
 
@@ -300,7 +310,16 @@ final class FriendStandings: FeedStandingProviding {
     // MARK: FeedStandingProviding
 
     func standing(for item: ActivityItem, isNewestOfTitle: Bool) -> FeedStanding? {
-        guard isNewestOfTitle, let want = Self.want(for: item), let entry = entries[want.pair] else { return nil }
+        guard isNewestOfTitle, let want = Self.want(for: item) else { return nil }
+        if let day = want.daySeason {
+            // The season and episode the day ended on, not where the friend is now: a season log after it took the
+            // rest. Nothing is drawn until that season's episodes are known.
+            guard let known = seasonTotals[day.key] else { return nil }
+            return FeedStandingMath.seasonStanding(
+                season: day.number, watched: day.watched, total: known.total, told: want.told
+            )
+        }
+        guard let entry = entries[want.pair] else { return nil }
         if want.pair.mediaType == "tv" {
             // Counted by the season the friend is in; until that season's episodes are known, nothing is drawn.
             guard let place = entry.seasons[want.titleKey], let known = seasonTotals[place.key] else { return nil }
@@ -327,10 +346,15 @@ final class FriendStandings: FeedStandingProviding {
     // MARK: Queue
 
     private func enqueue(wants: [Want], reloading: Bool) {
+        // A show's day that says its own season needs only that season's page, not the friend's list.
+        for want in wants {
+            if let day = want.daySeason { queueSeason(day) }
+        }
+        pumpSeasons()
         var keys: [Pair: Set<String>] = [:]
         var names: [Pair: [String: String]] = [:]
         var order: [Pair] = []
-        for want in wants {
+        for want in wants where want.daySeason == nil {
             if keys[want.pair] == nil { order.append(want.pair) }
             keys[want.pair, default: []].insert(want.titleKey)
             if let title = want.title { names[want.pair, default: [:]][want.titleKey] = title }
@@ -474,13 +498,18 @@ final class FriendStandings: FeedStandingProviding {
     private func loadSeasons(pair: Pair, titleKeys: Set<String>) {
         guard seasonPages != nil, let entry = entries[pair] else { return }
         for titleKey in titleKeys.sorted() {
-            guard let place = entry.seasons[titleKey], !seasonLoading.contains(place.key) else { continue }
-            if let known = seasonTotals[place.key], now().timeIntervalSince(known.at) < Self.freshFor { continue }
-            if let failed = seasonFailedAt[place.key], now().timeIntervalSince(failed) < Self.retryAfterFailure { continue }
-            seasonLoading.insert(place.key)
-            seasonQueue.append(place)
+            if let place = entry.seasons[titleKey] { queueSeason(place) }
         }
         pumpSeasons()
+    }
+
+    /// Lines up one season's read unless it is known and fresh, on its way, or failed under a minute ago.
+    private func queueSeason(_ place: SeasonPlace) {
+        guard seasonPages != nil, !seasonLoading.contains(place.key) else { return }
+        if let known = seasonTotals[place.key], now().timeIntervalSince(known.at) < Self.freshFor { return }
+        if let failed = seasonFailedAt[place.key], now().timeIntervalSince(failed) < Self.retryAfterFailure { return }
+        seasonLoading.insert(place.key)
+        seasonQueue.append(place)
     }
 
     private func pumpSeasons() {

@@ -82,14 +82,19 @@ final class HomeTodayStore {
         }
     }
 
-    /// Progress days only, summed per title. A title's first row (the newest) names its unit; a row in another unit
-    /// would add apples to oranges, so it is left out.
+    /// Progress days and logs, summed per title: an episode logged today moved the place as a tick does, so the lit
+    /// part that ends at the place covers it too. A rewatch log moves no place and is left out. A title's first row
+    /// (the newest) names its unit; a row in another unit would add apples to oranges, so it is left out.
     nonisolated static func parts(from rows: [ActivityItem]) -> [String: TodayPart] {
         var result: [String: TodayPart] = [:]
         for row in rows {
+            let counts: Bool = switch row.post {
+            case .progress: row.type == "progress_updated"
+            case .log: row.type == "diary_created" && row.object.isRewatch != true
+            case nil: false
+            }
             guard
-                row.type == "progress_updated",
-                case .progress = row.post,
+                counts,
                 let media = row.media,
                 let told = ToldAmount.parse(
                     label: row.object.label,

@@ -173,6 +173,8 @@ PLACE_UNITS = {
     "issue": "issues",
     activity_rows.MINUTE: "minutes",
     activity_rows.PERCENT: "percent",
+    activity_rows.EPISODE: "episodes",
+    activity_rows.SEASON_LEVEL: "season",
 }
 
 

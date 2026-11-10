@@ -89,6 +89,7 @@ final class HomeTodayStoreTests: XCTestCase {
         episode: Int? = nil,
         label: String? = "40 pages",
         unit: String? = "pages",
+        rewatch: Bool = false,
         withMedia: Bool = true
     ) throws -> ActivityItem {
         func quoted(_ value: String?) -> String { value.map { "\"\($0)\"" } ?? "null" }
@@ -104,7 +105,8 @@ final class HomeTodayStoreTests: XCTestCase {
           "id": \(id), "type": "\(type)", "created_at": "2026-11-07T16:00:00Z", "consumed_at": "2026-11-07",
           "actor": {"id": 3, "username": "claude", "display_name": "Claude", "avatar_url": null},
           "media": \(media), "person": null,
-          "object": {"type": "\(objectType)", "id": \(abs(id)), "label": \(quoted(label)), "unit": \(quoted(unit))},
+          "object": {"type": "\(objectType)", "id": \(abs(id)), "label": \(quoted(label)), "unit": \(quoted(unit)),
+                     "is_rewatch": \(rewatch)},
           "viewer": {"can_view": true, "has_liked": false}, "like_count": 0, "comment_count": 0
         }
         """
@@ -189,10 +191,10 @@ final class HomeTodayStoreTests: XCTestCase {
         XCTAssertEqual(store.part(for: ref("book")), TodayPart(unit: .pages, amount: 86))
     }
 
-    func testLogsOtherTitlesAndRowsWithNoMediaDoNotCount() async throws {
+    func testRewatchLogsOtherTitlesAndRowsWithNoMediaDoNotCount() async throws {
         let repository = ScriptedTodayRepository(answers: [.success(response([
             try row(id: -1, label: "40 pages"),
-            try row(id: 5, type: "diary_created", objectType: "diary", label: "100 pages"),
+            try row(id: 5, type: "diary_created", objectType: "diary", label: "100 pages", rewatch: true),
             try row(id: -3, mediaId: "2", label: "7 pages"),
             try row(id: -4, label: "9 pages", withMedia: false),
             try row(id: -5, label: "Started"),
@@ -205,6 +207,19 @@ final class HomeTodayStoreTests: XCTestCase {
         XCTAssertEqual(store.part(for: ref("book", "2")), TodayPart(unit: .pages, amount: 7))
         XCTAssertNil(store.part(for: ref("book", "3")))
         XCTAssertEqual(store.parts.count, 2)
+    }
+
+    func testAnEpisodeLoggedTodayCountsWithTheDaysTicks() async throws {
+        // Ticked E1 to E3, then logged E4: the lit part ending at E4 is all four, not E2 to E4.
+        let repository = ScriptedTodayRepository(answers: [.success(response([
+            try row(id: 8, type: "diary_created", objectType: "diary", mediaType: "episode", mediaId: "9",
+                    season: 1, episode: 4, label: "1 episode", unit: "minutes"),
+            try row(id: -1, mediaType: "tv", mediaId: "9", label: "3 episodes", unit: "minutes"),
+        ]))])
+        let store = makeStore(repository)
+        await store.refresh(username: "claude")
+
+        XCTAssertEqual(store.part(for: ref("tv", "9")), TodayPart(unit: .episodes, amount: 4))
     }
 
     func testASeasonAndEpisodeFoldIntoTheirShow() async throws {
