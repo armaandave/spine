@@ -115,24 +115,16 @@ struct PanelMeterCanvas: View {
         }
     }
 
-    /// The earlier part of the bar: flat white, or, with a poster palette, a gradient through the colors of the cells
-    /// that lie in it (the cells carry the blended colors, so it follows a swipe like the ticks do).
+    /// The earlier part of the bar: flat white, or, with a poster palette, its ramp laid along the whole meter. It comes
+    /// from `beforeRamp`, which blends straight with the swipe, never from the cells: mid-swipe a cell can already be
+    /// today's color on the next title.
     nonisolated private static func beforeShading(_ layout: MorphLayout, width: Double) -> GraphicsContext.Shading {
-        let stops: [Gradient.Stop] = layout.cells.compactMap { cell in
-            let center = cell.x + cell.w / 2
-            guard cell.w >= 0.05, center < layout.litStart, width > 0 else { return nil }
-            return Gradient.Stop(
-                color: Color(.sRGB, red: cell.r, green: cell.g, blue: cell.b, opacity: cell.a),
-                location: min(max(center / width, 0), 1)
-            )
+        let ramp = layout.beforeRamp
+        let colors = stride(from: 0, to: ramp.count - 3, by: 4).map { i in
+            Color(.sRGB, red: ramp[i], green: ramp[i + 1], blue: ramp[i + 2], opacity: ramp[i + 3])
         }
-        let plain = Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 0.55)
-        guard stops.count > 1, stops.contains(where: { $0.color != plain }) else { return .color(TileStyle.meterBefore) }
-        var ordered = [Gradient.Stop]()
-        for stop in stops {
-            ordered.append(Gradient.Stop(color: stop.color, location: max(stop.location, ordered.last?.location ?? 0)))
-        }
-        return .linearGradient(Gradient(stops: ordered), startPoint: .zero, endPoint: CGPoint(x: width, y: 0))
+        guard colors.count > 1, ramp != MorphLayout.plainRamp else { return .color(TileStyle.meterBefore) }
+        return .linearGradient(Gradient(colors: colors), startPoint: .zero, endPoint: CGPoint(x: width, y: 0))
     }
 
     /// A window's line for the whole series: the track, how much is done, and a marker on the lit end.

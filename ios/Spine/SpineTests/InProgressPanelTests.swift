@@ -309,11 +309,11 @@ final class MorphLayoutTests: XCTestCase {
 
     func testTheVectorRoundTrips() {
         let l = layout(meter(.episodes, 6, 7, 10), place: TilePlace(prefix: "", value: 7, joiner: "", total: nil, suffix: ""))
-        XCTAssertEqual(l.values.count, 288)
+        XCTAssertEqual(l.values.count, 300)
         XCTAssertEqual(MorphLayout(values: l.values), l)
         let other = layout(meter(.pages, 303, 333, 416))
         let vector = MorphVector(lo: l.values, hi: other.values, t: 0.25)
-        XCTAssertEqual(vector.values.count, 577)
+        XCTAssertEqual(vector.values.count, 601)
         XCTAssertEqual(MorphLayout(values: vector.lo), l)
         XCTAssertEqual(MorphLayout(values: vector.hi), other)
         XCTAssertEqual(vector.t, 0.25)
@@ -396,6 +396,26 @@ final class MorphLayoutTests: XCTestCase {
         XCTAssertEqual(mid.aShown, 0.5, accuracy: 0.0001)
         let back = MorphLayout.blend(some, none, 0.5)
         XCTAssertEqual(back.a, 412)
+    }
+
+    func testABarsEarlierPartIsTheTwoRampsMixedAndNeverTodaysColor() {
+        // Today grows to the left from one book to the next: the cells between the two starts are today's on the
+        // second book, and the earlier part must not pick their color up on the way.
+        let narrow = layout(meter(.pages, 250, 275, 500))
+        let wide = layout(meter(.pages, 150, 275, 500))
+        for step in 0 ... 20 {
+            XCTAssertEqual(MorphLayout.blend(narrow, wide, Double(step) / 20).beforeRamp, MorphLayout.plainRamp)
+        }
+        // A poster's ramp at rest, and halfway to a plain title the two half mixed.
+        let tint = MeterTint(ramp: [.init(red: 1, green: 0, blue: 0), .init(red: 0, green: 0, blue: 1)], today: .white)
+        let tinted = MorphLayout.make(
+            meter: meter(.pages, 250, 275, 500), place: .none, accentHex: nil, hasQuick: true, width: width, tint: tint
+        )
+        XCTAssertEqual(tinted.beforeRamp, [1, 0, 0, 0.8, 0.5, 0, 0.5, 0.8, 0, 0, 1, 0.8])
+        let half = MorphLayout.blend(tinted, wide, 0.5).beforeRamp
+        for (got, want) in zip(half, [1, 0.5, 0.5, 0.675, 0.75, 0.5, 0.75, 0.675, 0.5, 0.5, 1, 0.675]) {
+            XCTAssertEqual(got, want, accuracy: 0.0001)
+        }
     }
 
     // MARK: Sweep
