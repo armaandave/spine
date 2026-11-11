@@ -179,7 +179,7 @@ PLACE_UNITS = {
 
 
 def progress_fields(row):
-    """Return a progress row's moves, a percent with no length, and the day's place."""
+    """Return a progress row's moves, the percent it told, and the day's place."""
     return {
         **row_fields(row),
         "moves": [activity_rows.MOVE_KEYS[move] for move in row.moves],

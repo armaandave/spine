@@ -338,6 +338,11 @@ def _restore_book(plan, first, remaining):
     elif previous.get("kind") == "pages":
         session.pages_read = int(value)
         session.percentage_read = Decimal(session.pages_read * 100) / Decimal(total) if total else None
+        before = remaining[-1].current_progress if remaining else {}
+        typed = activity_rows.typed_percent(before)
+        if typed is not None and _number(before) == value:
+            # Back to a save typed in percent: that percent, not its page's.
+            session.percentage_read = typed
     else:
         session.percentage_read = value
         session.pages_read = round(float(value / 100 * total)) if total else None
@@ -400,7 +405,9 @@ def fix(owner, item, day, value, *, unit=None):
         raise ValidationError(message)
     following = plan.following()
     written = _plain(number)
-    plan.last.current_progress = {**plan.last.current_progress, "value": written}
+    # The fix is typed in the save's own unit, so a percent typed beside its page goes.
+    saved = {key: value for key, value in plan.last.current_progress.items() if key != "percentage_exact"}
+    plan.last.current_progress = {**saved, "value": written}
     plan.last.save(update_fields=["current_progress"])
     following.previous_progress = {**following.previous_progress, "value": written}
     following.save(update_fields=["previous_progress"])

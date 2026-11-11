@@ -46,6 +46,11 @@ hearts, follows, or adding to a list.
 - It is told in the title's own unit: episodes (TV, anime), chapters (manga),
   issues (comics), pages or percent (books), playtime or percent (games). When a
   game moves in both playtime and percent on one day, playtime tells it.
+- A book is told the way it was typed. A save typed in percent keeps that percent
+  exactly (`percentage_exact`, beside its rounded page), and a day whose last save was
+  typed in percent is told in percent ("read 5.25%"), even one that moved less than a
+  page; so is a log that finishes a read whose last save was. Its pages stay its
+  amount, so no number moves. Saves from before this kept no percent and stay in pages.
 - Progress that day replaces a start, as the same item. A log doesn't replace either:
   a log and that day's progress or start on the same title are separate items.
 - Starts are recorded in `social.ProgressChange` as a step of kind `start`; they
