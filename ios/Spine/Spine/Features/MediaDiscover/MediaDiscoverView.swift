@@ -161,7 +161,6 @@ struct MediaDiscoverView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: MediaDiscoverViewModel
     @State private var selectedMedia: MediaBrowsingSelection?
-    @State private var edgeDragOffset: CGFloat = 0
     @State private var isChoosingStreamingServices = false
 
     private let mediaRepository: MediaRepository
@@ -203,111 +202,103 @@ struct MediaDiscoverView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .topLeading) {
-                Color.black.ignoresSafeArea()
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
 
-                Group {
-                    if viewModel.isLoadingInitial, viewModel.results.isEmpty {
-                        ProgressView()
-                            .tint(.white)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if viewModel.needsStreamingServices, viewModel.results.isEmpty {
-                        ContentUnavailableView {
-                            Label("Choose your streaming services", systemImage: "play.tv")
-                        } description: {
-                            Text("Pick the services you subscribe to and see what's streaming on them.")
-                        } actions: {
-                            Button("Choose Services") {
-                                isChoosingStreamingServices = true
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.white)
-                            .foregroundStyle(.black)
+            Group {
+                if viewModel.isLoadingInitial, viewModel.results.isEmpty {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.needsStreamingServices, viewModel.results.isEmpty {
+                    ContentUnavailableView {
+                        Label("Choose your streaming services", systemImage: "play.tv")
+                    } description: {
+                        Text("Pick the services you subscribe to and see what's streaming on them.")
+                    } actions: {
+                        Button("Choose Services") {
+                            isChoosingStreamingServices = true
                         }
-                    } else if let error = viewModel.errorMessage, viewModel.results.isEmpty {
-                        ContentUnavailableView("Could not load media", systemImage: "exclamationmark.triangle", description: Text(error))
-                    } else if viewModel.results.isEmpty, viewModel.isOnMyServices {
-                        ContentUnavailableView(
-                            "Nothing streaming on your services",
-                            systemImage: "play.tv",
-                            description: Text("Turn off On my services to see everything.")
-                        )
-                    } else if viewModel.results.isEmpty {
-                        ContentUnavailableView("No results", systemImage: "square.grid.2x2", description: Text("Try another media detail pill."))
-                    } else {
-                        ScrollView {
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 10) {
-                                ForEach(viewModel.results) { media in
-                                    Button {
-                                        selectedMedia = MediaBrowsingSelection(
-                                            ref: media.ref,
-                                            within: viewModel.results.map(\.ref)
-                                        )
-                                    } label: {
-                                        MediaArtwork(
-                                            url: media.displayPosterURL,
-                                            title: media.title,
-                                            slot: .tagGrid,
-                                            mediaType: media.ref.mediaType,
-                                            orientation: media.posterOrientation
-                                        )
-                                        .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("View \(media.title)")
-                                    .prefetchingArtwork(after: media, in: viewModel.results) { $0.artworkRequest(slot: .tagGrid) }
-                                    .task {
-                                        await viewModel.loadNextPageIfNeeded(currentItem: media)
-                                    }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.white)
+                        .foregroundStyle(.black)
+                    }
+                } else if let error = viewModel.errorMessage, viewModel.results.isEmpty {
+                    ContentUnavailableView("Could not load media", systemImage: "exclamationmark.triangle", description: Text(error))
+                } else if viewModel.results.isEmpty, viewModel.isOnMyServices {
+                    ContentUnavailableView(
+                        "Nothing streaming on your services",
+                        systemImage: "play.tv",
+                        description: Text("Turn off On my services to see everything.")
+                    )
+                } else if viewModel.results.isEmpty {
+                    ContentUnavailableView("No results", systemImage: "square.grid.2x2", description: Text("Try another media detail pill."))
+                } else {
+                    ScrollView {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 10) {
+                            ForEach(viewModel.results) { media in
+                                Button {
+                                    selectedMedia = MediaBrowsingSelection(
+                                        ref: media.ref,
+                                        within: viewModel.results.map(\.ref)
+                                    )
+                                } label: {
+                                    MediaArtwork(
+                                        url: media.displayPosterURL,
+                                        title: media.title,
+                                        slot: .tagGrid,
+                                        mediaType: media.ref.mediaType,
+                                        orientation: media.posterOrientation
+                                    )
+                                    .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("View \(media.title)")
+                                .prefetchingArtwork(after: media, in: viewModel.results) { $0.artworkRequest(slot: .tagGrid) }
+                                .task {
+                                    await viewModel.loadNextPageIfNeeded(currentItem: media)
                                 }
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 14)
                         }
-                    }
-                }
-                .spineContentTransition(value: contentPhase)
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    if viewModel.request.supportsServiceFilter {
-                        serviceFilterBar
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 14)
                     }
                 }
             }
-            .navigationTitle(viewModel.request.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    MediaDiscoverBackButton {
-                        dismiss()
-                    }
+            .spineContentTransition(value: contentPhase)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if viewModel.request.supportsServiceFilter {
+                    serviceFilterBar
                 }
             }
-            .task {
-                if viewModel.results.isEmpty {
-                    await viewModel.load()
+        }
+        .navigationTitle(viewModel.request.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                MediaDiscoverBackButton {
+                    dismiss()
                 }
             }
-            .sheet(isPresented: $isChoosingStreamingServices) {
-                StreamingServicesSheet(repository: streamingRepository, onUnauthorized: onUnauthorized)
+        }
+        .task {
+            if viewModel.results.isEmpty {
+                await viewModel.load()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
-                guard viewModel.isOnMyServices else { return }
-                Task { await viewModel.load() }
-            }
+        }
+        .sheet(isPresented: $isChoosingStreamingServices) {
+            StreamingServicesSheet(repository: streamingRepository, onUnauthorized: onUnauthorized)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+            guard viewModel.isOnMyServices else { return }
+            Task { await viewModel.load() }
         }
         .background(Color.black)
-        .offset(x: edgeDragOffset)
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 28)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
-        .fullScreenCover(item: $selectedMedia, onDismiss: { selectedMedia = nil }) { selection in
+        .pushDestination(item: $selectedMedia) { selection in
             MediaDetailView(
                 ref: selection.ref,
                 browsingContext: selection.context,
@@ -321,6 +312,7 @@ struct MediaDiscoverView: View {
                 onUnauthorized: onUnauthorized
             )
         }
+        .navigationPage(.exploring)
     }
 
     private var contentPhase: SpineContentPhase {
@@ -361,23 +353,6 @@ struct MediaDiscoverView: View {
             .padding(.vertical, 6)
         }
         .background(Color.black)
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
     }
 }
 

@@ -44,7 +44,7 @@ struct StatsListProgressListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .environment(\.colorScheme, .dark)
-        .toolbar(.hidden, for: .tabBar)
+        .navigationPage(.page)
         .navigationDestination(item: $route) { route in
             StatsRouteDestination(route: route, services: services)
         }

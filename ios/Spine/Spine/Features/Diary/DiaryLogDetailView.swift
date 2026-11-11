@@ -178,7 +178,6 @@ struct DiaryLogDetailView: View {
     @State private var presentedRef: MediaRef?
     @State private var isEditing = false
     @State private var isDeleteConfirmationPresented = false
-    @State private var edgeDragOffset: CGFloat = 0
     @State private var topSafeAreaInset: CGFloat = 0
     @FocusState private var isCommentFocused: Bool
 
@@ -295,14 +294,6 @@ struct DiaryLogDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
-        // Inside the bar's inset, so the swipe's edge doesn't cover the heart, and it ends where the favorite's play
-        // circle starts: 16 of page inset and 8 of button padding.
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 24)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
         .safeAreaBar(edge: .bottom) {
             if viewModel.entry != nil {
                 PostCommentBar(model: viewModel.engagement, isFocused: $isCommentFocused)
@@ -310,9 +301,6 @@ struct DiaryLogDetailView: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeAreaInset = $0 }
         .navigationBarBackButtonHidden()
-        .toolbar(.hidden, for: .tabBar)
-        .dismissExplorationOnReturnHome()
-        .offset(x: edgeDragOffset)
         .task {
             if viewModel.entry == nil {
                 await viewModel.load()
@@ -331,7 +319,7 @@ struct DiaryLogDetailView: View {
         .onDisappear {
             songPreview.close()
         }
-        .fullScreenCover(item: $presentedRef) { ref in
+        .pushDestination(item: $presentedRef) { ref in
             mediaDestination(ref)
         }
         .sheet(isPresented: $isEditing) {
@@ -372,6 +360,8 @@ struct DiaryLogDetailView: View {
                  ? "A direct or older completion also deletes its playthrough and all progress. Deleting the current tracked completion reopens it with latest progress. This cannot be undone."
                  : "This cannot be undone.")
         }
+        .navigationPage(.post)
+        .dismissExplorationOnReturnHome()
     }
 
     private var canManageEntry: Bool {
@@ -385,23 +375,6 @@ struct DiaryLogDetailView: View {
             hasContent: viewModel.entry != nil,
             hasError: viewModel.errorMessage != nil
         )
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
     }
 
     /// The art behind the whole page: the log's own poster, which the title's details never replace, so the page does
@@ -701,32 +674,6 @@ struct DiaryLogDetailView: View {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-}
-
-struct DiaryLogDetailNavigationCover: View {
-    let entryId: Int
-    let diaryRepository: DiaryRepository
-    let mediaRepository: MediaRepository
-    let trackingRepository: TrackingRepository
-    let currentUserId: Int?
-    let selectedTab: AppTab
-    let onSelectTab: (AppTab) -> Void
-    let onUnauthorized: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            DiaryLogDetailView(
-                entryId: entryId,
-                diaryRepository: diaryRepository,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                currentUserId: currentUserId,
-                selectedTab: selectedTab,
-                onSelectTab: onSelectTab,
-                onUnauthorized: onUnauthorized
-            )
-        }
     }
 }
 

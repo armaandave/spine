@@ -643,20 +643,21 @@ struct LibraryView: View {
                     await viewModel.reload()
                 }
             }
-        }
-        .fullScreenCover(item: $selectedGridMedia, onDismiss: { selectedGridMedia = nil }) { selection in
-            MediaDetailView(
-                ref: selection.ref,
-                browsingContext: selection.context,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                diaryRepository: diaryRepository,
-                listRepository: listRepository,
-                currentUserId: currentUserId,
-                selectedTab: selectedTab,
-                onSelectTab: onSelectTab,
-                onUnauthorized: onUnauthorized
-            )
+            .pushDestination(item: $selectedGridMedia) { selection in
+                MediaDetailView(
+                    ref: selection.ref,
+                    browsingContext: selection.context,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    diaryRepository: diaryRepository,
+                    listRepository: listRepository,
+                    currentUserId: currentUserId,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            }
+            .navigationPage(.root)
         }
     }
 

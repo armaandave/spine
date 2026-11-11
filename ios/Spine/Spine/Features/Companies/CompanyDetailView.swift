@@ -268,7 +268,6 @@ struct CompanyDetailView: View {
     @State private var expandedRoles = Set<CompanyCatalogRole>()
     @State private var selectedMedia: MediaBrowsingSelection?
     @State private var selectedCompany: CompanyRef?
-    @State private var edgeDragOffset: CGFloat = 0
 
     private let ref: CompanyRef
     private let companyRepository: CompanyRepository
@@ -322,29 +321,8 @@ struct CompanyDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
         }
-        .toolbar(.hidden, for: .tabBar)
         .navigationBarBackButtonHidden()
-        .dismissExplorationOnReturnHome()
-        .offset(x: edgeDragOffset)
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 28)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
-        .overlay(alignment: .bottomLeading) {
-            if selectedTab == .search {
-                ExplorationSearchButton()
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            ExplorationHomeButton()
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-        }
-        .fullScreenCover(item: $selectedMedia) { selection in
+        .pushDestination(item: $selectedMedia) { selection in
             MediaDetailView(
                 ref: selection.ref,
                 browsingContext: selection.context,
@@ -359,7 +337,7 @@ struct CompanyDetailView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $selectedCompany) { ref in
+        .pushDestination(item: $selectedCompany) { ref in
             CompanyDetailView(
                 ref: ref,
                 companyRepository: companyRepository,
@@ -389,23 +367,8 @@ struct CompanyDetailView: View {
             // In place: a title marked from this page mustn't cut its catalog back to the first page.
             Task { await viewModel.refreshLoadedCatalogs(for: affectedRoles) }
         }
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
+        .navigationPage(.exploring)
+        .dismissExplorationOnReturnHome()
     }
 
     @ViewBuilder

@@ -221,6 +221,9 @@ struct AppShellView: View {
         .onChange(of: appNavigationState.returnHomeRequest) {
             selectedTab = .home
         }
+        .onChange(of: selectedTab, initial: true) {
+            appNavigationState.selectedTab = selectedTab
+        }
         .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
             guard let profile = notification.userInfo?["profile"] as? UserProfile else { return }
             session.profileDidUpdate(profile)

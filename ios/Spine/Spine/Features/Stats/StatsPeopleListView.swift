@@ -43,7 +43,6 @@ struct StatsPeopleListView: View {
     let services: StatsRouteServices
 
     @State private var pushedRoute: StatsRoute?
-    @State private var coverRoute: StatsRoute?
 
     init(
         viewModel: StatsPeoplePageModel,
@@ -83,16 +82,13 @@ struct StatsPeopleListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .environment(\.colorScheme, .dark)
-        .toolbar(.hidden, for: .tabBar)
+        .navigationPage(.page)
         .task {
             if viewModel.items.isEmpty, viewModel.errorMessage == nil {
                 await viewModel.load()
             }
         }
         .navigationDestination(item: $pushedRoute) { route in
-            StatsRouteDestination(route: route, services: services)
-        }
-        .fullScreenCover(item: $coverRoute) { route in
             StatsRouteDestination(route: route, services: services)
         }
     }
@@ -176,11 +172,7 @@ struct StatsPeopleListView: View {
         Group {
             if let route {
                 Button {
-                    if route.presentsFullScreen {
-                        coverRoute = route
-                    } else {
-                        pushedRoute = route
-                    }
+                    pushedRoute = route
                 } label: {
                     personRowContent(row, showsChevron: true, isLast: isLast)
                 }

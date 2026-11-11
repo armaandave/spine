@@ -256,6 +256,7 @@ struct TaggedListsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .customListsDidChange)) { _ in
             Task { await viewModel.load() }
         }
+        .navigationPage(.page)
     }
 
     private var contentPhase: SpineContentPhase {

@@ -164,7 +164,6 @@ final class StatsPeopleTests: XCTestCase {
         let nolan = row("Christopher Nolan", titles: 9).person
         let route = StatsDrillDown.person(nolan, role: "director").route(in: theirsMovies2025)
         XCTAssertEqual(route, .person(nolan.ref))
-        XCTAssertEqual(route?.presentsFullScreen, true)
 
         let author = StatsPerson(ref: PersonRef(source: "hardcover", id: "77"), name: "Ursula K. Le Guin", imageUrl: nil)
         XCTAssertNil(StatsDrillDown.person(author, role: "author").route(in: theirsMovies2025))

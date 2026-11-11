@@ -42,7 +42,7 @@ struct UpNextView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .navigationPage(.page)
         .task {
             // Home's copy is shown at once; this brings it up to date.
             await model.load()

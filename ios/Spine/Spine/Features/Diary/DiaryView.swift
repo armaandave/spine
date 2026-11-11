@@ -299,7 +299,6 @@ final class DiaryViewModel {
 struct MediaDiaryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: DiaryViewModel
-    @State private var edgeDragOffset: CGFloat = 0
 
     private let title: String
     private let artworkOverride: DiaryEntryArtworkOverride
@@ -341,111 +340,85 @@ struct MediaDiaryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                SpinePageBackground()
+        ZStack {
+            SpinePageBackground()
 
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        header
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    header
 
-                        Group {
-                            if viewModel.isBootstrapping || (viewModel.isLoading && viewModel.entries.isEmpty) {
-                                ProgressView()
-                                    .tint(.white)
-                                    .frame(maxWidth: .infinity, minHeight: 320)
-                            } else if let error = viewModel.errorMessage, viewModel.entries.isEmpty {
-                                DiaryStateCard(
-                                    title: "Could not load logs",
-                                    systemImage: "exclamationmark.triangle",
-                                    message: error
+                    Group {
+                        if viewModel.isBootstrapping || (viewModel.isLoading && viewModel.entries.isEmpty) {
+                            ProgressView()
+                                .tint(.white)
+                                .frame(maxWidth: .infinity, minHeight: 320)
+                        } else if let error = viewModel.errorMessage, viewModel.entries.isEmpty {
+                            DiaryStateCard(
+                                title: "Could not load logs",
+                                systemImage: "exclamationmark.triangle",
+                                message: error
+                            )
+                        } else if viewModel.entries.isEmpty {
+                            DiaryStateCard(
+                                title: "No logs",
+                                systemImage: "calendar",
+                                message: "Logs for this media will appear here."
+                            )
+                        } else {
+                            DiaryEntryList(entries: viewModel.entries, artworkOverride: artworkOverride) { entry in
+                                DiaryLogDetailView(
+                                    entryId: entry.id,
+                                    diaryRepository: diaryRepository,
+                                    mediaRepository: mediaRepository,
+                                    trackingRepository: trackingRepository,
+                                    currentUserId: currentUserId,
+                                    selectedTab: selectedTab,
+                                    onSelectTab: onSelectTab,
+                                    onUnauthorized: onUnauthorized
                                 )
-                            } else if viewModel.entries.isEmpty {
-                                DiaryStateCard(
-                                    title: "No logs",
-                                    systemImage: "calendar",
-                                    message: "Logs for this media will appear here."
-                                )
-                            } else {
-                                DiaryEntryList(entries: viewModel.entries, artworkOverride: artworkOverride) { entry in
-                                    DiaryLogDetailView(
-                                        entryId: entry.id,
-                                        diaryRepository: diaryRepository,
-                                        mediaRepository: mediaRepository,
-                                        trackingRepository: trackingRepository,
-                                        currentUserId: currentUserId,
-                                        selectedTab: selectedTab,
-                                        onSelectTab: onSelectTab,
-                                        onUnauthorized: onUnauthorized
-                                    )
-                                }
-                                paginationFooter
                             }
+                            paginationFooter
                         }
-                        .spineContentTransition(value: contentPhase)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 18)
-                    .padding(.bottom, 28)
+                    .spineContentTransition(value: contentPhase)
                 }
-                .diaryPinnedHeaders()
-                .refreshable {
-                    await viewModel.load()
-                }
+                .padding(.horizontal, 14)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
             }
-            .overlay(alignment: .top) {
-                DiaryTopSafeAreaScrim()
-            }
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar(.hidden, for: .navigationBar)
-            .toolbar(.hidden, for: .tabBar)
-            .navigationBarBackButtonHidden()
-            .offset(x: edgeDragOffset)
-            .overlay(alignment: .leading) {
-                Color.clear
-                    .frame(width: 28)
-                    .contentShape(Rectangle())
-                    .gesture(edgeSwipeBackGesture)
-            }
-            .task {
-                await viewModel.loadIfNeeded()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .letterboxdImportDidSucceed)) { _ in
-                Task { await viewModel.load() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
-                Task { await viewModel.load() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .marginsImportDidSucceed)) { _ in
-                Task { await viewModel.load() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
-                Task { await viewModel.load() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .diaryEntriesDidChange)) { _ in
-                Task { await viewModel.refreshLoadedEntries() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
-                Task { await viewModel.refreshLoadedEntries() }
+            .diaryPinnedHeaders()
+            .refreshable {
+                await viewModel.load()
             }
         }
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
+        .overlay(alignment: .top) {
+            DiaryTopSafeAreaScrim()
+        }
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden()
+        .task {
+            await viewModel.loadIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .letterboxdImportDidSucceed)) { _ in
+            Task { await viewModel.load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
+            Task { await viewModel.load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .marginsImportDidSucceed)) { _ in
+            Task { await viewModel.load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
+            Task { await viewModel.load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .diaryEntriesDidChange)) { _ in
+            Task { await viewModel.refreshLoadedEntries() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
+            Task { await viewModel.refreshLoadedEntries() }
+        }
+        .navigationPage(.page)
     }
 
     private var contentPhase: SpineContentPhase {
@@ -643,6 +616,7 @@ struct DiaryView: View {
                     await reloadDiary()
                 }
             }
+            .navigationPage(.root)
         }
     }
 

@@ -127,7 +127,6 @@ struct ProgressPostDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: ProgressPostDetailViewModel
     @State private var presentedRef: MediaRef?
-    @State private var edgeDragOffset: CGFloat = 0
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var isEditing = false
     @State private var isDeleteConfirmationPresented = false
@@ -206,13 +205,6 @@ struct ProgressPostDetailView: View {
 
             topButtons
         }
-        // Inside the bar's inset, so the swipe's edge doesn't cover the heart.
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 28)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
         .safeAreaBar(edge: .bottom) {
             if viewModel.activity != nil {
                 PostCommentBar(model: viewModel.engagement, isFocused: $isCommentFocused)
@@ -222,9 +214,6 @@ struct ProgressPostDetailView: View {
         .navigationBarBackButtonHidden()
         // The buttons are drawn by the page, so no navigation bar adds an inset of its own.
         .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
-        .dismissExplorationOnReturnHome()
-        .offset(x: edgeDragOffset)
         .task {
             if viewModel.activity == nil {
                 await viewModel.load()
@@ -269,7 +258,7 @@ struct ProgressPostDetailView: View {
         } message: {
             Text(viewModel.editor?.deleteErrorMessage ?? "")
         }
-        .fullScreenCover(item: $presentedRef) { ref in
+        .pushDestination(item: $presentedRef) { ref in
             MediaDetailView(
                 ref: ref,
                 mediaRepository: mediaRepository,
@@ -281,6 +270,8 @@ struct ProgressPostDetailView: View {
                 onUnauthorized: onUnauthorized
             )
         }
+        .navigationPage(.post)
+        .dismissExplorationOnReturnHome()
     }
 
     /// Back, and for your own book, manga, comic or game row Edit and Delete (the server says what the page offers,
@@ -342,23 +333,6 @@ struct ProgressPostDetailView: View {
         if viewModel.editor?.didChange == true {
             dismiss()
         }
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
     }
 
     /// The art behind the whole page: the card's own art for the title, which the title's details never replace, so the
@@ -503,35 +477,5 @@ struct ProgressPostDetailView: View {
         // The back button ends 50 pt below the safe area; the artwork starts 18 pt under it, as on a log's page.
         .padding(.top, topSafeAreaInset + 68)
         .padding(.bottom, 4)
-    }
-}
-
-struct ProgressPostNavigationCover: View {
-    let progressId: Int
-    let activityRepository: ActivityRepository
-    let diaryRepository: DiaryRepository
-    let mediaRepository: MediaRepository
-    let trackingRepository: TrackingRepository
-    let currentUserId: Int?
-    let selectedTab: AppTab
-    var feedCard: FeedCardModel? = nil
-    let onSelectTab: (AppTab) -> Void
-    let onUnauthorized: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            ProgressPostDetailView(
-                progressId: progressId,
-                activityRepository: activityRepository,
-                diaryRepository: diaryRepository,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                currentUserId: currentUserId,
-                selectedTab: selectedTab,
-                feedCard: feedCard,
-                onSelectTab: onSelectTab,
-                onUnauthorized: onUnauthorized
-            )
-        }
     }
 }

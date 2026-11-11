@@ -798,8 +798,7 @@ struct HomeView: View {
                     Task { await viewModel.loadInProgress(forceToday: true) }
                 }
             }
-            .fullScreenCover(item: $selectedRef, onDismiss: {
-                selectedRef = nil
+            .pushDestination(item: $selectedRef, onDismiss: {
                 selectedEpisodes = nil
                 selectedHandoff = nil
             }) { ref in
@@ -818,7 +817,7 @@ struct HomeView: View {
                     railHandoff: selectedHandoff
                 )
             }
-            .fullScreenCover(item: $selectedPerson, onDismiss: { selectedPerson = nil }) { ref in
+            .pushDestination(item: $selectedPerson) { ref in
                 PersonDetailView(
                     ref: ref,
                     peopleRepository: peopleRepository,
@@ -864,29 +863,26 @@ struct HomeView: View {
                     viewModel.topArt.applySitePicture(response)
                 }
             }
-            .fullScreenCover(item: $selectedPlanning, onDismiss: { selectedPlanning = nil }) { activity in
+            .pushDestination(item: $selectedPlanning) { activity in
                 if let planning = activity.planning {
-                    NavigationStack {
-                        PlanningTitlesView(
-                            activity: activity,
-                            planning: planning,
-                            activityRepository: activityRepository,
-                            diaryRepository: diaryRepository,
-                            mediaRepository: mediaRepository,
-                            trackingRepository: trackingRepository,
-                            currentUserId: currentUserId,
-                            selectedTab: selectedTab,
-                            onSelectTab: onSelectTab,
-                            onUnauthorized: onUnauthorized,
-                            onClose: { selectedPlanning = nil }
-                        )
-                    }
+                    PlanningTitlesView(
+                        activity: activity,
+                        planning: planning,
+                        activityRepository: activityRepository,
+                        diaryRepository: diaryRepository,
+                        mediaRepository: mediaRepository,
+                        trackingRepository: trackingRepository,
+                        currentUserId: currentUserId,
+                        selectedTab: selectedTab,
+                        onSelectTab: onSelectTab,
+                        onUnauthorized: onUnauthorized
+                    )
                 }
             }
-            .fullScreenCover(item: $selectedPost, onDismiss: { selectedPost = nil }) { selection in
+            .pushDestination(item: $selectedPost) { selection in
                 switch selection.post {
                 case let .log(id):
-                    DiaryLogDetailNavigationCover(
+                    DiaryLogDetailView(
                         entryId: id,
                         diaryRepository: diaryRepository,
                         mediaRepository: mediaRepository,
@@ -897,7 +893,7 @@ struct HomeView: View {
                         onUnauthorized: onUnauthorized
                     )
                 case let .progress(id):
-                    ProgressPostNavigationCover(
+                    ProgressPostDetailView(
                         progressId: id,
                         activityRepository: activityRepository,
                         diaryRepository: diaryRepository,
@@ -911,6 +907,7 @@ struct HomeView: View {
                     )
                 }
             }
+            .navigationPage(.root)
         }
     }
 

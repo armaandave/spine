@@ -2232,7 +2232,9 @@ struct MediaDetailView: View {
                 .zIndex(100)
             }
         }
-        .toolbar(.hidden, for: .tabBar)
+        // The page draws its own Home and Search buttons beside its rail. A poster opened full screen takes the
+        // swipes until it closes.
+        .navigationPage(.exploring, showsExplorationButtons: false, allowsSwipeBack: presentedPoster == nil)
         .dismissExplorationOnReturnHome()
     }
 
@@ -2373,7 +2375,6 @@ private struct MediaDetailPageView: View {
     @State private var isLikeAlertPresented = false
     @State private var showsTitleLogo = true
     @State private var topSafeAreaInset: CGFloat = 0
-    @State private var edgeDragOffset: CGFloat = 0
     @State private var ratingPicker = MediaRatingPickerState()
     @State private var albumBackdropTint: Color?
     @State private var didRunRailHandoff = false
@@ -2503,15 +2504,6 @@ private struct MediaDetailPageView: View {
             }
         }
         .navigationBarBackButtonHidden()
-        .offset(x: edgeDragOffset)
-        .overlay(alignment: .leading) {
-            if presentedPosterID == nil {
-                Color.clear
-                    .frame(width: 28)
-                    .contentShape(Rectangle())
-                    .gesture(edgeSwipeBackGesture)
-            }
-        }
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: TopSafeAreaInsetKey.self, value: proxy.safeAreaInsets.top)
@@ -2825,7 +2817,7 @@ private struct MediaDetailPageView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $isReviewsPresented) {
+        .pushDestination(isPresented: $isReviewsPresented) {
             if let detail = viewModel.detail {
                 MediaReviewsView(
                     detail: detail,
@@ -2834,7 +2826,7 @@ private struct MediaDetailPageView: View {
                 )
             }
         }
-        .fullScreenCover(isPresented: $isAniListReviewsPresented) {
+        .pushDestination(isPresented: $isAniListReviewsPresented) {
             if let detail = viewModel.detail {
                 AniListReviewsView(
                     detail: detail,
@@ -2842,7 +2834,7 @@ private struct MediaDetailPageView: View {
                 )
             }
         }
-        .fullScreenCover(item: $presentedRef) { ref in
+        .pushDestination(item: $presentedRef) { ref in
             MediaDetailView(
                 ref: ref,
                 mediaRepository: mediaRepository,
@@ -2858,7 +2850,7 @@ private struct MediaDetailPageView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedMediaSelection) { selection in
+        .pushDestination(item: $presentedMediaSelection) { selection in
             MediaDetailView(
                 ref: selection.ref,
                 browsingContext: selection.context,
@@ -2878,7 +2870,7 @@ private struct MediaDetailPageView: View {
                 }
             )
         }
-        .fullScreenCover(item: $presentedPerson) { person in
+        .pushDestination(item: $presentedPerson) { person in
             PersonDetailView(
                 ref: person,
                 peopleRepository: peopleRepository,
@@ -2892,7 +2884,7 @@ private struct MediaDetailPageView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedCompany) { company in
+        .pushDestination(item: $presentedCompany) { company in
             CompanyDetailView(
                 ref: company,
                 companyRepository: companyRepository,
@@ -2907,8 +2899,8 @@ private struct MediaDetailPageView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedDiaryEntry) { entry in
-            DiaryLogDetailNavigationCover(
+        .pushDestination(item: $presentedDiaryEntry) { entry in
+            DiaryLogDetailView(
                 entryId: entry.id,
                 diaryRepository: diaryRepository,
                 mediaRepository: mediaRepository,
@@ -2920,12 +2912,10 @@ private struct MediaDetailPageView: View {
             )
         }
         // A profile can unfollow or block, which takes them off this page.
-        .fullScreenCover(item: $presentedFriend, onDismiss: reloadFriends) { friend in
-            NavigationStack {
-                UserProfileDestination(username: friend.username)
-            }
+        .pushDestination(item: $presentedFriend, onDismiss: reloadFriends) { friend in
+            UserProfileDestination(username: friend.username)
         }
-        .fullScreenCover(isPresented: $isFriendsListPresented) {
+        .pushDestination(isPresented: $isFriendsListPresented) {
             if let detail = viewModel.detail {
                 MediaFriendsListView(
                     detail: detail,
@@ -2941,7 +2931,7 @@ private struct MediaDetailPageView: View {
                 )
             }
         }
-        .fullScreenCover(item: $presentedMediaDiary) { diary in
+        .pushDestination(item: $presentedMediaDiary) { diary in
             if let itemId = diary.detail.ref.itemId {
                 MediaDiaryView(
                     title: diary.title,
@@ -2958,7 +2948,7 @@ private struct MediaDetailPageView: View {
                 )
             }
         }
-        .fullScreenCover(item: $presentedDiscover) { request in
+        .pushDestination(item: $presentedDiscover) { request in
             MediaDiscoverView(
                 request: request,
                 mediaRepository: mediaRepository,
@@ -2971,7 +2961,7 @@ private struct MediaDetailPageView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedSeries) { series in
+        .pushDestination(item: $presentedSeries) { series in
             SeriesDetailView(
                 ref: series,
                 mediaRepository: mediaRepository,
@@ -2985,7 +2975,7 @@ private struct MediaDetailPageView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedSong) { selection in
+        .pushDestination(item: $presentedSong) { selection in
             SongDetailView(
                 selection: selection,
                 musicRepository: musicRepository,
@@ -3085,23 +3075,6 @@ private struct MediaDetailPageView: View {
         pendingLogoSave = nil
         viewModel.applyLogoSave(response)
         showsTitleLogo = true
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
     }
 
     private var topButtons: some View {
@@ -7821,13 +7794,17 @@ private struct MediaReviewsView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             header
         }
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.loadInitial()
         }
+        .navigationPage(.page)
     }
 
     private var header: some View {
         HStack(spacing: 12) {
+            PageHeaderBackButton { dismiss() }
+
             reviewPoster
                 .frame(width: 40, height: 58)
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
@@ -7843,18 +7820,6 @@ private struct MediaReviewsView: View {
             }
 
             Spacer()
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(.white.opacity(0.06), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close reviews")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -8091,13 +8056,18 @@ private struct AniListReviewsView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             doneButton
         }
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.loadInitial()
         }
+        // Its Done button takes the bottom.
+        .navigationPage(.page, showsExplorationButtons: false)
     }
 
     private var header: some View {
         HStack(spacing: 12) {
+            PageHeaderBackButton { dismiss() }
+
             reviewPoster
                 .frame(width: 40, height: 58)
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
@@ -8113,18 +8083,6 @@ private struct AniListReviewsView: View {
             }
 
             Spacer()
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(.white.opacity(0.06), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close AniList reviews")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

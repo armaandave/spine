@@ -4,6 +4,8 @@ import SwiftUI
 final class AppNavigationState {
     private(set) var returnHomeRequest = 0
     private(set) var returnToSearchRequest = 0
+    /// The tab on screen, so a page can show the Search button only in the Search tab.
+    var selectedTab: AppTab = .home
 
     func returnHome() {
         returnHomeRequest += 1

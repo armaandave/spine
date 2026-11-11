@@ -73,11 +73,9 @@ enum MusicSongPresentation {
 
 struct SongDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: SongDetailViewModel
     @State private var selectedAlbum: MediaRef?
     @State private var presentedPerson: PersonRef?
-    @State private var edgeDragOffset: CGFloat = 0
 
     private let selection: MusicSongSelection
     private let musicRepository: MusicRepository
@@ -134,29 +132,8 @@ struct SongDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
         }
-        .toolbar(.hidden, for: .tabBar)
         .navigationBarBackButtonHidden()
-        .dismissExplorationOnReturnHome()
-        .offset(x: edgeDragOffset)
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 28)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
-        .overlay(alignment: .bottomLeading) {
-            if selectedTab == .search {
-                ExplorationSearchButton()
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            ExplorationHomeButton()
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-        }
-        .fullScreenCover(item: $selectedAlbum) { ref in
+        .pushDestination(item: $selectedAlbum) { ref in
             MediaDetailView(
                 ref: ref,
                 mediaRepository: mediaRepository,
@@ -172,7 +149,7 @@ struct SongDetailView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedPerson) { person in
+        .pushDestination(item: $presentedPerson) { person in
             PersonDetailView(
                 ref: person,
                 peopleRepository: peopleRepository,
@@ -191,23 +168,8 @@ struct SongDetailView: View {
                 await viewModel.load()
             }
         }
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
+        .navigationPage(.exploring)
+        .dismissExplorationOnReturnHome()
     }
 
     @ViewBuilder

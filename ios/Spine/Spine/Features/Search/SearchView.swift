@@ -237,36 +237,35 @@ private struct SearchViewContainer: View {
             findPeopleRequest: findPeopleRequest,
             onUnauthorized: onUnauthorized,
             onFeaturedList: { selectedFeaturedList = $0 },
-            onSelect: { selectedRef = $0.ref }
+            onSelect: { selectedRef = $0.ref },
+            isShowingPage: selectedRef != nil || selectedFeaturedList != nil,
+            rootDestinations: { root in AnyView(destinations(root)) }
         )
         .environment(\.featuredZoomNamespace, featuredZoom)
         .onChange(of: appNavigationState?.returnToSearchRequest) {
             focusesSearchOnDismiss = true
         }
-        .fullScreenCover(item: $selectedRef, onDismiss: {
-            selectedRef = nil
-            focusSearchIfReturning()
-        }) { ref in
-            MediaDetailCover(
-                ref: ref,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                diaryRepository: diaryRepository,
-                listRepository: listRepository,
-                peopleRepository: peopleRepository,
-                currentUserId: currentUserId,
-                selectedTab: selectedTab,
-                onSelectTab: onSelectTab,
-                onUnauthorized: onUnauthorized
-            )
-        }
-        .fullScreenCover(item: $selectedFeaturedList, onDismiss: {
-            selectedFeaturedList = nil
-            focusSearchIfReturning()
-        }) { selection in
-            let repositories = AppRepositories.current()
-            // A stack of its own, so the list's tag and owner links can push their pages.
-            NavigationStack {
+    }
+
+    /// The pages Search opens, pushed on its stack (`SearchViewContent` puts these on the stack's first page).
+    private func destinations(_ root: AnyView) -> some View {
+        root
+            .pushDestination(item: $selectedRef, onDismiss: focusSearchIfReturning) { ref in
+                MediaDetailCover(
+                    ref: ref,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    diaryRepository: diaryRepository,
+                    listRepository: listRepository,
+                    peopleRepository: peopleRepository,
+                    currentUserId: currentUserId,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            }
+            .pushDestination(item: $selectedFeaturedList, onDismiss: focusSearchIfReturning) { selection in
+                let repositories = AppRepositories.current()
                 ProfileListDetailView(
                     listId: selection.card.id,
                     featured: selection.card,
@@ -282,12 +281,11 @@ private struct SearchViewContainer: View {
                     onSelectTab: onSelectTab,
                     onUnauthorized: onUnauthorized
                 )
+                .navigationTransition(.zoom(sourceID: selection.id, in: featuredZoom))
             }
-            .navigationTransition(.zoom(sourceID: selection.id, in: featuredZoom))
-        }
     }
 
-    /// Focus only after the cover finishes dismissing, so the search field is on screen.
+    /// Focus only after the page has gone back, so the search field is on screen.
     private func focusSearchIfReturning() {
         guard focusesSearchOnDismiss else { return }
         focusesSearchOnDismiss = false
@@ -295,7 +293,7 @@ private struct SearchViewContainer: View {
     }
 }
 
-/// Thin wrapper so `MediaDetailView` is only constructed when the cover is actually presented.
+/// Thin wrapper so `MediaDetailView` is only constructed when the page is actually opened.
 private struct MediaDetailCover: View {
     let ref: MediaRef
     let mediaRepository: MediaRepository
@@ -476,6 +474,10 @@ private struct SearchViewContent: View {
     let onRemove: (() -> Void)?
     let onFeaturedList: (FeaturedListSelection) -> Void
     let onSelect: (MediaSummary) -> Void
+    /// A title or list opened from here is on screen: the search stays as it was for coming back to it.
+    let isShowingPage: Bool
+    /// Adds the pages the stack's first page opens (only the Search tab opens any).
+    let rootDestinations: (AnyView) -> AnyView
 
     init(
         mediaRepository: MediaRepository,
@@ -490,7 +492,9 @@ private struct SearchViewContent: View {
         onRemove: (() -> Void)? = nil,
         onUnauthorized: @escaping () -> Void,
         onFeaturedList: @escaping (FeaturedListSelection) -> Void = { _ in },
-        onSelect: @escaping (MediaSummary) -> Void
+        onSelect: @escaping (MediaSummary) -> Void,
+        isShowingPage: Bool = false,
+        rootDestinations: @escaping (AnyView) -> AnyView = { $0 }
     ) {
         _viewModel = State(initialValue: SearchViewModel(
             mediaRepository: mediaRepository,
@@ -511,6 +515,8 @@ private struct SearchViewContent: View {
         self.onRemove = onRemove
         self.onFeaturedList = onFeaturedList
         self.onSelect = onSelect
+        self.isShowingPage = isShowingPage
+        self.rootDestinations = rootDestinations
     }
 
     var body: some View {
@@ -629,13 +635,17 @@ private struct SearchViewContent: View {
                     Task { await searchCurrentQuery(mediaType: selectedSearchType) }
                 }
                 .onDisappear {
-                    isSearchActive = false
+                    if !isShowingPage {
+                        isSearchActive = false
+                    }
                 }
                 .task(id: draftText) {
                     try? await Task.sleep(for: .milliseconds(300))
                     guard !Task.isCancelled else { return }
                     await viewModel.search(draftText, mediaType: selectedSearchType)
                 }
+                .modifier(RootDestinations(add: rootDestinations))
+                .navigationPage(.root)
             }
             .background(Color.black)
         }
@@ -709,6 +719,14 @@ private struct SearchViewContent: View {
             recentMediaData = string
             loadRecentMedia()
         }
+    }
+}
+
+private struct RootDestinations: ViewModifier {
+    let add: (AnyView) -> AnyView
+
+    func body(content: Content) -> some View {
+        add(AnyView(content))
     }
 }
 

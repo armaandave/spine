@@ -68,7 +68,7 @@ struct FilteredDiaryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .navigationPage(.page)
         .task {
             await viewModel.loadIfNeeded()
         }

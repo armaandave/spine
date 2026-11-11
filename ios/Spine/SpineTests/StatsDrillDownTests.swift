@@ -349,7 +349,6 @@ final class StatsDrillDownTests: XCTestCase {
         let route = StatsDrillDown.title(movie, within: [movie.ref, other.ref]).route(in: theirsGlobal2025)
 
         XCTAssertEqual(route, .title(MediaBrowsingSelection(ref: movie.ref, within: [movie.ref, other.ref])))
-        XCTAssertEqual(route?.presentsFullScreen, true)
     }
 
     func testATitleWithoutAnItemOpensTheTitlePageEvenOnYourOwnStats() {
@@ -372,7 +371,6 @@ final class StatsDrillDownTests: XCTestCase {
 
     func testListsAndCollectionsOpenForEveryone() throws {
         XCTAssertEqual(StatsDrillDown.list(id: 81).route(in: theirsGlobal2025), .list(id: 81))
-        XCTAssertEqual(StatsDrillDown.list(id: 81).route(in: ownGlobal2025)?.presentsFullScreen, false)
 
         let series = try JSONDecoder.api.decode(MediaSeriesSummary.self, from: Data("""
         {"id": "119", "source": "tmdb", "media_type": "movie", "name": "The Lord of the Rings Collection",
@@ -380,7 +378,6 @@ final class StatsDrillDownTests: XCTestCase {
         """.utf8))
         let route = StatsDrillDown.collection(series).route(in: theirsGlobal2025)
         XCTAssertEqual(route, .series(SeriesRef(source: "tmdb", id: "119", mediaType: "movie")))
-        XCTAssertEqual(route?.presentsFullScreen, true)
     }
 
     // MARK: - Helpers

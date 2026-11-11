@@ -306,8 +306,7 @@ enum StatsDrillDown: Hashable {
     }
 }
 
-/// A screen a stats tap opens. Series and title pages bring their own navigation, so they present
-/// full screen; the rest push onto the Stats navigation stack.
+/// A screen a stats tap opens, pushed onto the Stats navigation stack.
 enum StatsRoute: Hashable, Identifiable {
     case diary(StatsDrillDown, StatsDrillDownContext)
     case log(entryId: Int)
@@ -318,13 +317,6 @@ enum StatsRoute: Hashable, Identifiable {
     case activity(StatsDrillDown, StatsDrillDownContext)
 
     var id: Self { self }
-
-    var presentsFullScreen: Bool {
-        switch self {
-        case .series, .title, .person: true
-        case .diary, .log, .list, .activity: false
-        }
-    }
 }
 
 /// What the stats screens need to open their routes.
@@ -342,8 +334,7 @@ struct StatsRouteServices {
     var onUnauthorized: () -> Void = {}
 }
 
-/// The screen for a route: use it in `navigationDestination(item:)` for pushed routes and in
-/// `fullScreenCover(item:)` for `presentsFullScreen` ones.
+/// The screen for a route, for `navigationDestination(item:)`.
 struct StatsRouteDestination: View {
     let route: StatsRoute
     let services: StatsRouteServices
