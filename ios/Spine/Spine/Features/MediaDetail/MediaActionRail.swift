@@ -18,6 +18,9 @@ struct RailCenterButton {
     let identifier: String
     /// The icon's color. Nil is white.
     var tint: Color? = nil
+    /// Keeps the icon out of sight (its place stays, and it takes no taps) until its color is known, so it never shows
+    /// white and then turns. It fades in when this goes false.
+    var isIconHidden = false
     let action: () -> Void
 }
 
@@ -180,6 +183,13 @@ struct ActionRail: View {
                     identifier: center.identifier,
                     action: { handleCenter(center) }
                 )
+                // Only the opacity animates, and only coming in: going out is instant, so the old color never fades
+                // out as white, and the new color arrives already set.
+                .animation(center.isIconHidden || reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                    $0.opacity(center.isIconHidden ? 0 : 1)
+                }
+                .allowsHitTesting(!center.isIconHidden)
+                .accessibilityHidden(center.isIconHidden)
             }
             if showsRating {
                 let isFilled = isRatingFilled ?? (ratingPicker.confirmedHalfSteps > 0)
