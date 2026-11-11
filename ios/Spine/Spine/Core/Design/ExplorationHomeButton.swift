@@ -6,6 +6,8 @@ final class AppNavigationState {
     private(set) var returnToSearchRequest = 0
     /// The tab on screen, so a page can show the Search button only in the Search tab.
     var selectedTab: AppTab = .home
+    /// The tab on screen was tapped again (`navigationPage(.root)` takes it back to its first page, or up to its top).
+    private(set) var tabReselectRequest = 0
 
     func returnHome() {
         returnHomeRequest += 1
@@ -13,6 +15,10 @@ final class AppNavigationState {
 
     func returnToSearch() {
         returnToSearchRequest += 1
+    }
+
+    func reselectTab() {
+        tabReselectRequest += 1
     }
 }
 

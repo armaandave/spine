@@ -20,15 +20,20 @@ extension View {
     /// floating Home and Search buttons while exploring. Apply it last, outside the page's `pushDestination`s, so the
     /// pages they open are opened while exploring too. `allowsSwipeBack` is false while something over the page
     /// (a poster opened full screen) takes swipes itself.
+    ///
+    /// On a tab's first page (`.root`), tapping the tab again goes back to that page; tapped again there, the page
+    /// scrolls to its top and `onTabReselect` runs (Search puts the cursor in its search box).
     func navigationPage(
         _ kind: PageKind,
         showsExplorationButtons: Bool = true,
-        allowsSwipeBack: Bool = true
+        allowsSwipeBack: Bool = true,
+        onTabReselect: (() -> Void)? = nil
     ) -> some View {
         modifier(NavigationPageModifier(
             kind: kind,
             showsExplorationButtons: showsExplorationButtons,
-            allowsSwipeBack: allowsSwipeBack
+            allowsSwipeBack: allowsSwipeBack,
+            onTabReselect: onTabReselect
         ))
     }
 
@@ -112,6 +117,7 @@ private struct NavigationPageModifier: ViewModifier {
     let kind: PageKind
     let showsExplorationButtons: Bool
     let allowsSwipeBack: Bool
+    let onTabReselect: (() -> Void)?
 
     func body(content: Content) -> some View {
         let isExploring = kind == .exploring || (kind != .root && openedWhileExploring)
@@ -156,6 +162,11 @@ private struct NavigationPageModifier: ViewModifier {
                     page.closeTrail(animated: true)
                 }
             }
+            .onChange(of: appNavigationState?.tabReselectRequest) { _, request in
+                if request != nil, kind == .root {
+                    page.reselectTab(atFirstPage: onTabReselect)
+                }
+            }
             .environment(\.isExploring, isExploring || kind == .post)
     }
 
@@ -186,6 +197,63 @@ private final class PageController {
               index > 0
         else { return }
         navigationController.popToViewController(navigationController.viewControllers[index - 1], animated: animated)
+    }
+
+    /// The tab this first page belongs to was tapped while on screen: back to this page, or, already here, up to its
+    /// top. Other tabs' first pages hear the same tap and do nothing.
+    func reselectTab(atFirstPage: (() -> Void)?) {
+        guard let controller,
+              let tabBarController = controller.tabBarController,
+              let selected = tabBarController.selectedViewController,
+              Self.isInside(controller, selected),
+              let navigationController = controller.navigationController
+        else { return }
+        if navigationController.viewControllers.count > 1 {
+            navigationController.popToRootViewController(animated: true)
+            return
+        }
+        if let scrollView = Self.pageScrollView(in: navigationController.viewControllers.first?.view) {
+            let top = CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top)
+            scrollView.setContentOffset(top, animated: true)
+        }
+        atFirstPage?()
+    }
+
+    private static func isInside(_ controller: UIViewController, _ ancestor: UIViewController) -> Bool {
+        var current: UIViewController? = controller
+        while let candidate = current {
+            if candidate === ancestor { return true }
+            current = candidate.parent
+        }
+        return false
+    }
+
+    /// The page's main scroll view: the largest one on screen that scrolls up and down (not a sideways row, and not
+    /// one the page keeps faded out, like the Diary's month index).
+    private static func pageScrollView(in view: UIView?) -> UIScrollView? {
+        guard let view else { return nil }
+        var found: [UIScrollView] = []
+        var queue = [view]
+        while !queue.isEmpty {
+            let next = queue.removeFirst()
+            if let scrollView = next as? UIScrollView,
+               scrollView.contentSize.height + scrollView.adjustedContentInset.top + scrollView.adjustedContentInset.bottom
+                > scrollView.bounds.height + 1,
+               isOnScreen(scrollView) {
+                found.append(scrollView)
+            }
+            queue.append(contentsOf: next.subviews)
+        }
+        return found.max { $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height }
+    }
+
+    private static func isOnScreen(_ view: UIView) -> Bool {
+        var current: UIView? = view
+        while let candidate = current {
+            if candidate.isHidden || candidate.alpha < 0.01 || candidate.layer.opacity < 0.01 { return false }
+            current = candidate.superview
+        }
+        return view.window != nil
     }
 }
 

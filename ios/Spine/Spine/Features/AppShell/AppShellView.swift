@@ -54,8 +54,8 @@ struct AppShellView: View {
         Binding(
             get: { selectedTab },
             set: { tab in
-                if tab == .search, selectedTab == .search {
-                    searchFocusRequest += 1
+                if tab == selectedTab {
+                    appNavigationState.reselectTab()
                 }
                 selectedTab = tab
             }

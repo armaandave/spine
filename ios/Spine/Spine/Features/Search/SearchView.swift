@@ -460,6 +460,8 @@ private struct SearchViewContent: View {
     @State private var featuredStore: FeaturedListsStore?
     @State private var selectedSearchType: String
     @State private var handledFindPeopleRequest = 0
+    /// Tapping Search again on its first page puts the cursor in the box.
+    @State private var reselectFocusRequest = 0
     @AppStorage("recentMedia") private var recentMediaData = "[]"
 
     let mediaLensStore: MediaLensStore
@@ -547,7 +549,7 @@ private struct SearchViewContent: View {
                                 isSearchActive = true
                             }
                         },
-                        focusRequest: focusRequest
+                        focusRequest: focusRequest + reselectFocusRequest
                     )
 
                     Group {
@@ -645,7 +647,7 @@ private struct SearchViewContent: View {
                     await viewModel.search(draftText, mediaType: selectedSearchType)
                 }
                 .modifier(RootDestinations(add: rootDestinations))
-                .navigationPage(.root)
+                .navigationPage(.root) { reselectFocusRequest += 1 }
             }
             .background(Color.black)
         }
