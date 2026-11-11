@@ -683,6 +683,15 @@ final class HomeTilesStateTests: XCTestCase {
         XCTAssertTrue(TileReveal.requests(for: [], rest: 0).isEmpty)
     }
 
+    func testARevealWaitsNoLongerThanItsCapWhenAPosterStalls() async throws {
+        let request = try XCTUnwrap(TilePosterArt.request(for: media("a")))
+        let start = ContinuousClock.now
+        await TileReveal.warm([request], longest: .milliseconds(50)) { _ in
+            try? await Task.sleep(for: .seconds(10))
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(3), "A stalled poster doesn't hold the tile")
+    }
+
     func testSubtitlesAndLabels() {
         let model = HomeTilesModel()
         model.inProgress = [item("a"), item("b"), item("c"), item("d")]

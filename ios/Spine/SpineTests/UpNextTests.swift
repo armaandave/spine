@@ -190,6 +190,14 @@ final class UpNextTests: XCTestCase {
         let failing = HomeUpNextModel(repository: repository, defaults: defaults, onUnauthorized: {})
         await failing.load()
         XCTAssertFalse(failing.holdsPlace, "A read that fails gives the place up")
+
+        defaults.set(true, forKey: HomeUpNextModel.hadItemsKey)
+        repository.result = .success([try item("Pluribus")])
+        let cancelled = HomeUpNextModel(repository: repository, defaults: defaults, onUnauthorized: {})
+        let read = Task { await cancelled.load() }
+        read.cancel()
+        await read.value
+        XCTAssertFalse(cancelled.holdsPlace, "A read that was cancelled gives the place up")
     }
 
     func testAHomeWithoutExtrasMakesNoRead() async {

@@ -34,7 +34,13 @@ final class HomeUpNextModel {
     func load() async {
         guard let repository else { return }
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            // A read that failed or was cancelled gives the place up: nothing else would close it.
+            if holdsPlace {
+                withAnimation(TileMotion.reveal(reduceMotion: UIAccessibility.isReduceMotionEnabled)) { holdsPlace = false }
+            }
+        }
         do {
             let fresh = try await repository.upNext()
             guard !Task.isCancelled else { return }
@@ -50,7 +56,6 @@ final class HomeUpNextModel {
             return
         } catch {
             errorMessage = error.localizedDescription
-            withAnimation(TileMotion.reveal(reduceMotion: UIAccessibility.isReduceMotionEnabled)) { holdsPlace = false }
             if case APIError.unauthorized = error { onUnauthorized() }
         }
     }

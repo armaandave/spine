@@ -36,24 +36,41 @@ enum TileReveal {
         return shown.compactMap { TilePosterArt.request(for: posters[$0].media) } + [art].compactMap { $0 }
     }
 
-    /// Loads `requests` into the image cache and returns once they are all in, or after `longestWait`. Loads still
-    /// running then carry on.
-    static func warm(_ requests: [ImageRequest]) async {
+    /// Loads `requests` into the image cache and returns once they are all in, or after `longest`, whichever is
+    /// first. Loads still running then carry on. (A task group can't be the race: it waits for all its children, and
+    /// a child awaiting the loads can't be cancelled.)
+    static func warm(
+        _ requests: [ImageRequest],
+        longest: Duration = longestWait,
+        load: @escaping @Sendable (ImageRequest) async -> Void = { _ = try? await ImagePipeline.shared.image(for: $0) }
+    ) async {
         guard !requests.isEmpty else { return }
-        let wait = longestWait
-        let loads = Task {
-            await withTaskGroup(of: Void.self) { group in
-                for request in requests {
-                    group.addTask { _ = try? await ImagePipeline.shared.image(for: request) }
+        let gate = RevealGate()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            gate.continuation = continuation
+            Task { @MainActor in
+                await withTaskGroup(of: Void.self) { group in
+                    for request in requests {
+                        group.addTask { await load(request) }
+                    }
                 }
+                gate.open()
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: longest)
+                gate.open()
             }
         }
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { await loads.value }
-            group.addTask { try? await Task.sleep(for: wait) }
-            await group.next()
-            group.cancelAll()
-        }
+    }
+}
+
+/// Lets the first of the loads and the wait end `TileReveal.warm`, once.
+private final class RevealGate {
+    var continuation: CheckedContinuation<Void, Never>?
+
+    func open() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 
