@@ -361,7 +361,6 @@ struct DiaryLogDetailView: View {
                  : "This cannot be undone.")
         }
         .navigationPage(.post)
-        .dismissExplorationOnReturnHome()
     }
 
     private var canManageEntry: Bool {

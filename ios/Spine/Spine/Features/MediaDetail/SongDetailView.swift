@@ -169,7 +169,6 @@ struct SongDetailView: View {
             }
         }
         .navigationPage(.exploring)
-        .dismissExplorationOnReturnHome()
     }
 
     @ViewBuilder

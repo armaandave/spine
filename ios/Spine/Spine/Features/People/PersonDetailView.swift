@@ -535,7 +535,6 @@ struct PersonDetailView: View {
             }
         }
         .navigationPage(.exploring)
-        .dismissExplorationOnReturnHome()
     }
 
     @ViewBuilder

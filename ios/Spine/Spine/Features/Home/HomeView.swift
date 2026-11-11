@@ -695,7 +695,7 @@ struct HomeView: View {
         ))
     }
 
-    /// Reads only the covers' selection. The tiles, the feed and the glow are handed to the views that draw them as
+    /// Reads only the opened pages' selection. The tiles, the feed and the glow are handed to the views that draw them as
     /// objects, and none of their properties is read here, so scrolling, swiping a carousel and a quick action
     /// do not run this again.
     var body: some View {
@@ -913,7 +913,7 @@ struct HomeView: View {
 
     // MARK: Actions
 
-    /// What the open tile's buttons do. Built here, where the covers are, and handed to the tiles.
+    /// What the open tile's buttons do. Built here, where the pages they open are, and handed to the tiles.
     private var tileActions: HomeTilesActions {
         HomeTilesActions(
             onOpenTitle: { selectedRef = $0 },

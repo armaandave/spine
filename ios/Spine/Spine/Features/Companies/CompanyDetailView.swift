@@ -368,7 +368,6 @@ struct CompanyDetailView: View {
             Task { await viewModel.refreshLoadedCatalogs(for: affectedRoles) }
         }
         .navigationPage(.exploring)
-        .dismissExplorationOnReturnHome()
     }
 
     @ViewBuilder

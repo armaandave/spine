@@ -8,7 +8,8 @@ enum PageKind {
     /// A title, person, company, series, song or genre page. Exploring starts here: this page and every page opened
     /// after it hide the bottom bar, and the floating Home and Search buttons are the way out.
     case exploring
-    /// A log's or a day's progress page: its comment box takes the bottom, so the bar stays hidden.
+    /// A log's or a day's progress page: its comment box takes the bottom, so the bar stays hidden. The pages it opens
+    /// are opened while exploring.
     case post
     /// Any other page: the bottom bar shows, unless the page was opened while exploring.
     case page
@@ -106,6 +107,7 @@ private struct NavigationPageModifier: ViewModifier {
     @Environment(\.isExploring) private var openedWhileExploring
     @Environment(\.appNavigationState) private var appNavigationState
     @State private var stack = PageStack()
+    @State private var page = PageController()
 
     let kind: PageKind
     let showsExplorationButtons: Bool
@@ -113,6 +115,7 @@ private struct NavigationPageModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let isExploring = kind == .exploring || (kind != .root && openedWhileExploring)
+        let hidesBottomBar = kind == .exploring || kind == .post || isExploring
         content
             .environment(\.pageStack, stack)
             .navigationDestination(item: $stack.pushed) { page in
@@ -138,28 +141,51 @@ private struct NavigationPageModifier: ViewModifier {
                 }
             }
             .background {
-                SwipeBackEnabler(allowsSwipeBack: allowsSwipeBack)
+                SwipeBackEnabler(allowsSwipeBack: allowsSwipeBack, hidesBottomBar: hidesBottomBar, page: page)
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
             }
-            .toolbar(bottomBar(isExploring), for: .tabBar)
-            .environment(\.isExploring, isExploring)
+            // The Home and Search buttons close the trail from its first page.
+            .onChange(of: appNavigationState?.returnHomeRequest) { _, request in
+                if request != nil, startsTrail {
+                    page.closeTrail(animated: appNavigationState?.selectedTab == .home)
+                }
+            }
+            .onChange(of: appNavigationState?.returnToSearchRequest) { _, request in
+                if request != nil, startsTrail {
+                    page.closeTrail(animated: true)
+                }
+            }
+            .environment(\.isExploring, isExploring || kind == .post)
+    }
+
+    /// The trail's first page: an exploring or post page that wasn't opened while exploring.
+    private var startsTrail: Bool {
+        (kind == .exploring || kind == .post) && !openedWhileExploring
     }
 
     private func showsButtons(_ isExploring: Bool) -> Bool {
         showsExplorationButtons && isExploring && kind != .post && kind != .root
     }
+}
 
-    private func bottomBar(_ isExploring: Bool) -> Visibility {
-        switch kind {
-        case .root:
-            // Said outright: a trail closed from another tab (Home's button) left the bar hidden on `.automatic`.
-            .visible
-        case .exploring, .post:
-            .hidden
-        case .page:
-            isExploring ? .hidden : .visible
+/// The page's own place on its navigation stack, for closing a trail.
+private final class PageController {
+    weak var controller: SwipeBackEnabler.Controller?
+
+    /// Goes back to the page before this one, closing everything opened from it, the way the back button's long-press
+    /// menu does.
+    func closeTrail(animated: Bool) {
+        guard let controller, let navigationController = controller.navigationController else { return }
+        var pageController: UIViewController? = controller
+        while let current = pageController, current.parent !== navigationController {
+            pageController = current.parent
         }
+        guard let pageController,
+              let index = navigationController.viewControllers.firstIndex(of: pageController),
+              index > 0
+        else { return }
+        navigationController.popToViewController(navigationController.viewControllers[index - 1], animated: animated)
     }
 }
 
@@ -217,30 +243,43 @@ private struct PushDestinationModifier<Item: Identifiable, Destination: View>: V
 
 // MARK: - Apple's swipe back
 
-import os
-enum NavDebug {
-    static let log = Logger(subsystem: "spine.navdebug", category: "nav")
-}
-
-/// Turns Apple's swipe back on for the page's navigation stack. Our pages hide the back button or the whole
-/// navigation bar to draw their own over the artwork, and iOS turns its swipes off when either is hidden.
+/// Turns Apple's swipe back on for the page's navigation stack, and shows or hides the tab's bottom bar as the page
+/// comes on screen. Our pages hide the back button or the whole navigation bar to draw their own over the artwork, and
+/// iOS turns its swipes off when either is hidden.
+///
+/// The bar is set on the tab bar controller directly, by whichever page is coming on screen (at the start of a push,
+/// or of a swipe back, and again if the swipe is let go). SwiftUI's `.toolbar(_:for: .tabBar)` was tried and dropped:
+/// a page saying `.visible` showed the bar over every page above it, and pages taken off together left a tab's bar
+/// hidden for good.
 private struct SwipeBackEnabler: UIViewControllerRepresentable {
     let allowsSwipeBack: Bool
+    let hidesBottomBar: Bool
+    let page: PageController
 
     func makeUIViewController(context: Context) -> Controller {
-        Controller()
+        let controller = Controller()
+        page.controller = controller
+        return controller
     }
 
     func updateUIViewController(_ controller: Controller, context: Context) {
         controller.allowsSwipeBack = allowsSwipeBack
+        controller.hidesBottomBar = hidesBottomBar
     }
 
     final class Controller: UIViewController {
         var allowsSwipeBack = true
+        var hidesBottomBar = false
 
         override func didMove(toParent parent: UIViewController?) {
             super.didMove(toParent: parent)
             install()
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            guard let tabBarController, tabBarController.isTabBarHidden != hidesBottomBar else { return }
+            tabBarController.setTabBarHidden(hidesBottomBar, animated: animated)
         }
 
         override func viewDidAppear(_ animated: Bool) {
@@ -249,10 +288,7 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
         }
 
         private func install() {
-            guard let navigationController else {
-                NavDebug.log.notice("enabler: no navigationController")
-                return
-            }
+            guard let navigationController else { return }
             SwipeBack.install(on: navigationController)
         }
     }
@@ -279,9 +315,8 @@ private enum SwipeBack {
         }
     }
 
-    /// Asks Apple's own delegate first, so the swipe works exactly as Apple's wherever Apple allows it. When Apple
-    /// says no on a page that is not the stack's first, it was only because the bar or its back button is hidden,
-    /// unless the finger is moving another way or a row under it can scroll back.
+    /// Stands in for Apple's own delegate, which turns the swipes away whenever the bar or its back button is hidden.
+    /// It still asks Apple's delegate whether to begin, so the swipe behaves as Apple's wherever Apple allows it.
     final class Delegate: NSObject, UIGestureRecognizerDelegate {
         private weak var navigationController: UINavigationController?
         private weak var original: UIGestureRecognizerDelegate?
@@ -292,17 +327,16 @@ private enum SwipeBack {
         }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            if let top = navigationController?.topViewController, Self.blocksSwipeBack(top) {
-                return false
-            }
-            if original?.gestureRecognizerShouldBegin?(gestureRecognizer) == true {
-                NavDebug.log.notice("shouldBegin: Apple's says yes")
-                return true
-            }
+            // Never on a stack's first page, while a page is still sliding, or while the page on top says no.
             guard let navigationController,
                   navigationController.viewControllers.count > 1,
-                  navigationController.transitionCoordinator == nil
+                  navigationController.transitionCoordinator == nil,
+                  let top = navigationController.topViewController,
+                  !Self.blocksSwipeBack(top)
             else { return false }
+            if original?.gestureRecognizerShouldBegin?(gestureRecognizer) == true {
+                return true
+            }
             if let pan = gestureRecognizer as? UIPanGestureRecognizer,
                !(gestureRecognizer is UIScreenEdgePanGestureRecognizer) {
                 // From anywhere on the page: only a swipe to the right, and not one that scrolls a row back.
@@ -310,7 +344,6 @@ private enum SwipeBack {
                 guard velocity.x > 0, velocity.x > abs(velocity.y) else { return false }
                 if Self.isOverRowThatScrollsBack(pan) { return false }
             }
-            NavDebug.log.notice("shouldBegin: ours says yes")
             return true
         }
 
@@ -334,7 +367,12 @@ private enum SwipeBack {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            original?.gestureRecognizer?(gestureRecognizer, shouldBeRequiredToFailBy: otherGestureRecognizer)
+            // A swipe from the very edge always goes back: a sideways row or the title pager waits for it to fail
+            // (it fails at once for a touch that didn't start at the edge).
+            if gestureRecognizer is UIScreenEdgePanGestureRecognizer, otherGestureRecognizer.view is UIScrollView {
+                return true
+            }
+            return original?.gestureRecognizer?(gestureRecognizer, shouldBeRequiredToFailBy: otherGestureRecognizer)
                 ?? false
         }
 

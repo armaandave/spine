@@ -271,7 +271,6 @@ struct ProgressPostDetailView: View {
             )
         }
         .navigationPage(.post)
-        .dismissExplorationOnReturnHome()
     }
 
     /// Back, and for your own book, manga, comic or game row Edit and Delete (the server says what the page offers,

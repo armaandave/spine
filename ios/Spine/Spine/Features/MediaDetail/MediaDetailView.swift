@@ -2235,7 +2235,6 @@ struct MediaDetailView: View {
         // The page draws its own Home and Search buttons beside its rail. A poster opened full screen takes the
         // swipes until it closes.
         .navigationPage(.exploring, showsExplorationButtons: false, allowsSwipeBack: presentedPoster == nil)
-        .dismissExplorationOnReturnHome()
     }
 
     private func selectedIndex(in context: MediaBrowsingContext) -> Int {

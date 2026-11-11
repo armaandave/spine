@@ -27,17 +27,6 @@ extension EnvironmentValues {
     }
 }
 
-private struct ExplorationDepthKey: EnvironmentKey {
-    static let defaultValue = 0
-}
-
-private extension EnvironmentValues {
-    var explorationDepth: Int {
-        get { self[ExplorationDepthKey.self] }
-        set { self[ExplorationDepthKey.self] = newValue }
-    }
-}
-
 struct ExplorationHomeButton: View {
     @Environment(\.appNavigationState) private var appNavigationState
     var glass: Glass = .regular.tint(.white.opacity(0.1)).interactive()
@@ -85,30 +74,5 @@ private struct ExplorationGlassButton: View {
         .buttonStyle(.plain)
         .contentShape(Circle())
         .glassEffect(glass, in: .circle)
-    }
-}
-
-private struct DismissExplorationOnReturnHome: ViewModifier {
-    @Environment(\.appNavigationState) private var appNavigationState
-    @Environment(\.explorationDepth) private var explorationDepth
-    @Environment(\.dismiss) private var dismiss
-
-    func body(content: Content) -> some View {
-        content
-            .environment(\.explorationDepth, explorationDepth + 1)
-            .onChange(of: appNavigationState?.returnHomeRequest) { _, request in
-                guard request != nil, explorationDepth == 0 else { return }
-                dismiss()
-            }
-            .onChange(of: appNavigationState?.returnToSearchRequest) { _, request in
-                guard request != nil, explorationDepth == 0 else { return }
-                dismiss()
-            }
-    }
-}
-
-extension View {
-    func dismissExplorationOnReturnHome() -> some View {
-        modifier(DismissExplorationOnReturnHome())
     }
 }
