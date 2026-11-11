@@ -84,7 +84,6 @@ enum StatsPageDestination: Hashable, Identifiable {
 struct StatsView: View {
     @State private var viewModel: StatsViewModel
     @State private var destination: StatsPageDestination?
-    @State private var coverRoute: StatsRoute?
 
     private let username: String?
     private let services: StatsRouteServices
@@ -135,12 +134,6 @@ struct StatsView: View {
         }
         .navigationDestination(item: $destination) { destination in
             destinationView(destination)
-        }
-        .fullScreenCover(item: $coverRoute, onDismiss: {
-            // onAppear doesn't run when a cover closes; a change made inside should reload.
-            viewModel.appeared()
-        }) { route in
-            StatsRouteDestination(route: route, services: services)
         }
     }
 
@@ -304,11 +297,7 @@ struct StatsView: View {
             activityUsername: activityUsername
         )
         guard let route = drillDown.route(in: context) else { return }
-        if route.presentsFullScreen {
-            coverRoute = route
-        } else {
-            destination = .route(route)
-        }
+        destination = .route(route)
     }
 
     /// The show-all screens' context, so a poster there opens what it opens on the page.

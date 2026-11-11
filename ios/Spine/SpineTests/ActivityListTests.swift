@@ -396,7 +396,6 @@ final class ActivityListTests: XCTestCase {
         let pages = StatsDrillDown.activity(counts: nil)
         XCTAssertEqual(pages.route(in: ownBooks2026), .activity(pages, ownBooks2026))
         XCTAssertEqual(pages.route(in: theirsGlobalAllTime), .activity(pages, theirsGlobalAllTime))
-        XCTAssertFalse(StatsRoute.activity(pages, ownBooks2026).presentsFullScreen)
     }
 
     /// StatsView.username is nil on your own stats; without the profile's username the route can't say whose rows

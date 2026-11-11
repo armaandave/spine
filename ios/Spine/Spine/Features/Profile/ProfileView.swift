@@ -725,9 +725,8 @@ struct ProfileView: View {
                     viewModel.markStale()
                 }
             }
-            .fullScreenCover(item: $selectedRef, onDismiss: {
-                selectedRef = nil
-                // A cover closing fires no onAppear, so a save made inside reloads here.
+            .pushDestination(item: $selectedRef, onDismiss: {
+                // A save made on the page it opened reloads here when that page goes back.
                 Swift.Task<Void, Never> { await viewModel.reloadIfStale() }
             }) { ref in
                 MediaDetailView(
@@ -743,8 +742,7 @@ struct ProfileView: View {
                     onUnauthorized: onUnauthorized
                 )
             }
-            .fullScreenCover(item: $selectedPerson, onDismiss: {
-                selectedPerson = nil
+            .pushDestination(item: $selectedPerson, onDismiss: {
                 Swift.Task<Void, Never> { await viewModel.reloadIfStale() }
             }) { ref in
                 PersonDetailView(
@@ -845,6 +843,7 @@ struct ProfileView: View {
             } message: {
                 Text(viewModel.hofErrorMessage ?? "")
             }
+            .navigationPage(isPushedProfile ? .page : .root)
     }
 
     private var profileContent: some View {

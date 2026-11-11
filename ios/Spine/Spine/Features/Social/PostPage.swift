@@ -3,11 +3,10 @@ import SwiftUI
 
 /// The page a log and a day's progress share, so the two can only differ in their middle: the poster-tinted background,
 /// Back (with Edit and Delete for the owner), the hero, the date and how long ago under the middle, the comments under a
-/// hairline, the comment bar and the edge swipe back. Each page brings its own hero (`PostHero`) and middle, and its own
-/// sheets and dialogs.
+/// hairline and the comment bar. Each page brings its own hero (`PostHero`) and middle, and its own sheets and dialogs,
+/// and sets itself up with `navigationPage(.post)` (the swipe back, the hidden bottom bar, the Home button's return).
 struct PostPage<Item, Hero: View, Middle: View>: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var edgeDragOffset: CGFloat = 0
     @State private var topSafeAreaInset: CGFloat = 0
     @FocusState private var isCommentFocused: Bool
 
@@ -100,14 +99,6 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
 
             topButtons
         }
-        // Inside the bar's inset, so the swipe's edge doesn't cover the heart, and it ends where a log's favorite play
-        // circle starts: 16 of page inset and 8 of button padding.
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 24)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
         .safeAreaBar(edge: .bottom) {
             if item != nil {
                 PostCommentBar(model: engagement, isFocused: $isCommentFocused)
@@ -117,9 +108,6 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
         .navigationBarBackButtonHidden()
         // The buttons are drawn by the page, so no navigation bar adds an inset of its own.
         .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
-        .dismissExplorationOnReturnHome()
-        .offset(x: edgeDragOffset)
     }
 
     private var contentPhase: SpineContentPhase {
@@ -198,23 +186,6 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
     }
 }
 

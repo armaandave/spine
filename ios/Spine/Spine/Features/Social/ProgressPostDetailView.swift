@@ -239,7 +239,7 @@ struct ProgressPostDetailView: View {
         } message: {
             Text(viewModel.editor?.deleteErrorMessage ?? "")
         }
-        .fullScreenCover(item: $presentedRef) { ref in
+        .pushDestination(item: $presentedRef) { ref in
             MediaDetailView(
                 ref: ref,
                 mediaRepository: mediaRepository,
@@ -251,6 +251,7 @@ struct ProgressPostDetailView: View {
                 onUnauthorized: onUnauthorized
             )
         }
+        .navigationPage(.post)
     }
 
     /// An edit or a delete went through: Stats, the list and Home were told, and the row may be gone, so the page closes.
@@ -362,35 +363,5 @@ struct ProgressPostDetailView: View {
             isLoadingDetail: viewModel.isLoadingMediaDetail,
             onOpen: { presentedRef = media.ref }
         )
-    }
-}
-
-struct ProgressPostNavigationCover: View {
-    let progressId: Int
-    let activityRepository: ActivityRepository
-    let diaryRepository: DiaryRepository
-    let mediaRepository: MediaRepository
-    let trackingRepository: TrackingRepository
-    let currentUserId: Int?
-    let selectedTab: AppTab
-    var feedCard: FeedCardModel? = nil
-    let onSelectTab: (AppTab) -> Void
-    let onUnauthorized: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            ProgressPostDetailView(
-                progressId: progressId,
-                activityRepository: activityRepository,
-                diaryRepository: diaryRepository,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                currentUserId: currentUserId,
-                selectedTab: selectedTab,
-                feedCard: feedCard,
-                onSelectTab: onSelectTab,
-                onUnauthorized: onUnauthorized
-            )
-        }
     }
 }

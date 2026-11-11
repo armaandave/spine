@@ -315,13 +315,12 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .environment(\.colorScheme, .dark)
-        .toolbar(.hidden, for: .tabBar)
         .task {
             if viewModel.items.isEmpty, viewModel.errorMessage == nil {
                 await viewModel.load()
             }
         }
-        .fullScreenCover(item: $selectedRef, onDismiss: { selectedRef = nil }) { ref in
+        .pushDestination(item: $selectedRef) { ref in
             MediaDetailView(
                 ref: ref,
                 browsingContext: MediaBrowsingContext(
@@ -353,6 +352,7 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
                 )
             }
         }
+        .navigationPage(.page)
     }
 
     /// The page's drill-down for a title: its logs on your own stats, else the title page.

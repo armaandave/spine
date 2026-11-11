@@ -9,9 +9,8 @@ import SwiftUI
 /// one stack holding many rows: each row must be its own lazy item. Rows are already padded
 /// 16 pt from the edges. While another scope loads they're dimmed and don't take taps.
 ///
-/// Apply `navigationDestination`s and the media detail cover to the shell. Call
-/// `viewModel.appeared()` when a full-screen cover over the page is dismissed, because
-/// `onAppear` doesn't run then and a change made in the cover should reload the page.
+/// Apply `navigationDestination`s to the shell. Coming back from a page they open runs
+/// `onAppear`, which reloads the page after a change made there.
 struct StatsShell<Content: View>: View {
     let viewModel: StatsViewModel
     let content: (StatsPage) -> Content
@@ -60,7 +59,7 @@ struct StatsShell<Content: View>: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .navigationPage(.page)
         // Only the user's own switches: reloads stay silent.
         .sensoryFeedback(.selection, trigger: viewModel.userSwitchCount)
         .onAppear {

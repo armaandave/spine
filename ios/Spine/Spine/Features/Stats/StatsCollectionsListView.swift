@@ -72,13 +72,13 @@ struct StatsCollectionsListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .environment(\.colorScheme, .dark)
-        .toolbar(.hidden, for: .tabBar)
+        .navigationPage(.page)
         .task {
             if viewModel.items.isEmpty, viewModel.errorMessage == nil {
                 await viewModel.load()
             }
         }
-        .fullScreenCover(item: $route) { route in
+        .navigationDestination(item: $route) { route in
             StatsRouteDestination(route: route, services: services)
         }
     }

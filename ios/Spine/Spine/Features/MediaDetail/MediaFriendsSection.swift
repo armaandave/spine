@@ -147,8 +147,9 @@ struct MediaFriendsListView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             header
         }
-        .fullScreenCover(item: $presentedLog) { log in
-            DiaryLogDetailNavigationCover(
+        .toolbar(.hidden, for: .navigationBar)
+        .pushDestination(item: $presentedLog) { log in
+            DiaryLogDetailView(
                 entryId: log.id,
                 diaryRepository: diaryRepository,
                 mediaRepository: mediaRepository,
@@ -159,16 +160,17 @@ struct MediaFriendsListView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedFriend, onDismiss: onProfileClosed) { friend in
-            NavigationStack {
-                UserProfileDestination(username: friend.username)
-            }
+        .pushDestination(item: $presentedFriend, onDismiss: onProfileClosed) { friend in
+            UserProfileDestination(username: friend.username)
         }
+        .navigationPage(.page)
     }
 
     /// As the reviews page's header draws it.
     private var header: some View {
         HStack(spacing: 12) {
+            PageHeaderBackButton { dismiss() }
+
             poster
                 .frame(width: 40, height: 58)
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
@@ -184,18 +186,6 @@ struct MediaFriendsListView: View {
             }
 
             Spacer()
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(.white.opacity(0.06), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close friends")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

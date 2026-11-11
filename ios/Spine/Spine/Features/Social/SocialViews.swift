@@ -371,6 +371,7 @@ struct FollowListView: View {
         } message: {
             Text(viewModel.actionErrorMessage ?? "")
         }
+        .navigationPage(.page)
     }
 
     @ViewBuilder

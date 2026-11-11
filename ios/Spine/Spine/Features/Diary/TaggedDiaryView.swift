@@ -141,7 +141,7 @@ struct TaggedDiaryView: View {
                 }
             }
         }
-        .toolbar(.hidden, for: .tabBar)
+        .navigationPage(.page)
         .task {
             if viewModel.entries.isEmpty {
                 await viewModel.load()

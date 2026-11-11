@@ -51,8 +51,6 @@ struct PlanningTitlesView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
-    /// Set when the screen is a cover over Home, which has no back button of its own.
-    private let onClose: (() -> Void)?
 
     init(
         activity: ActivityItem,
@@ -64,8 +62,7 @@ struct PlanningTitlesView: View {
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
-        onUnauthorized: @escaping () -> Void = {},
-        onClose: (() -> Void)? = nil
+        onUnauthorized: @escaping () -> Void = {}
     ) {
         headline = PlanningWords.headline(for: activity)
         actor = activity.actor
@@ -76,7 +73,6 @@ struct PlanningTitlesView: View {
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
-        self.onClose = onClose
         _viewModel = State(initialValue: PlanningTitlesViewModel(
             planning: planning,
             activityRepository: activityRepository,
@@ -103,22 +99,12 @@ struct PlanningTitlesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            if let onClose {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close, action: onClose) {
-                        Label("Close", systemImage: "xmark")
-                    }
-                }
-            }
-        }
         .task {
             if viewModel.day == nil {
                 await viewModel.load()
             }
         }
-        .fullScreenCover(item: $presentedRef) { ref in
+        .pushDestination(item: $presentedRef) { ref in
             MediaDetailView(
                 ref: ref,
                 mediaRepository: mediaRepository,
@@ -130,6 +116,7 @@ struct PlanningTitlesView: View {
                 onUnauthorized: onUnauthorized
             )
         }
+        .navigationPage(.page)
     }
 
     @ViewBuilder

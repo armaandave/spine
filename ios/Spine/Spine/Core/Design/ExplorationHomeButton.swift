@@ -4,6 +4,10 @@ import SwiftUI
 final class AppNavigationState {
     private(set) var returnHomeRequest = 0
     private(set) var returnToSearchRequest = 0
+    /// The tab on screen, so a page can show the Search button only in the Search tab.
+    var selectedTab: AppTab = .home
+    /// The tab on screen was tapped again (`navigationPage(.root)` takes it back to its first page, or up to its top).
+    private(set) var tabReselectRequest = 0
 
     func returnHome() {
         returnHomeRequest += 1
@@ -11,6 +15,10 @@ final class AppNavigationState {
 
     func returnToSearch() {
         returnToSearchRequest += 1
+    }
+
+    func reselectTab() {
+        tabReselectRequest += 1
     }
 }
 
@@ -22,17 +30,6 @@ extension EnvironmentValues {
     var appNavigationState: AppNavigationState? {
         get { self[AppNavigationStateKey.self] }
         set { self[AppNavigationStateKey.self] = newValue }
-    }
-}
-
-private struct ExplorationDepthKey: EnvironmentKey {
-    static let defaultValue = 0
-}
-
-private extension EnvironmentValues {
-    var explorationDepth: Int {
-        get { self[ExplorationDepthKey.self] }
-        set { self[ExplorationDepthKey.self] = newValue }
     }
 }
 
@@ -83,30 +80,5 @@ private struct ExplorationGlassButton: View {
         .buttonStyle(.plain)
         .contentShape(Circle())
         .glassEffect(glass, in: .circle)
-    }
-}
-
-private struct DismissExplorationOnReturnHome: ViewModifier {
-    @Environment(\.appNavigationState) private var appNavigationState
-    @Environment(\.explorationDepth) private var explorationDepth
-    @Environment(\.dismiss) private var dismiss
-
-    func body(content: Content) -> some View {
-        content
-            .environment(\.explorationDepth, explorationDepth + 1)
-            .onChange(of: appNavigationState?.returnHomeRequest) { _, request in
-                guard request != nil, explorationDepth == 0 else { return }
-                dismiss()
-            }
-            .onChange(of: appNavigationState?.returnToSearchRequest) { _, request in
-                guard request != nil, explorationDepth == 0 else { return }
-                dismiss()
-            }
-    }
-}
-
-extension View {
-    func dismissExplorationOnReturnHome() -> some View {
-        modifier(DismissExplorationOnReturnHome())
     }
 }

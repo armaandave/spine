@@ -109,6 +109,12 @@ final class PersonDetailViewModel {
         stopPreparationPolling()
     }
 
+    /// Back on screen after a page it opened: a filmography still being prepared starts checking again.
+    func resumePreparationIfNeeded() {
+        guard pollingTask == nil else { return }
+        startPreparationPollingIfNeeded(requestFilter: filter, generation: requestGeneration)
+    }
+
     func loadNextPage() async {
         guard let page = detail?.creditsNextPage, !isLoadingNextPage else { return }
         let generation = requestGeneration
@@ -384,7 +390,6 @@ struct PersonDetailView: View {
     @State private var selectedSeries: SeriesRef?
     @State private var selectedFilmographyType: FilmographyType = .movie
     @State private var expandedCreditRoles = Set<String>()
-    @State private var edgeDragOffset: CGFloat = 0
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var presentedSheet: PersonDetailSheet?
 
@@ -454,28 +459,7 @@ struct PersonDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
         }
-        .toolbar(.hidden, for: .tabBar)
         .navigationBarBackButtonHidden()
-        .dismissExplorationOnReturnHome()
-        .offset(x: edgeDragOffset)
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 28)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
-        .overlay(alignment: .bottomLeading) {
-            if selectedTab == .search {
-                ExplorationSearchButton()
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            ExplorationHomeButton()
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-        }
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: PersonTopSafeAreaInsetKey.self, value: proxy.safeAreaInsets.top)
@@ -502,7 +486,7 @@ struct PersonDetailView: View {
                 }
             }
         }
-        .fullScreenCover(item: $selectedMedia, onDismiss: { selectedMedia = nil }) { selection in
+        .pushDestination(item: $selectedMedia) { selection in
             MediaDetailView(
                 ref: selection.ref,
                 browsingContext: selection.context,
@@ -517,7 +501,7 @@ struct PersonDetailView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $selectedSeries, onDismiss: { selectedSeries = nil }) { series in
+        .pushDestination(item: $selectedSeries) { series in
             SeriesDetailView(
                 ref: series,
                 mediaRepository: mediaRepository,
@@ -536,6 +520,8 @@ struct PersonDetailView: View {
                 await viewModel.load()
                 syncSelectedFilmographyType()
                 expandPrimaryCreditRole()
+            } else {
+                viewModel.resumePreparationIfNeeded()
             }
         }
         .onDisappear {
@@ -553,23 +539,7 @@ struct PersonDetailView: View {
                 syncSelectedFilmographyType()
             }
         }
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
+        .navigationPage(.exploring)
     }
 
     @ViewBuilder

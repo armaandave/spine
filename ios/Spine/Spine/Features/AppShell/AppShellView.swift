@@ -54,8 +54,8 @@ struct AppShellView: View {
         Binding(
             get: { selectedTab },
             set: { tab in
-                if tab == .search, selectedTab == .search {
-                    searchFocusRequest += 1
+                if tab == selectedTab {
+                    appNavigationState.reselectTab()
                 }
                 selectedTab = tab
             }
@@ -220,6 +220,9 @@ struct AppShellView: View {
         }
         .onChange(of: appNavigationState.returnHomeRequest) {
             selectedTab = .home
+        }
+        .onChange(of: selectedTab, initial: true) {
+            appNavigationState.selectedTab = selectedTab
         }
         .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
             guard let profile = notification.userInfo?["profile"] as? UserProfile else { return }

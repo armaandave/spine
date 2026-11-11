@@ -253,7 +253,7 @@ struct DiaryLogDetailView: View {
         .onDisappear {
             songPreview.close()
         }
-        .fullScreenCover(item: $presentedRef) { ref in
+        .pushDestination(item: $presentedRef) { ref in
             mediaDestination(ref)
         }
         .sheet(isPresented: $isEditing) {
@@ -294,6 +294,7 @@ struct DiaryLogDetailView: View {
                  ? "A direct or older completion also deletes its playthrough and all progress. Deleting the current tracked completion reopens it with latest progress. This cannot be undone."
                  : "This cannot be undone.")
         }
+        .navigationPage(.post)
     }
 
     private var canManageEntry: Bool {
@@ -494,32 +495,6 @@ struct DiaryLogDetailView: View {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-}
-
-struct DiaryLogDetailNavigationCover: View {
-    let entryId: Int
-    let diaryRepository: DiaryRepository
-    let mediaRepository: MediaRepository
-    let trackingRepository: TrackingRepository
-    let currentUserId: Int?
-    let selectedTab: AppTab
-    let onSelectTab: (AppTab) -> Void
-    let onUnauthorized: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            DiaryLogDetailView(
-                entryId: entryId,
-                diaryRepository: diaryRepository,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                currentUserId: currentUserId,
-                selectedTab: selectedTab,
-                onSelectTab: onSelectTab,
-                onUnauthorized: onUnauthorized
-            )
-        }
     }
 }
 
