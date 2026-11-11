@@ -97,10 +97,8 @@ private struct UpNextTileFace: View {
         .frame(height: UpNextTileSpec.height)
         .background {
             // The feed card's sheen on the art, under the posters and the words, as the card has it. A tile still
-            // loading is the glass and the sheen alone.
-            if items.isEmpty {
-                FeedCardSheen()
-            } else {
+            // loading is the glass alone: the sheen with no art under it reads as a glare.
+            if !items.isEmpty {
                 UpNextTileArt(url: items.first.flatMap { URL(string: $0.media.displayPosterURL ?? "") })
                     .overlay { FeedCardSheen() }
             }

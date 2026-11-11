@@ -236,9 +236,9 @@ private struct HomeTile: View {
                     onOpenTitle: openTitle
                 )
             case .loading:
-                // The tile's own glass and its title: nothing stands in for the posters.
-                FeedCardSheen()
-                    .frame(width: side, height: TileGeometry.closedHeight)
+                // The tile's own glass and its title: nothing stands in for the posters. No sheen: with no art under
+                // it, it reads as a glare.
+                EmptyView()
             case .offer:
                 TileOfferGlyph(symbol: tile == .inProgress ? "plus" : "person.badge.plus", side: side)
             case .message:
