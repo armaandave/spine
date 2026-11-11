@@ -17,6 +17,8 @@ struct TrendingRailHost: View {
     let actions: HomeTilesActions
     /// The title's poster color for the Open icon; nil keeps it white.
     var openTint: Color?
+    /// The poster's colors are still being counted: the Open icon waits for them.
+    var isOpenTintPending = false
 
     var body: some View {
         let viewModel = entry?.viewModel
@@ -62,6 +64,7 @@ struct TrendingRailHost: View {
                 label: "Open \(name)",
                 identifier: "trending.rail.open",
                 tint: openTint,
+                isIconHidden: isOpenTintPending,
                 action: { actions.onOpenTrending(title) }
             ),
             isLoadingState: config == nil && phase != .failed,
