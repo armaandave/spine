@@ -38,7 +38,10 @@ nonisolated struct MorphCell: Equatable {
 /// layouts and a blend factor are the panel while a finger is between two titles.
 nonisolated struct MorphLayout: Equatable {
     static let cellCount = InProgressPanelMetrics.cellCount
-    static let headCount = 18
+    /// The earlier days' colors are kept at the meter's start, middle and end. A poster's ramp has at most three
+    /// colors (`MeterTint.maximumColors`), evenly spaced, so these three points are the ramp exactly.
+    static let rampStopCount = 3
+    static let headCount = 18 + rampStopCount * 4
     static let valueCount = headCount + cellCount * MorphCell.valueCount
 
     /// 1 when the meter is a bar, else 0.
@@ -64,6 +67,10 @@ nonisolated struct MorphLayout: Equatable {
     var accentR = 0.97
     var accentG = 0.97
     var accentB = 0.97
+    /// The bar's earlier part, as RGBA at each of `rampStopCount` points along the whole meter: the poster's ramp, or
+    /// plain white. It blends straight with the scroll. Taking it from the cells instead let a cell that is today's on
+    /// the next title color the earlier part mid-swipe, so today's edge flickered and ran ahead of itself.
+    var beforeRamp: [Double] = MorphLayout.plainRamp
     var cells: [MorphCell] = Array(repeating: MorphCell(), count: MorphLayout.cellCount)
     /// The poster's colors this layout was made with. Only at rest: it is not part of the flat form, the colors
     /// themselves are (the cells' and the accent), so they blend with the scroll like everything else.
@@ -71,11 +78,12 @@ nonisolated struct MorphLayout: Equatable {
 
     // MARK: Flat form
 
-    /// The 288 numbers, head first then 30 cells of 9.
+    /// The 300 numbers, head first then 30 cells of 9.
     var values: [Double] {
         var out = [bar, litStart, litEnd, glow, lineOpacity, lineAt, a, aShown, b, bShown,
                    quickWidth, quickOn, updateX, updateWidth, updatePrimary, accentR, accentG, accentB]
         out.reserveCapacity(Self.valueCount)
+        out.append(contentsOf: beforeRamp)
         for cell in cells { out.append(contentsOf: cell.values) }
         return out
     }
@@ -102,6 +110,7 @@ nonisolated struct MorphLayout: Equatable {
         accentR = v[15]
         accentG = v[16]
         accentB = v[17]
+        beforeRamp = Array(v[18 ..< Self.headCount])
         cells = (0 ..< Self.cellCount).map { j in
             let start = Self.headCount + j * MorphCell.valueCount
             return MorphCell(v[start ..< start + MorphCell.valueCount])
@@ -112,6 +121,7 @@ nonisolated struct MorphLayout: Equatable {
 
     static let before = (r: 1.0, g: 1.0, b: 1.0, a: 0.55)
     static let rest = (r: 1.0, g: 1.0, b: 1.0, a: 0.16)
+    static let plainRamp: [Double] = (0 ..< rampStopCount).flatMap { _ in [before.r, before.g, before.b, before.a] }
 
     /// The layout of one title. `meter` is the title's meter as the model has it (a long series' window is placed
     /// here, as on the tile panel).
@@ -131,6 +141,10 @@ nonisolated struct MorphLayout: Equatable {
         } else {
             let hsb = ArtAccent.pastelHSB(fromHex: accentHex)
             (layout.accentR, layout.accentG, layout.accentB) = rgb(hue: hsb.hue, saturation: hsb.saturation, brightness: hsb.brightness)
+        }
+        layout.beforeRamp = (0 ..< rampStopCount).flatMap { i in
+            let c = layout.beforeColor(at: Double(i) / Double(rampStopCount - 1))
+            return [c.0, c.1, c.2, c.3]
         }
 
         for j in 0 ..< cellCount { layout.cells[j] = hidden(j, width: W) }
@@ -323,7 +337,7 @@ nonisolated struct MorphVector: VectorArithmetic, Equatable {
         self.values = values
     }
 
-    /// `[lo (288)] [hi (288)] [t]`.
+    /// `[lo (300)] [hi (300)] [t]`.
     init(lo: [Double], hi: [Double], t: Double) {
         values = lo + hi + [t]
     }
