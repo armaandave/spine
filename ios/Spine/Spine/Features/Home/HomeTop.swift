@@ -17,11 +17,7 @@ struct HomeTop: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let phase = Phase.resolve(
-            hasProfile: viewModel.profile != nil,
-            isLoading: viewModel.isLoading,
-            error: viewModel.profileErrorMessage
-        )
+        let phase = Phase.resolve(hasProfile: viewModel.profile != nil, error: viewModel.profileErrorMessage)
         VStack(alignment: .leading, spacing: 0) {
             // It sits above the tiles, on the picture's soft lower part, and squeezes up to the top of the page as a
             // tile opens, with the tile; its left stays where it is.
@@ -42,18 +38,9 @@ struct HomeTop: View {
                 .frame(minHeight: 360, alignment: .top)
                 .padding(.top, HomeTopSpec.headerToTiles)
                 .transition(.opacity)
-            case .loading:
-                Group {
-                    HomeTilesSkeletonHost(glow: viewModel.glowModel)
-                    friendsRow
-                    VStack(spacing: HomeDesign.Metric.cardGap) {
-                        ForEach(0 ..< HomeTopSpec.skeletonCards, id: \.self) { _ in
-                            FeedCardSkeleton()
-                        }
-                    }
-                }
-                .transition(.opacity)
             case .content:
+                // From the first frame: each part shows its own loading look until its data is in, so nothing is
+                // swapped for a copy of itself when the profile arrives.
                 Group {
                     HomeTilesSection(
                         model: viewModel.tiles,
@@ -94,15 +81,13 @@ struct HomeTop: View {
         .padding(.bottom, HomeTopSpec.friendsToFeed)
     }
 
-    /// What the page top shows: the profile's failure, the first load, or the page.
+    /// What the page top shows: the profile's failure, or the page (loading or loaded).
     enum Phase: Equatable {
         case failed(String)
-        case loading
         case content
 
-        static func resolve(hasProfile: Bool, isLoading: Bool, error: String?) -> Phase {
+        static func resolve(hasProfile: Bool, error: String?) -> Phase {
             if let error, !hasProfile { return .failed(error) }
-            if isLoading, !hasProfile { return .loading }
             return .content
         }
     }
@@ -455,24 +440,6 @@ struct HomeFeedStatus: View {
 }
 
 // MARK: - Pieces
-
-/// The two tiles as placeholders for the first moments of Home. It measures its own width once.
-private struct HomeTilesSkeletonHost: View {
-    let glow: HomeGlowModel
-    @State private var contentWidth = TileGeometry.referenceContentWidth
-
-    var body: some View {
-        HomeTilesSkeleton(contentWidth: contentWidth)
-            // The placeholders sit where the tiles will, so the glow ends in the same place before and after.
-            .modifier(HomeGlowTilesAnchor(glow: glow))
-            .padding(.top, HomeTopSpec.headerToTiles)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.width
-            } action: { width in
-                if width > 0 { contentWidth = width }
-            }
-    }
-}
 
 struct HomeInlineState: View {
     let title: String

@@ -8,6 +8,8 @@ struct MediaArtwork: View {
     var mediaType: String?
     var orientation: PosterOrientation?
     var contentMode: PosterContentMode = .fill
+    /// A flat fill in place of the media type's colored placeholder while the art loads.
+    var placeholderFill: Color?
 
     var body: some View {
         SpineAsyncImage(url: imageURL, thumbnailSize: artworkSize) { phase in
@@ -63,20 +65,26 @@ struct MediaArtwork: View {
         slot.artworkSize(mediaType: mediaType, orientation: orientation)
     }
 
+    @ViewBuilder
     private var placeholder: some View {
-        let theme = MediaTypeTheme.theme(for: mediaType ?? "unknown")
-        return ZStack {
-            LinearGradient(
-                colors: theme.gradientColors.map { $0.opacity(0.8) },
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .overlay(.quaternary.opacity(0.28))
+        if let placeholderFill {
+            placeholderFill
+                .frame(width: artworkSize.width, height: artworkSize.height)
+        } else {
+            let theme = MediaTypeTheme.theme(for: mediaType ?? "unknown")
+            ZStack {
+                LinearGradient(
+                    colors: theme.gradientColors.map { $0.opacity(0.8) },
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay(.quaternary.opacity(0.28))
 
-            MediaTypeGlyph(theme: theme, size: min(artworkSize.width, artworkSize.height) * 0.36)
-                .opacity(0.8)
+                MediaTypeGlyph(theme: theme, size: min(artworkSize.width, artworkSize.height) * 0.36)
+                    .opacity(0.8)
+            }
+            .frame(width: artworkSize.width, height: artworkSize.height)
         }
-        .frame(width: artworkSize.width, height: artworkSize.height)
     }
 }
 

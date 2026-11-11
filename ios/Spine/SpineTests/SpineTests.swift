@@ -1841,7 +1841,7 @@ final class SpineTests: XCTestCase {
         ])
         XCTAssertEqual(activity.feedRequests, [25], "Home's activity is the people you follow, a page at a time")
         XCTAssertTrue(activity.requests.isEmpty)
-        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertFalse(viewModel.isLoadingInProgress)
         XCTAssertNil(viewModel.profileErrorMessage)
         XCTAssertNil(viewModel.inProgressErrorMessage)
         XCTAssertNil(viewModel.activityErrorMessage)
@@ -1881,7 +1881,7 @@ final class SpineTests: XCTestCase {
 
         XCTAssertEqual(unauthorizedCount, 1)
         XCTAssertNotNil(viewModel.inProgressErrorMessage)
-        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertFalse(viewModel.isLoadingInProgress)
     }
 
     @MainActor
