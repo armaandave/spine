@@ -319,8 +319,10 @@ struct PostHero: View {
         .onTapGesture(perform: onOpen)
         .accessibilityLabel("View \(title)")
         .accessibilityAddTraits(.isButton)
-        .task(id: Self.logoRequest(for: detail)?.url) { await settleTitleArt() }
-        .task(id: isLoadingDetail) { await settleTitleArt() }
+        // Settles again whenever the details finish or bring a different logo.
+        .task(id: "\(isLoadingDetail) \(Self.logoRequest(for: detail)?.url?.absoluteString ?? "")") {
+            await settleTitleArt()
+        }
         .task {
             try? await Task.sleep(for: Self.titleWait)
             if titleArt == .pending { titleArt = .text }
