@@ -178,9 +178,6 @@ struct DiaryLogDetailView: View {
     @State private var presentedRef: MediaRef?
     @State private var isEditing = false
     @State private var isDeleteConfirmationPresented = false
-    @State private var edgeDragOffset: CGFloat = 0
-    @State private var topSafeAreaInset: CGFloat = 0
-    @FocusState private var isCommentFocused: Bool
 
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
@@ -217,102 +214,27 @@ struct DiaryLogDetailView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            PostPageBackground(url: pageArtURL, accentHex: pageAccentHex)
-
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    Group {
-                        if viewModel.isLoading, viewModel.entry == nil {
-                            ProgressView()
-                                .tint(.white)
-                                .frame(maxWidth: .infinity, minHeight: 520)
-                        } else if let entry = viewModel.entry {
-                            content(entry)
-                        } else if let error = viewModel.errorMessage {
-                            ContentUnavailableView("Could not load log", systemImage: "exclamationmark.triangle", description: Text(error))
-                                .foregroundStyle(.white)
-                                .padding()
-                        }
-                    }
-                    .spineContentTransition(value: contentPhase)
-                    .padding(.bottom, 24)
-                }
-                .scrollContentBackground(.hidden)
-                .scrollDismissesKeyboard(.immediately)
-                .scrollEdgeEffectStyle(.hard, for: .bottom)
-                .ignoresSafeArea(edges: .top)
-                .onChange(of: viewModel.engagement.sentCount) {
-                    PostCommentsSection.scrollToSent(viewModel.engagement, with: proxy)
-                }
-            }
-
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .bold))
-                            .frame(width: 38, height: 38)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(.circle)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Back")
-
-                    Spacer()
-
-                    if canManageEntry {
-                        Button {
-                            isEditing = true
-                        } label: {
-                            Text("Edit")
-                                .font(.system(size: 14, weight: .heavy))
-                                .padding(.horizontal, 13)
-                                .frame(height: 38)
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(.capsule)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                        .disabled(viewModel.isDeleting)
-
-                        Button(role: .destructive) {
-                            isDeleteConfirmationPresented = true
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 16, weight: .bold))
-                                .frame(width: 38, height: 38)
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(.circle)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .accessibilityLabel("Delete")
-                        .disabled(viewModel.isDeleting)
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
+        PostPage(
+            item: viewModel.entry,
+            isLoading: viewModel.isLoading,
+            errorTitle: "Could not load log",
+            errorMessage: viewModel.errorMessage,
+            artURL: pageArtURL,
+            accentHex: pageAccentHex,
+            engagement: viewModel.engagement,
+            date: viewModel.entry?.consumedAt,
+            dateNote: viewModel.entry.flatMap(gameNote),
+            hidesComments: viewModel.entry.map(hidesComments) ?? false,
+            showsEdit: canManageEntry,
+            showsDelete: canManageEntry,
+            isBusy: viewModel.isDeleting,
+            onEdit: { isEditing = true },
+            onDelete: { isDeleteConfirmationPresented = true }
+        ) { entry in
+            hero(entry)
+        } middle: { entry in
+            logSection(entry)
         }
-        // Inside the bar's inset, so the swipe's edge doesn't cover the heart, and it ends where the favorite's play
-        // circle starts: 16 of page inset and 8 of button padding.
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 24)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
-        .safeAreaBar(edge: .bottom) {
-            if viewModel.entry != nil {
-                PostCommentBar(model: viewModel.engagement, isFocused: $isCommentFocused)
-            }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeAreaInset = $0 }
-        .navigationBarBackButtonHidden()
-        .toolbar(.hidden, for: .tabBar)
-        .dismissExplorationOnReturnHome()
-        .offset(x: edgeDragOffset)
         .task {
             if viewModel.entry == nil {
                 await viewModel.load()
@@ -379,31 +301,6 @@ struct DiaryLogDetailView: View {
         return entry.user.id == currentUserId
     }
 
-    private var contentPhase: SpineContentPhase {
-        .resolve(
-            isLoading: viewModel.isLoading,
-            hasContent: viewModel.entry != nil,
-            hasError: viewModel.errorMessage != nil
-        )
-    }
-
-    private var edgeSwipeBackGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .global)
-            .onChanged { value in
-                guard value.translation.width > 0 else { return }
-                edgeDragOffset = value.translation.width
-            }
-            .onEnded { value in
-                if value.translation.width > 90 {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        edgeDragOffset = 0
-                    }
-                }
-            }
-    }
-
     /// The art behind the whole page: the log's own poster, which the title's details never replace, so the page does
     /// not change tint when they arrive.
     private var pageArtURL: URL? {
@@ -418,131 +315,63 @@ struct DiaryLogDetailView: View {
         viewModel.mediaDetail?.posterAccentColor
     }
 
-    private func content(_ entry: DiaryEntry) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            hero(entry)
-            logSection(entry)
-        }
-    }
-
     private func hero(_ entry: DiaryEntry) -> some View {
-        HStack(alignment: .bottom, spacing: 14) {
-            PostHeroPoster(
-                url: viewModel.mediaDetail?.displayPosterURL ?? entry.media.displayPosterURL,
-                title: entry.media.title,
-                mediaType: entry.media.ref.mediaType,
-                orientation: viewModel.mediaDetail?.posterOrientation ?? entry.media.posterOrientation
-            )
-
-            VStack(alignment: .leading, spacing: 8) {
-                PostHeroAuthorLine(user: entry.user)
-
-                PostHeroTypeLabel(text: mediaTypeLabel(entry.media.ref.mediaType))
-
-                if let logged = DiaryLogFormat.dateLabel(entry.consumedAt) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        // The rewatch arrow sits with the stars and heart, as on the card.
-                        Text("Logged \(logged)")
-                            .font(PostPageStyle.loggedFont)
-                            .foregroundStyle(.white.opacity(0.86))
-
-                        if let age = DiaryLogFormat.ageLabel(entry.consumedAt) {
-                            Text(age)
-                                .font(PostPageStyle.timeFont)
-                                .foregroundStyle(.white.opacity(0.72))
-                        }
-                    }
-                }
-
-                if entry.media.ref.mediaType == "game" {
-                    let progress = GameProgressValues(totalMinutes: entry.totalMinutes, percentage: entry.completion).summary
-                    if !progress.isEmpty { Text("At completion: \(progress)").font(.subheadline) }
-                }
-                let parts = titleParts(TVTrackingPresentation.diaryTitle(for: entry.media))
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    if let detail = viewModel.mediaDetail {
-                        MediaTitleDisplay(
-                            detail: detail,
-                            title: parts.title,
-                            showsLogo: .constant(true),
-                            font: PostPageStyle.titleFont,
-                            lineLimit: 4,
-                            minimumScaleFactor: 0.72,
-                            maxLogoHeight: 48,
-                            alignment: .leading,
-                            onTap: { presentedRef = entry.media.ref },
-                            onLongPress: nil
-                        )
-                    } else {
-                        PostHeroTitle(text: parts.title)
-                    }
-
-                }
-
-                if let metadata = heroMetadata(entry) {
-                    Text(metadata)
-                        .font(PostPageStyle.subtitleFont)
-                        .foregroundStyle(.white.opacity(0.78))
-                        .lineLimit(2)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .onTapGesture { presentedRef = entry.media.ref }
-        .accessibilityLabel("View \(entry.media.displayTitle)")
-        .accessibilityAddTraits(.isButton)
-        .padding(.horizontal, 16)
-        // The top bar ends 50 pt below the safe area; the artwork starts 18 pt under it, whatever its shape.
-        .padding(.top, topSafeAreaInset + 68)
-        .padding(.bottom, 22)
+        PostHero(
+            posterURL: viewModel.mediaDetail?.displayPosterURL ?? entry.media.displayPosterURL,
+            posterTitle: entry.media.title,
+            mediaType: entry.media.ref.mediaType,
+            orientation: viewModel.mediaDetail?.posterOrientation ?? entry.media.posterOrientation,
+            user: entry.user,
+            title: PostHero.titleParts(TVTrackingPresentation.diaryTitle(for: entry.media)).title,
+            detail: viewModel.mediaDetail,
+            subtitle: PostHero.metadata(displayTitle: entry.media.displayTitle, detail: viewModel.mediaDetail),
+            onOpen: { presentedRef = entry.media.ref }
+        )
     }
 
+    /// "At completion: 12h · 100%" on a game's log.
+    private func gameNote(_ entry: DiaryEntry) -> String? {
+        guard entry.media.ref.mediaType == "game" else { return nil }
+        let progress = GameProgressValues(totalMinutes: entry.totalMinutes, percentage: entry.completion).summary
+        return progress.isEmpty ? nil : "At completion: \(progress)"
+    }
+
+    /// The log's own part of the page: its stars, heart and rewatch, favorite, review and tags.
+    @ViewBuilder
     private func logSection(_ entry: DiaryEntry) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if hasRatingOrLike(entry) {
-                ratingLikeLine(entry)
-            }
-
-            if entry.containsSpoilers, clean(entry.review) != nil {
-                PostSpoilerChip()
-            }
-
-            if let favorite = entry.favorite, !hidesFavorite(entry) {
-                favoriteLine(favorite)
-            }
-
-            if let title = clean(entry.reviewTitle) {
-                Text(title)
-                    .font(.system(size: 21, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            reviewBody(entry)
-
-            if !entry.tags.isEmpty {
-                DiaryLogTagsView(
-                    tags: entry.tags,
-                    diaryRepository: Self.tagRepository(for: entry.user, base: diaryRepository, currentUserId: currentUserId),
-                    mediaRepository: mediaRepository,
-                    trackingRepository: trackingRepository,
-                    currentUserId: currentUserId,
-                    selectedTab: selectedTab,
-                    onSelectTab: onSelectTab,
-                    onUnauthorized: onUnauthorized
-                )
-            }
-
-            PostHairline()
-                .padding(.top, 8)
-
-            PostCommentsSection(model: viewModel.engagement, hidesComments: hidesComments(entry))
-
-            Color.clear
-                .frame(height: 1)
-                .id("post-end")
+        if hasRatingOrLike(entry) {
+            ratingLikeLine(entry)
         }
-        .padding(.horizontal, 16)
+
+        if entry.containsSpoilers, clean(entry.review) != nil {
+            PostSpoilerChip()
+        }
+
+        if let favorite = entry.favorite, !hidesFavorite(entry) {
+            favoriteLine(favorite)
+        }
+
+        if let title = clean(entry.reviewTitle) {
+            Text(title)
+                .font(.system(size: 21, weight: .heavy))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        reviewBody(entry)
+
+        if !entry.tags.isEmpty {
+            DiaryLogTagsView(
+                tags: entry.tags,
+                diaryRepository: Self.tagRepository(for: entry.user, base: diaryRepository, currentUserId: currentUserId),
+                mediaRepository: mediaRepository,
+                trackingRepository: trackingRepository,
+                currentUserId: currentUserId,
+                selectedTab: selectedTab,
+                onSelectTab: onSelectTab,
+                onUnauthorized: onUnauthorized
+            )
+        }
     }
 
     /// A tag page shows its owner's logs, so a tag on someone else's log opens theirs.
@@ -661,42 +490,6 @@ struct DiaryLogDetailView: View {
         )
     }
 
-    private func heroMetadata(_ entry: DiaryEntry) -> String? {
-        var parts = [titleParts(entry.media.displayTitle).year, DiaryLogFormat.year(viewModel.mediaDetail?.releaseDate), detailString(viewModel.mediaDetail, "runtime")]
-            .compactMap { clean($0) }
-        var seen = Set<String>()
-        parts = parts.filter { seen.insert($0.lowercased()).inserted }
-        return parts.isEmpty ? nil : parts.joined(separator: " - ")
-    }
-
-    private func detailString(_ detail: MediaDetail?, _ key: String) -> String? {
-        guard let value = detail?.details?[key] else { return nil }
-        switch value {
-        case let .string(string):
-            return clean(string)
-        case let .number(number):
-            return number.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(number))" : "\(number)"
-        case let .bool(bool):
-            return bool ? "Yes" : "No"
-        default:
-            return nil
-        }
-    }
-
-    private func mediaTypeLabel(_ mediaType: String) -> String {
-        mediaType == "tv" ? "TV" : mediaType.capitalized
-    }
-
-    private func titleParts(_ title: String) -> (title: String, year: String?) {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasSuffix(")") else { return (trimmed, nil) }
-        let suffix = String(trimmed.suffix(6))
-        guard suffix.first == "(", suffix.last == ")" else { return (trimmed, nil) }
-        let year = String(suffix.dropFirst().dropLast())
-        guard year.count == 4, year.allSatisfy(\.isNumber) else { return (trimmed, nil) }
-        return (String(trimmed.dropLast(7)), year)
-    }
-
     private func clean(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -745,8 +538,8 @@ enum PostPageStyle {
     static let posterShadowRadius: CGFloat = 22
     static let posterShadowOffset: CGFloat = 22
 
-    static let loggedFont = Font.system(size: 13, weight: .heavy)
-    static let timeFont = Font.system(size: 12, weight: .semibold)
+    static let loggedFont = Font.system(size: 13, weight: .bold)
+    static let timeFont = Font.system(size: 13, weight: .semibold)
     static let titleFont = Font.system(size: 30, weight: .black)
     static let subtitleFont = Font.system(size: 13, weight: .semibold)
 
@@ -834,7 +627,7 @@ struct PostHeroPoster: View {
     }
 }
 
-/// Who posted it: a 24 pt avatar (requested as a thumbnail) and the username; opens their profile.
+/// Who posted it: a 26 pt avatar (requested as a thumbnail) and the username; opens their profile.
 struct PostHeroAuthorLine: View {
     let user: UserSummary
 
@@ -842,10 +635,10 @@ struct PostHeroAuthorLine: View {
         NavigationLink {
             UserProfileDestination(username: user.username)
         } label: {
-            HStack(spacing: 7) {
+            HStack(spacing: 8) {
                 SpineAsyncImage(
                     url: URL(string: user.avatarUrl ?? ""),
-                    thumbnailSize: CGSize(width: 24, height: 24)
+                    thumbnailSize: CGSize(width: 26, height: 26)
                 ) { phase in
                     if case let .success(image) = phase {
                         image
@@ -857,13 +650,13 @@ struct PostHeroAuthorLine: View {
                             .foregroundStyle(.white.opacity(0.54))
                     }
                 }
-                .frame(width: 24, height: 24)
+                .frame(width: 26, height: 26)
                 .background(.white.opacity(0.10), in: Circle())
                 .clipShape(Circle())
                 .accessibilityHidden(true)
 
                 Text(user.username)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
             }
@@ -872,19 +665,6 @@ struct PostHeroAuthorLine: View {
         .buttonStyle(.plain)
         .accessibilityLabel(user.username)
         .accessibilityHint("Opens \(user.username)'s profile")
-    }
-}
-
-/// "MOVIE", "TV", "BOOK": small, heavy, tracked.
-struct PostHeroTypeLabel: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 11, weight: .heavy))
-            .tracking(0.88)
-            .foregroundStyle(.white.opacity(0.72))
-            .textCase(.uppercase)
     }
 }
 
