@@ -18,7 +18,7 @@ commit.
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from functools import partial, reduce
 from operator import or_
 from types import SimpleNamespace
@@ -216,16 +216,28 @@ class Note:
     # Where the read stood after the day's last numbered save, by unit. A log's pages
     # come after it, so a finished read's day still says where that day stopped.
     place: dict | None = None
+    # Whether the day's last numbered save was typed in percent, so the day is told in
+    # percent (AC-2).
+    in_percent: bool = False
 
 
 @dataclass
 class Reading:
-    """One read of a title: its amounts, and percents told with no known length."""
+    """One read of a title: its amounts, and percents told with no known length.
+
+    A book with a length also keeps its place in percent (`exact`), as typed where it
+    was, so a day typed in percent is told in percent with nothing rounded away.
+    """
 
     counted: Position = field(default_factory=Position)
     percents: Position = field(default_factory=Position)
+    exact: Position = field(default_factory=Position)
     first_day: date | None = None
     notes: dict = field(default_factory=dict)
+    # Whether the newest numbered save was typed in percent; a log finishing the read
+    # then tells what it added in percent too.
+    in_percent: bool = False
+    percent_logs: set = field(default_factory=set)
 
     def touch(self, day, change, *, started=False, move=None):
         """Note a save on its day. Any save, a start included, can be first activity."""
@@ -251,12 +263,17 @@ class Reading:
         """
         if self.first_day is not None and day < self.first_day:
             self.notes.clear()
-            for amount in (*self.counted.amounts, *self.percents.amounts):
+            for amount in (*self.counted.amounts, *self.percents.amounts, *self.exact.amounts):
                 if amount.day is not None:
                     amount.log_id = log_id
         if target is not None and target > self.counted.value:
             self.counted.amounts.append(Amount(day, target - self.counted.value, at, log_id))
             self.counted.value = target
+        if self.in_percent:
+            self.percent_logs.add(log_id)
+            if self.exact.value < 100:
+                self.exact.amounts.append(Amount(day, 100 - self.exact.value, at, log_id))
+                self.exact.value = Decimal(100)
 
 
 class Title:
@@ -324,6 +341,26 @@ class Title:
             row.progress_id = min(filter(None, (row.progress_id, *(note.change_ids or note.status_ids))), default=None)
             if note.place:
                 row.place = note.place
+        self._tell_in_percent(reading)
+
+    def _tell_in_percent(self, reading):
+        """Tell a day typed in percent, and a log after one, in percent (AC-2).
+
+        The pages stay its amount, so every number adds up as before. A day that moved
+        less than a page is still told: it moved.
+        """
+        percents = defaultdict(Decimal)
+        for amount in reading.exact.amounts:
+            if amount.log_id is not None:
+                if amount.log_id in reading.percent_logs:
+                    percents[LOG, amount.log_id] += amount.value
+            elif amount.day is not None and amount.day in reading.notes and reading.notes[amount.day].in_percent:
+                percents[PROGRESS, amount.day] += amount.value
+        for (kind, key), value in percents.items():
+            row = self.logs[key] if kind == LOG else self.days[key]
+            if value > 0:
+                row.told = value + (row.told if row.told_unit == PERCENT else ZERO)
+                row.told_unit = PERCENT
 
     def _amount_row(self, amount):
         """Return the row an amount lands on, or None if it went to the pile."""
@@ -447,6 +484,37 @@ def _pages_of(snapshot, length):
     return None
 
 
+def typed_percent(snapshot):
+    """Return the percent a save was typed in, beside its page; None for pages."""
+    return saved_number(snapshot.get("percentage_exact"))
+
+
+def _percent_of(snapshot, length):
+    """Return a saved place in percent: as typed, else its pages over the length.
+
+    None with no number, or for pages of an unknown length.
+    """
+    typed = typed_percent(snapshot)
+    if typed is not None:
+        return typed
+    value = saved_number(snapshot.get("value"))
+    if value is None:
+        return None
+    if snapshot.get("kind") == "percentage":
+        return value
+    if snapshot.get("kind") == "pages" and length:
+        return _page_percent(value, length)
+    return None
+
+
+def _page_percent(pages, length):
+    """Return pages as a percent of the length, to two decimals as a save keeps it.
+
+    So every place is in hundredths and a day's percent never reads "0%".
+    """
+    return (pages * 100 / Decimal(length)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def _book_target(snapshot, total):
     """Return (the pages a finished read comes to, whether that's its real length).
 
@@ -501,6 +569,8 @@ def _walk_journey(reading, session, saves, length, zone, *, continues, finished)
     opening = _opening(session, saves, length, finished=finished)
     if opening and opening > reading.counted.value:
         reading.counted.move_to(opening, None, None)
+    if opening and length and _page_percent(opening, length) > reading.exact.value:
+        reading.exact.move_to(_page_percent(opening, length), None, None)
     started = not continues and not _first_move_picks_up(saves)
     for change in saves:
         saved = change.current_progress
@@ -518,12 +588,18 @@ def _walk_journey(reading, session, saves, length, zone, *, continues, finished)
                 continue
             reading.touch(day, change)
             pages = _pages_of(saved, length)
+            exact = None if pages is None else _percent_of(saved, length)
+            # Typed in percent beside its page: the day says percent (AC-2).
+            typed = exact is not None and typed_percent(saved) is not None
+            reading.in_percent = reading.notes[day].in_percent = typed
             if pages is None:
                 reading.percents.move_to(value, day, change.created_at)
                 reading.stood_at(day, {PERCENT: value})
             else:
                 reading.counted.move_to(pages, day, change.created_at)
-                reading.stood_at(day, {PAGE: pages})
+                if exact is not None:
+                    reading.exact.move_to(exact, day, change.created_at)
+                reading.stood_at(day, {PERCENT: exact} if typed else {PAGE: pages})
 
 
 def marked_between(prior, later, marked_at):

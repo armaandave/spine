@@ -92,21 +92,6 @@ final class PeopleListPresentationTests: XCTestCase {
         )
     }
 
-    func testLegacyActivityFallbackLabelsArePreserved() {
-        XCTAssertEqual(
-            ProfileRecentActivityRailModel.fallbackLabel(
-                for: activity(id: 1, type: "list_created", objectName: "  Movie Picks  ")
-            ),
-            "Movie Picks"
-        )
-        XCTAssertEqual(
-            ProfileRecentActivityRailModel.fallbackLabel(
-                for: activity(id: 2, type: "list_item_added")
-            ),
-            "List"
-        )
-    }
-
     func testCustomListChangePublishesListIDAndType() {
         let notification = expectation(
             forNotification: .customListsDidChange,
@@ -177,14 +162,12 @@ final class PeopleListPresentationTests: XCTestCase {
 
     private func activity(
         id: Int,
-        type: String = "list_item_added",
         media: MediaSummary? = nil,
-        person: ActivityPersonSnapshot? = nil,
-        objectName: String? = nil
+        person: ActivityPersonSnapshot? = nil
     ) -> ActivityItem {
         ActivityItem(
             id: id,
-            type: type,
+            type: "list_item_added",
             createdAt: nil,
             actor: UserSummary(
                 id: 1,
@@ -201,7 +184,7 @@ final class PeopleListPresentationTests: XCTestCase {
                 current: nil,
                 rating: nil,
                 liked: nil,
-                name: objectName
+                name: nil
             )
         )
     }

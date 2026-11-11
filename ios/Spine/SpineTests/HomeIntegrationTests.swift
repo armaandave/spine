@@ -361,6 +361,24 @@ final class HomeIntegrationTests: XCTestCase {
         XCTAssertEqual(home.glowModel.idle?.title, "Perf Movie")
     }
 
+    func testTheFeedLoadsWithoutWaitingForTheRailAndTheGlowWaitsForTheRail() async throws {
+        let item = book("b1", pages: 10)
+        tracking.items["book"] = [item]
+        tracking.holdsRail = true
+        activity.feedPages[nil] = page([try log(1)])
+        let home = makeHome()
+
+        let loading = Task { await home.load() }
+        await waitUntil { !home.feed.items.isEmpty }
+        XCTAssertTrue(home.tiles.inProgress.isEmpty, "The rail is still on its way")
+        XCTAssertNil(home.glowModel.idle, "The newest post does not light the glow before the rail answers")
+
+        tracking.releaseRail()
+        await loading.value
+        XCTAssertEqual(home.tiles.inProgress.count, 1)
+        XCTAssertEqual(home.glowModel.idle, item.media)
+    }
+
     func testTheFollowCountDecidesWhetherEmptyTrendingOffersToFindPeople() async {
         let none = makeHome(following: 0)
         await none.load()
@@ -387,8 +405,8 @@ final class HomeIntegrationTests: XCTestCase {
         await home.trendingFill?.value
 
         XCTAssertEqual(
-            activity.events.filter { $0 != "today" }, ["feed", "own"],
-            "Your own activity is asked for after the feed's first page"
+            Set(activity.events.filter { $0 != "today" }), ["feed", "own"],
+            "Your own activity is asked for with the feed's first page"
         )
         XCTAssertEqual(activity.pageRequests, [HomeRecordingActivityRepository.PageRequest(username: "armaan", pageSize: 25)])
         XCTAssertEqual(home.tiles.trending.first?.media.title, "Shared", "Two people first")
@@ -396,6 +414,24 @@ final class HomeIntegrationTests: XCTestCase {
         XCTAssertEqual(home.tiles.trending.first?.people.count, 2)
         XCTAssertFalse(home.tiles.isLoadingTrending)
         XCTAssertEqual(home.tiles.trendingSubtitle, "This week")
+    }
+
+    func testTrendingShowsOnceYourOwnActivityIsInNotFromTheFeedAlone() async throws {
+        activity.feedPages[nil] = page([try log(1, title: "Theirs", mediaID: "t")])
+        activity.ownRows = [try log(2, title: "Mine", mediaID: "m", user: "armaan", actor: 1)]
+        activity.holdsOwn = true
+        let home = makeHome(extras: true)
+
+        let loading = Task { await home.load() }
+        await waitUntil { !home.feed.items.isEmpty }
+        XCTAssertTrue(home.tiles.trending.isEmpty, "Nothing shows from the feed alone")
+        XCTAssertTrue(home.tiles.isLoadingTrending)
+
+        activity.releaseOwn()
+        await loading.value
+        await home.trendingFill?.value
+        XCTAssertEqual(Set(home.tiles.trending.map(\.media.title)), ["Theirs", "Mine"])
+        XCTAssertFalse(home.tiles.isLoadingTrending)
     }
 
     func testTrendingFollowsTheFeedWhenItChangesAndNeverAsksAgain() async throws {
@@ -574,12 +610,10 @@ final class HomeIntegrationTests: XCTestCase {
 
     // MARK: The page top's states
 
-    func testThePageTopShowsFailureLoadingOrContent() {
-        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: false, isLoading: true, error: nil), .loading)
-        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: false, isLoading: false, error: "Offline"), .failed("Offline"))
-        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: true, isLoading: true, error: nil), .content, "A reload keeps the page")
-        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: true, isLoading: false, error: "Offline"), .content)
-        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: false, isLoading: false, error: nil), .content)
+    func testThePageTopShowsTheProfilesFailureOrThePage() {
+        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: false, error: "Offline"), .failed("Offline"))
+        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: false, error: nil), .content, "Each part shows its own loading look")
+        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: true, error: "Offline"), .content, "A reload keeps the page")
     }
 
     func testTheFeedsStatesStandInOnlyWhileThereAreNoRows() {
@@ -605,8 +639,7 @@ final class HomeIntegrationTests: XCTestCase {
         XCTAssertNotNil(home.profileErrorMessage)
         XCTAssertNil(home.profile)
         XCTAssertEqual(unauthorized, 1)
-        XCTAssertFalse(home.isLoading)
-        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: false, isLoading: home.isLoading, error: home.profileErrorMessage),
+        XCTAssertEqual(HomeTop.Phase.resolve(hasProfile: false, error: home.profileErrorMessage),
                        .failed(home.profileErrorMessage ?? ""))
     }
 }
@@ -673,6 +706,15 @@ final class HomeRecordingActivityRepository: ActivityRepository {
     private(set) var events: [String] = []
     /// How many times the rail has been read so far.
     var watchedRail: () -> Int = { 0 }
+    /// Holds the reads of your own activity until `releaseOwn()`, to see what Home shows while one is on its way.
+    var holdsOwn = false
+    private var heldOwn: [CheckedContinuation<Void, Never>] = []
+
+    func releaseOwn() {
+        holdsOwn = false
+        heldOwn.forEach { $0.resume() }
+        heldOwn = []
+    }
 
     func userActivity(username: String, limit: Int) async throws -> [ActivityItem] {
         pageRequests.append(PageRequest(username: username, pageSize: limit))
@@ -683,6 +725,7 @@ final class HomeRecordingActivityRepository: ActivityRepository {
     func userActivityPage(username: String, pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse {
         pageRequests.append(PageRequest(username: username, pageSize: pageSize))
         events.append("own")
+        if holdsOwn { await withCheckedContinuation { heldOwn.append($0) } }
         return ActivityCursorResponse(nextCursor: nil, previousCursor: nil, results: ownRows)
     }
 
@@ -720,9 +763,19 @@ final class HomeRecordingTrackingRepository: TrackingRepository {
     private(set) var bookCalls: [Decimal] = []
     private(set) var updateCalls: [(ref: MediaRef, status: String?)] = []
     var updateError: Error?
+    /// Holds the rail's reads until `releaseRail()`, to see what Home does while the rail is on its way.
+    var holdsRail = false
+    private var heldRail: [CheckedContinuation<Void, Never>] = []
+
+    func releaseRail() {
+        holdsRail = false
+        heldRail.forEach { $0.resume() }
+        heldRail = []
+    }
 
     func list(mediaType: String, page: String?, status: String?, query: String?) async throws -> PagedResponse<Spine.LibraryItem> {
         listCalls += 1
+        if holdsRail { await withCheckedContinuation { heldRail.append($0) } }
         let results = items[mediaType] ?? []
         return PagedResponse(count: results.count, next: nil, previous: nil, results: results)
     }

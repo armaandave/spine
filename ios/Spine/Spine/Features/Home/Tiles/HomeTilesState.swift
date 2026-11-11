@@ -83,6 +83,14 @@ final class HomeTilesState {
         return list.firstIndex(of: rest.id) ?? min(max(rest.index, 0), list.count - 1)
     }
 
+    /// Whether `tile` would rest at the same place in `newIDs` as it does now (`keepRest`), so its carousel would not
+    /// move under the fan.
+    func keepsRestPlace(_ tile: HomeTileID, in newIDs: [String]) -> Bool {
+        guard let rest = rests[tile], !newIDs.isEmpty else { return true }
+        let next = newIDs.firstIndex(of: rest.id) ?? min(max(rest.index, 0), newIDs.count - 1)
+        return next == restIndex(tile)
+    }
+
     /// The id of the title `tile` rests on.
     func restID(_ tile: HomeTileID) -> String? {
         guard let list = ids[tile], !list.isEmpty else { return nil }

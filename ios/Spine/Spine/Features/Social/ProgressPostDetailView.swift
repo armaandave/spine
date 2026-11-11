@@ -5,6 +5,8 @@ import SwiftUI
 final class ProgressPostDetailViewModel {
     private(set) var activity: ActivityItem?
     private(set) var mediaDetail: MediaDetail?
+    /// The title's details are on their way (they decide whether the title is a logo).
+    private(set) var isLoadingMediaDetail = false
     private(set) var isLoading = true
     private(set) var errorMessage: String?
     let engagement: PostEngagementModel
@@ -66,6 +68,8 @@ final class ProgressPostDetailViewModel {
         do {
             let loaded = try await activityRepository.progressPost(id: progressId)
             // Shown right away: the title's details only add artwork, and can be slow to arrive.
+            isLoadingMediaDetail = loaded.media?.ref != nil
+            defer { isLoadingMediaDetail = false }
             activity = loaded
             engagement.seed(loaded.engagement)
             if let media = loaded.media, let trackingRepository {
@@ -121,16 +125,14 @@ final class ProgressPostDetailViewModel {
     }
 }
 
-/// A day's progress on its own page, laid out like a log's page: the title, who it was, what they did, then its likes
-/// and comments.
+/// A day's progress on its own page, on the same `PostPage` as a log's: the title, who it was, what they did, then its
+/// likes and comments.
 struct ProgressPostDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: ProgressPostDetailViewModel
     @State private var presentedRef: MediaRef?
-    @State private var topSafeAreaInset: CGFloat = 0
     @State private var isEditing = false
     @State private var isDeleteConfirmationPresented = false
-    @FocusState private var isCommentFocused: Bool
 
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
@@ -170,50 +172,29 @@ struct ProgressPostDetailView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            PostPageBackground(url: pageArtURL, accentHex: pageAccentHex)
-
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    Group {
-                        if viewModel.isLoading, viewModel.activity == nil {
-                            ProgressView()
-                                .tint(.white)
-                                .frame(maxWidth: .infinity, minHeight: 520)
-                        } else if let activity = viewModel.activity {
-                            content(activity)
-                        } else if let error = viewModel.errorMessage {
-                            ContentUnavailableView(
-                                "Could not load this",
-                                systemImage: "exclamationmark.triangle",
-                                description: Text(error)
-                            )
-                            .foregroundStyle(.white)
-                            .padding()
-                        }
-                    }
-                    .padding(.bottom, 24)
-                }
-                .scrollContentBackground(.hidden)
-                .scrollDismissesKeyboard(.immediately)
-                .scrollEdgeEffectStyle(.hard, for: .bottom)
-                .ignoresSafeArea(edges: .top)
-                .onChange(of: viewModel.engagement.sentCount) {
-                    PostCommentsSection.scrollToSent(viewModel.engagement, with: proxy)
-                }
+        // Edit and Delete only for your own book, manga, comic or game row: the server says what the page offers (AC-9).
+        PostPage(
+            item: viewModel.activity,
+            isLoading: viewModel.isLoading,
+            errorTitle: "Could not load this",
+            errorMessage: viewModel.errorMessage,
+            artURL: pageArtURL,
+            accentHex: pageAccentHex,
+            engagement: viewModel.engagement,
+            // The day itself; older servers send only when it was saved.
+            date: viewModel.activity.flatMap { $0.consumedAt ?? $0.createdAt },
+            showsEdit: viewModel.controls.showsEdit,
+            showsDelete: viewModel.controls.showsDelete,
+            isBusy: viewModel.editor?.isDeleting == true,
+            onEdit: { isEditing = true },
+            onDelete: { isDeleteConfirmationPresented = true }
+        ) { activity in
+            if let media = activity.media {
+                hero(activity, media: media)
             }
-
-            topButtons
+        } middle: { activity in
+            daySection(activity)
         }
-        .safeAreaBar(edge: .bottom) {
-            if viewModel.activity != nil {
-                PostCommentBar(model: viewModel.engagement, isFocused: $isCommentFocused)
-            }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeAreaInset = $0 }
-        .navigationBarBackButtonHidden()
-        // The buttons are drawn by the page, so no navigation bar adds an inset of its own.
-        .toolbar(.hidden, for: .navigationBar)
         .task {
             if viewModel.activity == nil {
                 await viewModel.load()
@@ -273,60 +254,6 @@ struct ProgressPostDetailView: View {
         .navigationPage(.post)
     }
 
-    /// Back, and for your own book, manga, comic or game row Edit and Delete (the server says what the page offers,
-    /// AC-9): one row at one inset, as on a log's page.
-    private var topButtons: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 8) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .bold))
-                        .frame(width: 38, height: 38)
-                }
-                .buttonStyle(.plain)
-                .contentShape(.circle)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Back")
-
-                Spacer()
-
-                if viewModel.controls.showsEdit {
-                    Button {
-                        isEditing = true
-                    } label: {
-                        Text("Edit")
-                            .font(.system(size: 14, weight: .heavy))
-                            .padding(.horizontal, 13)
-                            .frame(height: 38)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(.capsule)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    .disabled(viewModel.editor?.isDeleting == true)
-                }
-
-                if viewModel.controls.showsDelete {
-                    Button(role: .destructive) {
-                        isDeleteConfirmationPresented = true
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 16, weight: .bold))
-                            .frame(width: 38, height: 38)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(.circle)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Delete")
-                    .disabled(viewModel.editor?.isDeleting == true)
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-    }
-
     /// An edit or a delete went through: Stats, the list and Home were told, and the row may be gone, so the page closes.
     private func leaveIfChanged() {
         if viewModel.editor?.didChange == true {
@@ -347,38 +274,22 @@ struct ProgressPostDetailView: View {
         )
     }
 
-    private func content(_ activity: ActivityItem) -> some View {
+    /// The day's own part of the page: what the card says under its title, then its bar.
+    @ViewBuilder
+    private func daySection(_ activity: ActivityItem) -> some View {
         let page = viewModel.pageContent
-        return VStack(alignment: .leading, spacing: 18) {
-            if let media = activity.media {
-                hero(activity, media: media, page: page)
-            }
+        if let page, page.hasHeadline {
+            headline(page, activity: activity)
+        } else {
+            Text(ActivityFeedPresentation.progressHeadline(for: activity))
+                .font(.system(size: 21, weight: .heavy))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+        }
 
-            VStack(alignment: .leading, spacing: 18) {
-                if let page, page.hasHeadline {
-                    headline(page, activity: activity)
-                } else {
-                    Text(ActivityFeedPresentation.progressHeadline(for: activity))
-                        .font(.system(size: 21, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                // The bar the day's card draws, once the person's place on the title is known.
-                if let page, let meter = page.meter {
-                    PostProgressMeterView(meter: meter, art: page.art)
-                }
-
-                PostHairline()
-                    .padding(.top, 6)
-
-                PostCommentsSection(model: viewModel.engagement)
-
-                Color.clear
-                    .frame(height: 1)
-                    .id("post-end")
-            }
-            .padding(.horizontal, 16)
+        // The bar the day's card draws, once the person's place on the title is known.
+        if let page, let meter = page.meter {
+            PostProgressMeterView(meter: meter, art: page.art)
         }
     }
 
@@ -437,44 +348,20 @@ struct ProgressPostDetailView: View {
         .accessibilityLabel(page.spokenHeadline)
     }
 
-    private func hero(_ activity: ActivityItem, media: MediaSummary, page: ProgressPageContent?) -> some View {
-        HStack(alignment: .bottom, spacing: 14) {
-            PostHeroPoster(
-                url: viewModel.mediaDetail?.displayPosterURL ?? media.displayPosterURL,
-                title: media.title,
-                mediaType: media.ref.mediaType,
-                orientation: viewModel.mediaDetail?.posterOrientation ?? media.posterOrientation
-            )
-
-            VStack(alignment: .leading, spacing: 8) {
-                PostHeroAuthorLine(user: activity.actor)
-
-                PostHeroTypeLabel(text: media.ref.mediaType == "tv" ? "TV" : media.ref.mediaType.capitalized)
-
-                if let date = ActivityTimestampFormatter.text(for: activity) {
-                    Text(date)
-                        .font(PostPageStyle.loggedFont)
-                        .foregroundStyle(.white.opacity(0.86))
-                }
-
-                PostHeroTitle(text: page?.title ?? media.displayTitle)
-
-                // "S2 E7", "E7", "Season 2": which part of the show the day was.
-                if let tag = page?.tag {
-                    Text(tag)
-                        .font(PostPageStyle.subtitleFont)
-                        .foregroundStyle(.white.opacity(0.78))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { presentedRef = media.ref }
-        .accessibilityLabel("View \(media.displayTitle)")
-        .accessibilityAddTraits(.isButton)
-        .padding(.horizontal, 16)
-        // The back button ends 50 pt below the safe area; the artwork starts 18 pt under it, as on a log's page.
-        .padding(.top, topSafeAreaInset + 68)
-        .padding(.bottom, 4)
+    private func hero(_ activity: ActivityItem, media: MediaSummary) -> some View {
+        let page = viewModel.pageContent
+        return PostHero(
+            posterURL: viewModel.mediaDetail?.displayPosterURL ?? media.displayPosterURL,
+            posterTitle: media.title,
+            mediaType: media.ref.mediaType,
+            orientation: viewModel.mediaDetail?.posterOrientation ?? media.posterOrientation,
+            user: activity.actor,
+            title: PostHero.titleParts(page?.title ?? media.displayTitle).title,
+            detail: viewModel.mediaDetail,
+            // "S2 E7", "E7", "Season 2": which part of the show the day was; otherwise the year, as on a log.
+            subtitle: page?.tag ?? PostHero.metadata(displayTitle: media.displayTitle, detail: viewModel.mediaDetail),
+            isLoadingDetail: viewModel.isLoadingMediaDetail,
+            onOpen: { presentedRef = media.ref }
+        )
     }
 }

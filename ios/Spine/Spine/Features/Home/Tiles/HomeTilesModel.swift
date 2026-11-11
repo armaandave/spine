@@ -97,6 +97,12 @@ final class HomeTilesModel {
     /// The viewer's state for the focused Trending title and its neighbors, which the panel's rail is made from.
     var railStore: TrendingRailStore?
 
+    // MARK: Showing
+
+    /// The tiles whose posters have been shown. A tile whose titles have just arrived keeps its loading look until its
+    /// fan's posters and its art are in the image cache, then shows them all at once (`TileReveal`).
+    var revealed: Set<HomeTileID> = []
+
     // MARK: Posters
 
     var inProgressPosters: [TilePoster] {
@@ -144,6 +150,12 @@ final class HomeTilesModel {
             if isLoadingTrending { return .loading }
             return followsNobody ? .offer("Find people") : .message("Nothing yet")
         }
+    }
+
+    /// What the closed tile shows now: its titles once they have been revealed, the loading look until then.
+    func shownFace(for tile: HomeTileID) -> TileFace {
+        let face = face(for: tile)
+        return face == .items && !revealed.contains(tile) ? .loading : face
     }
 
     /// The closed tile's second line: the count, or the empty state's words.

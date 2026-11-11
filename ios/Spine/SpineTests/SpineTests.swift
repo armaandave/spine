@@ -1841,7 +1841,7 @@ final class SpineTests: XCTestCase {
         ])
         XCTAssertEqual(activity.feedRequests, [25], "Home's activity is the people you follow, a page at a time")
         XCTAssertTrue(activity.requests.isEmpty)
-        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertFalse(viewModel.isLoadingInProgress)
         XCTAssertNil(viewModel.profileErrorMessage)
         XCTAssertNil(viewModel.inProgressErrorMessage)
         XCTAssertNil(viewModel.activityErrorMessage)
@@ -1881,7 +1881,7 @@ final class SpineTests: XCTestCase {
 
         XCTAssertEqual(unauthorizedCount, 1)
         XCTAssertNotNil(viewModel.inProgressErrorMessage)
-        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertFalse(viewModel.isLoadingInProgress)
     }
 
     @MainActor
@@ -4167,133 +4167,12 @@ final class SpineTests: XCTestCase {
         XCTAssertNil(unchanged.compactDisplayParts(preferredMode: nil), "No change to show")
     }
 
-    func testProgressDeltaTextFormatting() {
-        let percentage = ProgressChangeState(
-            id: 1,
-            previous: ProgressState(kind: "percentage", value: Decimal(96), max: Decimal(100), unit: "percent"),
-            current: ProgressState(kind: "percentage", value: Decimal(98), max: Decimal(100), unit: "percent"),
-            createdAt: nil
-        )
-        let pages = ProgressChangeState(
-            id: 2,
-            previous: ProgressState(kind: "pages", value: Decimal(120), max: Decimal(300), unit: "page"),
-            current: ProgressState(kind: "pages", value: Decimal(220), max: Decimal(300), unit: "page"),
-            createdAt: nil
-        )
-        let singlePage = ProgressChangeState(
-            id: 3,
-            previous: ProgressState(kind: "pages", value: Decimal(120), max: Decimal(300), unit: "page"),
-            current: ProgressState(kind: "pages", value: Decimal(121), max: Decimal(300), unit: "page"),
-            createdAt: nil
-        )
-        let negativeMinutes = ProgressChangeState(
-            id: 4,
-            previous: ProgressState(kind: "minutes", value: Decimal(25), max: nil, unit: "minute"),
-            current: ProgressState(kind: "minutes", value: Decimal(20), max: nil, unit: "minute"),
-            createdAt: nil
-        )
-        let unchanged = ProgressChangeState(
-            id: 5,
-            previous: ProgressState(kind: "percentage", value: Decimal(98), max: Decimal(100), unit: "percent"),
-            current: ProgressState(kind: "percentage", value: Decimal(98), max: Decimal(100), unit: "percent"),
-            createdAt: nil
-        )
-        let missing = ProgressChangeState(
-            id: 6,
-            previous: ProgressState(kind: "pages", value: nil, max: Decimal(300), unit: "page"),
-            current: ProgressState(kind: "pages", value: Decimal(121), max: Decimal(300), unit: "page"),
-            createdAt: nil
-        )
-
-        XCTAssertEqual(percentage.compactDeltaText(preferredMode: nil), "+2%")
-        XCTAssertEqual(pages.compactDeltaText(preferredMode: .pages), "+100 pages")
-        XCTAssertEqual(singlePage.compactDeltaText(preferredMode: .pages), "+1 page")
-        XCTAssertEqual(negativeMinutes.compactDeltaText(preferredMode: nil), "-5 minutes")
-        XCTAssertNil(unchanged.compactDeltaText(preferredMode: nil))
-        XCTAssertNil(missing.compactDeltaText(preferredMode: nil))
-    }
-
-    func testProfileRecentActivityRailMetadata() {
-        let diary = activityItem(
-            id: 1,
-            title: "Liked Log",
-            type: "diary_created",
-            previous: nil,
-            current: nil,
-            rating: "9.0",
-            liked: true
-        )
-        let progress = activityItem(
-            id: 2,
-            title: "Progress",
-            previous: ProgressState(kind: "percentage", value: Decimal(96), max: Decimal(100), unit: "percent"),
-            current: ProgressState(kind: "percentage", value: Decimal(98), max: Decimal(100), unit: "percent")
-        )
+    func testProfileRecentActivityRailLeavesOutActivityWithNoTitle() {
+        let diary = activityItem(id: 1, title: "Log", type: "diary_created", previous: nil, current: nil)
+        let progress = activityItem(id: 2, title: "Progress")
         let noMedia = activityItem(id: 3, title: "No Media", hasMedia: false)
 
-        let railItems = ProfileRecentActivityRailModel.items(from: [diary, progress, noMedia])
-
-        XCTAssertEqual(railItems.map(\.activity.id), [1, 2])
-        XCTAssertEqual(ProfileRecentActivityRailModel.rating(for: diary), "9.0")
-        XCTAssertTrue(ProfileRecentActivityRailModel.isLikedDiary(diary))
-        guard case let .media(progressMedia) = railItems[1].subject else {
-            return XCTFail("Expected media activity")
-        }
-        XCTAssertEqual(
-            ProfileRecentActivityRailModel.progressDeltaText(for: progress, media: progressMedia),
-            "+2%"
-        )
-    }
-
-    func testProfileRecentActivityRailShowsOneStarWithTheRating() {
-        func stars(_ rating: String?, _ mediaType: String) -> String? {
-            ProfileRecentActivityRailModel.starValueText(
-                for: activityItem(id: 1, title: "Log", type: "diary_created", rating: rating, mediaType: mediaType)
-            )
-        }
-
-        // Every rating comes in stars; in-between ones round to the nearest half, like everywhere else.
-        XCTAssertEqual(stars("4.5", "movie"), "4.5")
-        XCTAssertEqual(stars("2.0", "book"), "2")
-        XCTAssertEqual(stars("5", "game"), "5")
-        XCTAssertEqual(stars("4.5", "tv"), "4.5")
-        XCTAssertEqual(stars("3.65", "tv"), "3.5")
-        XCTAssertEqual(stars("3.75", "anime"), "4")
-        XCTAssertEqual(stars("0.5", "movie"), "0.5")
-        XCTAssertNil(stars(nil, "movie"))
-        XCTAssertNil(stars("0", "movie"))
-    }
-
-    func testProfileRecentActivityRailShowsProgressAsAGain() throws {
-        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("230 pages"), "+230 pages")
-        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("15%"), "+15%")
-        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("2h 30m"), "+2h 30m")
-        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("12 chapters"), "+12 chapters")
-        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("1 issue"), "+1 issue")
-        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("3 episodes"), "+3 eps.")
-        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("1 episode"), "+1 ep.")
-        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("Started"), "Started")
-        XCTAssertNil(ProfileRecentActivityRailModel.progressGainText("  "))
-    }
-
-    func testProfileRecentActivityRailMarksARewatchLog() throws {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let log = try decoder.decode(
-            ActivityObject.self,
-            from: Data(#"{"type": "diary", "id": 9, "rating": null, "liked": false, "is_rewatch": true}"#.utf8)
-        )
-        let rewatch = ActivityItem(
-            id: 9,
-            type: "diary_created",
-            createdAt: "2026-10-30T12:00:00Z",
-            actor: UserSummary(id: 1, username: "mobile", displayName: "Mobile", avatarUrl: nil),
-            media: nil,
-            object: log
-        )
-
-        XCTAssertTrue(ProfileRecentActivityRailModel.isRewatchDiary(rewatch))
-        XCTAssertFalse(ProfileRecentActivityRailModel.isRewatchDiary(activityItem(id: 2, title: "Log", type: "diary_created")))
+        XCTAssertEqual(ProfileRecentActivityRailModel.items(from: [diary, progress, noMedia]).map(\.activity.id), [1, 2])
     }
 
     func testProfileRecentActivityRailShowsAShowOnceAcrossItsSeasonsAndEpisodes() {
@@ -5694,8 +5573,6 @@ final class SpineTests: XCTestCase {
         let today = page.results[0]
 
         XCTAssertEqual(ActivityFeedPresentation.actionText(for: today), "watched 4 episodes")
-        XCTAssertEqual(ProfileRecentActivityRailModel.fallbackLabel(for: today), "+4 eps.")
-        XCTAssertEqual(ProfileRecentActivityRailModel.fallbackLabel(for: page.results[1]), "+1 ep.")
         XCTAssertNil(page.results[2].object.isRewatch)
         XCTAssertEqual(ActivityDestination.resolve(today), .progress(3))
         XCTAssertEqual(

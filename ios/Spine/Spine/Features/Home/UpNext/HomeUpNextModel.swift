@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 /// What Home's Up next tile and page show: dated TV and anime episodes that haven't aired yet, soonest first
 /// (docs/up-next-contract.md). The tile and the page read it in their own bodies, so a load redraws only them.
@@ -12,24 +13,43 @@ final class HomeUpNextModel {
     private(set) var errorMessage: String?
     /// Whether a read has answered at least once.
     private(set) var hasLoaded = false
+    /// Whether Home keeps the tile's place before the first read answers: Up next had something the last time it
+    /// answered on this phone, so what is under the tile does not drop when it arrives.
+    private(set) var holdsPlace: Bool
+
+    static let hadItemsKey = "home.upNext.hadItems"
 
     /// Nil makes no read: a Home built without its extras.
     @ObservationIgnored private let repository: TrackingRepository?
     @ObservationIgnored private let onUnauthorized: () -> Void
+    @ObservationIgnored private let defaults: UserDefaults
 
-    init(repository: TrackingRepository?, onUnauthorized: @escaping () -> Void) {
+    init(repository: TrackingRepository?, defaults: UserDefaults = .standard, onUnauthorized: @escaping () -> Void) {
         self.repository = repository
+        self.defaults = defaults
         self.onUnauthorized = onUnauthorized
+        holdsPlace = repository != nil && defaults.bool(forKey: Self.hadItemsKey)
     }
 
     func load() async {
         guard let repository else { return }
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            // A read that failed or was cancelled gives the place up: nothing else would close it.
+            if holdsPlace {
+                withAnimation(TileMotion.reveal(reduceMotion: UIAccessibility.isReduceMotionEnabled)) { holdsPlace = false }
+            }
+        }
         do {
             let fresh = try await repository.upNext()
             guard !Task.isCancelled else { return }
-            if fresh != items { items = fresh }
+            defaults.set(!fresh.isEmpty, forKey: Self.hadItemsKey)
+            // A tile that appears, or a kept place that closes, slides what is under it rather than moving it at once.
+            withAnimation(TileMotion.reveal(reduceMotion: UIAccessibility.isReduceMotionEnabled)) {
+                if fresh != items { items = fresh }
+                holdsPlace = false
+            }
             errorMessage = nil
             hasLoaded = true
         } catch is CancellationError {

@@ -1,7 +1,7 @@
 """Authoritative book tracking and reading-journey transitions."""
 
 from datetime import UTC, date, datetime, time
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from uuid import UUID
 
 from django.core.exceptions import ValidationError
@@ -26,6 +26,7 @@ from social.models import ProgressChange
 
 UNSET = object()
 OPEN_STATUSES = {Status.IN_PROGRESS.value, Status.PAUSED.value}
+HUNDREDTH = Decimal("0.01")
 
 
 class BookTrackingConflict(Exception):
@@ -657,7 +658,8 @@ def update_progress(
     elif progress_type == "percentage":
         if amount > 100:
             raise ValidationError("Percentage cannot exceed 100.")
-        percentage = amount
+        # Two decimals, as the column keeps it, so the save's record agrees with it.
+        percentage = amount.quantize(HUNDREDTH, rounding=ROUND_HALF_UP)
         if total_pages:
             pages = int(round(float(amount / 100 * total_pages)))
     else:
@@ -676,6 +678,7 @@ def update_progress(
     else:
         progress_day = saved_on
     previous = _journey_progress(session)
+    previous_percentage = session.percentage_read
     session.pages_read = pages
     session.percentage_read = percentage
     session.progressed_on = progress_day
@@ -685,7 +688,13 @@ def update_progress(
     )
     _set_book_from_session(book, session)
     current = _journey_progress(session)
-    if previous != current:
+    # A percent that moves within one page is still a move.
+    moved = previous != current or (progress_type == "percentage" and percentage != previous_percentage)
+    if moved:
+        if progress_type == "percentage" and current["kind"] == "pages":
+            # Its page is rounded, so the save keeps the percent as typed: activity
+            # tells its day in percent (AC-2).
+            current = {**current, "percentage_exact": float(percentage)}
         _record_progress_change(user, item, previous, current, saved_on)
     return book
 

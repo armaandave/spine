@@ -38,6 +38,16 @@ class BookDayPlaceTests(WireBase):
         self.assertEqual(day["object"]["place"], {"pages": 893})
         self.assertEqual(earlier["object"]["place"], {"pages": 645})
 
+    def test_a_day_typed_in_percent_says_percent_on_the_wire(self):
+        item = self.book("typed", pages=400)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, "30.25", d(2026, 3, 2), kind="percentage")
+        self.save(item, "35.5", d(2026, 3, 3), kind="percentage")
+        day = next(row for row in self.results(self.follower) if row["media"]["title"] == "typed")
+        told = day["object"]
+        self.assertEqual((told["label"], told["percent"], told["place"]), ("5.25%", 5.25, {"percent": 35.5}))
+        self.assertEqual(told["amount"], 21)
+
     def test_a_percent_with_no_length_stands_in_percent(self):
         item = self.book("unknown", pages=None)
         self.begin(item, d(2026, 3, 1))
