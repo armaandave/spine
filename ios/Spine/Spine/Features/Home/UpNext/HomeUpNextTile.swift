@@ -5,6 +5,9 @@ import SwiftUI
 /// whole tile opens the Up next page. It shows only once something is coming up.
 struct HomeUpNextTile: View {
     let model: HomeUpNextModel
+    /// The tiles above, and how far the page has scrolled: the posters fold in as the tiles' do.
+    let tiles: HomeTilesState
+    let glow: HomeGlowModel
     // A closure the page rebuilds every time it runs: it says nothing new (`StableInput`).
     @StableInput var onOpen: () -> Void
 
@@ -19,7 +22,7 @@ struct HomeUpNextTile: View {
                     taps += 1
                     onOpen()
                 } label: {
-                    UpNextTileFace(items: items)
+                    UpNextTileFace(items: items, tiles: tiles, glow: glow)
                 }
                 .buttonStyle(UpNextTilePressStyle())
                 .accessibilityLabel("Up next")
@@ -30,7 +33,7 @@ struct HomeUpNextTile: View {
                 .transition(.opacity)
             } else if model.holdsPlace {
                 // Its place while the first read is on its way: the tile's glass and its title.
-                UpNextTileFace(items: [])
+                UpNextTileFace(items: [], tiles: tiles, glow: glow)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Loading Up next")
                     .padding(.top, HomeDesign.Metric.tileGap)
@@ -55,6 +58,8 @@ private enum UpNextTileSpec {
     /// A whole 2:3 poster (27 x 40 made 15% bigger).
     static let poster = CGSize(width: 31, height: 46)
     static let posterCorner: CGFloat = 5
+    /// From one poster's leading edge to the next.
+    static let posterStep = poster.width + posterGap
     static let maxPosters = 5
     static let titleFont = Font.system(size: 17, weight: .heavy)
     static let chevronFont = Font.system(size: 14, weight: .bold)
@@ -62,9 +67,16 @@ private enum UpNextTileSpec {
 
 private struct UpNextTileFace: View {
     let items: [UpNextItem]
+    let tiles: HomeTilesState
+    let glow: HomeGlowModel
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: UpNextTileSpec.corner, style: .continuous)
+        let shown = Array(items.prefix(UpNextTileSpec.maxPosters))
+        // The poster the others fold in behind: the middle one, or the sooner of the two middle ones.
+        let middle = (shown.count - 1) / 2
+        // Not while a tile is open: this tile sits lower then. It folds or unfolds as the tile closes or opens.
+        let foldGain: CGFloat = tiles.open == nil ? 1 : 0
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
@@ -85,8 +97,11 @@ private struct UpNextTileFace: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: UpNextTileSpec.posterGap) {
-                ForEach(items.prefix(UpNextTileSpec.maxPosters)) { item in
+                ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
+                    let slots = CGFloat(index - middle)
                     UpNextTilePoster(item: item)
+                        .modifier(UpNextPosterFold(gain: foldGain, glow: glow, slotsFromMiddle: slots))
+                        .zIndex(Double(-abs(slots)))
                 }
             }
             .fixedSize()
@@ -135,6 +150,40 @@ private struct UpNextTilePoster: View {
         .overlay { shape.strokeBorder(TileStyle.posterHairline, lineWidth: TileStyle.strokeWidth) }
         .shadow(color: .black.opacity(0.35), radius: 6, y: 5)
         .accessibilityHidden(true)
+    }
+}
+
+/// Folds the posters in behind the middle one as the page scrolls, as the In progress and Trending tiles fold their two
+/// back posters behind the front one: each slides toward the middle poster, shrinks and darkens, one to one with how
+/// far this tile has scrolled off the top, and unfolds as you scroll back. The posters past the middle one's
+/// neighbors fade as they go, as the open carousel's do, so it folds to one poster with two behind it like the fan.
+///
+/// Its `gain` is 1 while no tile is open and 0 while one is, and animates with the tile's open and close (they run
+/// inside an animation); at 0 it reads no scroll.
+private struct UpNextPosterFold: ViewModifier, Animatable {
+    var gain: CGFloat
+    let glow: HomeGlowModel
+    /// Poster steps from the middle poster: negative to its left.
+    let slotsFromMiddle: CGFloat
+
+    var animatableData: CGFloat {
+        get { gain }
+        set { gain = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        // This tile's bottom edge on screen with the page at rest: it sits a gap under the closed tiles.
+        let bottom = (glow.tilesBottom ?? GlowSpec.estimatedTilesBottom)
+            + HomeDesign.Metric.tileGap + UpNextTileSpec.height
+        let progress = gain == 0
+            ? 0
+            : gain * TileGeometry.foldProgress(scroll: glow.scrollOffset, tilesBottom: bottom)
+        let weight = TileGeometry.openFoldWeight(slotsFromFocus: slotsFromMiddle) * progress
+        content
+            .brightness(Double(-TileGeometry.foldDim * weight))
+            .scaleEffect(1 - (1 - TileGeometry.foldScale) * weight)
+            .offset(x: -slotsFromMiddle * UpNextTileSpec.posterStep * progress)
+            .opacity(TileGeometry.openFoldOpacity(slotsFromFocus: slotsFromMiddle, progress: progress))
     }
 }
 
