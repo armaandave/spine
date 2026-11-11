@@ -234,8 +234,10 @@ private final class PageController {
         guard let view else { return nil }
         var found: [UIScrollView] = []
         var queue = [view]
-        while !queue.isEmpty {
-            let next = queue.removeFirst()
+        var index = 0
+        while index < queue.count {
+            let next = queue[index]
+            index += 1
             if let scrollView = next as? UIScrollView,
                scrollView.contentSize.height + scrollView.adjustedContentInset.top + scrollView.adjustedContentInset.bottom
                 > scrollView.bounds.height + 1,

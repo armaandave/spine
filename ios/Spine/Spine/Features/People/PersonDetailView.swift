@@ -109,6 +109,12 @@ final class PersonDetailViewModel {
         stopPreparationPolling()
     }
 
+    /// Back on screen after a page it opened: a filmography still being prepared starts checking again.
+    func resumePreparationIfNeeded() {
+        guard pollingTask == nil else { return }
+        startPreparationPollingIfNeeded(requestFilter: filter, generation: requestGeneration)
+    }
+
     func loadNextPage() async {
         guard let page = detail?.creditsNextPage, !isLoadingNextPage else { return }
         let generation = requestGeneration
@@ -514,13 +520,12 @@ struct PersonDetailView: View {
                 await viewModel.load()
                 syncSelectedFilmographyType()
                 expandPrimaryCreditRole()
+            } else {
+                viewModel.resumePreparationIfNeeded()
             }
         }
         .onDisappear {
-            // A page it opened covers it without closing it, so a filmography still being prepared keeps going.
-            if selectedMedia == nil, selectedSeries == nil {
-                viewModel.cancelPreparation()
-            }
+            viewModel.cancelPreparation()
         }
         .onChange(of: selectedFilmographyType) { _, _ in
             expandPrimaryCreditRole()
