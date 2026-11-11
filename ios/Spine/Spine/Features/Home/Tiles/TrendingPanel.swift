@@ -37,6 +37,8 @@ struct TrendingPanel: View {
     @Environment(\.colorSchemeContrast) private var contrast
     /// Posters' colors counted on this device, by title key; the server's, or ones counted earlier, need no waiting.
     @State private var counted: [String: [PosterSwatch]] = [:]
+    /// Titles whose poster couldn't be counted (none, or unreadable): their Open icon shows white instead of waiting.
+    @State private var uncountable: Set<String> = []
 
     var body: some View {
         let entry = store?.entry(for: title.key)
@@ -56,7 +58,14 @@ struct TrendingPanel: View {
                 .frame(maxHeight: .infinity, alignment: .top)
 
             if let store {
-                TrendingRailHost(title: title, entry: entry, store: store, actions: actions, openTint: openTint)
+                TrendingRailHost(
+                    title: title,
+                    entry: entry,
+                    store: store,
+                    actions: actions,
+                    openTint: openTint,
+                    isOpenTintPending: posterSwatches == nil && !uncountable.contains(title.key)
+                )
                     .padding(.bottom, HomeDesign.Metric.trendingRailBottom)
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
@@ -106,11 +115,14 @@ struct TrendingPanel: View {
         title.media.displayPosterURL.flatMap { URL(string: $0) }
     }
 
+    /// The poster's colors, if known yet: the server's, or counted here or earlier.
+    private var posterSwatches: [PosterSwatch]? {
+        counted[title.key] ?? PosterPaletteStore.shared.known(server: title.media.posterPalette, url: posterURL)
+    }
+
     /// The poster's color for the Open icon: its first color that reads on the dark glass, else its second, else white.
     private var openTint: Color? {
-        let swatches = counted[title.key]
-            ?? PosterPaletteStore.shared.known(server: title.media.posterPalette, url: posterURL)
-        return TrendingOpenTint.color(from: swatches, highContrast: contrast == .increased)
+        TrendingOpenTint.color(from: posterSwatches, highContrast: contrast == .increased)
     }
 
     /// Counts the poster's colors when the server sent none and none were counted before.
@@ -118,10 +130,12 @@ struct TrendingPanel: View {
         let key = title.key
         let server = title.media.posterPalette
         let url = posterURL
-        guard PosterPaletteStore.shared.known(server: server, url: url) == nil,
-              let found = await PosterPaletteStore.shared.swatches(server: server, url: url)
-        else { return }
-        counted[key] = found
+        guard PosterPaletteStore.shared.known(server: server, url: url) == nil else { return }
+        if let found = await PosterPaletteStore.shared.swatches(server: server, url: url) {
+            counted[key] = found
+        } else {
+            uncountable.insert(key)
+        }
     }
 }
 
