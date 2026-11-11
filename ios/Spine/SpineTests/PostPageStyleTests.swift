@@ -44,9 +44,8 @@ final class PostPageStyleTests: XCTestCase {
             let text = try Self.source(path)
             XCTAssertTrue(text.contains("\"Back\""), "\(path) lost the Back button")
             XCTAssertTrue(text.contains("PostCommentBar(model: viewModel.engagement"), "\(path) lost the comment bar")
-            XCTAssertTrue(text.contains(".toolbar(.hidden, for: .tabBar)"), "\(path) shows the tab bar")
-            XCTAssertTrue(text.contains(".dismissExplorationOnReturnHome()"), "\(path) lost the Home return")
-            XCTAssertTrue(text.contains("edgeSwipeBackGesture"), "\(path) lost the edge swipe")
+            // Hides the tab bar, swipes back, and closes for the Home button, as every post page does.
+            XCTAssertTrue(text.contains(".navigationPage(.post)"), "\(path) isn't set up as a post page")
         }
         let bar = try Self.source("Features/Social/ActivityPostViews.swift")
         for identifier in ["post.like", "post.comment-field", "post.comment-send"] {
