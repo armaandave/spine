@@ -400,6 +400,7 @@ class ApiV1FoundationTests(TestCase):
             set(album),
             {
                 "ref",
+                "friends",
                 "title",
                 "subtitle",
                 "overview",

@@ -73,6 +73,7 @@ class MediaSearchView(MediaExposureMixin, APIView):
         except provider_services.SearchSuperseded:
             # The app has moved on to the newer search and ignores this answer.
             raise SearchReplaced from None
+        results = activity_service.friends_on_results(request.user, results, request=request)
         return Response({"count": len(results), "next": None, "previous": None, "results": results})
 
     @staticmethod
@@ -102,12 +103,13 @@ class MediaSearchView(MediaExposureMixin, APIView):
             raise SearchReplaced from None
         if not payload["completed_media_types"]:
             raise AllMediaSearchUnavailable
+        results = activity_service.friends_on_results(request.user, payload["results"], request=request)
         return Response(
             {
-                "count": len(payload["results"]),
+                "count": len(results),
                 "next": None,
                 "previous": None,
-                "results": payload["results"],
+                "results": results,
                 "unavailable_media_types": payload["unavailable_media_types"],
             },
         )
