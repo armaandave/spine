@@ -525,6 +525,20 @@ private struct SearchViewContent: View {
         ZStack {
             NavigationStack {
                 VStack(spacing: 0) {
+                    if showsLargeTitle {
+                        Text(title)
+                            .font(.system(size: 30, weight: .heavy))
+                            .tracking(-0.5)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                            .padding(.bottom, 8)
+                            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                            .accessibilityAddTraits(.isHeader)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     MediaSearchBar(
                         text: $draftText,
                         selectedMediaType: selectedMediaTypeBinding,
@@ -593,10 +607,13 @@ private struct SearchViewContent: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .animation(.smooth(duration: 0.35), value: showsLargeTitle)
                 .background(Color.black)
                 .mediaLensAtmosphere(theme: currentTheme)
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
+                // The Search tab names itself in big type above the box instead (a picker keeps its bar and Cancel).
+                .toolbar(isSearchTab ? .hidden : .automatic, for: .navigationBar)
                 .toolbarBackground(.hidden, for: .navigationBar)
                 .toolbarColorScheme(.dark, for: .navigationBar)
                 .toolbar {
@@ -655,6 +672,17 @@ private struct SearchViewContent: View {
 
     private var currentTheme: MediaTypeTheme {
         mediaLensStore.theme(for: selectedSearchType)
+    }
+
+    /// The Search tab itself, not a picker built on this screen: only it has the lists to show.
+    private var isSearchTab: Bool {
+        featuredStore != nil
+    }
+
+    /// "Search" in big type over the box while the page shows every kind's lists; it tucks away once you search.
+    private var showsLargeTitle: Bool {
+        isSearchTab && !isSearchActive && selectedSearchType == APIConstants.allMedia
+            && draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var allowsAllMediaSearch: Bool {
@@ -789,7 +817,7 @@ private struct SearchResultsSection: View {
         if let error = errorMessage {
             ContentUnavailableView("Search failed", systemImage: "exclamationmark.triangle", description: Text(error))
         } else if !results.isEmpty {
-            SearchResultsList(results: results, showsMediaTypes: showsMediaTypes, onSelect: onSelect)
+            SearchResultsList(results: results, query: query, showsMediaTypes: showsMediaTypes, onSelect: onSelect)
         } else {
             SearchEmptyState(
                 query: query,
@@ -842,23 +870,27 @@ private struct SearchEmptyState: View {
             ContentUnavailableView("Search Spine", systemImage: "magnifyingglass", description: Text("Enter a title to find media."))
         } else {
             List {
-                Section("Recently Opened") {
+                Section {
                     ForEach(recentMedia) { media in
                         Button {
                             onRecentMedia(media)
                         } label: {
-                            SearchResultRow(
-                                result: media,
-                                usesDiarySize: true,
-                                showsMediaType: showsMediaTypes
-                            )
+                            SearchResultRichRow(result: media, showsKind: showsMediaTypes, isCompact: true)
                         }
                         .buttonStyle(.plain)
-                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 12))
+                        .alignmentGuide(.listRowSeparatorLeading) { _ in SearchResultRichRow.artWidth(isCompact: true) + 14 }
+                        .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 14))
+                        .listRowBackground(Color.clear)
                     }
+                } header: {
+                    Text("RECENTLY OPENED")
+                        .font(.system(size: 13, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.6))
                 }
+                .listSectionSeparator(.hidden)
             }
-            .listStyle(.insetGrouped)
+            .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.black)
             .scrollDismissesKeyboard(.interactively)
@@ -937,6 +969,7 @@ private struct SearchNoResultsState: View {
 
 private struct SearchResultsList: View {
     let results: [MediaSummary]
+    let query: String
     let showsMediaTypes: Bool
     let onSelect: (MediaSummary) -> Void
 
@@ -946,10 +979,12 @@ private struct SearchResultsList: View {
                 Button {
                     onSelect(result)
                 } label: {
-                    SearchResultRow(result: result, showsMediaType: showsMediaTypes)
+                    SearchResultRichRow(result: result, query: query, showsKind: showsMediaTypes)
                 }
                 .buttonStyle(.plain)
-                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 12))
+                .alignmentGuide(.listRowSeparatorLeading) { _ in SearchResultRichRow.artWidth(isCompact: false) + 14 }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 14))
+                .listRowBackground(Color.clear)
             }
         }
         .listStyle(.plain)
