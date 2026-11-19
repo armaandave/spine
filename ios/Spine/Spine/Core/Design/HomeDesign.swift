@@ -92,6 +92,8 @@ nonisolated enum HomeDesign {
         /// The rewatch glyph on dark-ink cards, and the deeper green that still reads on light-ink cards.
         static let rewatchGreen = Color(red: 0x4A / 255, green: 0xDE / 255, blue: 0x80 / 255)
         static let rewatchGreenDeep = Color(red: 0x0F / 255, green: 0x7A / 255, blue: 0x3B / 255)
+        /// The spoiler eye: a muted brick red, softer than a warning red, on dark and light art alike.
+        static let spoilerRed = Color(red: 0xC9 / 255, green: 0x52 / 255, blue: 0x4A / 255)
         /// Text on light art.
         static let lightInk = Color(red: 0x0D / 255, green: 0x1A / 255, blue: 0x1F / 255)
         /// Initials on an avatar disc.

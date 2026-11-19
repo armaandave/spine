@@ -4279,7 +4279,9 @@ private struct MediaDetailPageView: View {
                     || viewModel.reviewCount > 0 {
                     SpineRatingDistributionSection(
                         community: detail.community,
-                        reviewCount: viewModel.reviewCount
+                        reviewCount: viewModel.reviewCount,
+                        posterURL: detail.displayPosterURL,
+                        people: chartPeople
                     ) {
                         isReviewsPresented = true
                     }
@@ -4383,7 +4385,9 @@ private struct MediaDetailPageView: View {
             trackingSummarySection(detail)
             SpineRatingDistributionSection(
                 community: detail.community,
-                reviewCount: viewModel.reviewCount
+                reviewCount: viewModel.reviewCount,
+                posterURL: detail.displayPosterURL,
+                people: chartPeople
             ) {
                 isReviewsPresented = true
             }
@@ -4427,9 +4431,19 @@ private struct MediaDetailPageView: View {
         Task { await viewModel.loadFriends() }
     }
 
+    /// You (when you have stars) and the friends who rated, as photos on the ratings curve.
+    private var chartPeople: [RatingChartPerson] {
+        RatingChartPerson.people(
+            viewerRating: viewModel.viewer?.rating,
+            viewerAvatarURL: SignedInUserCache().load()?.avatarUrl,
+            friends: viewModel.friends
+        )
+    }
+
     private func friendsSection(_ detail: MediaDetail) -> some View {
         MediaFriendsSection(
             ref: detail.ref,
+            posterURL: detail.displayPosterURL,
             friends: viewModel.friends,
             onSeeAll: { isFriendsListPresented = true }
         ) { friend in
@@ -8339,77 +8353,85 @@ private func aniListDestination(_ rawValue: String?) -> URL? {
 struct SpineRatingDistributionSection: View {
     let community: CommunityStats?
     let reviewCount: Int
+    /// The poster the page shows: the number and the curve take the title's color from it, as Home's title does.
+    var posterURL: String?
+    /// You and the friends who rated, drawn as photos on the curve.
+    var people: [RatingChartPerson] = []
     let onSeeReviews: () -> Void
 
+    @State private var tint: Color?
+
+    init(
+        community: CommunityStats?,
+        reviewCount: Int,
+        posterURL: String? = nil,
+        people: [RatingChartPerson] = [],
+        onSeeReviews: @escaping () -> Void
+    ) {
+        self.community = community
+        self.reviewCount = reviewCount
+        self.posterURL = posterURL
+        self.people = people
+        self.onSeeReviews = onSeeReviews
+        _tint = State(initialValue: MediaPageTint.known(posterURL))
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                if let average = community?.averageRating {
-                    Label(average.starRatingLabel, systemImage: "star.fill")
-                        .font(.system(size: 18, weight: .heavy))
-                        .foregroundStyle(.white)
+        Group {
+            if counts.allSatisfy({ $0 == 0 }) {
+                HStack {
+                    Text("No ratings yet.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.58))
+                    Spacer()
+                    seeReviewsButton
                 }
-                Spacer()
-                Text("\((community?.ratingCount ?? 0).formatted()) \(community?.ratingCount == 1 ? "rating" : "ratings")")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.52))
-            }
-
-            if buckets.isEmpty {
-                Text("No ratings yet.")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.58))
             } else {
-                HStack(alignment: .bottom, spacing: 8) {
-                    ForEach(buckets, id: \.rating) { bucket in
-                        VStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(.white.opacity(0.82))
-                                .frame(width: 18, height: max(4, CGFloat(bucket.count) / CGFloat(maxCount) * 70))
-                            Text(bucket.rating)
-                                .font(.system(size: 9, weight: .heavy))
-                                .foregroundStyle(.white.opacity(0.58))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .frame(height: 96, alignment: .bottom)
-            }
-
-            if reviewCount > 0 {
-                Button(action: onSeeReviews) {
-                    HStack(spacing: 5) {
-                        Text(reviewsButtonTitle)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .heavy))
-                    }
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.82))
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .accessibilityHint("Opens every written review")
+                RatingsGlowChart(
+                    counts: counts,
+                    average: average,
+                    totalCount: community?.ratingCount ?? counts.reduce(0, +),
+                    tint: tint,
+                    people: people,
+                    reviewsTitle: reviewCount > 0 ? reviewsButtonTitle : nil,
+                    onSeeReviews: onSeeReviews
+                )
             }
         }
-        .padding(14)
-        .background(Color.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var buckets: [RatingDistributionBucket] {
-        let rawBuckets = community?.ratingDistribution ?? []
-        guard !rawBuckets.isEmpty else { return [] }
-        let counts = Dictionary(
-            grouping: rawBuckets,
-            by: { $0.rating.starRatingStep }
-        )
-            .mapValues { $0.reduce(0) { $0 + $1.count } }
-        return (1...10).map { step in
-            RatingDistributionBucket(rating: String.starRatingLabel(forStep: step), count: counts[step, default: 0])
+        .task(id: posterURL) {
+            tint = MediaPageTint.known(posterURL)
+            if tint == nil { tint = await MediaPageTint.load(posterURL) }
         }
     }
 
-    private var maxCount: Int {
-        max(buckets.map(\.count).max() ?? 1, 1)
+    @ViewBuilder
+    private var seeReviewsButton: some View {
+        if reviewCount > 0 {
+            Button(action: onSeeReviews) {
+                HStack(spacing: 5) {
+                    Text(reviewsButtonTitle)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .heavy))
+                }
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundStyle(.white.opacity(0.82))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens every written review")
+        }
+    }
+
+    private var counts: [Int] {
+        RatingsChartGeometry.counts(from: community?.ratingDistribution ?? [])
+    }
+
+    /// The community's average in stars; counted from the steps when the payload has none.
+    private var average: Double {
+        if let value = community?.averageRating.flatMap(Double.init) { return value }
+        let total = counts.reduce(0, +)
+        guard total > 0 else { return 0 }
+        let weighted = counts.enumerated().reduce(0.0) { $0 + Double($1.element) * Double($1.offset + 1) / 2 }
+        return weighted / Double(total)
     }
 
     private var reviewsButtonTitle: String {
