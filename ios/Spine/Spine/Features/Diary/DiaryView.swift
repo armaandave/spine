@@ -814,13 +814,12 @@ struct DiaryView: View {
     }
 
     private var mediaPicker: some View {
-        MediaSearchLensPicker(
+        MediaTypeBar(
             selectedType: selectedMediaTypeBinding,
             availableTypes: viewModel.mediaTypes,
-            horizontalPadding: 0,
-            fitsAllTypes: true,
             allowsEmptySelection: true,
-            isCompact: true
+            // The page ticks for every media type change, the filter sheet's too.
+            playsHaptic: false
         ) { selectedType in
             viewModel.filter.selectMediaType(selectedType.isEmpty ? nil : selectedType)
             Task { await reloadDiary(loadsFilterOptions: true) }
