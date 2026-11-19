@@ -148,7 +148,12 @@ private struct NavigationPageModifier: ViewModifier {
                 }
             }
             .background {
-                SwipeBackEnabler(kind: kind, allowsSwipeBack: allowsSwipeBack, page: page)
+                SwipeBackEnabler(
+                    kind: kind,
+                    allowsSwipeBack: allowsSwipeBack,
+                    selectedTab: appNavigationState?.selectedTab,
+                    page: page
+                )
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
             }
@@ -306,6 +311,7 @@ private struct PushDestinationModifier<Item: Identifiable, Destination: View>: V
 private struct SwipeBackEnabler: UIViewControllerRepresentable {
     let kind: PageKind
     let allowsSwipeBack: Bool
+    let selectedTab: AppTab?
     let page: PageController
 
     func makeUIViewController(context: Context) -> Controller {
@@ -318,11 +324,16 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: Controller, context: Context) {
         controller.kind = kind
         controller.allowsSwipeBack = allowsSwipeBack
+        if controller.selectedTab != selectedTab {
+            controller.selectedTab = selectedTab
+            controller.tabDidChange()
+        }
     }
 
     final class Controller: UIViewController {
         var kind = PageKind.page
         var allowsSwipeBack = true
+        var selectedTab: AppTab?
         weak var page: PageController?
 
         override func didMove(toParent parent: UIViewController?) {
@@ -332,6 +343,29 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
 
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
+            updateBar(animated: animated)
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            install()
+        }
+
+        /// Another tab was picked. iOS doesn't reliably tell the new tab's page it's appearing, so the bar is set from the
+        /// page on top of the tab on screen once the switch is under way, and again when it's done.
+        func tabDidChange() {
+            DispatchQueue.main.async { [weak self] in
+                guard let tabBarController = self?.tabBarController else { return }
+                Self.pageOnTop(of: tabBarController)?.updateBar(animated: false)
+                tabBarController.transitionCoordinator?.animate(alongsideTransition: nil) { _ in
+                    Self.pageOnTop(of: tabBarController)?.updateBar(animated: false)
+                }
+            }
+        }
+
+        /// Shows or hides the bar for this page, when its tab is the one on screen: a tab being left, its trail closing as
+        /// Home opens, must not set Home's.
+        private func updateBar(animated: Bool) {
             if let opened = isInsideTrail(), page?.openedWhileExploring != opened {
                 page?.openedWhileExploring = opened
             }
@@ -340,8 +374,6 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
             case .exploring, .post: true
             case .page: page?.openedWhileExploring ?? false
             }
-            // Only a page in the tab on screen sets the bar: a tab being left, its trail closing as Home opens, must not
-            // hide Home's.
             guard let tabBarController,
                   let selected = tabBarController.selectedViewController,
                   PageController.isInside(self, selected),
@@ -350,9 +382,18 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
             tabBarController.setTabBarHidden(hidesBottomBar, animated: animated)
         }
 
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            install()
+        /// The page on top of the tab on screen, by its enabler.
+        private static func pageOnTop(of tabBarController: UITabBarController) -> Controller? {
+            guard let tab = tabBarController.selectedViewController else { return nil }
+            var queue = [tab]
+            while !queue.isEmpty {
+                let next = queue.removeFirst()
+                if let stack = next as? UINavigationController {
+                    return stack.topViewController.flatMap(enabler(of:))
+                }
+                queue += next.children
+            }
+            return nil
         }
 
         /// The index of the trail's first page on a stack: its first exploring or post page.
