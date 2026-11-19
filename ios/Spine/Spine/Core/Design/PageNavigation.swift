@@ -180,6 +180,7 @@ private final class PageController {
     /// back button's long-press menu does.
     func closeTrail(animated: Bool) {
         guard let navigationController = controller?.navigationController,
+              navigationController.transitionCoordinator == nil,
               let start = SwipeBackEnabler.Controller.trailStart(in: navigationController),
               start > 0
         else { return }
@@ -325,8 +326,11 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
         controller.kind = kind
         controller.allowsSwipeBack = allowsSwipeBack
         if controller.selectedTab != selectedTab {
+            let isTabChange = controller.selectedTab != nil
             controller.selectedTab = selectedTab
-            controller.tabDidChange()
+            if isTabChange {
+                controller.tabDidChange()
+            }
         }
     }
 
@@ -351,8 +355,9 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
             install()
         }
 
-        /// Another tab was picked. iOS doesn't reliably tell the new tab's page it's appearing, so the bar is set from the
-        /// page on top of the tab on screen once the switch is under way, and again when it's done.
+        /// Another tab was picked. iOS 27 tells the new tab's page it's appearing while the old tab still counts as the
+        /// selected one, so that page leaves the bar alone; the bar is set from the page on top of the tab on screen once
+        /// the switch is under way, and again when it's done.
         func tabDidChange() {
             DispatchQueue.main.async { [weak self] in
                 guard let tabBarController = self?.tabBarController else { return }
