@@ -1680,14 +1680,12 @@ private struct GameCompletionPresentation: Identifiable {
 }
 
 private enum MediaDetailSheet: Identifiable {
-    case posterMenu
     case bookGameActions
     case tvActions
     case addToList
 
     var id: String {
         switch self {
-        case .posterMenu: "posterMenu"
         case .bookGameActions: "bookGameActions"
         case .tvActions: "tvActions"
         case .addToList: "addToList"
@@ -2511,52 +2509,6 @@ private struct MediaDetailPageView: View {
         .onPreferenceChange(TopSafeAreaInsetKey.self) { topSafeAreaInset = $0 }
         .sheet(item: $presentedSheet, onDismiss: presentPendingSheet) { sheet in
             switch sheet {
-            case .posterMenu:
-                PosterMenuSheet(
-                    posterLabel: "Customize Poster",
-                    showsSeasonOption: parentSeasonRef(viewModel.detail) != nil,
-                    showsTVShowOption: parentTVRef(viewModel.detail) != nil,
-                    showsPosterOption: canCustomizePoster(viewModel.detail),
-                    showsBackdropOption: canCustomizeBackdrop(viewModel.detail),
-                    showsLogoOption: canCustomizeLogo(viewModel.detail),
-                    onViewSeason: {
-                        guard let ref = parentSeasonRef(viewModel.detail) else { return }
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            navigateToParent(ref)
-                        }
-                    },
-                    onViewTVShow: {
-                        guard let ref = parentTVRef(viewModel.detail) else { return }
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            presentedRef = ref
-                        }
-                    },
-                    onAddToList: {
-                        presentedSheet = .addToList
-                    },
-                    onCustomizePoster: {
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            isPosterPickerPresented = true
-                        }
-                    },
-                    onCustomizeBackdrop: {
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            isBackdropPickerPresented = true
-                        }
-                    },
-                    onCustomizeLogo: {
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            isLogoPickerPresented = true
-                        }
-                    }
-                )
-                .presentationDetents([.height(posterMenuHeight(for: viewModel.detail))])
-                .presentationDragIndicator(.visible)
             case .bookGameActions:
                 if let detail = viewModel.detail {
                     if detail.ref.mediaType == "game" {
@@ -3084,11 +3036,8 @@ private struct MediaDetailPageView: View {
                     dismiss()
                 }
                 Spacer()
-                if viewModel.detail != nil {
-                    CircleIconButton(systemName: "ellipsis", label: "More") {
-                        dismissRatingPicker()
-                        presentedSheet = .posterMenu
-                    }
+                if let detail = viewModel.detail {
+                    moreMenu(detail)
                 }
             }
         }
@@ -3105,15 +3054,54 @@ private struct MediaDetailPageView: View {
         topSafeAreaInsetOverride ?? topSafeAreaInset
     }
 
-    private func posterMenuHeight(for detail: MediaDetail?) -> CGFloat {
-        let optionalRows = [
-            parentSeasonRef(detail) != nil,
-            parentTVRef(detail) != nil,
-            canCustomizePoster(detail),
-            canCustomizeBackdrop(detail),
-            canCustomizeLogo(detail),
-        ].filter { $0 }.count
-        return 80 + CGFloat(optionalRows * 68)
+    /// The page's ⋯: Apple's own menu, as on profiles and lists. Going to the show or season, Add to List, then the
+    /// artwork this title's source has choices for.
+    private func moreMenu(_ detail: MediaDetail) -> some View {
+        Menu {
+            let season = parentSeasonRef(detail)
+            let show = parentTVRef(detail)
+            if season != nil || show != nil {
+                Section {
+                    if let season {
+                        Button("Open Season", systemImage: "rectangle.stack") { choose { navigateToParent(season) } }
+                    }
+                    if let show {
+                        Button("Open Show", systemImage: "tv") { choose { presentedRef = show } }
+                    }
+                }
+            }
+            Button("Add to List", systemImage: "list.bullet.rectangle") { choose { presentedSheet = .addToList } }
+            Section {
+                if canCustomizePoster(detail) {
+                    Button("Customize Poster", systemImage: "photo.on.rectangle.angled") {
+                        choose { isPosterPickerPresented = true }
+                    }
+                }
+                if canCustomizeBackdrop(detail) {
+                    Button("Customize Backdrop", systemImage: "photo.on.rectangle") {
+                        choose { isBackdropPickerPresented = true }
+                    }
+                }
+                if canCustomizeLogo(detail) {
+                    Button("Customize Logo", systemImage: "textformat") { choose { isLogoPickerPresented = true } }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .bold))
+                .frame(width: 44, height: 44)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel("More")
+    }
+
+    /// A choice from ⋯ first folds the rail's stars away.
+    private func choose(_ action: () -> Void) {
+        dismissRatingPicker()
+        action()
     }
 
     private func canCustomizePoster(_ detail: MediaDetail?) -> Bool {
@@ -5383,102 +5371,6 @@ func bookGameCopy(for mediaType: String) -> (currently: String, finished: String
     }
 }
 
-private struct PosterMenuSheet: View {
-    let posterLabel: String
-    let showsSeasonOption: Bool
-    let showsTVShowOption: Bool
-    let showsPosterOption: Bool
-    let showsBackdropOption: Bool
-    let showsLogoOption: Bool
-    let onViewSeason: () -> Void
-    let onViewTVShow: () -> Void
-    let onAddToList: () -> Void
-    let onCustomizePoster: () -> Void
-    let onCustomizeBackdrop: () -> Void
-    let onCustomizeLogo: () -> Void
-
-    var body: some View {
-        VStack(spacing: 10) {
-            if showsSeasonOption {
-                Button(action: onViewSeason) {
-                    Label("View Season", systemImage: "rectangle.stack")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-
-            if showsTVShowOption {
-                Button(action: onViewTVShow) {
-                    Label("View TV Show", systemImage: "tv")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-
-            Button(action: onAddToList) {
-                Label("Add to List", systemImage: "list.bullet.rectangle")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18)
-                    .frame(height: 54)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16)
-
-            if showsPosterOption {
-                Button(action: onCustomizePoster) {
-                    Label(posterLabel, systemImage: "photo.on.rectangle.angled")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-
-            if showsBackdropOption {
-                Button(action: onCustomizeBackdrop) {
-                    Label("Customize Backdrop", systemImage: "photo.on.rectangle")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-
-            if showsLogoOption {
-                Button(action: onCustomizeLogo) {
-                    Label("Customize Logo", systemImage: "textformat")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-        }
-        .presentationBackground(.regularMaterial)
-    }
-}
-
 /// Only books open this sheet: games use GameActionSheet, so the non-book branch is unreachable today.
 private struct BookGameActionSheet: View {
     /// What the book list showed when a choice was made, kept while the sheet slides away (see GameActionSheet).
@@ -5601,7 +5493,7 @@ private struct BookGameActionSheet: View {
                 }
                 if let removal = menu.removal {
                     Section {
-                        Button(removal.title, role: .destructive) {
+                        Button(removal.title, systemImage: "trash", role: .destructive) {
                             if !removal.isDisabled { isRemoveConfirmationPresented = true }
                         }
                         .disabled(removal.isDisabled)
@@ -5617,15 +5509,15 @@ private struct BookGameActionSheet: View {
         }
         .preferredColorScheme(.dark)
         .confirmationDialog("Mark this \(noun) as Did Not Finish?", isPresented: $isDNFConfirmationPresented, titleVisibility: .visible) {
-            Button("Mark as DNF", role: .destructive) {
+            Button("Did Not Finish", role: .destructive) {
                 commit { onAction(.stopped) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your current progress will remain in reading history.")
         }
-        .confirmationDialog(isSeries ? "Remove from Library?" : "Remove book tracking?", isPresented: $isRemoveConfirmationPresented, titleVisibility: .visible) {
-            Button(isSeries ? "Remove from Library" : "Remove Tracking", role: .destructive) {
+        .confirmationDialog("Remove from Library?", isPresented: $isRemoveConfirmationPresented, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
                 commit(onRemove)
             }
             Button("Cancel", role: .cancel) {}

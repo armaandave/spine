@@ -308,10 +308,10 @@ nonisolated enum TVTrackingPresentation {
         }
     }
 
-    /// The show's + menu: Watching (Resume in its place when Paused), Planning, Pause, Drop, Log, Rewatch or Stop
-    /// Rewatching, and Remove from Library for a show in the library. Base options are always listed; unavailable
-    /// ones carry the server's reason. A show that isn't in the library has nothing to remove, whatever the server
-    /// sends. Rewatch comes after Log because it appears when the show finishes.
+    /// The show's + menu, in Library's words: Watching (Resume in its place when Paused), Planning, Paused, Dropped, Log,
+    /// Rewatch or Stop Rewatching, and Remove from Library for a show in the library. Base options are always listed;
+    /// unavailable ones carry the server's reason. A show that isn't in the library has nothing to remove, whatever the
+    /// server sends. Rewatch comes after Log because it appears when the show finishes.
     static func showMenu(for tv: TVShowState) -> [TVMenuItem] {
         var items: [TVMenuItem] = []
         let menu = MenuSource(available: tv.availableActions, reasons: tv.actionReasons, selected: tv.selectedAction)
@@ -323,8 +323,8 @@ nonisolated enum TVTrackingPresentation {
             items.append(menu.item("watching", "Watching", "play.fill", .action(.watching)))
         }
         items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
-        items.append(menu.item("pause", "Pause", "pause.fill", .action(.pause)))
-        items.append(menu.item("drop", "Drop", "xmark", .confirmDrop))
+        items.append(menu.item("pause", "Paused", "pause.fill", .action(.pause)))
+        items.append(menu.item("drop", "Dropped", "xmark", .confirmDrop))
         items.append(menu.item("log", "Log", "square.and.pencil", .log))
         if let rewatch = menu.optionalItem("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)) {
             items.append(rewatch)
@@ -353,8 +353,8 @@ nonisolated enum TVTrackingPresentation {
         }
         items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
         if !anime.single {
-            items.append(menu.item("pause", "Pause", "pause.fill", .action(.pause)))
-            items.append(menu.item("drop", "Drop", "xmark", .confirmDrop))
+            items.append(menu.item("pause", "Paused", "pause.fill", .action(.pause)))
+            items.append(menu.item("drop", "Dropped", "xmark", .confirmDrop))
         }
         items.append(menu.item("log", "Log", "square.and.pencil", .log))
         if !anime.single {

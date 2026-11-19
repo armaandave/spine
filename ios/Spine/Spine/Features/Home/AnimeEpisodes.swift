@@ -514,7 +514,7 @@ struct AnimeEpisodesSheet: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button("Log…", systemImage: "square.and.pencil") {
+                        Button("Log", systemImage: "square.and.pencil") {
                             openLog()
                         }
                         .disabled(!episodes.canLog)

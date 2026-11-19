@@ -834,7 +834,7 @@ private struct ContinueWatchingEpisodesSheet: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button("Log \(TVTrackingPresentation.seasonTitle(episodes.seasonNumber))…",
+                        Button("Log \(TVTrackingPresentation.seasonTitle(episodes.seasonNumber))",
                                systemImage: "square.and.pencil") {
                             openLog()
                         }

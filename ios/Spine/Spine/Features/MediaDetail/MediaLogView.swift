@@ -320,7 +320,7 @@ final class MediaLogViewModel {
         case "comic":
             "Log Comic"
         case "game":
-            "Log Completion"
+            "Log Game"
         case "boardgame":
             "Log Board Game"
         case "book":

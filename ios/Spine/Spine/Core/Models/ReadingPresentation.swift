@@ -52,15 +52,15 @@ nonisolated struct ReadingMenu: Equatable {
                 rows.append(Row(title: "Keep Reading", systemImage: "book.pages", command: .keepReading))
             }
             rows.append(Row(title: "Reread", systemImage: "arrow.counterclockwise", command: .reread))
+        } else if status == "Paused" {
+            // Resume takes Currently Reading's place, as it takes Watching's on a show.
+            rows.append(Row(title: "Resume", systemImage: "play.fill", command: .resume))
         } else {
             rows.append(statusRow("Currently Reading", "book.pages", .currentlyReading, for: "In progress"))
         }
         rows.append(statusRow("Paused", "pause.fill", .paused, for: "Paused"))
         rows.append(statusRow("Did Not Finish", "xmark", .didNotFinish(asks: isLive), for: "Dropped"))
-        if status == "Paused" {
-            rows.append(Row(title: "Resume Reading", systemImage: nil, command: .resume))
-        }
-        rows.append(Row(title: "Log Read", systemImage: "square.and.pencil", command: .log))
+        rows.append(Row(title: "Log", systemImage: "square.and.pencil", command: .log))
         self.rows = rows
 
         liveReason = isLive
@@ -71,7 +71,7 @@ nonisolated struct ReadingMenu: Equatable {
             )
             : nil
         removal = status == nil ? nil : Removal(
-            title: isSeries ? "Remove from Library" : "Remove Tracking",
+            title: "Remove from Library",
             isDisabled: book?.canRemoveTracking == false,
             reason: book?.canRemoveTracking == false ? book?.removeTrackingReason : nil
         )

@@ -894,7 +894,7 @@ final class AnimeTrackingTests: XCTestCase {
         anime.availableActions = ["pause", "drop", "log", "remove", "rate"]
         anime.actionReasons = ["planning": "You've started this anime. Pause or drop it instead."]
         var items = TVTrackingPresentation.animeMenu(for: anime)
-        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Remove from Library"])
+        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Paused", "Dropped", "Log", "Remove from Library"])
         XCTAssertTrue(items[0].isSelected)
         XCTAssertFalse(items[1].isAvailable)
         XCTAssertEqual(items[1].reason, "You've started this anime. Pause or drop it instead.")
@@ -908,7 +908,7 @@ final class AnimeTrackingTests: XCTestCase {
         anime.selectedAction = "pause"
         anime.availableActions = ["resume", "drop", "log", "remove", "rate"]
         items = TVTrackingPresentation.animeMenu(for: anime)
-        XCTAssertEqual(items.map(\.title), ["Resume", "Planning", "Pause", "Drop", "Log", "Remove from Library"])
+        XCTAssertEqual(items.map(\.title), ["Resume", "Planning", "Paused", "Dropped", "Log", "Remove from Library"])
         XCTAssertEqual(items[0].command, .action(.resume))
 
         // A finished title offers Rewatch; during one, Stop Rewatching takes its place.
@@ -917,13 +917,13 @@ final class AnimeTrackingTests: XCTestCase {
         anime.availableActions = ["pause", "drop", "rewatch", "log", "rate"]
         anime.actionReasons = ["watching": "You've watched everything that has aired.", "remove": "Delete this anime's logs first."]
         items = TVTrackingPresentation.animeMenu(for: anime)
-        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Rewatch", "Remove from Library"],
+        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Paused", "Dropped", "Log", "Rewatch", "Remove from Library"],
                        "Rewatch, which appears when the title finishes, comes after Log")
         XCTAssertEqual(items.last?.reason, "Delete this anime's logs first.")
         XCTAssertEqual(items[0].reason, "You've watched everything that has aired.")
         anime.availableActions = ["pause", "drop", "stop_rewatch", "log", "rate"]
         anime.actionReasons = ["rewatch": "You're already rewatching this."]
-        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: anime).map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Stop Rewatching", "Remove from Library"])
+        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: anime).map(\.title), ["Watching", "Planning", "Paused", "Dropped", "Log", "Stop Rewatching", "Remove from Library"])
 
         // Not in the library: nothing to remove.
         XCTAssertFalse(TVTrackingPresentation.animeMenu(for: AnimeState()).map(\.title).contains("Remove from Library"))

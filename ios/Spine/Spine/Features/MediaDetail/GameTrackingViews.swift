@@ -238,14 +238,18 @@ struct GameActionSheet: View {
         NavigationStack {
             List {
                 Section {
-                    statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress", disabled: game?.hasPlayingPlaythrough == true)
+                    if status == "Paused" {
+                        // Resume takes Playing's place, as it takes Watching's on a show.
+                        Button("Resume", systemImage: "play.fill") { commit { onAction(.currently) } }
+                    } else {
+                        statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress", disabled: game?.hasPlayingPlaythrough == true)
+                    }
                     statusButton("Planning", symbol: "bookmark", action: .planning, selected: status == "Planning", disabled: status == "Planning" || game?.hasLivePlaythrough == true)
                     statusButton("Paused", symbol: "pause.fill", action: .paused, selected: status == "Paused")
                     Button { if game?.hasLivePlaythrough == true { confirmDrop = true } else { commit { onAction(.stopped) } } } label: {
-                        Label(status == "Dropped" ? "Dropped ✓" : "Dropped", systemImage: "stop.fill")
+                        Label(status == "Dropped" ? "Dropped ✓" : "Dropped", systemImage: "xmark")
                     }.disabled(status == "Dropped")
-                    if status == "Paused" { Button("Resume") { commit { onAction(.currently) } } }
-                    Button("Log Completion", systemImage: "square.and.pencil") { commit(onLog) }
+                    Button("Log", systemImage: "square.and.pencil") { commit(onLog) }
                 }
                 if game?.hasLivePlaythrough == true {
                     Text("Pause, drop, or delete the unfinished playthrough before choosing Planning.").font(.caption).foregroundStyle(.secondary)
@@ -253,7 +257,7 @@ struct GameActionSheet: View {
                 if game?.canUpdateProgress == true { Button("Update Progress", systemImage: "slider.horizontal.3") { commit(onProgress) } }
                 if status != nil {
                     Section {
-                        Button("Remove from Library", role: .destructive) { confirmRemove = true }
+                        Button("Remove from Library", systemImage: "trash", role: .destructive) { confirmRemove = true }
                             .disabled(game?.canRemoveTracking == false)
                         if game?.canRemoveTracking == false {
                             Text("Delete playthroughs and completion logs first. Custom lists stay unchanged.").font(.caption).foregroundStyle(.secondary)
@@ -443,14 +447,14 @@ struct GameProgressSheet: View {
         } moreActions: {
             if playthrough.isUnfinished {
                 if playthrough.status == "Paused" {
-                    Button("Resume Playing", systemImage: "play.fill") { choose { onAction("resume") } }
+                    Button("Resume", systemImage: "play.fill") { choose { onAction("resume") } }
                 } else {
                     Button("Pause", systemImage: "pause.fill") { choose { onAction("pause") } }
                 }
             }
             Button("Edit Dates", systemImage: "calendar", action: onEditDates)
             if playthrough.isUnfinished {
-                Button("Mark as Dropped", systemImage: "xmark") { pending = .drop }
+                Button("Drop", systemImage: "xmark") { pending = .drop }
                 Divider()
                 Button("Restart from Beginning", systemImage: "arrow.counterclockwise") { pending = .restart }
                 Button("Delete Playthrough", systemImage: "trash", role: .destructive) { pending = .delete }

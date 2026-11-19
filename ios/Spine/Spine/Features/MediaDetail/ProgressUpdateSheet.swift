@@ -1043,8 +1043,8 @@ private enum BookJourneyMenuAction: String, CaseIterable, Identifiable {
     func title(_ words: Words) -> String {
         switch self {
         case .pause: "Pause"
-        case .resume: "Resume Reading"
-        case .didNotFinish: "Mark as DNF"
+        case .resume: "Resume"
+        case .didNotFinish: "Did Not Finish"
         case .finish: "Finish & Log"
         case .restart: "Restart from Beginning"
         case .delete: "Delete \(words.attempt.capitalized)"

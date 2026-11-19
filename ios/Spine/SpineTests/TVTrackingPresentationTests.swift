@@ -211,7 +211,7 @@ final class TVTrackingPresentationTests: XCTestCase {
         let tv = try JSONDecoder.api.decode(TVShowState.self, from: Data(TVTrackingModelsTests.showDetailJSON.utf8))
         let items = TVTrackingPresentation.showMenu(for: tv)
         XCTAssertEqual(items.map(\.key), ["watching", "planning", "pause", "drop", "log", "remove"])
-        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Remove from Library"])
+        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Paused", "Dropped", "Log", "Remove from Library"])
 
         let watching = try XCTUnwrap(items.first { $0.key == "watching" })
         XCTAssertTrue(watching.isSelected, "The current status shows as selected, not as a second action.")

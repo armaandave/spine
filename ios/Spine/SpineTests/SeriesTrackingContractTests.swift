@@ -586,7 +586,7 @@ final class SeriesTrackingContractTests: XCTestCase {
     // BK-100: what isn't in the library has nothing to remove.
     func testTheMenuOfAnUntrackedSeries() {
         let menu = ReadingMenu(mediaType: "manga", status: nil, book: nil)
-        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Currently Reading", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Currently Reading", "Paused", "Did Not Finish", "Log"])
         XCTAssertFalse(menu.rows.contains(where: \.isDisabled))
         XCTAssertEqual(menu.rows.map(\.command)[3], .didNotFinish(asks: false))
         XCTAssertNil(menu.liveReason)
@@ -597,35 +597,32 @@ final class SeriesTrackingContractTests: XCTestCase {
     func testTheMenuDuringARead() {
         let reason = "Pause or mark this attempt Did Not Finish first."
         let menu = ReadingMenu(mediaType: "comic", status: "In progress", book: live(reasons: ["planning": reason]))
-        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Currently Reading ✓", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Currently Reading ✓", "Paused", "Did Not Finish", "Log"])
         XCTAssertEqual(menu.rows.filter(\.isDisabled).map(\.title), ["To Read", "Currently Reading ✓"])
         XCTAssertEqual(menu.rows.map(\.command)[3], .didNotFinish(asks: true))
         XCTAssertEqual(menu.liveReason, reason)
     }
 
-    // BK-100, BK-303: Resume when Paused.
+    // BK-100, BK-303: when Paused, Resume takes Currently Reading's place, as it takes Watching's on a show.
     func testTheMenuWhilePaused() {
         let menu = ReadingMenu(mediaType: "manga", status: "Paused", book: live("Paused"))
-        XCTAssertEqual(
-            menu.rows.map(\.title),
-            ["To Read", "Currently Reading", "Paused ✓", "Did Not Finish", "Resume Reading", "Log Read"]
-        )
-        XCTAssertEqual(menu.rows.first { $0.title == "Resume Reading" }?.command, .resume)
+        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Resume", "Paused ✓", "Did Not Finish", "Log"])
+        XCTAssertEqual(menu.rows[1].command, .resume)
     }
 
     // MC-200: a Read series with more offers both; with nothing more, Reread only. A book keeps its row.
     func testTheMenuOfAReadSeries() {
         let more = ReadingMenu(mediaType: "manga", status: "Completed", book: BookTrackingState(offersKeepReading: true))
-        XCTAssertEqual(more.rows.map(\.title), ["To Read", "Keep Reading", "Reread", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(more.rows.map(\.title), ["To Read", "Keep Reading", "Reread", "Paused", "Did Not Finish", "Log"])
         XCTAssertEqual(more.rows[1].command, .keepReading)
         XCTAssertEqual(more.rows[2].command, .reread)
         let done = ReadingMenu(mediaType: "comic", status: "Completed", book: BookTrackingState(offersKeepReading: false))
-        XCTAssertEqual(done.rows.map(\.title), ["To Read", "Reread", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(done.rows.map(\.title), ["To Read", "Reread", "Paused", "Did Not Finish", "Log"])
         let book = ReadingMenu(mediaType: "book", status: "Completed", book: BookTrackingState())
-        XCTAssertEqual(book.rows.map(\.title), ["To Read", "Currently Reading", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(book.rows.map(\.title), ["To Read", "Currently Reading", "Paused", "Did Not Finish", "Log"])
     }
 
-    // BK-002: removal says why it can't happen, in the series' words.
+    // BK-002: removal says why it can't happen. Books and series both say Remove from Library, as shows and games do.
     func testTheMenusRemoval() {
         let blocked = ReadingMenu(
             mediaType: "manga",
@@ -635,7 +632,7 @@ final class SeriesTrackingContractTests: XCTestCase {
         XCTAssertEqual(blocked.removal, ReadingMenu.Removal(title: "Remove from Library", isDisabled: true, reason: "Delete reading attempts and logs first."))
         let free = ReadingMenu(mediaType: "comic", status: "Planning", book: BookTrackingState(canRemoveTracking: true))
         XCTAssertEqual(free.removal, ReadingMenu.Removal(title: "Remove from Library", isDisabled: false, reason: nil))
-        XCTAssertEqual(ReadingMenu(mediaType: "book", status: "Planning", book: nil).removal?.title, "Remove Tracking")
+        XCTAssertEqual(ReadingMenu(mediaType: "book", status: "Planning", book: nil).removal?.title, "Remove from Library")
     }
 
     // MC-000: a series speaks of attempts, whatever the server left out. A book of its journeys.
