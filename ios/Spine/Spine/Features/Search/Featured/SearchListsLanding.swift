@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// What Search shows before you type, with every kind of media in the field: one big word per kind of list
-/// ("Movies", "Books", "Across Media"), how many lists it has and three of their posters. A word opens that kind's
-/// lists.
+/// ("Movies", "Books"), how many lists it has and where they come from ("Oscars · Cannes +23"). A word opens that
+/// kind's lists.
 struct SearchListsLanding: View {
     let store: FeaturedListsStore
     let enabledMediaTypes: [String]
@@ -31,7 +31,7 @@ struct SearchListsLanding: View {
     }
 
     private func kinds(_ shelves: [FeaturedShelf], everyKind: Int) -> some View {
-        SearchListsRows(everyKind: everyKind) { rowHeight in
+        SearchListsRows(everyKind: everyKind, summary: SearchListsSummary.text(for: shelves)) { rowHeight in
             ForEach(shelves) { shelf in
                 NavigationLink {
                     FeaturedShelfDetailView(
@@ -52,10 +52,27 @@ struct SearchListsLanding: View {
     }
 }
 
+/// The line beside LISTS, adding up the rows on screen: every row's lists, and each source once however many rows
+/// it's on.
+enum SearchListsSummary {
+    static func totals(for shelves: [FeaturedShelf]) -> (lists: Int, sources: Int) {
+        (shelves.reduce(0) { $0 + $1.count }, Set(shelves.flatMap { $0.sources.map(\.name) }).count)
+    }
+
+    /// "174 lists · 75 sources"; just the lists from a server that doesn't name sources.
+    static func text(for shelves: [FeaturedShelf]) -> String {
+        let (lists, sources) = totals(for: shelves)
+        let listsText = lists == 1 ? "1 list" : "\(lists.formatted()) lists"
+        guard sources > 0 else { return listsText }
+        return "\(listsText) · \(sources == 1 ? "1 source" : "\(sources.formatted()) sources")"
+    }
+}
+
 /// "LISTS" over the kinds. The rows split the height down to the tab bar so that every kind fits exactly when
 /// they're all turned on (fewer end higher), and scroll only on a screen too short for that.
 private struct SearchListsRows<Rows: View>: View {
     let everyKind: Int
+    var summary: String?
     @ViewBuilder let rows: (_ rowHeight: CGFloat) -> Rows
 
     private static var minimumRowHeight: CGFloat { 60 }
@@ -64,7 +81,7 @@ private struct SearchListsRows<Rows: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SearchListsHeading()
+            SearchListsHeading(summary: summary)
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
             GeometryReader { proxy in
@@ -83,17 +100,28 @@ private struct SearchListsRows<Rows: View>: View {
 }
 
 private struct SearchListsHeading: View {
+    var summary: String?
+
     var body: some View {
-        Text("LISTS")
-            .font(.system(size: 13, weight: .bold))
-            .tracking(0.8)
-            .foregroundStyle(.white.opacity(0.55))
-            .padding(.bottom, 4)
-            .accessibilityAddTraits(.isHeader)
+        HStack(alignment: .firstTextBaseline) {
+            Text("LISTS")
+                .font(.system(size: 13, weight: .bold))
+                .tracking(0.8)
+                .foregroundStyle(.white.opacity(0.55))
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            if let summary {
+                Text(summary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.42))
+            }
+        }
+        .padding(.bottom, 4)
     }
 }
 
-/// "Movies 39" in big type, the count on the word's baseline, three of its posters at the far end.
+/// "Movies 39" in big type, the count on the word's baseline, and where its lists come from at the far end.
 private struct SearchListsKindRow: View {
     let shelf: FeaturedShelf
     let height: CGFloat
@@ -112,8 +140,9 @@ private struct SearchListsKindRow: View {
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.45))
             }
-            Spacer(minLength: 8)
-            SearchListsPosters(posters: shelf.rowPosters, square: shelf.mediaType == "music")
+            .layoutPriority(1)
+            Spacer(minLength: 0)
+            SearchListsSourcesLine(sources: shelf.sources)
         }
         .frame(height: height)
         .contentShape(Rectangle())
@@ -124,39 +153,96 @@ private struct SearchListsKindRow: View {
         }
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(shelf.title), \(shelf.count) \(shelf.count == 1 ? "list" : "lists")")
+        .accessibilityLabel(accessibilityText)
         .accessibilityHint("Opens its lists")
+    }
+
+    private var accessibilityText: String {
+        let lists = "\(shelf.count) \(shelf.count == 1 ? "list" : "lists")"
+        guard !shelf.sources.isEmpty else { return "\(shelf.title), \(lists)" }
+        let total = shelf.sources.count
+        let named = shelf.sources.prefix(2).map(\.name).joined(separator: " and ")
+        return "\(shelf.title), \(lists) from \(total) \(total == 1 ? "source" : "sources"), including \(named)"
     }
 }
 
-/// Up to three posters side by side, straight, in slots of one width so every row's posters line up.
-private struct SearchListsPosters: View {
-    static let slotWidth: CGFloat = 32
-    static let posterHeight: CGFloat = 48
-    static let spacing: CGFloat = 6
-
-    let posters: [MediaSummary]
-    let square: Bool
+/// A row's sources on one line: the first two by name with their icons, or the first alone when two don't fit,
+/// then how many more.
+private struct SearchListsSourcesLine: View {
+    let sources: [FeaturedShelfSource]
 
     var body: some View {
-        HStack(spacing: Self.spacing) {
-            ForEach(posters, id: \.ref) { media in
-                let size = CGSize(width: Self.slotWidth, height: square ? Self.slotWidth : Self.posterHeight)
-                SpineAsyncImage(url: URL(string: media.displayPosterURL ?? ""), thumbnailSize: size) { phase in
-                    if case let .success(image) = phase {
+        ViewThatFits(in: .horizontal) {
+            line(naming: 2)
+            line(naming: 1)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func line(naming count: Int) -> some View {
+        let named = Array(sources.prefix(count))
+        let more = sources.count - named.count
+        return HStack(spacing: 11) {
+            ForEach(named) { source in
+                HStack(spacing: 6) {
+                    SearchListsSourceIcon(source: source)
+                    Text(source.name)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .tracking(-0.1)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(1)
+                }
+            }
+            if more > 0 {
+                Text("+\(more)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+        }
+    }
+}
+
+/// A source's icon as a small rounded square; its first letter when it has none.
+private struct SearchListsSourceIcon: View {
+    let source: FeaturedShelfSource
+
+    private static var side: CGFloat { 16 }
+
+    var body: some View {
+        Group {
+            if let url = source.iconUrl.flatMap(URL.init(string:)) {
+                SpineAsyncImage(url: url, thumbnailSize: CGSize(width: Self.side, height: Self.side)) { phase in
+                    switch phase {
+                    case let .success(image):
                         image
                             .resizable()
                             .scaledToFill()
-                    } else {
+                    case .failure:
+                        letter
+                    default:
                         Color.white.opacity(0.08)
                     }
                 }
-                .frame(width: size.width, height: size.height)
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            } else {
+                letter
             }
         }
-        .frame(width: Self.slotWidth * 3 + Self.spacing * 2, height: Self.posterHeight, alignment: .trailing)
-        .accessibilityHidden(true)
+        .frame(width: Self.side, height: Self.side)
+        .clipShape(RoundedRectangle(cornerRadius: 4.5, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)
+        }
+    }
+
+    private var letter: some View {
+        ZStack {
+            Color.white.opacity(0.12)
+            Text(source.name.prefix(1).uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(0.8))
+        }
     }
 }
 
@@ -169,11 +255,16 @@ private struct SearchListsSkeleton: View {
                         .fill(.white.opacity(0.08))
                         .frame(width: [150, 70, 120, 120, 120, 120, 140, 110][index], height: 26)
                     Spacer()
-                    HStack(spacing: SearchListsPosters.spacing) {
-                        ForEach(0 ..< 3, id: \.self) { _ in
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(.white.opacity(0.06))
-                                .frame(width: SearchListsPosters.slotWidth, height: SearchListsPosters.posterHeight)
+                    HStack(spacing: 11) {
+                        ForEach(0 ..< 2, id: \.self) { _ in
+                            HStack(spacing: 6) {
+                                RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                                    .fill(.white.opacity(0.08))
+                                    .frame(width: 16, height: 16)
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .fill(.white.opacity(0.06))
+                                    .frame(width: 46, height: 10)
+                            }
                         }
                     }
                 }
@@ -182,20 +273,5 @@ private struct SearchListsSkeleton: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading lists")
-    }
-}
-
-extension FeaturedShelf {
-    /// Up to three posters for a kind's row: the first poster of each of its first lists, then more from the first
-    /// list when it has fewer lists, never the same title twice.
-    var rowPosters: [MediaSummary] {
-        var posters: [MediaSummary] = []
-        func add(_ media: MediaSummary?) {
-            guard let media, posters.count < 3, !posters.contains(where: { $0.ref == media.ref }) else { return }
-            posters.append(media)
-        }
-        lists.forEach { add($0.previews.first?.media) }
-        lists.first?.previews.forEach { add($0.media) }
-        return posters
     }
 }

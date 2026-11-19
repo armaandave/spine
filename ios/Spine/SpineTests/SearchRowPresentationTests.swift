@@ -75,14 +75,40 @@ final class SearchRowPresentationTests: XCTestCase {
         XCTAssertNil(SearchRowText.friendsLine(MediaFriendsSummary(count: 0, people: [])))
     }
 
-    func testAKindsPostersAreTheFirstOfEachListThenMoreFromTheFirst() {
-        let lists = [
-            card(id: 1, titles: ["dune", "arrival", "dune"]),
-            card(id: 2, titles: ["sinners"]),
-        ]
-        let shelf = FeaturedShelf(key: "movie", title: "Movies", mediaType: "movie", lists: lists)
+    func testTheLineAboveTheKindsAddsUpTheRowsAndCountsEachSourceOnce() {
+        let movies = FeaturedShelf(
+            key: "movie", title: "Movies", mediaType: "movie", count: 39, lists: [],
+            sources: [FeaturedShelfSource(name: "Oscars"), FeaturedShelfSource(name: "Netflix", lists: 3)]
+        )
+        let tv = FeaturedShelf(
+            key: "tv", title: "TV", mediaType: "tv", count: 18, lists: [],
+            sources: [FeaturedShelfSource(name: "Emmys"), FeaturedShelfSource(name: "Netflix", lists: 2)]
+        )
+        let totals = SearchListsSummary.totals(for: [movies, tv])
+        XCTAssertEqual(totals.lists, 57)
+        XCTAssertEqual(totals.sources, 3)
 
-        XCTAssertEqual(shelf.rowPosters.map(\.title), ["dune", "sinners", "arrival"])
+        let older = FeaturedShelf(key: "book", title: "Books", mediaType: "book", count: 59, lists: [])
+        XCTAssertEqual(SearchListsSummary.totals(for: [older]).sources, 0)
+    }
+
+    func testShelvesDecodeTheirSourcesAndDropABrokenOne() throws {
+        let json = #"""
+        {"shelves": [
+          {"key": "movie", "title": "Movies", "media_type": "movie", "count": 39, "lists": [],
+           "sources": [{"name": "Oscars", "icon_url": "https://example.com/oscars.png", "lists": 2},
+                       {"icon_url": "https://example.com/nameless.png", "lists": 1},
+                       {"name": "A Zine", "icon_url": null, "lists": 1}]},
+          {"key": "tv", "title": "TV", "media_type": "tv", "count": 18, "lists": []}
+        ]}
+        """#
+        let response = try JSONDecoder.api.decode(FeaturedShelvesResponse.self, from: Data(json.utf8))
+
+        XCTAssertEqual(response.shelves[0].sources.map(\.name), ["Oscars", "A Zine"])
+        XCTAssertEqual(response.shelves[0].sources[0].lists, 2)
+        XCTAssertEqual(response.shelves[0].sources[0].iconUrl, "https://example.com/oscars.png")
+        XCTAssertNil(response.shelves[0].sources[1].iconUrl)
+        XCTAssertEqual(response.shelves[1].sources, [])
     }
 
     func testSearchResultsDecodeTheirFriendsAndSurviveABrokenOne() throws {
@@ -107,20 +133,5 @@ final class SearchRowPresentationTests: XCTestCase {
 
     private func face(_ username: String) -> MediaFriendFace {
         MediaFriendFace(id: username.count, username: username, displayName: username, avatarUrl: nil)
-    }
-
-    private func card(id: Int, titles: [String]) -> FeaturedListCard {
-        FeaturedListCard(
-            id: id,
-            name: "List \(id)",
-            itemsCount: titles.count,
-            mediaTypes: ["movie"],
-            previews: titles.map { title in
-                FeaturedPreview(media: MediaSummary(
-                    ref: MediaRef(itemId: nil, source: "tmdb", mediaType: "movie", mediaId: title, seasonNumber: nil, episodeNumber: nil),
-                    title: title
-                ))
-            }
-        )
     }
 }
