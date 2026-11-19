@@ -17,9 +17,9 @@ enum PageKind {
 
 extension View {
     /// Sets a page up: its bottom bar, Apple's swipe back, the pages its links open (`pushDestination`), and the
-    /// floating Home and Search buttons while exploring. Apply it last, outside the page's `pushDestination`s, so the
-    /// pages they open are opened while exploring too. `allowsSwipeBack` is false while something over the page
-    /// (a poster opened full screen) takes swipes itself.
+    /// floating Home and Search buttons while exploring. Apply it last, outside the page's `pushDestination`s, which
+    /// open their pages through it. `allowsSwipeBack` is false while something over the page (a poster opened full
+    /// screen) takes swipes itself.
     ///
     /// On a tab's first page (`.root`), tapping the tab again goes back to that page; tapped again there, the page
     /// scrolls to its top and `onTabReselect` runs (Search puts the cursor in its search box).
@@ -84,10 +84,11 @@ struct PageHeaderBackButton: View {
 }
 
 extension EnvironmentValues {
-    /// True on a page opened while exploring (and on the exploring page itself).
-    var isExploring: Bool {
-        get { self[IsExploringKey.self] }
-        set { self[IsExploringKey.self] = newValue }
+    /// Goes back to the page before the trail the page is on, in one step, with a slide or at once. The floating Home
+    /// and Search buttons do this first, from the page they're on.
+    var closeTrail: (_ animated: Bool) -> Void {
+        get { self[CloseTrailKey.self] }
+        set { self[CloseTrailKey.self] = newValue }
     }
 
     fileprivate var pageStack: PageStack? {
@@ -96,8 +97,8 @@ extension EnvironmentValues {
     }
 }
 
-private struct IsExploringKey: EnvironmentKey {
-    static let defaultValue = false
+private struct CloseTrailKey: EnvironmentKey {
+    static let defaultValue: (_ animated: Bool) -> Void = { _ in }
 }
 
 private struct PageStackKey: EnvironmentKey {
@@ -109,7 +110,6 @@ private struct PresentedFlag: Identifiable {
 }
 
 private struct NavigationPageModifier: ViewModifier {
-    @Environment(\.isExploring) private var openedWhileExploring
     @Environment(\.appNavigationState) private var appNavigationState
     @State private var stack = PageStack()
     @State private var page = PageController()
@@ -120,8 +120,9 @@ private struct NavigationPageModifier: ViewModifier {
     let onTabReselect: (() -> Void)?
 
     func body(content: Content) -> some View {
-        let isExploring = kind == .exploring || (kind != .root && openedWhileExploring)
-        let hidesBottomBar = kind == .exploring || kind == .post || isExploring
+        // Exploring pages, and other pages opened inside a trail, have the floating Home and Search buttons.
+        let showsButtons = showsExplorationButtons
+            && (kind == .exploring || (kind == .page && page.openedWhileExploring))
         content
             .environment(\.pageStack, stack)
             .navigationDestination(item: $stack.pushed) { page in
@@ -133,70 +134,51 @@ private struct NavigationPageModifier: ViewModifier {
                 }
             }
             .overlay(alignment: .bottomLeading) {
-                if showsButtons(isExploring), appNavigationState?.selectedTab == .search {
+                if showsButtons, appNavigationState?.selectedTab == .search {
                     ExplorationSearchButton()
                         .padding(.horizontal, 16)
                         .padding(.bottom, 8)
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                if showsButtons(isExploring) {
+                if showsButtons {
                     ExplorationHomeButton()
                         .padding(.horizontal, 16)
                         .padding(.bottom, 8)
                 }
             }
             .background {
-                SwipeBackEnabler(allowsSwipeBack: allowsSwipeBack, hidesBottomBar: hidesBottomBar, page: page)
+                SwipeBackEnabler(kind: kind, allowsSwipeBack: allowsSwipeBack, page: page)
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
-            }
-            // The Home and Search buttons close the trail from its first page.
-            .onChange(of: appNavigationState?.returnHomeRequest) { _, request in
-                if request != nil, startsTrail {
-                    page.closeTrail(animated: appNavigationState?.selectedTab == .home)
-                }
-            }
-            .onChange(of: appNavigationState?.returnToSearchRequest) { _, request in
-                if request != nil, startsTrail {
-                    page.closeTrail(animated: true)
-                }
             }
             .onChange(of: appNavigationState?.tabReselectRequest) { _, request in
                 if request != nil, kind == .root {
                     page.reselectTab(atFirstPage: onTabReselect)
                 }
             }
-            .environment(\.isExploring, isExploring || kind == .post)
-    }
-
-    /// The trail's first page: an exploring or post page that wasn't opened while exploring.
-    private var startsTrail: Bool {
-        (kind == .exploring || kind == .post) && !openedWhileExploring
-    }
-
-    private func showsButtons(_ isExploring: Bool) -> Bool {
-        showsExplorationButtons && isExploring && kind != .post && kind != .root
+            .environment(\.closeTrail, page.closeTrail(animated:))
     }
 }
 
-/// The page's own place on its navigation stack, for closing a trail.
+/// The page's own place on its navigation stack, for its bar, its buttons and closing a trail.
+@Observable
 private final class PageController {
-    weak var controller: SwipeBackEnabler.Controller?
+    @ObservationIgnored weak var controller: SwipeBackEnabler.Controller?
 
-    /// Goes back to the page before this one, closing everything opened from it, the way the back button's long-press
-    /// menu does.
+    /// A page before this one on its stack is an exploring or post page, so this one is inside that trail. Worked out
+    /// from the stack as the page comes on screen: SwiftUI gives a pushed page the surroundings of its stack's first
+    /// page, not of the page that opened it.
+    var openedWhileExploring = false
+
+    /// Goes back to the page before the trail's first page, closing every page opened from it in one step, the way the
+    /// back button's long-press menu does.
     func closeTrail(animated: Bool) {
-        guard let controller, let navigationController = controller.navigationController else { return }
-        var pageController: UIViewController? = controller
-        while let current = pageController, current.parent !== navigationController {
-            pageController = current.parent
-        }
-        guard let pageController,
-              let index = navigationController.viewControllers.firstIndex(of: pageController),
-              index > 0
+        guard let navigationController = controller?.navigationController,
+              let start = SwipeBackEnabler.Controller.trailStart(in: navigationController),
+              start > 0
         else { return }
-        navigationController.popToViewController(navigationController.viewControllers[index - 1], animated: animated)
+        navigationController.popToViewController(navigationController.viewControllers[start - 1], animated: animated)
     }
 
     /// The tab this first page belongs to was tapped while on screen: back to this page, or, already here, up to its
@@ -219,7 +201,7 @@ private final class PageController {
         atFirstPage?()
     }
 
-    private static func isInside(_ controller: UIViewController, _ ancestor: UIViewController) -> Bool {
+    static func isInside(_ controller: UIViewController, _ ancestor: UIViewController) -> Bool {
         var current: UIViewController? = controller
         while let candidate = current {
             if candidate === ancestor { return true }
@@ -317,29 +299,31 @@ private struct PushDestinationModifier<Item: Identifiable, Destination: View>: V
 /// comes on screen. Our pages hide the back button or the whole navigation bar to draw their own over the artwork, and
 /// iOS turns its swipes off when either is hidden.
 ///
-/// The bar is set on the tab bar controller directly, by whichever page is coming on screen (at the start of a push,
-/// or of a swipe back, and again if the swipe is let go). SwiftUI's `.toolbar(_:for: .tabBar)` was tried and dropped:
-/// a page saying `.visible` showed the bar over every page above it, and pages taken off together left a tab's bar
-/// hidden for good.
+/// The bar is set on the tab bar controller directly, by whichever page is coming on screen in the tab on screen (at
+/// the start of a push, or of a swipe back, and again if the swipe is let go). SwiftUI's `.toolbar(_:for: .tabBar)`
+/// was tried and dropped: a page saying `.visible` showed the bar over every page above it, and pages taken off
+/// together left a tab's bar hidden for good.
 private struct SwipeBackEnabler: UIViewControllerRepresentable {
+    let kind: PageKind
     let allowsSwipeBack: Bool
-    let hidesBottomBar: Bool
     let page: PageController
 
     func makeUIViewController(context: Context) -> Controller {
         let controller = Controller()
+        controller.page = page
         page.controller = controller
         return controller
     }
 
     func updateUIViewController(_ controller: Controller, context: Context) {
+        controller.kind = kind
         controller.allowsSwipeBack = allowsSwipeBack
-        controller.hidesBottomBar = hidesBottomBar
     }
 
     final class Controller: UIViewController {
+        var kind = PageKind.page
         var allowsSwipeBack = true
-        var hidesBottomBar = false
+        weak var page: PageController?
 
         override func didMove(toParent parent: UIViewController?) {
             super.didMove(toParent: parent)
@@ -348,13 +332,58 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
 
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
-            guard let tabBarController, tabBarController.isTabBarHidden != hidesBottomBar else { return }
+            if let opened = isInsideTrail(), page?.openedWhileExploring != opened {
+                page?.openedWhileExploring = opened
+            }
+            let hidesBottomBar = switch kind {
+            case .root: false
+            case .exploring, .post: true
+            case .page: page?.openedWhileExploring ?? false
+            }
+            // Only a page in the tab on screen sets the bar: a tab being left, its trail closing as Home opens, must not
+            // hide Home's.
+            guard let tabBarController,
+                  let selected = tabBarController.selectedViewController,
+                  PageController.isInside(self, selected),
+                  tabBarController.isTabBarHidden != hidesBottomBar
+            else { return }
             tabBarController.setTabBarHidden(hidesBottomBar, animated: animated)
         }
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             install()
+        }
+
+        /// The index of the trail's first page on a stack: its first exploring or post page.
+        static func trailStart(in navigationController: UINavigationController) -> Int? {
+            navigationController.viewControllers.firstIndex { pageController in
+                guard let kind = enabler(of: pageController)?.kind else { return false }
+                return kind == .exploring || kind == .post
+            }
+        }
+
+        /// Whether a page before this one on its stack is an exploring or post page; nil while it isn't on a stack.
+        private func isInsideTrail() -> Bool? {
+            guard let navigationController else { return nil }
+            var pageController: UIViewController? = self
+            while let current = pageController, current.parent !== navigationController {
+                pageController = current.parent
+            }
+            guard let pageController, let index = navigationController.viewControllers.firstIndex(of: pageController)
+            else { return nil }
+            return Self.trailStart(in: navigationController).map { $0 < index } ?? false
+        }
+
+        /// A page's own enabler: the nearest one among its child controllers (none on a page without `navigationPage`).
+        private static func enabler(of pageController: UIViewController) -> Controller? {
+            var queue = [pageController]
+            while !queue.isEmpty {
+                let next = queue.removeFirst()
+                if let enabler = next as? Controller { return enabler }
+                queue += next.children
+            }
+            return nil
         }
 
         private func install() {
@@ -372,7 +401,8 @@ private enum SwipeBack {
     )
 
     static func install(on navigationController: UINavigationController) {
-        // The swipe from the edge, and iOS 26's swipe from anywhere on the page.
+        // The swipe from the edge, and iOS 26's swipe from anywhere on the page, which here takes only a swipe that
+        // starts at the edge too.
         let gestures = [
             navigationController.interactivePopGestureRecognizer,
             navigationController.interactiveContentPopGestureRecognizer,
@@ -386,14 +416,23 @@ private enum SwipeBack {
     }
 
     /// Stands in for Apple's own delegate, which turns the swipes away whenever the bar or its back button is hidden.
-    /// It still asks Apple's delegate whether to begin, so the swipe behaves as Apple's wherever Apple allows it.
     final class Delegate: NSObject, UIGestureRecognizerDelegate {
+        /// How far in from the screen's left edge a swipe back can start.
+        private static let edgeWidth: CGFloat = 24
+
         private weak var navigationController: UINavigationController?
         private weak var original: UIGestureRecognizerDelegate?
 
         init(navigationController: UINavigationController, original: UIGestureRecognizerDelegate?) {
             self.navigationController = navigationController
             self.original = original
+        }
+
+        /// Back is a swipe from the screen's edge. iOS 26's swipe from anywhere on the page takes only a touch that
+        /// starts there: the rest belong to rows that scroll sideways and the pager between titles.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            gestureRecognizer !== navigationController?.interactiveContentPopGestureRecognizer
+                || touch.location(in: nil).x <= Self.edgeWidth
         }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -404,16 +443,6 @@ private enum SwipeBack {
                   let top = navigationController.topViewController,
                   !Self.blocksSwipeBack(top)
             else { return false }
-            if original?.gestureRecognizerShouldBegin?(gestureRecognizer) == true {
-                return true
-            }
-            if let pan = gestureRecognizer as? UIPanGestureRecognizer,
-               !(gestureRecognizer is UIScreenEdgePanGestureRecognizer) {
-                // From anywhere on the page: only a swipe to the right, and not one that scrolls a row back.
-                let velocity = pan.velocity(in: pan.view)
-                guard velocity.x > 0, velocity.x > abs(velocity.y) else { return false }
-                if Self.isOverRowThatScrollsBack(pan) { return false }
-            }
             return true
         }
 
@@ -452,22 +481,6 @@ private enum SwipeBack {
                 return true
             }
             return controller.children.contains(where: blocksSwipeBack)
-        }
-
-        /// True when the touch is on a sideways row (a carousel, the title pager) that isn't at its start, so the
-        /// swipe scrolls it back instead of leaving the page.
-        private static func isOverRowThatScrollsBack(_ pan: UIPanGestureRecognizer) -> Bool {
-            guard let view = pan.view else { return false }
-            var current = view.hitTest(pan.location(in: view), with: nil)
-            while let candidate = current, candidate !== view {
-                if let scrollView = candidate as? UIScrollView,
-                   scrollView.contentSize.width > scrollView.bounds.width + 1,
-                   scrollView.contentOffset.x > -scrollView.adjustedContentInset.left + 1 {
-                    return true
-                }
-                current = candidate.superview
-            }
-            return false
         }
     }
 }
