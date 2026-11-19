@@ -8,6 +8,10 @@ final class RatingsGlowChartTests: XCTestCase {
     private typealias G = RatingsChartGeometry
     private let width: CGFloat = 374
 
+    func testInterTightIsBundledAndRegistered() {
+        XCTAssertNotNil(UIFont(name: "InterTight-Regular", size: 44))
+    }
+
     // MARK: Chart geometry
 
     func testBucketsLandOnTheirHalfStarSteps() {

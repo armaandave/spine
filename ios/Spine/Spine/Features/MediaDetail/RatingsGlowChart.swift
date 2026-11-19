@@ -242,8 +242,10 @@ struct RatingsGlowChart: View {
     private static let sideInset: CGFloat = 14
 
     /// Inter Tight Black: the bundled variable font (`Resources/Fonts`, registered under `UIAppFonts`) with its
-    /// weight axis set to 900 through the font descriptor.
+    /// weight axis set to 900 through the font descriptor. A fixed 44 pt, like the board's fixed 48 pt header,
+    /// so it does not scale with Dynamic Type.
     static let numberFont: Font = {
+        assert(UIFont(name: "InterTight-Regular", size: 44) != nil, "Inter Tight is not bundled or registered")
         let weightAxis = 0x7767_6874 // 'wght'
         let descriptor = UIFontDescriptor(fontAttributes: [
             .name: "InterTight-Regular",
@@ -283,11 +285,19 @@ struct RatingsGlowChart: View {
 
     /// No stroke and no fill: only a soft white glow just inside the edges, so the box is felt rather than drawn.
     private var innerLightBox: some View {
-        RoundedRectangle(cornerRadius: Self.boxRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.06), lineWidth: 18)
+        // CSS `inset 0 0 18px rgba(255,255,255,.06)`: the area outside the box, blurred, clipped to the box.
+        GeometryReader { geometry in
+            let box = CGRect(origin: .zero, size: geometry.size)
+            Path { path in
+                path.addRect(box.insetBy(dx: -40, dy: -40))
+                path.addRoundedRect(in: box, cornerSize: CGSize(width: Self.boxRadius, height: Self.boxRadius), style: .circular)
+            }
+            .fill(Color.white.opacity(0.06), style: FillStyle(eoFill: true))
             .blur(radius: 9)
-            .clipShape(RoundedRectangle(cornerRadius: Self.boxRadius, style: .continuous))
-            .allowsHitTesting(false)
+            .clipShape(RoundedRectangle(cornerRadius: Self.boxRadius, style: .circular))
+        }
+        .drawingGroup()
+        .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
 
@@ -298,6 +308,8 @@ struct RatingsGlowChart: View {
             Text(String(format: "%.1f", average))
                 .font(Self.numberFont)
                 .tracking(-2)
+                // The board's 48 pt line box, so the baseline lands where it does there.
+                .frame(height: Self.headerHeight)
                 .foregroundStyle(color)
                 // Softer than Home's title glow.
                 .shadow(color: color.opacity(0.24), radius: 6)
@@ -325,12 +337,15 @@ struct RatingsGlowChart: View {
                     }
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(.white.opacity(0.82))
+                    // 10 pt of tappable air around the text; the outer padding below takes it back out.
+                    .padding(10)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(height: 18)
-                // 12 pt below the header's top, 20 pt in from the right: inside the box's corner.
-                .padding(.top, 12)
-                .padding(.trailing, 20)
+                .frame(height: 38)
+                // The text sits 12 pt below the header's top, 20 pt in from the right: inside the box's corner.
+                .padding(.top, 2)
+                .padding(.trailing, 10)
                 .accessibilityHint("Opens every written review")
             }
         }
@@ -419,7 +434,7 @@ struct RatingsGlowChart: View {
                     Circle().inset(by: -1).stroke(Color.white, lineWidth: 2)
                 }
             }
-            .shadow(color: person.isYou ? .white.opacity(0.35) : .clear, radius: 10)
+            .modifier(YourGlow(isYou: person.isYou))
     }
 }
 
@@ -471,5 +486,18 @@ private struct RatingsCurveLayer: View, Equatable {
         .padding(-24)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// Only your own photo gets the faint white glow; friends' photos add no shadow layer.
+private struct YourGlow: ViewModifier {
+    let isYou: Bool
+
+    func body(content: Content) -> some View {
+        if isYou {
+            content.shadow(color: .white.opacity(0.35), radius: 10)
+        } else {
+            content
+        }
     }
 }
