@@ -7,10 +7,17 @@ struct FeaturedLanding: View {
     let selectedMediaType: String
     let enabledMediaTypes: [String]
     let onSelect: (FeaturedListSelection) -> Void
+    /// A big word tapped: picks that media type, as the picker does.
+    let onPickKind: (String) -> Void
 
     var body: some View {
         if selectedMediaType == APIConstants.allMedia {
-            SearchListsLanding(store: store, enabledMediaTypes: enabledMediaTypes, onSelect: onSelect)
+            SearchListsLanding(
+                store: store,
+                enabledMediaTypes: enabledMediaTypes,
+                onSelect: onSelect,
+                onPickKind: onPickKind
+            )
         } else {
             FeaturedTypeLayer(store: store, mediaType: selectedMediaType, onSelect: onSelect)
                 .id(selectedMediaType)

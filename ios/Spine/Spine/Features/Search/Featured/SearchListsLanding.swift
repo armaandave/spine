@@ -1,12 +1,13 @@
 import SwiftUI
 
 /// What Search shows before you type, with every kind of media in the field: one big word per kind of list
-/// ("Movies", "Books"), how many lists it has and where they come from ("Oscars · Cannes +23"). A word opens that
-/// kind's lists.
+/// ("Movies", "Books") and where its lists come from ("Oscars · Cannes +23"). A word picks that kind, exactly as the
+/// media picker does; only "Across Media", which the picker has no place for, opens its own page.
 struct SearchListsLanding: View {
     let store: FeaturedListsStore
     let enabledMediaTypes: [String]
     let onSelect: (FeaturedListSelection) -> Void
+    let onPickKind: (String) -> Void
 
     var body: some View {
         let layer = store.layer(mediaType: nil)
@@ -33,17 +34,26 @@ struct SearchListsLanding: View {
     private func kinds(_ shelves: [FeaturedShelf], everyKind: Int) -> some View {
         SearchListsRows(everyKind: everyKind, summary: SearchListsSummary.text(for: shelves)) { rowHeight in
             ForEach(shelves) { shelf in
-                NavigationLink {
-                    FeaturedShelfDetailView(
-                        store: store,
-                        mediaType: shelf.mediaType ?? shelf.key,
-                        title: shelf.title,
-                        onSelect: onSelect
-                    )
-                } label: {
-                    SearchListsKindRow(shelf: shelf, height: rowHeight)
+                if let mediaType = shelf.mediaType, !shelf.isMixed {
+                    Button {
+                        onPickKind(mediaType)
+                    } label: {
+                        SearchListsKindRow(shelf: shelf, height: rowHeight)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    NavigationLink {
+                        FeaturedShelfDetailView(
+                            store: store,
+                            mediaType: shelf.mediaType ?? shelf.key,
+                            title: shelf.title,
+                            onSelect: onSelect
+                        )
+                    } label: {
+                        SearchListsKindRow(shelf: shelf, height: rowHeight)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .refreshable {
@@ -121,26 +131,20 @@ private struct SearchListsHeading: View {
     }
 }
 
-/// "Movies 39" in big type, the count on the word's baseline, and where its lists come from at the far end.
+/// "Movies" in big type, and where its lists come from at the far end.
 private struct SearchListsKindRow: View {
     let shelf: FeaturedShelf
     let height: CGFloat
 
     var body: some View {
         HStack(spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(shelf.title)
-                    .font(.system(size: 32, weight: .heavy))
-                    .tracking(-1.1)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text(shelf.count.formatted())
-                    .font(.system(size: 13, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.45))
-            }
-            .layoutPriority(1)
+            Text(shelf.title)
+                .font(.system(size: 32, weight: .heavy))
+                .tracking(-1.1)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .layoutPriority(1)
             Spacer(minLength: 0)
             SearchListsSourcesLine(sources: shelf.sources)
         }
@@ -154,7 +158,7 @@ private struct SearchListsKindRow: View {
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
-        .accessibilityHint("Opens its lists")
+        .accessibilityHint("Shows its lists")
     }
 
     private var accessibilityText: String {

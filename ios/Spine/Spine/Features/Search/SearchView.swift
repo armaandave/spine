@@ -542,11 +542,7 @@ private struct SearchViewContent: View {
                         text: $draftText,
                         selectedMediaType: selectedMediaTypeBinding,
                         availableTypes: availableSearchTypes,
-                        onLensSelect: { selectedType in
-                            Task {
-                                await searchCurrentQuery(mediaType: selectedType)
-                            }
-                        },
+                        onLensSelect: pickKind,
                         onSearch: { text in
                             search(text)
                         },
@@ -579,6 +575,7 @@ private struct SearchViewContent: View {
                                 featuredStore: featuredStore,
                                 enabledMediaTypes: viewModel.mediaTypes,
                                 onFeaturedList: onFeaturedList,
+                                onPickKind: pickKind,
                                 onRecentMedia: { media in
                                     saveRecentMedia(media)
                                     onSelect(media)
@@ -705,6 +702,13 @@ private struct SearchViewContent: View {
         await viewModel.search(trimmed, mediaType: mediaType)
     }
 
+    /// Picks a media type, from the picker or a big word on the opening page: the picker's lens slides to it, the
+    /// page shows that type, and any typed text searches it.
+    private func pickKind(_ mediaType: String) {
+        selectedMediaTypeBinding.wrappedValue = mediaType
+        Task { await searchCurrentQuery(mediaType: mediaType) }
+    }
+
     private func validateSelectedMediaType() {
         if allowsAllMediaSearch {
             if selectedSearchType != APIConstants.allMedia,
@@ -777,6 +781,7 @@ private struct SearchResultsSection: View {
     let featuredStore: FeaturedListsStore?
     let enabledMediaTypes: [String]
     let onFeaturedList: (FeaturedListSelection) -> Void
+    let onPickKind: (String) -> Void
     let onRecentMedia: (MediaSummary) -> Void
     let onSelect: (MediaSummary) -> Void
 
@@ -814,6 +819,7 @@ private struct SearchResultsSection: View {
                 featuredStore: featuredStore,
                 enabledMediaTypes: enabledMediaTypes,
                 onFeaturedList: onFeaturedList,
+                onPickKind: onPickKind,
                 onRecentMedia: onRecentMedia
             )
         }
@@ -839,6 +845,7 @@ private struct SearchEmptyState: View {
     let featuredStore: FeaturedListsStore?
     let enabledMediaTypes: [String]
     let onFeaturedList: (FeaturedListSelection) -> Void
+    let onPickKind: (String) -> Void
     let onRecentMedia: (MediaSummary) -> Void
 
     var body: some View {
@@ -849,7 +856,8 @@ private struct SearchEmptyState: View {
                 store: featuredStore,
                 selectedMediaType: selectedMediaType,
                 enabledMediaTypes: enabledMediaTypes,
-                onSelect: onFeaturedList
+                onSelect: onFeaturedList,
+                onPickKind: onPickKind
             )
         } else if recentMedia.isEmpty {
             ContentUnavailableView("Search Spine", systemImage: "magnifyingglass", description: Text("Enter a title to find media."))
