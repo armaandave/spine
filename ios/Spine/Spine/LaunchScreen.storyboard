@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="23094" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
+    <device id="retina6_12" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="23084"/>
+        <capability name="Named colors" minToolsVersion="9.0"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--Launch: the glowing logo on the plaster. LaunchOverlay starts as an exact copy of this.-->
+        <scene sceneID="EHf-IW-A2E">
+            <objects>
+                <viewController id="01J-lp-oVM" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="Ze5-6b-2t3">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" image="LaunchPlaster" translatesAutoresizingMaskIntoConstraints="NO" id="Pl4-st-3r0">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                            </imageView>
+                            <imageView userInteractionEnabled="NO" contentMode="center" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="LaunchLogo" translatesAutoresizingMaskIntoConstraints="NO" id="Lg0-Mk-1aa">
+                                <rect key="frame" x="31.666666666666657" y="251" width="330" height="350"/>
+                            </imageView>
+                        </subviews>
+                        <color key="backgroundColor" name="LaunchBackground"/>
+                        <constraints>
+                            <constraint firstItem="Pl4-st-3r0" firstAttribute="top" secondItem="Ze5-6b-2t3" secondAttribute="top" id="Pc1-tp-001"/>
+                            <constraint firstAttribute="bottom" secondItem="Pl4-st-3r0" secondAttribute="bottom" id="Pc2-bt-002"/>
+                            <constraint firstItem="Pl4-st-3r0" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="Pc3-ld-003"/>
+                            <constraint firstAttribute="trailing" secondItem="Pl4-st-3r0" secondAttribute="trailing" id="Pc4-tr-004"/>
+                            <constraint firstItem="Lg0-Mk-1aa" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="Lc1-cx-005"/>
+                            <constraint firstItem="Lg0-Mk-1aa" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="Lc2-cy-006"/>
+                        </constraints>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="53" y="375"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="LaunchLogo" width="330" height="350"/>
+        <image name="LaunchPlaster" width="4" height="1024"/>
+        <namedColor name="LaunchBackground">
+            <color red="0.87450980392156863" green="0.73333333333333328" blue="0.69411764705882351" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+        </namedColor>
+    </resources>
+</document>
