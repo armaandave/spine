@@ -349,9 +349,9 @@ private struct MediaFriendCard: View {
                 }
             }
             .padding(16)
-            // No second block: the row centers in the card.
-            .frame(width: isCompact ? 244 : nil, height: isCompact ? 120 : nil, alignment: line == nil ? .leading : .topLeading)
-            .frame(maxWidth: isCompact ? nil : .infinity, minHeight: isCompact ? nil : 120, alignment: line == nil ? .leading : .topLeading)
+            // The whole block, with or without a second line, centers in the card.
+            .frame(width: isCompact ? 244 : nil, height: isCompact ? 120 : nil, alignment: .leading)
+            .frame(maxWidth: isCompact ? nil : .infinity, minHeight: isCompact ? nil : 120, alignment: .leading)
             .glassEffect(.regular, in: Self.shape)
             .overlay(alignment: .top) { specular }
             .contentShape(Self.shape)
