@@ -112,9 +112,9 @@ struct PosterPoseEffect: ViewModifier, Animatable {
     }
 }
 
-/// Folds a closed tile's two back posters in behind the front one as the page scrolls: they straighten, slide in
-/// under it, shrink and darken, one to one with how far the tile has scrolled off the top (`TileGeometry.foldProgress`),
-/// and unfold as you scroll back. Only transforms and one brightness: nothing is laid out again, and no view is added.
+/// Folds a closed tile's two side posters in behind the front one as the page scrolls: they slide in under it, shrink
+/// and darken, one to one with how far the tile has scrolled off the top (`TileGeometry.foldProgress`), and unfold as
+/// you scroll back. Only transforms and one brightness: nothing is laid out again, and no view is added.
 ///
 /// A modifier of its own, so a scroll re-evaluates these few lines for each back poster and not the poster or the
 /// tile. Its `gain` is 1 on a closed tile and 0 on an open one (and on the posters that do not fold), and animates
