@@ -8402,6 +8402,8 @@ struct SpineRatingDistributionSection: View {
                     reviewsTitle: reviewCount > 0 ? reviewsButtonTitle : nil,
                     onSeeReviews: onSeeReviews
                 )
+                // Sits close to the Friends header under it.
+                .padding(.bottom, -10)
             }
         }
         .task(id: posterURL) {
@@ -8440,7 +8442,7 @@ struct SpineRatingDistributionSection: View {
     }
 
     private var reviewsButtonTitle: String {
-        reviewCount == 1 ? "See 1 review" : "See all \(reviewCount.formatted()) reviews"
+        reviewCount == 1 ? "1 review" : "\(reviewCount.formatted()) reviews"
     }
 }
 

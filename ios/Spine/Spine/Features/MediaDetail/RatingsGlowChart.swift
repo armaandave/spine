@@ -5,14 +5,14 @@ import SwiftUI
 /// the photos on it stack. Pure, so each rule is tested on its own.
 enum RatingsChartGeometry {
     static let stepCount = 10
-    static let height: CGFloat = 170
+    /// Just the curve, the photos and room for the glow under the floor: no axis.
+    static let height: CGFloat = 152
     /// Room left of the first step and right of the last.
     static let inset: CGFloat = 14
     static let floorY: CGFloat = 140
     /// How far above the floor the busiest step reaches.
     static let amplitude: CGFloat = 92
     static let hairlineTop: CGFloat = 4
-    static let labelY: CGFloat = 158
     /// How far up each further photo at one step sits.
     static let stackStep: CGFloat = 14
     static let photoSize: CGFloat = 24
@@ -25,12 +25,6 @@ enum RatingsChartGeometry {
     /// The x of step `index` (0 is a half star, 9 is five stars).
     static func x(step index: Int, chartWidth: CGFloat) -> CGFloat {
         inset + CGFloat(index) * stepWidth(chartWidth: chartWidth)
-    }
-
-    /// The step nearest `x`, 0...9.
-    static func step(atX x: CGFloat, chartWidth: CGFloat) -> Int {
-        let raw = ((x - inset) / stepWidth(chartWidth: chartWidth)).rounded()
-        return min(max(Int(raw), 0), stepCount - 1)
     }
 
     /// Where the average sits: stars 0.5...5 map onto steps 0...9.
@@ -132,12 +126,6 @@ enum RatingsChartGeometry {
         return path
     }
 
-    /// A step's stars as words: "4.5", "4".
-    static func label(step: Int) -> String {
-        let stars = Double(step + 1) / 2
-        return stars.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(stars))" : String(format: "%.1f", stars)
-    }
-
     /// The lowest a photo's center may sit: its top edge stays inside the chart, under the header.
     static let photoTopLimit: CGFloat = photoSize / 2
 
@@ -226,7 +214,7 @@ enum MediaPageTint {
 }
 
 /// The header (the average, big, in the title's color) and the glowing curve under it, with the average as a hairline
-/// and the people who rated as photos on the curve. Dragging across the chart reads any step.
+/// and the people who rated as photos on the curve.
 struct RatingsGlowChart: View {
     typealias G = RatingsChartGeometry
 
@@ -237,31 +225,26 @@ struct RatingsGlowChart: View {
     /// The title's color; white when the poster gave none.
     let tint: Color?
     let people: [RatingChartPerson]
-    /// "See all 96 reviews", or nil when there are none to open.
+    /// "96 reviews", or nil when there are none to open.
     let reviewsTitle: String?
     let onSeeReviews: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @GestureState private var scrubX: CGFloat?
     @State private var appeared = false
-    @State private var accessibilityStep: Int?
 
-    private static let headerHeight: CGFloat = 64
-    private static let headerGap: CGFloat = 4
+    private static let headerHeight: CGFloat = 48
+    private static let headerGap: CGFloat = 0
     private static let pageColor = Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x10 / 255)
-    private static let returnSpring = Animation.spring(response: 0.6, dampingFraction: 0.62)
 
     private var color: Color { tint ?? .white }
 
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let scrubIndex = scrubX.map { G.step(atX: $0, chartWidth: width) }
             VStack(alignment: .leading, spacing: Self.headerGap) {
-                header(scrubIndex: scrubIndex)
-                chart(width: width, scrubIndex: scrubIndex)
+                header
+                chart(width: width)
             }
-            .sensoryFeedback(.selection, trigger: scrubIndex) { _, new in new != nil }
         }
         .frame(height: Self.headerHeight + Self.headerGap + G.height)
         .onAppear {
@@ -276,33 +259,26 @@ struct RatingsGlowChart: View {
 
     // MARK: Header
 
-    private func header(scrubIndex: Int?) -> some View {
-        let scrubbing = scrubIndex != nil
-        let number = scrubIndex.map { G.label(step: $0) } ?? String(format: "%.1f", average)
-        let count = scrubIndex.map { counts[$0] } ?? totalCount
-        return HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(scrubbing ? "AT THIS STEP" : "AVERAGE")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.62))
-                    .frame(height: 14, alignment: .leading)
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(number)
-                        .font(.system(size: 44, weight: .light))
-                        .tracking(-1.2)
-                        .monospacedDigit()
-                        .foregroundStyle(color)
-                        // Home's title glow.
-                        .shadow(color: color.opacity(0.45), radius: 6)
-                        .shadow(color: color.opacity(0.3), radius: 16)
-                    Text("\(count.formatted()) \(count == 1 ? "rating" : "ratings")")
-                        .font(.system(size: 13, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.62))
+    private var header: some View {
+        HStack(alignment: .bottom) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(String(format: "%.1f", average))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
+                    // Home's title glow.
+                    .shadow(color: color.opacity(0.45), radius: 6)
+                    .shadow(color: color.opacity(0.3), radius: 16)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(totalCount.formatted())
+                    Image(systemName: "eye")
                 }
-                .lineLimit(1)
-                .frame(height: 48)
+                .font(.system(size: 13, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.62))
+                .accessibilityLabel("\(totalCount.formatted()) \(totalCount == 1 ? "rating" : "ratings")")
             }
+            .lineLimit(1)
             .accessibilityHidden(true)
             Spacer(minLength: 8)
             if let reviewsTitle {
@@ -325,63 +301,27 @@ struct RatingsGlowChart: View {
 
     // MARK: Chart
 
-    private func chart(width: CGFloat, scrubIndex: Int?) -> some View {
+    private func chart(width: CGFloat) -> some View {
         let ys = G.ys(counts: counts)
         let slopes = G.slopes(ys)
         let averageX = G.averageX(stars: average, chartWidth: width)
-        let hairX = scrubX.map {
-            min(max($0, G.inset), G.x(step: G.stepCount - 1, chartWidth: width))
-        } ?? averageX
-        let hairY = G.curveY(at: hairX, ys: ys, slopes: slopes, chartWidth: width)
+        let hairY = G.curveY(at: averageX, ys: ys, slopes: slopes, chartWidth: width)
         let animate = !reduceMotion
         return ZStack(alignment: .topLeading) {
             RatingsCurveLayer(ys: ys, slopes: slopes, width: width, tint: color, appeared: appeared, animate: animate)
                 .equatable()
-            ForEach(1...5, id: \.self) { star in
-                Text("\(star)")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.58))
-                    .position(x: G.x(step: star * 2 - 1, chartWidth: width), y: G.labelY - 3.5)
-            }
-            hairline(x: hairX, crossing: hairY, animate: animate, scrubbing: scrubX != nil)
-            photos(ys: ys, width: width, scrubIndex: scrubIndex, animate: animate)
+            hairline(x: averageX, crossing: hairY, animate: animate)
+            photos(ys: ys, width: width, animate: animate)
         }
         .frame(width: width, height: G.height, alignment: .topLeading)
-        .contentShape(Rectangle())
-        // A short press that stays put, then drag: a vertical swipe still scrolls the page.
-        .gesture(
-            LongPressGesture(minimumDuration: 0.22, maximumDistance: 6)
-                .sequenced(before: DragGesture(minimumDistance: 0))
-                .updating($scrubX) { value, state, _ in
-                    // From the press, the hairline waits at the average; the finger moves it from there.
-                    if case let .second(true, drag) = value {
-                        state = drag?.location.x ?? averageX
-                    }
-                }
-        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             "Ratings, average \(String(format: "%.1f", average)) out of 5, \(totalCount.formatted()) \(totalCount == 1 ? "rating" : "ratings")"
         )
-        .accessibilityValue(accessibilityStep.map(stepDescription) ?? "")
-        .accessibilityHint("Swipe up or down to hear each rating")
-        .accessibilityAdjustableAction { direction in
-            let current = accessibilityStep ?? G.step(atX: averageX, chartWidth: width)
-            switch direction {
-            case .increment: accessibilityStep = min(current + 1, G.stepCount - 1)
-            case .decrement: accessibilityStep = max(current - 1, 0)
-            @unknown default: break
-            }
-        }
-    }
-
-    private func stepDescription(_ step: Int) -> String {
-        let count = counts[step]
-        return "\(G.label(step: step)) stars, \(count.formatted()) \(count == 1 ? "rating" : "ratings")"
     }
 
     /// The average: a 1 pt line from the top to the floor, brightest where it crosses the curve and clear at both ends.
-    private func hairline(x: CGFloat, crossing: CGFloat, animate: Bool, scrubbing: Bool) -> some View {
+    private func hairline(x: CGFloat, crossing: CGFloat, animate: Bool) -> some View {
         let length = G.floorY - G.hairlineTop
         let location = min(max((crossing - G.hairlineTop) / length, 0.1), 0.9)
         return Rectangle()
@@ -402,12 +342,10 @@ struct RatingsGlowChart: View {
             .opacity(appeared ? 1 : 0)
             .animation(animate ? .easeInOut(duration: 0.6).delay(1.4) : nil, value: appeared)
             .position(x: x, y: G.hairlineTop + length / 2)
-            // Follows the finger with no animation; springs back to the average when let go (not on a resize or new data).
-            .animation(animate && !scrubbing ? Self.returnSpring : nil, value: scrubbing)
             .allowsHitTesting(false)
     }
 
-    private func photos(ys: [CGFloat], width: CGFloat, scrubIndex: Int?, animate: Bool) -> some View {
+    private func photos(ys: [CGFloat], width: CGFloat, animate: Bool) -> some View {
         let photoYs = G.photoYs(steps: people.map(\.step), ys: ys)
         let slots = G.stackSlots(steps: people.map(\.step))
         var ranks = [Int](repeating: 0, count: people.count)
@@ -416,12 +354,8 @@ struct RatingsGlowChart: View {
         }
         return ZStack(alignment: .topLeading) {
             ForEach(Array(people.enumerated()), id: \.element.id) { index, person in
-                let lifted = person.step == scrubIndex
                 let rank = ranks[index]
                 photo(person)
-                    .scaleEffect(lifted ? 1.15 : 1)
-                    .offset(y: lifted ? -6 : 0)
-                    .animation(animate ? .spring(response: 0.35, dampingFraction: 0.7) : nil, value: lifted)
                     .scaleEffect(appeared ? 1 : 0.55)
                     .offset(y: appeared ? 0 : -28)
                     .opacity(appeared ? 1 : 0)
@@ -452,8 +386,7 @@ struct RatingsGlowChart: View {
     }
 }
 
-/// The area, the glowing line and its glow, drawn once and drawn in: it only changes with its inputs, so dragging
-/// across the chart never redraws it.
+/// The area, the glowing line and its glow, drawn once and drawn in: it only changes with its inputs.
 private struct RatingsCurveLayer: View, Equatable {
     typealias G = RatingsChartGeometry
 

@@ -31,9 +31,6 @@ final class RatingsGlowChartTests: XCTestCase {
     func testStepsSpanTheWidthWithAnInsetEitherSide() {
         XCTAssertEqual(G.x(step: 0, chartWidth: width), 14)
         XCTAssertEqual(G.x(step: 9, chartWidth: width), 360, accuracy: 0.001)
-        XCTAssertEqual(G.step(atX: -50, chartWidth: width), 0)
-        XCTAssertEqual(G.step(atX: 999, chartWidth: width), 9)
-        XCTAssertEqual(G.step(atX: G.x(step: 4, chartWidth: width) + 5, chartWidth: width), 4)
     }
 
     func testTheAverageSitsBetweenItsSteps() {
@@ -56,12 +53,6 @@ final class RatingsGlowChartTests: XCTestCase {
             x += 3
         }
         XCTAssertEqual(G.curveY(at: G.x(step: 8, chartWidth: width), ys: ys, slopes: slopes, chartWidth: width), ys[8], accuracy: 0.001)
-    }
-
-    func testStepLabelsAreWholeOrHalfStars() {
-        XCTAssertEqual(G.label(step: 0), "0.5")
-        XCTAssertEqual(G.label(step: 7), "4")
-        XCTAssertEqual(G.label(step: 8), "4.5")
     }
 
     func testPhotosAtOneStepStackUpwardInOrder() {
