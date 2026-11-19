@@ -80,8 +80,8 @@ final class HomeDesignTests: XCTestCase {
         let cx = side / 2
         XCTAssertEqual(side, 173)
         XCTAssertEqual(HomeDesign.Metric.fan(index: 0, tileSide: side), Fan(x: cx - 33, y: 16, width: 66, height: 99, degrees: 0, brightness: 1, z: 5, opacity: 1))
-        XCTAssertEqual(HomeDesign.Metric.fan(index: 1, tileSide: side), Fan(x: cx - 64, y: 24, width: 56, height: 84, degrees: -11, brightness: 0.62, z: 4, opacity: 1))
-        XCTAssertEqual(HomeDesign.Metric.fan(index: 2, tileSide: side), Fan(x: cx + 8, y: 24, width: 56, height: 84, degrees: 11, brightness: 0.62, z: 3, opacity: 1))
+        XCTAssertEqual(HomeDesign.Metric.fan(index: 1, tileSide: side), Fan(x: cx - 109, y: 24, width: 56, height: 84, degrees: 0, brightness: 0.62, z: 4, opacity: 1))
+        XCTAssertEqual(HomeDesign.Metric.fan(index: 2, tileSide: side), Fan(x: cx + 53, y: 24, width: 56, height: 84, degrees: 0, brightness: 0.62, z: 3, opacity: 1))
         for index in [3, 4] {
             XCTAssertEqual(
                 HomeDesign.Metric.fan(index: index, tileSide: side),

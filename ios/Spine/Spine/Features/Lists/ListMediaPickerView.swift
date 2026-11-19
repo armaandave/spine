@@ -16,7 +16,6 @@ struct ListMediaPickerView: View {
 
     @State private var searchViewModel: SearchViewModel
     @State private var selectedSearchType = APIConstants.allMedia
-    @State private var isMediaLensExpanded = false
     @State private var searchText = ""
     @AppStorage("recentMedia") private var recentMediaData = "[]"
 
@@ -42,9 +41,7 @@ struct ListMediaPickerView: View {
                 MediaSearchBar(
                     text: $searchText,
                     selectedMediaType: selectedMediaTypeBinding,
-                    isLensExpanded: $isMediaLensExpanded,
                     availableTypes: SearchViewModel.allSearchScopes(from: searchViewModel.mediaTypes),
-                    onLensTap: { isMediaLensExpanded = true },
                     onLensSelect: searchSelectedMediaType,
                     onSearch: searchSubmittedText,
                     onClear: searchViewModel.clear
@@ -65,8 +62,6 @@ struct ListMediaPickerView: View {
                         .padding(.bottom, 28)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .blur(radius: isMediaLensExpanded ? 8 : 0)
-                .allowsHitTesting(!isMediaLensExpanded)
             }
         }
         .mediaLensAtmosphere(theme: MediaTypeTheme.theme(for: selectedSearchType))

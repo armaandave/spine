@@ -453,7 +453,6 @@ struct HallOfFameSearchView: View {
 
 private struct SearchViewContent: View {
     @State private var viewModel: SearchViewModel
-    @State private var isMediaLensExpanded = false
     @State private var isSearchActive = false
     @State private var draftText = ""
     @State private var recentMedia: [MediaSummary] = []
@@ -542,11 +541,7 @@ private struct SearchViewContent: View {
                     MediaSearchBar(
                         text: $draftText,
                         selectedMediaType: selectedMediaTypeBinding,
-                        isLensExpanded: $isMediaLensExpanded,
                         availableTypes: availableSearchTypes,
-                        onLensTap: {
-                            isMediaLensExpanded = true
-                        },
                         onLensSelect: { selectedType in
                             Task {
                                 await searchCurrentQuery(mediaType: selectedType)
@@ -593,16 +588,6 @@ private struct SearchViewContent: View {
                                     onSelect(media)
                                 }
                             )
-                        }
-                    }
-                    .blur(radius: isMediaLensExpanded ? 8 : 0)
-                    .allowsHitTesting(!isMediaLensExpanded)
-                    .overlay {
-                        if isMediaLensExpanded {
-                            Color.black.opacity(0.001)
-                                .onTapGesture {
-                                    isMediaLensExpanded = false
-                                }
                         }
                     }
                 }
