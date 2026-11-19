@@ -128,9 +128,9 @@ nonisolated enum TileGeometry {
         var folds: Bool { self == .left || self == .right }
     }
 
-    /// The posters a closed tile shows when it rests on `rest`: that title in front, the one before it in the left
-    /// back slot and the one after it in the right. At the first title the back slots are the second and third; at the
-    /// last, the two before it (the mirror image).
+    /// The posters a closed tile shows when it rests on `rest`: that title in front, the one before it on its left
+    /// and the one after it on its right. At the first title the side places are the second and third; at the last,
+    /// the two before it (the mirror image).
     static func fanSlots(rest: Int, count: Int) -> (front: Int, left: Int?, right: Int?) {
         guard count > 0 else { return (0, nil, nil) }
         let front = min(max(rest, 0), count - 1)
@@ -440,8 +440,8 @@ enum TileMotion {
     }
 
     /// How a poster moves as its tile opens, by the place it starts in: the close played backwards in time. The front
-    /// poster zooms out of its fan spot and the two beside it fly from the back places, together; the posters that
-    /// were hidden behind them start late and end with them.
+    /// poster zooms out of its fan spot and the two beside it fly from their places in the row, together; the posters
+    /// that were hidden behind them start late and end with them.
     static func open(role: TileGeometry.FanRole, reduceMotion: Bool) -> Animation {
         guard !reduceMotion else { return HomeDesign.Motion.reduced }
         switch role {
@@ -469,7 +469,7 @@ enum TileMotion {
         frame(closing: true, reduceMotion: reduceMotion)
     }
 
-    /// The posters beside it flying into the back places: the same curve and length as the front one and no
+    /// The posters beside it flying into their places in the row: the same curve and length as the front one and no
     /// stagger, so the three travel in step and each path can be followed.
     static func closeNeighbor(reduceMotion: Bool) -> Animation {
         guard !reduceMotion else { return HomeDesign.Motion.reduced }

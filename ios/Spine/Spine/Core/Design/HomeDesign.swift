@@ -46,8 +46,10 @@ nonisolated enum HomeDesign {
             floor((contentWidth - tileGap) / 2)
         }
 
-        /// One of the five posters fanned over a closed tile. `x` and `y` are the poster's top-left inside
-        /// the tile, `degrees` its rotation, `brightness` the multiplier the mock applies (1 is untouched).
+        /// One of the posters over a closed tile: the front one, one lined up on each side of it as in a row that
+        /// runs on past the tile's edges, and the rest hidden behind the front one. `x` and `y` are the poster's
+        /// top-left inside the tile, `degrees` its rotation, `brightness` the multiplier the mock applies (1 is
+        /// untouched).
         nonisolated struct Fan: Equatable {
             let x: CGFloat
             let y: CGFloat
@@ -59,15 +61,23 @@ nonisolated enum HomeDesign {
             let opacity: Double
         }
 
+        /// The space between a closed tile's front poster and the poster on each side of it. Wide enough that the
+        /// side posters run past the tile's edges.
+        static let fanGap: CGFloat = 20
+
         static func fan(index: Int, tileSide: CGFloat) -> Fan {
             let cx = tileSide / 2
             switch index {
             case 0:
                 return Fan(x: cx - 33, y: 16, width: 66, height: 99, degrees: 0, brightness: 1, z: 5, opacity: 1)
             case 1:
-                return Fan(x: cx - 64, y: 24, width: 56, height: 84, degrees: -11, brightness: 0.62, z: 4, opacity: 1)
+                return Fan(
+                    x: cx - 33 - fanGap - 56, y: 24, width: 56, height: 84, degrees: 0, brightness: 0.62, z: 4, opacity: 1
+                )
             case 2:
-                return Fan(x: cx + 8, y: 24, width: 56, height: 84, degrees: 11, brightness: 0.62, z: 3, opacity: 1)
+                return Fan(
+                    x: cx + 33 + fanGap, y: 24, width: 56, height: 84, degrees: 0, brightness: 0.62, z: 3, opacity: 1
+                )
             default:
                 return Fan(x: cx - 28, y: 22, width: 56, height: 84, degrees: 0, brightness: 0.5, z: 1, opacity: 0)
             }
