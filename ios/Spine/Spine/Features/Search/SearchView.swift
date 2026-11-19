@@ -872,11 +872,11 @@ private struct SearchEmptyState: View {
                         Button {
                             onRecentMedia(media)
                         } label: {
-                            SearchResultRichRow(result: media, showsKind: showsMediaTypes, isCompact: true)
+                            SearchResultRichRow(result: media, showsKind: showsMediaTypes)
                         }
                         .buttonStyle(.plain)
-                        .alignmentGuide(.listRowSeparatorLeading) { _ in SearchResultRichRow.artWidth(isCompact: true) + 14 }
-                        .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 14))
+                        .alignmentGuide(.listRowSeparatorLeading) { _ in SearchResultRichRow.artWidth + 14 }
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 14))
                         .listRowBackground(Color.clear)
                     }
                 } header: {
@@ -979,7 +979,7 @@ private struct SearchResultsList: View {
                     SearchResultRichRow(result: result, query: query, showsKind: showsMediaTypes)
                 }
                 .buttonStyle(.plain)
-                .alignmentGuide(.listRowSeparatorLeading) { _ in SearchResultRichRow.artWidth(isCompact: false) + 14 }
+                .alignmentGuide(.listRowSeparatorLeading) { _ in SearchResultRichRow.artWidth + 14 }
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 14))
                 .listRowBackground(Color.clear)
             }

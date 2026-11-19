@@ -1,28 +1,31 @@
 import SwiftUI
 
-/// A search result: the art, the title with what you typed set apart, what it is, and where you and your friends
-/// stand on it.
+/// A search result, or a title opened lately: the art, the title with what you typed set apart, what it is, and where
+/// you and your friends stand on it.
 struct SearchResultRichRow: View {
     let result: MediaSummary
     var query = ""
     /// The kind leads the line under the title when the search covers every kind.
     var showsKind = true
-    /// Recently opened: smaller art, and no standing or friends, since what was saved then may be out of date.
-    var isCompact = false
+
+    /// The art column's width, so the list can start its separators where the text starts.
+    static var artWidth: CGFloat { PosterSlot.libraryRow.size.width }
 
     private static let inProgressBlue = Color(red: 0.61, green: 0.86, blue: 1)
+    /// Friends shown as faces; more than this adds "+N".
+    private static let faces = 3
 
     var body: some View {
         HStack(spacing: 14) {
             MediaArtwork(
                 url: result.displayPosterURL,
                 title: result.title,
-                slot: isCompact ? .listPreview : .libraryRow,
+                slot: .libraryRow,
                 mediaType: result.ref.mediaType,
                 orientation: result.posterOrientation
             )
             .shadow(color: .black.opacity(0.4), radius: 7, y: 5)
-            .frame(width: Self.artWidth(isCompact: isCompact))
+            .frame(width: Self.artWidth)
 
             VStack(alignment: .leading, spacing: 3) {
                 title
@@ -36,7 +39,7 @@ struct SearchResultRichRow: View {
                         .lineLimit(1)
                 }
 
-                if !isCompact, standing != nil || friendsLine != nil {
+                if standing != nil || friends != nil {
                     HStack(spacing: 8) {
                         standingView
                         friendsView
@@ -55,11 +58,6 @@ struct SearchResultRichRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-    }
-
-    /// The art column's width, so the list can start its separators where the text starts.
-    static func artWidth(isCompact: Bool) -> CGFloat {
-        isCompact ? PosterSlot.listPreview.size.width : PosterSlot.libraryRow.size.width
     }
 
     private var title: Text {
@@ -90,12 +88,12 @@ struct SearchResultRichRow: View {
     }
 
     private var standing: SearchRowText.Standing? {
-        isCompact ? nil : SearchRowText.standing(for: result.userState, mediaType: result.ref.mediaType)
+        SearchRowText.standing(for: result.userState, mediaType: result.ref.mediaType)
     }
 
-    private var friendsLine: String? {
-        guard !isCompact, let friends = result.friends else { return nil }
-        return SearchRowText.friendsLine(friends)
+    private var friends: MediaFriendsSummary? {
+        guard let friends = result.friends, friends.count > 0 else { return nil }
+        return friends
     }
 
     @ViewBuilder
@@ -119,20 +117,24 @@ struct SearchResultRichRow: View {
         }
     }
 
+    /// The faces of friends who've done something with it; their names are left to VoiceOver.
     @ViewBuilder
     private var friendsView: some View {
-        if let friends = result.friends, let friendsLine {
-            HStack(spacing: 6) {
+        if let friends {
+            let shown = friends.people.prefix(Self.faces)
+            HStack(spacing: 5) {
                 HStack(spacing: -5) {
-                    ForEach(friends.people.prefix(3)) { person in
+                    ForEach(shown) { person in
                         UserAvatar(urlString: person.avatarUrl, size: 20)
                             .overlay(Circle().stroke(.black, lineWidth: 1.5))
                     }
                 }
-                Text(friendsLine)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
+                if friends.count > shown.count {
+                    Text("+\(friends.count - shown.count)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.5))
+                }
             }
         }
     }
@@ -150,7 +152,7 @@ struct SearchResultRichRow: View {
         case nil:
             break
         }
-        if let friendsLine { parts.append("Friends: \(friendsLine)") }
+        if let friendsLine = friends.flatMap(SearchRowText.friendsLine) { parts.append("Friends: \(friendsLine)") }
         return parts.joined(separator: ", ")
     }
 }
