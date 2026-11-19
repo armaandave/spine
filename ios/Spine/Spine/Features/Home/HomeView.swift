@@ -819,6 +819,9 @@ struct HomeView: View {
             .task {
                 await viewModel.loadIfNeeded()
             }
+            .background {
+                HomeLaunchReadiness(viewModel: viewModel, isSelected: selectedTab == .home)
+            }
             .modifier(HomeRefreshTriggers(viewModel: viewModel, selectedTab: selectedTab))
             .modifier(HomeWriteFailureAlert(viewModel: viewModel))
             .navigationDestination(isPresented: $showsUpNext) {
@@ -1022,6 +1025,24 @@ struct HomeView: View {
         case .none:
             break
         }
+    }
+}
+
+/// Tells the launch animation when Home can be shown, so the logo can fly into the header: once the profile is in (or
+/// failed). The tiles keep their own loading look until their rows come, which can take a few seconds. A view of its
+/// own, so these reads don't redraw the page.
+private struct HomeLaunchReadiness: View {
+    let viewModel: HomeViewModel
+    let isSelected: Bool
+
+    @Environment(LaunchHandoff.self) private var launch: LaunchHandoff?
+
+    var body: some View {
+        let ready = isSelected && (viewModel.profile != nil || viewModel.profileErrorMessage != nil)
+        Color.clear
+            .onChange(of: ready, initial: true) { _, ready in
+                launch?.homeReadinessChanged(ready)
+            }
     }
 }
 

@@ -35,11 +35,14 @@ extension EnvironmentValues {
 
 struct ExplorationHomeButton: View {
     @Environment(\.appNavigationState) private var appNavigationState
+    @Environment(\.closeTrail) private var closeTrail
     var glass: Glass = .regular.tint(.white.opacity(0.1)).interactive()
 
     var body: some View {
         if let appNavigationState {
             ExplorationGlassButton(systemName: "house.fill", glass: glass) {
+                // Out of this tab's trail in one step: with a slide when this tab is Home, at once when Home is another.
+                closeTrail(appNavigationState.selectedTab == .home)
                 appNavigationState.returnHome()
             }
             .accessibilityLabel("Go to Home")
@@ -51,11 +54,13 @@ struct ExplorationHomeButton: View {
 
 struct ExplorationSearchButton: View {
     @Environment(\.appNavigationState) private var appNavigationState
+    @Environment(\.closeTrail) private var closeTrail
     var glass: Glass = .regular.tint(.white.opacity(0.1)).interactive()
 
     var body: some View {
         if let appNavigationState {
             ExplorationGlassButton(systemName: "magnifyingglass", glass: glass) {
+                closeTrail(true)
                 appNavigationState.returnToSearch()
             }
             .accessibilityLabel("Go to Search")
