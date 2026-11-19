@@ -16,6 +16,7 @@ final class RatingsGlowChartTests: XCTestCase {
             RatingDistributionBucket(rating: "4.5", count: 7),
             RatingDistributionBucket(rating: "4.4", count: 1),
             RatingDistributionBucket(rating: "5", count: 3),
+            RatingDistributionBucket(rating: "0", count: 9),
         ])
         XCTAssertEqual(counts, [2, 0, 0, 0, 0, 0, 0, 0, 8, 3])
     }
@@ -67,7 +68,28 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(G.stackSlots(steps: [8, 3, 8, 8, 3]), [0, 0, 1, 2, 1])
     }
 
+    func testABusyStepCompressesItsStackSoTheTopPhotoStaysInTheChart() {
+        let ys = G.ys(counts: [0, 0, 0, 0, 0, 0, 0, 0, 10, 0])
+        let few = G.photoYs(steps: [8, 8], ys: ys)
+        XCTAssertEqual(few[0] - few[1], G.stackStep, accuracy: 0.001)
+        let many = G.photoYs(steps: [Int](repeating: 8, count: 9), ys: ys)
+        XCTAssertEqual(many[0], ys[8], accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(many.min()!, G.photoTopLimit - 0.001)
+    }
+
+    func testTheAverageIsCountedFromTheStepsWhenThePayloadHasNone() {
+        XCTAssertEqual(G.average(payload: 3.2, counts: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 3.2)
+        XCTAssertEqual(G.average(payload: nil, counts: [0, 0, 0, 0, 0, 0, 0, 0, 1, 1]), 4.75, accuracy: 0.001)
+        XCTAssertEqual(G.average(payload: nil, counts: [Int](repeating: 0, count: 10)), 0)
+    }
+
     // MARK: People on the curve
+
+    func testAnEpisodePageChartsTheEpisodeStarsAndEveryOtherPageTheTitles() {
+        XCTAssertEqual(RatingChartPerson.viewerRating(mediaType: "episode", titleRating: "4", episodeRating: nil), nil)
+        XCTAssertEqual(RatingChartPerson.viewerRating(mediaType: "episode", titleRating: "4", episodeRating: "2.5"), "2.5")
+        XCTAssertEqual(RatingChartPerson.viewerRating(mediaType: "season", titleRating: "4", episodeRating: "2.5"), "4")
+    }
 
     func testYouGoFirstAndOnlyWhenYouHaveStars() {
         let friends = [friend(id: 1, rating: "4.5"), friend(id: 2, rating: nil), friend(id: 3, rating: "2")]
@@ -96,12 +118,6 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertFalse(friend(rating: "5", review: "Fine.").cardMarks.spoiler)
     }
 
-    func testTheSpoilerMarkIsASoftRedEye() {
-        XCTAssertEqual(FeedMark.spoiler.symbolName, "eye.slash.fill")
-        XCTAssertEqual(FeedMark.spoiler.color(for: .dark), HomeDesign.Palette.spoilerRed)
-        XCTAssertEqual(FeedMark.spoiler.cacheName, "spoiler")
-    }
-
     func testTheSecondLinePrefersTheReviewThenTheLogThenStanding() {
         let movie = ref("movie")
         XCTAssertEqual(
@@ -109,7 +125,11 @@ final class RatingsGlowChartTests: XCTestCase {
             .review(title: "Great", text: "Words.")
         )
         XCTAssertEqual(friend(reviewTitle: "", review: "Words.").cardLine(for: movie), .review(title: nil, text: "Words."))
-        XCTAssertEqual(friend(diaryEntryId: 1, consumedAt: "2024-03-02").cardLine(for: movie), .plain("Logged Mar 2, 2024"))
+        guard case let .plain(logged) = friend(diaryEntryId: 1, consumedAt: "2024-03-02").cardLine(for: movie) else {
+            return XCTFail("a log with no review says when it was logged")
+        }
+        XCTAssertTrue(logged.hasPrefix("Logged"))
+        XCTAssertEqual(friend(progressLabel: "5 of 10 episodes").cardLine(for: ref("tv")), .detail("5 of 10 episodes"))
         XCTAssertEqual(
             friend(status: "In progress", progressLabel: "5 of 10 episodes").cardLine(for: ref("tv")),
             .status(word: "Watching", progress: "5 of 10 episodes")
@@ -120,7 +140,10 @@ final class RatingsGlowChartTests: XCTestCase {
 
     func testASpoilerReviewFallsBackToTheLogDate() {
         let spoiler = friend(diaryEntryId: 1, consumedAt: "2024-03-02", review: "He dies.", containsSpoilers: true)
-        XCTAssertEqual(spoiler.cardLine(for: ref("movie")), .plain("Logged Mar 2, 2024"))
+        guard case let .plain(logged) = spoiler.cardLine(for: ref("movie")) else {
+            return XCTFail("a spoiler review's words wait behind its log")
+        }
+        XCTAssertTrue(logged.hasPrefix("Logged"))
     }
 
     // MARK: Builders

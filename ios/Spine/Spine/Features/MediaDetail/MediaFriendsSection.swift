@@ -43,8 +43,10 @@ struct FriendCardMarks: Equatable {
 /// What a card says under the name: their review, else their log date, else where they stand.
 enum FriendCardLine: Equatable {
     case review(title: String?, text: String)
-    /// "Logged Oct 14", or progress with no status.
+    /// "Logged Oct 14".
     case plain(String)
+    /// Progress with no status, as the dim half of a status line: "5 of 10 episodes".
+    case detail(String)
     /// The status word, then how far they are: "Watching · 5 of 10 episodes".
     case status(word: String, progress: String?)
 }
@@ -65,7 +67,7 @@ extension MediaFriend {
         }
         if let logLine { return .plain(logLine) }
         if let standing = standingLabel(for: ref) { return .status(word: standing, progress: progressLabel) }
-        return progressLabel.map(FriendCardLine.plain)
+        return progressLabel.map(FriendCardLine.detail)
     }
 }
 
@@ -121,7 +123,7 @@ struct MediaFriendsSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 header
 
-                GlassEffectContainer(spacing: 12) {
+                GlassEffectContainer(spacing: 4) {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: 12) {
                             ForEach(friends) { friend in
@@ -141,7 +143,10 @@ struct MediaFriendsSection: View {
             .environment(\.colorScheme, .dark)
             .task(id: posterURL) {
                 tint = MediaPageTint.known(posterURL)
-                if tint == nil { tint = await MediaPageTint.load(posterURL) }
+                if tint == nil {
+                    let loaded = await MediaPageTint.load(posterURL)
+                    withAnimation(.easeInOut(duration: 0.4)) { tint = loaded }
+                }
             }
         }
     }
@@ -193,6 +198,7 @@ struct MediaFriendsListView: View {
         ZStack {
             SpinePageBackground()
             ScrollView(showsIndicators: false) {
+                GlassEffectContainer(spacing: 4) {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if let stats = friends.ratingStats {
                         SpineRatingDistributionSection(
@@ -212,6 +218,7 @@ struct MediaFriendsListView: View {
                             }
                         }
                     }
+                }
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 14)
@@ -294,15 +301,16 @@ private struct FriendsRailWash: View {
     var body: some View {
         if let tint {
             GeometryReader { geometry in
-                let width = geometry.size.width
-                let height = geometry.size.height + 96
+                // The board's box: the rail's width plus the page's 14 pt gutters, 240 tall from 48 above.
+                let width = geometry.size.width + 28
+                let height: CGFloat = 240
                 ZStack {
                     blob(tint, radii: CGSize(width: 150, height: 96), at: CGPoint(x: width * 0.14, y: height * 0.50), alpha: 0.114)
                     blob(tint, radii: CGSize(width: 170, height: 110), at: CGPoint(x: width * 0.52, y: height * 0.42), alpha: 0.066)
                     blob(tint, radii: CGSize(width: 150, height: 100), at: CGPoint(x: width * 0.92, y: height * 0.58), alpha: 0.090)
                 }
                 .frame(width: width, height: height)
-                .offset(y: -48)
+                .offset(x: -14, y: -48)
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -401,7 +409,7 @@ private struct MediaFriendCard: View {
             }
             if marks.liked { FeedMarkView(mark: .heart, ink: .dark, size: 12) }
             if marks.rewatch { FeedMarkView(mark: .rewatch, ink: .dark, size: 12) }
-            if marks.spoiler { FeedMarkView(mark: .spoiler, ink: .dark, size: 12) }
+            if marks.spoiler { FeedMarkView(mark: .spoiler, ink: .dark, size: 14) }
         }
         .frame(height: 16, alignment: .leading)
         .accessibilityElement(children: .ignore)
@@ -428,6 +436,7 @@ private struct MediaFriendCard: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.white.opacity(0.94))
                         .lineLimit(isCompact ? 1 : nil)
+                        .frame(height: isCompact ? 18 : nil, alignment: .topLeading)
                 }
                 Text(text)
                     .font(.system(size: 13, weight: .medium))
@@ -441,6 +450,12 @@ private struct MediaFriendCard: View {
             Text(text)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.58))
+                .lineLimit(1)
+                .frame(height: isCompact ? 36 : nil, alignment: .topLeading)
+        case let .detail(text):
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.72))
                 .lineLimit(1)
                 .frame(height: isCompact ? 36 : nil, alignment: .topLeading)
         case let .status(word, progress):

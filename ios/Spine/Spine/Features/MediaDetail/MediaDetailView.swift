@@ -2376,6 +2376,7 @@ private struct MediaDetailPageView: View {
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var ratingPicker = MediaRatingPickerState()
     @State private var albumBackdropTint: Color?
+    @State private var viewerAvatarURL: String?
     @State private var didRunRailHandoff = false
 
     private let mediaRepository: MediaRepository
@@ -2991,6 +2992,7 @@ private struct MediaDetailPageView: View {
             )
         }
         .task(id: shouldLoad) {
+            if viewerAvatarURL == nil { viewerAvatarURL = SignedInUserCache().load()?.avatarUrl }
             if shouldLoad, viewModel.detail == nil {
                 await viewModel.load()
                 await runRailHandoff()
@@ -4434,8 +4436,12 @@ private struct MediaDetailPageView: View {
     /// You (when you have stars) and the friends who rated, as photos on the ratings curve.
     private var chartPeople: [RatingChartPerson] {
         RatingChartPerson.people(
-            viewerRating: viewModel.viewer?.rating,
-            viewerAvatarURL: SignedInUserCache().load()?.avatarUrl,
+            viewerRating: RatingChartPerson.viewerRating(
+                mediaType: viewModel.detail?.ref.mediaType ?? "",
+                titleRating: viewModel.viewer?.rating,
+                episodeRating: viewModel.viewer?.tv?.episode?.userRating
+            ),
+            viewerAvatarURL: viewerAvatarURL,
             friends: viewModel.friends
         )
     }
@@ -8378,7 +8384,7 @@ struct SpineRatingDistributionSection: View {
 
     var body: some View {
         Group {
-            if counts.allSatisfy({ $0 == 0 }) {
+            if counts.allSatisfy({ $0 == 0 }), (community?.ratingCount ?? 0) == 0, people.isEmpty {
                 HStack {
                     Text("No ratings yet.")
                         .font(.system(size: 13, weight: .semibold))
@@ -8400,7 +8406,10 @@ struct SpineRatingDistributionSection: View {
         }
         .task(id: posterURL) {
             tint = MediaPageTint.known(posterURL)
-            if tint == nil { tint = await MediaPageTint.load(posterURL) }
+            if tint == nil {
+                let loaded = await MediaPageTint.load(posterURL)
+                withAnimation(.easeInOut(duration: 0.4)) { tint = loaded }
+            }
         }
     }
 
@@ -8427,11 +8436,7 @@ struct SpineRatingDistributionSection: View {
 
     /// The community's average in stars; counted from the steps when the payload has none.
     private var average: Double {
-        if let value = community?.averageRating.flatMap(Double.init) { return value }
-        let total = counts.reduce(0, +)
-        guard total > 0 else { return 0 }
-        let weighted = counts.enumerated().reduce(0.0) { $0 + Double($1.element) * Double($1.offset + 1) / 2 }
-        return weighted / Double(total)
+        RatingsChartGeometry.average(payload: community?.averageRating.flatMap(Double.init), counts: counts)
     }
 
     private var reviewsButtonTitle: String {

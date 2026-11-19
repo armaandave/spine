@@ -43,9 +43,21 @@ enum RatingsChartGeometry {
     static func counts(from buckets: [RatingDistributionBucket]) -> [Int] {
         var counts = [Int](repeating: 0, count: stepCount)
         for bucket in buckets {
-            counts[min(max(bucket.rating.ratingHalfSteps, 1), stepCount) - 1] += bucket.count
+            // No stars is no step: nobody is drawn there either.
+            let steps = bucket.rating.ratingHalfSteps
+            guard steps > 0 else { continue }
+            counts[min(steps, stepCount) - 1] += bucket.count
         }
         return counts
+    }
+
+    /// The average in stars: the payload's own when it has one, else counted from the steps (0 when empty).
+    static func average(payload: Double?, counts: [Int]) -> Double {
+        if let payload { return payload }
+        let total = counts.reduce(0, +)
+        guard total > 0 else { return 0 }
+        let weighted = counts.enumerated().reduce(0.0) { $0 + Double($1.element) * Double($1.offset + 1) / 2 }
+        return weighted / Double(total)
     }
 
     /// The height of each step's point: the floor, less the count's share of the busiest step.
@@ -126,6 +138,24 @@ enum RatingsChartGeometry {
         return stars.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(stars))" : String(format: "%.1f", stars)
     }
 
+    /// The lowest a photo's center may sit: its top edge stays inside the chart, under the header.
+    static let photoTopLimit: CGFloat = photoSize / 2
+
+    /// The height of each photo, in order: the first at a step sits on the curve, the rest above it, 14 pt apart, or
+    /// closer together when the step is busy so the top one never rises into the header.
+    static func photoYs(steps: [Int], ys: [CGFloat]) -> [CGFloat] {
+        let slots = stackSlots(steps: steps)
+        var perStep: [Int: Int] = [:]
+        for step in steps { perStep[step, default: 0] += 1 }
+        return steps.indices.map { index in
+            let base = ys[steps[index]]
+            let others = (perStep[steps[index]] ?? 1) - 1
+            let room = max(base - photoTopLimit, 0)
+            let gap = others > 0 ? min(stackStep, room / CGFloat(others)) : stackStep
+            return base - CGFloat(slots[index]) * gap
+        }
+    }
+
     /// For each photo, in order, how many photos sit below it at the same step (0 is on the curve).
     static func stackSlots(steps: [Int]) -> [Int] {
         var used: [Int: Int] = [:]
@@ -146,6 +176,12 @@ struct RatingChartPerson: Identifiable, Equatable {
     let isYou: Bool
 
     var step: Int { halfSteps - 1 }
+
+    /// The stars to plot as yours: an episode's page charts the episode, so it reads your episode stars; every other
+    /// page reads the title's own.
+    static func viewerRating(mediaType: String, titleRating: String?, episodeRating: String?) -> String? {
+        mediaType == "episode" ? episodeRating : titleRating
+    }
 
     /// You first (when you have stars), then every friend who rated, in the friends' order.
     static func people(
@@ -213,7 +249,7 @@ struct RatingsGlowChart: View {
     private static let headerHeight: CGFloat = 64
     private static let headerGap: CGFloat = 4
     private static let pageColor = Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x10 / 255)
-    private static let returnSpring = Animation.spring(response: 0.6, dampingFraction: 0.55)
+    private static let returnSpring = Animation.spring(response: 0.6, dampingFraction: 0.62)
 
     private var color: Color { tint ?? .white }
 
@@ -230,7 +266,11 @@ struct RatingsGlowChart: View {
         .frame(height: Self.headerHeight + Self.headerGap + G.height)
         .onAppear {
             // Reduce Motion: it is simply there.
-            appeared = true
+            if reduceMotion { appeared = true }
+        }
+        // The page's scroll view builds this at load; draw in when it is actually on screen.
+        .onScrollVisibilityChange(threshold: 0.3) { visible in
+            if visible { appeared = true }
         }
     }
 
@@ -261,6 +301,7 @@ struct RatingsGlowChart: View {
                         .foregroundStyle(.white.opacity(0.62))
                 }
                 .lineLimit(1)
+                .frame(height: 48)
             }
             .accessibilityHidden(true)
             Spacer(minLength: 8)
@@ -295,24 +336,26 @@ struct RatingsGlowChart: View {
         let animate = !reduceMotion
         return ZStack(alignment: .topLeading) {
             RatingsCurveLayer(ys: ys, slopes: slopes, width: width, tint: color, appeared: appeared, animate: animate)
+                .equatable()
             ForEach(1...5, id: \.self) { star in
                 Text("\(star)")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.white.opacity(0.58))
-                    .position(x: G.x(step: star * 2 - 1, chartWidth: width), y: G.labelY)
+                    .position(x: G.x(step: star * 2 - 1, chartWidth: width), y: G.labelY - 3.5)
             }
             hairline(x: hairX, crossing: hairY, animate: animate, scrubbing: scrubX != nil)
             photos(ys: ys, width: width, scrubIndex: scrubIndex, animate: animate)
         }
         .frame(width: width, height: G.height, alignment: .topLeading)
         .contentShape(Rectangle())
-        // A short press, then drag: a quick vertical swipe still scrolls the page.
+        // A short press that stays put, then drag: a vertical swipe still scrolls the page.
         .gesture(
-            LongPressGesture(minimumDuration: 0.12)
+            LongPressGesture(minimumDuration: 0.22, maximumDistance: 6)
                 .sequenced(before: DragGesture(minimumDistance: 0))
                 .updating($scrubX) { value, state, _ in
-                    if case let .second(true, drag?) = value {
-                        state = drag.location.x
+                    // From the press, the hairline waits at the average; the finger moves it from there.
+                    if case let .second(true, drag) = value {
+                        state = drag?.location.x ?? averageX
                     }
                 }
         )
@@ -357,20 +400,24 @@ struct RatingsGlowChart: View {
             .shadow(color: color.opacity(0.6), radius: 3)
             .shadow(color: color.opacity(0.35), radius: 10)
             .opacity(appeared ? 1 : 0)
-            .animation(animate ? .easeInOut(duration: 0.7).delay(1.1) : nil, value: appeared)
+            .animation(animate ? .easeInOut(duration: 0.6).delay(1.4) : nil, value: appeared)
             .position(x: x, y: G.hairlineTop + length / 2)
-            // Follows the finger with no animation; springs back to the average when let go.
-            .animation(animate && !scrubbing ? Self.returnSpring : nil, value: x)
+            // Follows the finger with no animation; springs back to the average when let go (not on a resize or new data).
+            .animation(animate && !scrubbing ? Self.returnSpring : nil, value: scrubbing)
             .allowsHitTesting(false)
     }
 
     private func photos(ys: [CGFloat], width: CGFloat, scrubIndex: Int?, animate: Bool) -> some View {
+        let photoYs = G.photoYs(steps: people.map(\.step), ys: ys)
         let slots = G.stackSlots(steps: people.map(\.step))
-        let order = people.indices.sorted { (people[$0].step, $0) < (people[$1].step, $1) }
+        var ranks = [Int](repeating: 0, count: people.count)
+        for (rank, index) in people.indices.sorted(by: { (people[$0].step, $0) < (people[$1].step, $1) }).enumerated() {
+            ranks[index] = rank
+        }
         return ZStack(alignment: .topLeading) {
             ForEach(Array(people.enumerated()), id: \.element.id) { index, person in
                 let lifted = person.step == scrubIndex
-                let rank = order.firstIndex(of: index) ?? 0
+                let rank = ranks[index]
                 photo(person)
                     .scaleEffect(lifted ? 1.15 : 1)
                     .offset(y: lifted ? -6 : 0)
@@ -379,12 +426,12 @@ struct RatingsGlowChart: View {
                     .offset(y: appeared ? 0 : -28)
                     .opacity(appeared ? 1 : 0)
                     .animation(
-                        animate ? .spring(response: 0.6, dampingFraction: 0.5).delay(0.85 + Double(rank) * 0.11) : nil,
+                        animate ? .spring(response: 0.55, dampingFraction: 0.62).delay(0.85 + Double(rank) * 0.11) : nil,
                         value: appeared
                     )
                     .position(
                         x: G.x(step: person.step, chartWidth: width),
-                        y: ys[person.step] - CGFloat(slots[index]) * G.stackStep
+                        y: photoYs[index]
                     )
                     .zIndex(Double(20 - slots[index]))
             }
@@ -407,7 +454,7 @@ struct RatingsGlowChart: View {
 
 /// The area, the glowing line and its glow, drawn once and drawn in: it only changes with its inputs, so dragging
 /// across the chart never redraws it.
-private struct RatingsCurveLayer: View {
+private struct RatingsCurveLayer: View, Equatable {
     typealias G = RatingsChartGeometry
 
     let ys: [CGFloat]
@@ -448,6 +495,10 @@ private struct RatingsCurveLayer: View {
                 .animation(draw, value: appeared)
         }
         .frame(width: width, height: G.height, alignment: .topLeading)
+        // Rasterized once; the padding keeps the glow from being cut at the chart's edges.
+        .padding(24)
+        .drawingGroup()
+        .padding(-24)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
