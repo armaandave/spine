@@ -18,7 +18,8 @@ extension View {
     NavigationStack {
         VStack {
             Spacer()
-            MediaLensChip(selectedType: "game") {}
+            MediaTypeBar(selectedType: .constant("game"), availableTypes: ["movie", "tv", "game"])
+                .padding(.horizontal, 16)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
