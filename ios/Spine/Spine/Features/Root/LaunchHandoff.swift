@@ -35,6 +35,9 @@ final class LaunchHandoff {
     private(set) var phase: Phase = .covering
     /// The header's logo and "Home" stay hidden while the overlay's copies of them are on their way.
     private(set) var hidesHeaderLogo: Bool
+    /// The color the overlay's "Home" is drawn in, which the header's word keeps until the hand-over, so a picture
+    /// whose colors arrive mid-glide doesn't change the word as it lands. Nil once the header shows its own color.
+    private(set) var heldWordColor: Color?
     let reduceMotion: Bool
 
     /// The header's logo and word, in window coordinates, and the word's color: where the flight lands.
@@ -45,13 +48,14 @@ final class LaunchHandoff {
     @ObservationIgnored private var isSignedIn = false
     @ObservationIgnored private var homeIsReady = false
     @ObservationIgnored private var waitLimit: Task<Void, Never>?
+    @ObservationIgnored private var finishAnyway: Task<Void, Never>?
 
     /// How long a signed-in launch waits for Home's profile before it lands anyway.
     static let longestWaitForHome: Duration = .milliseconds(1500)
 
-    init() {
-        reduceMotion = UIAccessibility.isReduceMotionEnabled
-        hidesHeaderLogo = !reduceMotion
+    init(reduceMotion: Bool? = nil) {
+        self.reduceMotion = reduceMotion ?? UIAccessibility.isReduceMotionEnabled
+        hidesHeaderLogo = !self.reduceMotion
     }
 
     func sessionChanged(_ session: Session) {
@@ -99,8 +103,11 @@ final class LaunchHandoff {
 
     /// The overlay finished: the header shows its own logo and word again.
     func finish() {
+        guard phase != .done else { return }
         waitLimit?.cancel()
+        finishAnyway?.cancel()
         hidesHeaderLogo = false
+        heldWordColor = nil
         phase = .done
     }
 
@@ -124,13 +131,27 @@ final class LaunchHandoff {
 
     private func land() {
         waitLimit?.cancel()
+        heldWordColor = wordColor
         phase = .landing
+        // At most a beat to settle, then the glide.
+        endAnyway(after: .seconds(LaunchChoreography.beatPeriod + LaunchChoreography.duration + 1))
     }
 
     private func fadeOut() {
         waitLimit?.cancel()
         hidesHeaderLogo = false
         phase = .fading
+        endAnyway(after: .seconds(1.5))
+    }
+
+    /// The overlay ends itself when its animation runs out. If something cut the animation short, this ends it a
+    /// little later anyway, so the overlay never stays over Home (it holds the last frame, which is Home's own look).
+    private func endAnyway(after delay: Duration) {
+        finishAnyway = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.finish()
+        }
     }
 }
 
@@ -267,7 +288,7 @@ struct LaunchOverlay: UIViewRepresentable {
 ///
 /// SwiftUI makes this view again when the app's tab bar first appears under it, and may move it. So everything runs on
 /// one clock for the whole launch (`Clock`), and a new view picks up exactly where the old one was.
-final class LaunchOverlayView: UIView, CAAnimationDelegate {
+final class LaunchOverlayView: UIView {
     enum Motion {
         /// Frames in window coordinates.
         case land(logo: CGRect, word: CGRect, wordImage: UIImage?)
@@ -363,6 +384,9 @@ final class LaunchOverlayView: UIView, CAAnimationDelegate {
         for item in timeline where item.layer.animation(forKey: item.key) == nil && now < Self.end(of: item.animation) {
             item.layer.add(item.animation, forKey: item.key)
         }
+        // Laid out again now that the screen's scale is known (a layout before this one may have used 1x).
+        setNeedsLayout()
+        layoutIfNeeded()
         startMotionIfReady()
     }
 
@@ -374,7 +398,7 @@ final class LaunchOverlayView: UIView, CAAnimationDelegate {
     }
 
     /// The glide's or the fade's clock ran out (not cut short by a move): the header takes over.
-    func animationDidStop(_ animation: CAAnimation, finished: Bool) {
+    fileprivate func animationEnded(finished: Bool) {
         guard finished else { return }
         timeline.removeAll()
         onFinish?()
@@ -491,7 +515,7 @@ final class LaunchOverlayView: UIView, CAAnimationDelegate {
         path.duration = duration
         path.calculationMode = .linear
         // The glide's clock: when it runs out, the header takes over.
-        path.delegate = self
+        path.delegate = AnimationEnd(self)
         run(logo, "position", path, endingAt: NSValue(cgPoint: end))
         run(logo, "transform.scale", frames.map(\.scale))
         run(plaster, "opacity", frames.map(\.plaster))
@@ -531,7 +555,7 @@ final class LaunchOverlayView: UIView, CAAnimationDelegate {
         fade.duration = 0.35
         fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
         fade.beginTime = begin
-        fade.delegate = self
+        fade.delegate = AnimationEnd(self)
         layer.opacity = 0
         play(fade, on: layer, key: "fade")
         CATransaction.commit()
@@ -555,5 +579,19 @@ final class LaunchOverlayView: UIView, CAAnimationDelegate {
 
     private static func evenKeyTimes(_ count: Int) -> [NSNumber] {
         (0..<count).map { NSNumber(value: Double($0) / Double(max(1, count - 1))) }
+    }
+}
+
+/// Tells the overlay when its glide or fade ends, without the animation keeping the overlay alive: an animation holds
+/// its delegate, and the overlay holds its animations.
+private final class AnimationEnd: NSObject, CAAnimationDelegate {
+    private weak var view: LaunchOverlayView?
+
+    init(_ view: LaunchOverlayView) {
+        self.view = view
+    }
+
+    func animationDidStop(_ animation: CAAnimation, finished: Bool) {
+        view?.animationEnded(finished: finished)
     }
 }

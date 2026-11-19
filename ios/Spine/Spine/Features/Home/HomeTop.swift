@@ -189,8 +189,9 @@ private struct HomeTopHeader: View {
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
                             launch?.headerMoved(logo: frame)
                         }
-                    HomeTitleWord(color: titleColor)
+                    HomeTitleWord(color: launch?.heldWordColor ?? titleColor)
                         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
+                        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: launch?.heldWordColor == nil)
                         .opacity(hidesLogo ? 0 : 1)
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
                             launch?.headerMoved(word: frame)
