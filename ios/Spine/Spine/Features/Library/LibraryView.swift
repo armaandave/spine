@@ -692,11 +692,9 @@ struct LibraryView: View {
             MediaSearchBar(
                 text: $searchDraftText,
                 selectedMediaType: selectedMediaTypeBinding,
-                isLensExpanded: .constant(false),
                 availableTypes: viewModel.mediaTypes,
                 horizontalPadding: 0,
                 showsMediaLens: false,
-                onLensTap: {},
                 onLensSelect: { _ in },
                 onSearch: { text in
                     Task { await viewModel.setSearchQuery(text) }
@@ -766,13 +764,10 @@ struct LibraryView: View {
     }
 
     private var mediaPicker: some View {
-        MediaSearchLensPicker(
+        MediaTypeBar(
             selectedType: selectedMediaTypeBinding,
-            availableTypes: viewModel.mediaTypes,
-            horizontalPadding: 0,
-            fitsAllTypes: true,
-            isCompact: true
-        ) { _ in }
+            availableTypes: viewModel.mediaTypes
+        )
     }
 
     @ViewBuilder

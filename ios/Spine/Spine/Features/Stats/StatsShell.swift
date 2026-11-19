@@ -135,16 +135,15 @@ struct StatsShell<Content: View>: View {
     }
 
     private var mediaPicker: some View {
-        MediaSearchLensPicker(
+        MediaTypeBar(
             selectedType: Binding(
                 get: { viewModel.selectedMediaType ?? "" },
                 set: { viewModel.selectMediaType($0) }
             ),
             availableTypes: viewModel.mediaTypes,
-            horizontalPadding: 0,
-            fitsAllTypes: true,
             allowsEmptySelection: true,
-            isCompact: true
+            // The page ticks for every year and type switch.
+            playsHaptic: false
         ) { selectedType in
             viewModel.selectMediaType(selectedType)
         }
