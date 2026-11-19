@@ -233,20 +233,42 @@ struct RatingsGlowChart: View {
     @State private var appeared = false
 
     private static let headerHeight: CGFloat = 48
-    private static let headerGap: CGFloat = 0
-    private static let pageColor = Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x10 / 255)
+    /// Air above the header, so the box's top edge sits 2 pt above the number's line.
+    private static let topInset: CGFloat = 8
+    /// The Inner light box: from 6 pt down to the floor, 1 pt in from each side.
+    private static let boxTop: CGFloat = 6
+    private static let boxRadius: CGFloat = 20
+    /// Where the header's content sits from the box's left edge, and the reviews link from the right.
+    private static let sideInset: CGFloat = 14
+
+    /// Inter Tight Black: the bundled variable font (`Resources/Fonts`, registered under `UIAppFonts`) with its
+    /// weight axis set to 900 through the font descriptor.
+    static let numberFont: Font = {
+        let weightAxis = 0x7767_6874 // 'wght'
+        let descriptor = UIFontDescriptor(fontAttributes: [
+            .name: "InterTight-Regular",
+            UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [weightAxis: 900],
+        ])
+        return Font(UIFont(descriptor: descriptor, size: 44))
+    }()
 
     private var color: Color { tint ?? .white }
 
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            VStack(alignment: .leading, spacing: Self.headerGap) {
-                header
-                chart(width: width)
+            ZStack(alignment: .topLeading) {
+                innerLightBox
+                    .frame(width: width - 2, height: G.floorY + Self.topInset + Self.headerHeight - Self.boxTop)
+                    .offset(x: 1, y: Self.boxTop)
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    chart(width: width)
+                }
+                .padding(.top, Self.topInset)
             }
         }
-        .frame(height: Self.headerHeight + Self.headerGap + G.height)
+        .frame(height: Self.topInset + Self.headerHeight + G.height)
         .onAppear {
             // Reduce Motion: it is simply there.
             if reduceMotion { appeared = true }
@@ -257,30 +279,43 @@ struct RatingsGlowChart: View {
         }
     }
 
+    // MARK: Box
+
+    /// No stroke and no fill: only a soft white glow just inside the edges, so the box is felt rather than drawn.
+    private var innerLightBox: some View {
+        RoundedRectangle(cornerRadius: Self.boxRadius, style: .continuous)
+            .stroke(Color.white.opacity(0.06), lineWidth: 18)
+            .blur(radius: 9)
+            .clipShape(RoundedRectangle(cornerRadius: Self.boxRadius, style: .continuous))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
     // MARK: Header
 
     private var header: some View {
-        HStack(alignment: .bottom) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(String(format: "%.1f", average))
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(color)
-                    // Home's title glow.
-                    .shadow(color: color.opacity(0.45), radius: 6)
-                    .shadow(color: color.opacity(0.3), radius: 16)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(totalCount.formatted())
-                    Image(systemName: "eye")
-                }
-                .font(.system(size: 13, weight: .semibold))
-                .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.62))
-                .accessibilityLabel("\(totalCount.formatted()) \(totalCount == 1 ? "rating" : "ratings")")
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(String(format: "%.1f", average))
+                .font(Self.numberFont)
+                .tracking(-2)
+                .foregroundStyle(color)
+                // Softer than Home's title glow.
+                .shadow(color: color.opacity(0.24), radius: 6)
+                .shadow(color: color.opacity(0.14), radius: 14)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(totalCount.formatted())
+                Image(systemName: "eye")
             }
-            .lineLimit(1)
-            .accessibilityHidden(true)
-            Spacer(minLength: 8)
+            .font(.system(size: 13, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(.white.opacity(0.62))
+            .accessibilityLabel("\(totalCount.formatted()) \(totalCount == 1 ? "rating" : "ratings")")
+        }
+        .lineLimit(1)
+        .accessibilityHidden(true)
+        .padding(.horizontal, Self.sideInset)
+        .frame(maxWidth: .infinity, minHeight: Self.headerHeight, maxHeight: Self.headerHeight, alignment: .bottomLeading)
+        .overlay(alignment: .topTrailing) {
             if let reviewsTitle {
                 Button(action: onSeeReviews) {
                     HStack(spacing: 5) {
@@ -292,11 +327,13 @@ struct RatingsGlowChart: View {
                     .foregroundStyle(.white.opacity(0.82))
                 }
                 .buttonStyle(.plain)
-                .padding(.bottom, 6)
+                .frame(height: 18)
+                // 12 pt below the header's top, 20 pt in from the right: inside the box's corner.
+                .padding(.top, 12)
+                .padding(.trailing, 20)
                 .accessibilityHint("Opens every written review")
             }
         }
-        .frame(height: Self.headerHeight, alignment: .bottom)
     }
 
     // MARK: Chart
@@ -377,10 +414,10 @@ struct RatingsGlowChart: View {
     private func photo(_ person: RatingChartPerson) -> some View {
         UserAvatar(urlString: person.avatarURL, size: G.photoSize)
             .overlay {
-                // A ring outside the photo: white for you, the page's color for friends so overlaps read.
-                Circle()
-                    .inset(by: person.isYou ? -1 : -0.75)
-                    .stroke(person.isYou ? Color.white : Self.pageColor, lineWidth: person.isYou ? 2 : 1.5)
+                // Friends' photos have no ring; yours has a white outline.
+                if person.isYou {
+                    Circle().inset(by: -1).stroke(Color.white, lineWidth: 2)
+                }
             }
             .shadow(color: person.isYou ? .white.opacity(0.35) : .clear, radius: 10)
     }
