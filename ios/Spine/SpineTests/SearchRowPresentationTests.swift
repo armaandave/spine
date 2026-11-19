@@ -82,7 +82,7 @@ final class SearchRowPresentationTests: XCTestCase {
         ]
         let shelf = FeaturedShelf(key: "movie", title: "Movies", mediaType: "movie", lists: lists)
 
-        XCTAssertEqual(shelf.fanPosters.map(\.title), ["dune", "sinners", "arrival"])
+        XCTAssertEqual(shelf.rowPosters.map(\.title), ["dune", "sinners", "arrival"])
     }
 
     func testSearchResultsDecodeTheirFriendsAndSurviveABrokenOne() throws {
