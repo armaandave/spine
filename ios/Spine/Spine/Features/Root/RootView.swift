@@ -4,6 +4,8 @@ import SwiftUI
 struct RootView: View {
     @State private var session: AppSession
     @State private var onboardingStore: OnboardingStore
+    /// The launch screen's logo flying into Home's header, once per launch.
+    @State private var launch = LaunchHandoff()
 
     init() {
         self.init(repositories: .current())
@@ -31,11 +33,31 @@ struct RootView: View {
                     .spineSoftAppear()
             }
         }
+        .environment(launch)
+        .overlay {
+            if launch.phase != .done {
+                LaunchOverlay(handoff: launch, phase: launch.phase)
+                    .ignoresSafeArea()
+            }
+        }
+        .onChange(of: launchSession, initial: true) { _, stage in
+            launch.sessionChanged(stage)
+            // The colors of someone's Home picture don't belong on the next launch once they've signed out.
+            if stage == .signedOut { LaunchPalette.remember(nil) }
+        }
         .task {
             await session.start()
             if case .signedIn = session.state {
                 onboardingStore.markWelcomeSeen()
             }
+        }
+    }
+
+    private var launchSession: LaunchHandoff.Session {
+        switch session.state {
+        case .checking: .checking
+        case .signedOut: .signedOut
+        case .signedIn: .signedIn
         }
     }
 }
@@ -51,7 +73,8 @@ private struct SessionCheckingView: View {
                     .tint(.white.opacity(0.72))
             }
         }
-        .preferredColorScheme(.dark)
+        // No preferred color scheme: the launch overlay covers this view, and forcing dark here flipped the status bar
+        // over the launch screen's plaster for a moment.
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Opening Spine")
     }

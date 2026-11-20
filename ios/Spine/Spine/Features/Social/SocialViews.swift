@@ -35,7 +35,7 @@ struct UserAvatar: View {
     var size: CGFloat = 44
 
     var body: some View {
-        SpineAsyncImage(url: URL(string: urlString ?? "")) { phase in
+        SpineAsyncImage(url: URL(string: urlString ?? ""), thumbnailSize: CGSize(width: size, height: size)) { phase in
             if case let .success(image) = phase {
                 image
                     .resizable()

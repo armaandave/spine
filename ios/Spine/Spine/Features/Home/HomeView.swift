@@ -819,6 +819,9 @@ struct HomeView: View {
             .task {
                 await viewModel.loadIfNeeded()
             }
+            .background {
+                HomeLaunchReadiness(viewModel: viewModel, isSelected: selectedTab == .home)
+            }
             .modifier(HomeRefreshTriggers(viewModel: viewModel, selectedTab: selectedTab))
             .modifier(HomeWriteFailureAlert(viewModel: viewModel))
             .navigationDestination(isPresented: $showsUpNext) {
@@ -932,6 +935,7 @@ struct HomeView: View {
                         trackingRepository: trackingRepository,
                         currentUserId: currentUserId,
                         selectedTab: selectedTab,
+                        feedCard: selection.card,
                         onSelectTab: onSelectTab,
                         onUnauthorized: onUnauthorized
                     )
@@ -1008,7 +1012,9 @@ struct HomeView: View {
     private func open(_ activity: ActivityItem) {
         switch ActivityDestination.resolve(activity) {
         case let .diary(id):
-            selectedPost = ActivityPostSelection(post: .log(id))
+            selectedPost = ActivityPostSelection(
+                post: .log(id), card: viewModel.feedModel.entries.first { $0.id == activity.id }
+            )
         case let .progress(id):
             selectedPost = ActivityPostSelection(
                 post: .progress(id), card: viewModel.feedModel.entries.first { $0.id == activity.id }
@@ -1022,6 +1028,24 @@ struct HomeView: View {
         case .none:
             break
         }
+    }
+}
+
+/// Tells the launch animation when Home can be shown, so the logo can fly into the header: once the profile is in (or
+/// failed). The tiles keep their own loading look until their rows come, which can take a few seconds. A view of its
+/// own, so these reads don't redraw the page.
+private struct HomeLaunchReadiness: View {
+    let viewModel: HomeViewModel
+    let isSelected: Bool
+
+    @Environment(LaunchHandoff.self) private var launch: LaunchHandoff?
+
+    var body: some View {
+        let ready = isSelected && (viewModel.profile != nil || viewModel.profileErrorMessage != nil)
+        Color.clear
+            .onChange(of: ready, initial: true) { _, ready in
+                launch?.homeReadinessChanged(ready)
+            }
     }
 }
 
@@ -1115,7 +1139,7 @@ private struct HomeQuickActionWarmup: ViewModifier {
 
 private struct ActivityPostSelection: Identifiable {
     let post: ActivityPostRef
-    /// The card it was opened from, so a progress post can draw the card's bar.
+    /// The card it was opened from, so a progress post or a log can draw the card's bar.
     var card: FeedCardModel? = nil
 
     var id: String { post.id }

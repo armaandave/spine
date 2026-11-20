@@ -9,8 +9,10 @@ struct HomeFeedRows: View {
     /// no different for it (`StableInput`).
     @StableInput var onOpen: (Int) -> Void
 
-    /// A card and the gap under it: the lazy stack only ever moves known sizes.
-    static let cardRowHeight = HomeDesign.Metric.cardHeight + HomeDesign.Metric.cardGap
+    /// A card and the gap under it: the lazy stack only ever moves known sizes, each card's own.
+    static func cardRowHeight(_ card: FeedCardModel) -> CGFloat {
+        card.height + HomeDesign.Metric.cardGap
+    }
 
     var body: some View {
         let entries = model.entries
@@ -18,7 +20,7 @@ struct HomeFeedRows: View {
             FeedCardView(model: card, onOpen: onOpen)
                 .equatable()
                 .padding(.horizontal, HomeDesign.Metric.pageMargin)
-                .frame(height: Self.cardRowHeight, alignment: .top)
+                .frame(height: Self.cardRowHeight(card), alignment: .top)
                 .prefetchingFeedCards(at: index, in: entries)
                 .onAppear { model.cardAppeared(card) }
                 .task { await model.loadNextPageIfNeeded(cardID: card.id) }

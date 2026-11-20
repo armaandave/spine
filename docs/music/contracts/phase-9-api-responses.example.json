@@ -41,6 +41,7 @@
         },
         "object": {
           "amount": 2,
+          "bar": null,
           "id": 1,
           "is_rewatch": false,
           "label": null,

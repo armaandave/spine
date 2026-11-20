@@ -116,6 +116,11 @@ private enum HomeTopSpec {
     static let dateFont = Font.system(size: 13, weight: .semibold)
     static let titleFont = Font.system(size: 30, weight: .heavy)
     static let titleTracking: CGFloat = -0.5
+    /// The title's capital letters, which the logo beside it is centered on.
+    static let titleCapHeight = UIFont.systemFont(ofSize: 30, weight: .heavy).capHeight
+    /// The logo beside the title: 28 pt tall (the mark is 710 x 803), 6 pt before the word.
+    static let logoSize = CGSize(width: 28.0 * 710 / 803, height: 28)
+    static let logoToTitle: CGFloat = 6
     /// The title's glow, in the title's color: a tight layer and a wide one.
     static let titleGlowTightOpacity: Double = 0.45
     static let titleGlowWideOpacity: Double = 0.3
@@ -150,6 +155,10 @@ private struct HomeTopHeader: View {
     /// The title's and the date's colors from the picture; nil (as before, no glow) until the picture's colors are known.
     @State private var tints = HeaderTints()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(LaunchHandoff.self) private var launch: LaunchHandoff?
+
+    private var titleColor: Color { tints.title?.color ?? .white }
+    private var hidesLogo: Bool { launch?.hidesHeaderLogo ?? false }
 
     var body: some View {
         // The label goes while a tile is open: the picture it names has faded out.
@@ -170,15 +179,27 @@ private struct HomeTopHeader: View {
                     )
                     .lineLimit(1)
                     .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
-                Text("Home")
-                    .font(HomeTopSpec.titleFont)
-                    .tracking(HomeTopSpec.titleTracking)
-                    .foregroundStyle(tints.title?.color ?? .white)
-                    // A soft glow in the same color: a tight one and a wide one, faint. White while the title is white.
-                    .shadow(color: (tints.title?.color ?? .white).opacity(HomeTopSpec.titleGlowTightOpacity), radius: 6)
-                    .shadow(color: (tints.title?.color ?? .white).opacity(HomeTopSpec.titleGlowWideOpacity), radius: 16)
-                    .lineLimit(1)
-                    .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
+                // The logo, then the word. At launch the launch screen's logo flies into this spot and "Home"
+                // slides in beside it (`LaunchHandoff`); until they land, the real ones stay hidden under them.
+                HStack(alignment: .firstTextBaseline, spacing: HomeTopSpec.logoToTitle) {
+                    HomeHeaderLogo(glow: launch?.heldGlowColor ?? tints.title ?? LaunchLogo.milkGlow)
+                        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
+                        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: launch?.heldGlowColor == nil)
+                        .opacity(hidesLogo ? 0 : 1)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                            launch?.headerMoved(logo: frame)
+                        }
+                    HomeTitleWord(color: launch?.heldWordColor ?? titleColor)
+                        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tints)
+                        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: launch?.heldWordColor == nil)
+                        .opacity(hidesLogo ? 0 : 1)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                            launch?.headerMoved(word: frame)
+                        }
+                }
+                .onChange(of: tints, initial: true) {
+                    launch?.headerWordColorChanged(titleColor)
+                }
             }
             .dynamicTypeSize(...HomeDesign.Text.maxCategory)
 
@@ -230,9 +251,9 @@ private struct HomeTopHeader: View {
     private var tintSource: TintSource? {
         let glow = viewModel.glowModel
         if let poster = glow.focused?.displayPosterURL, let url = URL(string: poster) {
-            return TintSource(colors: url, glow: glow.activeURL)
+            return TintSource(colors: url, glow: glow.activeURL, isPicture: false)
         }
-        return (viewModel.topArt.art?.backdrop).map { TintSource(colors: $0, glow: nil) }
+        return (viewModel.topArt.art?.backdrop).map { TintSource(colors: $0, glow: nil, isPicture: true) }
     }
 
     private func updateTitleTint(for source: TintSource?) async {
@@ -246,6 +267,7 @@ private struct HomeTopHeader: View {
         if let known = store.known(server: nil, url: source.colors),
            source.glow == nil || glowStore.known(server: nil, url: source.glow) != nil {
             tints = HeaderTints(swatches: known, glow: glowStore.known(server: nil, url: source.glow))
+            rememberForLaunch(known, from: source)
             return
         }
         // Not counted yet: the old picture's colors don't belong on this one, so the header goes back to white first.
@@ -255,6 +277,73 @@ private struct HomeTopHeader: View {
         let (swatches, glowSwatches) = await (counted, glow)
         guard !Task.isCancelled else { return }
         tints = swatches.map { HeaderTints(swatches: $0, glow: glowSwatches) } ?? HeaderTints()
+        rememberForLaunch(swatches, from: source)
+    }
+
+    /// The picture's colors at rest (not an open tile's poster) are what the next launch fills with. Kept while the
+    /// picture is loading or missing; a picture that is all shadow leaves the launch pale rose.
+    private func rememberForLaunch(_ swatches: [PosterSwatch]?, from source: TintSource) {
+        guard source.isPicture, let swatches else { return }
+        LaunchPalette.remember(LaunchPalette(swatches: swatches))
+    }
+}
+
+/// "Home" in its color, with a soft glow in the same color: a tight one and a wide one, faint. The header shows it, and
+/// the launch animation slides in a picture of it (`image`) beside the logo before handing over to the header's own.
+struct HomeTitleWord: View {
+    let color: Color
+
+    var body: some View {
+        Text("Home")
+            .font(HomeTopSpec.titleFont)
+            .tracking(HomeTopSpec.titleTracking)
+            .foregroundStyle(color)
+            .shadow(color: color.opacity(HomeTopSpec.titleGlowTightOpacity), radius: 6)
+            .shadow(color: color.opacity(HomeTopSpec.titleGlowWideOpacity), radius: 16)
+            .lineLimit(1)
+    }
+
+    /// Room around the word for its glow, in the picture.
+    static let glowRoom: CGFloat = 32
+
+    /// The word as a picture, `glowRoom` bigger on every side, centered where the word is.
+    static func image(color: Color, scale: CGFloat) -> UIImage? {
+        let renderer = ImageRenderer(
+            content: HomeTitleWord(color: color)
+                .padding(glowRoom)
+                .environment(\.legibilityWeight, UIAccessibility.isBoldTextEnabled ? .bold : .regular)
+        )
+        renderer.scale = scale
+        renderer.isOpaque = false
+        return renderer.uiImage
+    }
+}
+
+/// The glowing logo beside "Home": the launch screen's logo as it lands here, centered on the word's capitals. Milk,
+/// with a glow in the picture's main color (the title's), else milk's own warm glow.
+private struct HomeHeaderLogo: View {
+    let glow: MeterTint.RGB
+
+    var body: some View {
+        Color.clear
+            .frame(width: HomeTopSpec.logoSize.width, height: HomeTopSpec.logoSize.height)
+            .overlay {
+                ZStack {
+                    Image("HomeLogoGlow")
+                        .renderingMode(.template)
+                        .foregroundStyle(glow.color)
+                        .opacity(LaunchLogo.headerGlowOpacity(for: glow))
+                    Image("HomeLogoShape")
+                        .renderingMode(.template)
+                        .foregroundStyle(LaunchLogo.milk.color)
+                    Image("HomeLogoRim")
+                }
+                .allowsHitTesting(false)
+            }
+            .alignmentGuide(.firstTextBaseline) { dimensions in
+                dimensions[VerticalAlignment.center] + HomeTopSpec.titleCapHeight / 2
+            }
+            .accessibilityHidden(true)
     }
 }
 
@@ -263,6 +352,8 @@ private struct HomeTopHeader: View {
 private struct TintSource: Hashable {
     let colors: URL
     let glow: URL?
+    /// Home's picture at rest, not an open tile's poster: its colors are what the next launch fills with.
+    let isPicture: Bool
 }
 
 /// The header's colors from the picture: the title takes its most common real color, the date the next one.

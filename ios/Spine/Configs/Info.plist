@@ -9,6 +9,10 @@ Release builds always use production.
 -->
 <plist version="1.0">
 <dict>
+	<key>UIAppFonts</key>
+	<array>
+		<string>InterTight-Variable.ttf</string>
+	</array>
 	<key>SpineAPIBaseURL</key>
 	<string>$(SPINE_API_BASE_URL)</string>
 </dict>
