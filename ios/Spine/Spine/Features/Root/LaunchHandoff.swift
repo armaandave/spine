@@ -116,6 +116,7 @@ final class LaunchHandoff {
         heldWordColor = nil
         heldGlowColor = nil
         phase = .done
+        LaunchLogo.forgetTints()
     }
 
     private func advance() {
@@ -280,20 +281,33 @@ enum LaunchLogo {
         glow == milkGlow ? LaunchChoreography.fullGlow : 0.8
     }
 
-    /// `mask` (a white image whose alpha is the shape) in `color`, with `over` drawn as it is on top: the logo's shape
-    /// in a color with its white rim, or its glow in a color.
-    static func tinted(_ mask: UIImage?, _ color: MeterTint.RGB, over: UIImage? = nil) -> UIImage? {
-        guard let mask else { return nil }
+    /// The images tinted so far this launch: SwiftUI makes the overlay again as the app opens, and the new one takes
+    /// these instead of drawing them again. Emptied once the launch is over (`forgetTints`).
+    private static var tints: [String: UIImage] = [:]
+
+    /// The asset `mask` (a white image whose alpha is the shape) in `color`, with the asset `over` drawn as it is on
+    /// top: the logo's shape in a color with its white rim, or its glow in a color.
+    static func tinted(_ mask: String, _ color: MeterTint.RGB, over: String? = nil) -> UIImage? {
+        let key = "\(mask) \(color.red) \(color.green) \(color.blue) \(over ?? "")"
+        if let made = tints[key] { return made }
+        guard let image = UIImage(named: mask) else { return nil }
+        let top = over.flatMap { UIImage(named: $0) }
         let format = UIGraphicsImageRendererFormat()
-        format.scale = mask.scale
+        format.scale = image.scale
         format.opaque = false
-        return UIGraphicsImageRenderer(size: mask.size, format: format).image { context in
-            let rect = CGRect(origin: .zero, size: mask.size)
+        let made = UIGraphicsImageRenderer(size: image.size, format: format).image { context in
+            let rect = CGRect(origin: .zero, size: image.size)
             UIColor(red: color.red, green: color.green, blue: color.blue, alpha: 1).setFill()
             context.fill(rect)
-            mask.draw(in: rect, blendMode: .destinationIn, alpha: 1)
-            over?.draw(in: rect)
+            image.draw(in: rect, blendMode: .destinationIn, alpha: 1)
+            top?.draw(in: rect)
         }
+        tints[key] = made
+        return made
+    }
+
+    static func forgetTints() {
+        tints = [:]
     }
 }
 
@@ -388,7 +402,7 @@ final class LaunchOverlayView: UIView {
 
         let logoColor = palette?.logo ?? LaunchLogo.milk
         let headerGlowColor = LaunchLogo.headerGlow(palette)
-        let shape = UIImage(named: "LaunchLogoShape"), rim = UIImage(named: "LaunchLogoRim")
+        let shape = UIImage(named: "LaunchLogoShape")
         let glowMask = UIImage(named: "LaunchLogoGlow")
 
         plaster.backgroundColor = UIColor(named: "LaunchBackground")?.cgColor
@@ -417,19 +431,19 @@ final class LaunchOverlayView: UIView {
         outline.frame = logo.bounds
         outline.contents = UIImage(named: "LaunchOutline")?.cgImage
         outlineColor.frame = logo.bounds
-        outlineColor.contents = LaunchLogo.tinted(UIImage(named: "LaunchOutlineStroke"), logoColor)?.cgImage
+        outlineColor.contents = LaunchLogo.tinted("LaunchOutlineStroke", logoColor)?.cgImage
         outlineColor.opacity = 0
         body.frame = logo.bounds
         for (layer, tint) in [(launchBody, logoColor), (headerBody, LaunchLogo.milk)] {
             layer.frame = body.bounds
-            layer.contents = LaunchLogo.tinted(shape, tint, over: rim)?.cgImage
+            layer.contents = LaunchLogo.tinted("LaunchLogoShape", tint, over: "LaunchLogoRim")?.cgImage
             body.addSublayer(layer)
         }
         headerBody.opacity = 0
         for (layer, tint) in [(glow, LaunchLogo.glowColor(for: logoColor)), (headerGlow, headerGlowColor)] {
             layer.bounds = CGRect(origin: .zero, size: glowMask?.size ?? .zero)
             layer.position = CGPoint(x: logo.bounds.midX, y: logo.bounds.midY)
-            layer.contents = LaunchLogo.tinted(glowMask, tint)?.cgImage
+            layer.contents = LaunchLogo.tinted("LaunchLogoGlow", tint)?.cgImage
             glows.addSublayer(layer)
         }
         glow.opacity = Float(LaunchChoreography.fullGlow)
@@ -586,7 +600,7 @@ final class LaunchOverlayView: UIView {
     private func land(logoFrame: CGRect, wordFrame: CGRect, wordImage: UIImage?) {
         let target = convert(logoFrame, from: nil)
         let wordRect = convert(wordFrame, from: nil)
-        let landed = LaunchLogo.tinted(UIImage(named: "HomeLogoShape"), LaunchLogo.milk, over: UIImage(named: "HomeLogoRim"))
+        let landed = LaunchLogo.tinted("HomeLogoShape", LaunchLogo.milk, over: "HomeLogoRim")
         let headerGlowStrength = LaunchLogo.headerGlowOpacity(for: LaunchLogo.headerGlow(palette))
         // SwiftUI draws the header's logo and word on whole pixels, so the glide ends with the same pictures on the
         // same pixels (this view fills the window, so its points are the window's).

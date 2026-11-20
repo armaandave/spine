@@ -251,15 +251,14 @@ private struct HomeTopHeader: View {
     private var tintSource: TintSource? {
         let glow = viewModel.glowModel
         if let poster = glow.focused?.displayPosterURL, let url = URL(string: poster) {
-            return TintSource(colors: url, glow: glow.activeURL)
+            return TintSource(colors: url, glow: glow.activeURL, isPicture: false)
         }
-        return (viewModel.topArt.art?.backdrop).map { TintSource(colors: $0, glow: nil) }
+        return (viewModel.topArt.art?.backdrop).map { TintSource(colors: $0, glow: nil, isPicture: true) }
     }
 
     private func updateTitleTint(for source: TintSource?) async {
         guard let source else {
             tints = HeaderTints()
-            LaunchPalette.remember(nil)
             return
         }
         let store = PosterPaletteStore.homePicture
@@ -281,10 +280,11 @@ private struct HomeTopHeader: View {
         rememberForLaunch(swatches, from: source)
     }
 
-    /// The picture's colors at rest (not an open tile's poster) are what the next launch fills with.
+    /// The picture's colors at rest (not an open tile's poster) are what the next launch fills with. Kept while the
+    /// picture is loading or missing; a picture that is all shadow leaves the launch pale rose.
     private func rememberForLaunch(_ swatches: [PosterSwatch]?, from source: TintSource) {
-        guard source.glow == nil else { return }
-        LaunchPalette.remember(swatches.flatMap { LaunchPalette(swatches: $0) })
+        guard source.isPicture, let swatches else { return }
+        LaunchPalette.remember(LaunchPalette(swatches: swatches))
     }
 }
 
@@ -352,6 +352,8 @@ private struct HomeHeaderLogo: View {
 private struct TintSource: Hashable {
     let colors: URL
     let glow: URL?
+    /// Home's picture at rest, not an open tile's poster: its colors are what the next launch fills with.
+    let isPicture: Bool
 }
 
 /// The header's colors from the picture: the title takes its most common real color, the date the next one.

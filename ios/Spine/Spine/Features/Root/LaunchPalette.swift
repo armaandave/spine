@@ -23,7 +23,7 @@ nonisolated struct LaunchPalette: Equatable, Sendable {
     /// From the picture's swatches: its most common real color, and the next one that is clearly a different color,
     /// picked the way the date picks its color (`HomeTitleTint`), but as they are, not lightened for the header.
     init?(swatches: [PosterSwatch]) {
-        let colors = Self.realColors(from: swatches)
+        let colors = HomeTitleTint.realColors(from: swatches)
         guard let main = colors.first, let header = HomeTitleTint.color(from: swatches) else { return nil }
         let mainTone = HomeTitleTint.lab(of: main)
         let second = colors.dropFirst().first { candidate in
@@ -33,19 +33,6 @@ nonisolated struct LaunchPalette: Equatable, Sendable {
                 || HomeTitleTint.hueGap(mainTone, tone) >= HomeTitleTint.dateHueGap
         } ?? main.mixed(toward: .white, by: HomeTitleTint.dateFallbackMix)
         self.init(background: main, logo: Self.standingOut(second, on: main), headerGlow: header)
-    }
-
-    /// The picture's colors as they are, most common first, without its shadow: black, near-black greys and specks.
-    static func realColors(from swatches: [PosterSwatch]) -> [MeterTint.RGB] {
-        swatches.sorted { $0.share > $1.share }.compactMap { swatch in
-            guard swatch.share >= MeterTint.minimumShare, let rgb = MeterTint.RGB(hex: swatch.hex) else { return nil }
-            let tone = HomeTitleTint.lab(of: rgb)
-            if tone.lightness < HomeTitleTint.blackLightness { return nil }
-            if tone.lightness < HomeTitleTint.darkGreyLightness, HomeTitleTint.chroma(tone) < HomeTitleTint.greyChroma {
-                return nil
-            }
-            return rgb
-        }
     }
 
     /// `color` as it is when it stands out on `background`; else moved toward white on a dark background (toward black
