@@ -24,7 +24,7 @@ final class PosterHoldMenuTests: XCTestCase {
             for viewer in [nil, UserMediaState.untracked] {
                 let menu = PosterHoldMenu(ref: ref(type, source: source), viewer: viewer)
                 XCTAssertNil(menu.shelf, type)
-                XCTAssertEqual(menu.quick, [.watched(word: watchedWord(type), isFilled: false), .planning(isFilled: false)], type)
+                XCTAssertEqual(menu.quick, [.watched(word: watchedWord(type)), .planning(isFilled: false)], type)
                 XCTAssertFalse(menu.offersRemoval, type)
             }
         }
@@ -44,7 +44,7 @@ final class PosterHoldMenuTests: XCTestCase {
             let menu = PosterHoldMenu(ref: ref(type, source: source), viewer: UserMediaState(isTracked: true, status: "Planning"))
             XCTAssertEqual(menu.shelf, PosterHoldMenu.shelfName(status: "Planning", mediaType: type), type)
             XCTAssertNotNil(menu.shelf, type)
-            XCTAssertEqual(menu.quick, [.watched(word: watchedWord(type), isFilled: false), .planning(isFilled: true)], type)
+            XCTAssertEqual(menu.quick, [.watched(word: watchedWord(type)), .planning(isFilled: true)], type)
             XCTAssertFalse(menu.offersRemoval, "The bookmark takes a planned title out: \(type)")
         }
         let show = UserMediaState(isTracked: true, tv: TVShowState(inLibrary: true, status: "Planning"))
@@ -64,15 +64,20 @@ final class PosterHoldMenuTests: XCTestCase {
     func testPausedAndDroppedKeepTheEye() {
         for status in ["Paused", "Dropped"] {
             let menu = PosterHoldMenu(ref: ref("book", source: "hardcover"), viewer: UserMediaState(isTracked: true, status: status))
-            XCTAssertEqual(menu.quick, [.watched(word: watchedWord("book"), isFilled: false)], status)
+            XCTAssertEqual(menu.quick, [.watched(word: watchedWord("book"))], status)
             XCTAssertNotNil(menu.shelf, status)
         }
     }
 
-    func testAFinishedTitleShowsWatchedFilledAndNoPlanning() {
-        let menu = PosterHoldMenu(ref: ref("movie"), viewer: UserMediaState(isTracked: true, status: "Completed"))
-        XCTAssertEqual(menu.quick, [.watched(word: watchedWord("movie"), isFilled: true)])
-        XCTAssertEqual(menu.shelf, PosterHoldMenu.shelfName(status: "Completed", mediaType: "movie"))
+    func testAFinishedTitleHasNoRowJustItsShelf() {
+        for (type, source) in types where type != "tv" && type != "anime" {
+            let menu = PosterHoldMenu(ref: ref(type, source: source), viewer: UserMediaState(isTracked: true, status: "Completed"))
+            XCTAssertEqual(menu.quick, [], type)
+            XCTAssertEqual(menu.shelf, PosterHoldMenu.shelfName(status: "Completed", mediaType: type), type)
+        }
+        let finishedShow = TVShowState(inLibrary: true, status: "Completed", eye: TVEyeState(filled: true, tap: .unmarkMarks))
+        XCTAssertEqual(PosterHoldMenu(ref: ref("tv"), viewer: UserMediaState(isTracked: true, tv: finishedShow)).quick, [],
+                       "A show's filled eye means it's finished")
     }
 
     func testRemoveFromLibraryOnlyWhereTheTitlesPageOffersIt() {
@@ -93,9 +98,7 @@ final class PosterHoldMenuTests: XCTestCase {
 
     func testTheEyeStaysOpenToFlipOnlyWhenItsTapIsAWriteByItself() {
         XCTAssertTrue(PosterHoldMenu(ref: ref("movie"), viewer: nil).eyeStaysOpen)
-        XCTAssertTrue(PosterHoldMenu(ref: ref("movie"), viewer: UserMediaState(isTracked: true, status: "Completed")).eyeStaysOpen)
-        XCTAssertFalse(PosterHoldMenu(ref: ref("movie"), viewer: UserMediaState(isTracked: true, status: "Completed", diaryCount: 2)).eyeStaysOpen,
-                       "Logs keep it watched: undoing is explained, and the menu closes for it")
+        XCTAssertTrue(PosterHoldMenu(ref: ref("music", source: "apple_music"), viewer: UserMediaState(isTracked: true, status: "Planning")).eyeStaysOpen)
         XCTAssertTrue(PosterHoldMenu(ref: ref("book", source: "hardcover"), viewer: nil).eyeStaysOpen)
         XCTAssertFalse(PosterHoldMenu(ref: ref("tv"), viewer: nil).eyeStaysOpen, "A show's eye marks every aired episode, asking first")
         XCTAssertFalse(PosterHoldMenu(ref: ref("anime", source: "mal"), viewer: nil).eyeStaysOpen)
@@ -105,7 +108,7 @@ final class PosterHoldMenuTests: XCTestCase {
 
     func testASeasonLeavesPlanningToItsShow() {
         let season = ref("season", season: 2)
-        XCTAssertEqual(PosterHoldMenu(ref: season, viewer: nil).quick, [.watched(word: watchedWord("tv"), isFilled: false)])
+        XCTAssertEqual(PosterHoldMenu(ref: season, viewer: nil).quick, [.watched(word: watchedWord("tv"))])
         let watching = UserMediaState(isTracked: true, status: "In progress", tv: TVShowState(inLibrary: true, status: "In progress"))
         XCTAssertEqual(PosterHoldMenu(ref: season, viewer: watching).quick, [])
         XCTAssertFalse(PosterHoldMenu(ref: season, viewer: watching).offersRemoval)

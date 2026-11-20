@@ -147,14 +147,15 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
         }
     }
 
-    /// The icons along the top, as on the title page's rail: the eye (closed once watched) and the bookmark. Both flip
-    /// where they're tapped and the menu stays open. A tap still on its way shows its new state (`PosterHoldTitle`).
+    /// The icons along the top, as on the title page's rail: the eye and the bookmark. Both flip where they're tapped and
+    /// the menu stays open; once marking it watched lands, the title is finished and the row gives way to its shelf line.
+    /// A tap still on its way shows its new state (`PosterHoldTitle`).
     private func quickRow(_ menu: PosterHoldMenu, _ title: PosterHoldTitle, _ controller: PosterHoldController) -> some View {
         ControlGroup {
             ForEach(Array(menu.quick.enumerated()), id: \.offset) { _, quick in
                 switch quick {
-                case let .watched(word, isFilled):
-                    let shown = title.eye ?? isFilled
+                case let .watched(word):
+                    let shown = title.eye ?? false
                     Button(shown ? "Undo \(word)" : "Mark as \(word)", systemImage: shown ? "eye.slash.fill" : "eye") {
                         controller.run(.watched(wasFilled: shown), on: media.ref, flips: menu.eyeStaysOpen, open: open)
                     }

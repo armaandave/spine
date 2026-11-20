@@ -3,13 +3,14 @@ import Foundation
 /// What touching and holding a poster offers, worked out from your own state for the title with the rules the title's
 /// page and Home's Trending rail already use, so each choice does what the same button does there.
 ///
-/// The top follows where you are with the title: the eye and Planning, except while it's in progress, when there is no
-/// row at all, just the shelf line. Planning shows only while the title can be planned, as on the title page, and is
-/// filled while the title is in Planning. The shelf line shows only for a title in your library.
+/// The top follows where you are with the title: the eye (to mark it watched) and Planning while you haven't finished
+/// it, and no row at all once it's in progress or finished, just the shelf line. Planning shows only while the title can
+/// be planned, as on the title page, and is filled while the title is in Planning. The shelf line shows only for a
+/// title in your library.
 struct PosterHoldMenu: Equatable {
     enum Quick: Equatable {
-        /// The page's eye: marks the title watched (listened, read, played), or, filled, undoes that.
-        case watched(word: String, isFilled: Bool)
+        /// The page's eye: marks the title watched (listened, read, played). A finished title has no eye.
+        case watched(word: String)
         /// The bookmark: adds the title to Planning, or, filled, takes it back out.
         case planning(isFilled: Bool)
     }
@@ -20,7 +21,7 @@ struct PosterHoldMenu: Equatable {
     /// Remove from Library: for a title past Planning whose page offers it (shows, anime, books, manga, comics, games).
     let offersRemoval: Bool
     /// The eye writes at once, so the menu stays open and the eye flips where you tapped it. Otherwise the tap opens the
-    /// title's log, explains why it can't, or asks first (a show or anime marks every aired episode), and the menu closes.
+    /// title's log or asks first (a show or anime marks every aired episode), and the menu closes.
     let eyeStaysOpen: Bool
 
     init(ref: MediaRef, viewer: UserMediaState?) {
@@ -28,36 +29,34 @@ struct PosterHoldMenu: Equatable {
         let status = viewer.flatMap { $0.tv?.status ?? $0.anime?.status ?? $0.status }
         shelf = inLibrary ? Self.shelfName(status: status, mediaType: ref.mediaType) : nil
 
-        if Self.matches(status, "In progress") {
-            // Started, so no Planning, and the eye has no place mid-way: the shelf line says where you are.
+        let isWatched = viewer.map { TrendingRailConfig.make(title: "", ref: ref, viewer: $0).isEyeSelected } ?? false
+        if Self.matches(status, "In progress") || isWatched {
+            // Started or finished: no Planning, and no eye. The shelf line says where you are.
             quick = []
             eyeStaysOpen = false
         } else {
-            let config = viewer.map { TrendingRailConfig.make(title: "", ref: ref, viewer: $0) }
-            let isWatched = config?.isEyeSelected ?? false
-            var quick: [Quick] = [.watched(word: Self.watchedWord(for: ref), isFilled: isWatched)]
+            var quick: [Quick] = [.watched(word: Self.watchedWord(for: ref))]
             switch Self.planning(ref: ref, viewer: viewer) {
             case .add: quick.append(.planning(isFilled: false))
             case .remove: quick.append(.planning(isFilled: true))
             case .hidden: break
             }
             self.quick = quick
-            eyeStaysOpen = Self.eyeWritesAtOnce(ref: ref, viewer: viewer, isWatched: isWatched)
+            eyeStaysOpen = Self.eyeWritesAtOnce(ref: ref, viewer: viewer)
         }
 
         offersRemoval = inLibrary && !Self.matches(status, "Planning") && Self.pageOffersRemoval(ref: ref, viewer: viewer)
     }
 
-    /// Whether the eye's tap is a write by itself, the way the page's eye routes it (`TrendingRailRouter.eye`).
-    static func eyeWritesAtOnce(ref: MediaRef, viewer: UserMediaState?, isWatched: Bool) -> Bool {
+    /// Whether marking the title watched is a write by itself, the way the page's eye routes it (`TrendingRailRouter.eye`).
+    static func eyeWritesAtOnce(ref: MediaRef, viewer: UserMediaState?) -> Bool {
         // A show's or anime's eye marks every aired episode and can ask first.
         if ref.isTVFamily || ref.isAnime { return false }
-        // Logs keep a movie or album watched: undoing it is explained, not written (SW-008).
-        if ref.isSingleWeight { return !(isWatched && (viewer?.diaryCount ?? 0) > 0) }
+        if ref.isSingleWeight { return true }
         // A game played right now finishes in its log.
         if ref.mediaType == "game" { return viewer?.game?.hasLivePlaythrough != true }
         if ref.readsLikeBook {
-            switch ReadingRouting.eyeTap(book: viewer?.book, isRead: isWatched, noun: ref.mediaType) {
+            switch ReadingRouting.eyeTap(book: viewer?.book, isRead: false, noun: ref.mediaType) {
             case .markRead, .undoRead: return true
             case .openLog, .explain: return false
             }
