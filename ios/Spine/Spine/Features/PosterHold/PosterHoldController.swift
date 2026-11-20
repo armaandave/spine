@@ -166,24 +166,48 @@ final class PosterHoldController {
     }
 
     /// Remove from Library asks first, as on the page: a show or anime with its count (TV-003), a book or game plainly.
+    /// When the loaded title says it can't be removed yet (its logs block it), the page's reason shows instead.
     private func remove(model: MediaDetailViewModel, detail: MediaDetail) {
         if model.tracksAnime, let anime = model.viewer?.anime {
+            guard anime.availableActions.contains("remove") else {
+                model.tvNotice = anime.actionReasons["remove"] ?? Self.cantRemoveYet
+                return
+            }
             model.tvConfirmation = TVPageConfirmation(
                 kind: .remove,
                 prompt: AnimeTrackingPresentation.removePrompt(for: anime),
                 expectedVersion: anime.version
             )
         } else if detail.ref.isTVFamily, let tv = model.viewer?.tv {
+            guard tv.availableActions.contains("remove") else {
+                model.tvNotice = tv.actionReasons["remove"] ?? Self.cantRemoveYet
+                return
+            }
             model.tvConfirmation = TVPageConfirmation(
                 kind: .remove,
                 prompt: TVTrackingPresentation.removePrompt(count: tv.removeCount),
                 expectedVersion: tv.version
             )
+        } else if let reason = Self.removalBlock(model.viewer) {
+            model.quickActionErrorMessage = reason
         } else {
             question = Question(prompt: "Remove from Library?", confirmTitle: "Remove from Library") {
                 _ = model.removeTracking(for: detail)
             }
         }
+    }
+
+    private static let cantRemoveYet = "This can't be removed from your library yet."
+
+    /// A book's or game's reason it can't leave the library yet, from the loaded title.
+    private static func removalBlock(_ viewer: UserMediaState?) -> String? {
+        if let book = viewer?.book, !book.canRemoveTracking {
+            return book.removeTrackingReason ?? cantRemoveYet
+        }
+        if let game = viewer?.game, !game.canRemoveTracking {
+            return "To remove this game, delete its playthroughs and logs first."
+        }
+        return nil
     }
 
     // MARK: Models

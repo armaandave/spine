@@ -1561,7 +1561,7 @@ struct ProfileView: View {
                 } else if viewModel.inProgressItems.isEmpty {
                     EmptyProfileCard(title: "Nothing in progress yet", systemName: "play.circle")
                 } else {
-                    InProgressRail(items: viewModel.inProgressItems) { item in
+                    InProgressRail(items: viewModel.inProgressItems, isOwnProfile: isOwnProfile) { item in
                         selectedRef = item.media.ref
                     }
                 }
@@ -2032,6 +2032,8 @@ private struct RecentActivityRail: View {
 /// cards are where progress is updated (TV-701).
 private struct InProgressRail: View {
     let items: [LibraryItem]
+    /// The rows' tracking is yours: the hold menus read it too. A friend's rows carry theirs.
+    let isOwnProfile: Bool
     let action: (LibraryItem) -> Void
 
     var body: some View {
@@ -2041,7 +2043,7 @@ private struct InProgressRail: View {
             let visibleCount = max(3, min(5, Int((proxy.size.width + spacing) / (itemWidth + spacing))))
             HStack(alignment: .top, spacing: spacing) {
                 ForEach(Array(items.prefix(visibleCount))) { item in
-                    InProgressPoster(item: item) {
+                    InProgressPoster(item: item, viewer: isOwnProfile ? item.holdViewer : item.media.userState) {
                         action(item)
                     }
                     .frame(width: itemWidth)
@@ -2055,6 +2057,8 @@ private struct InProgressRail: View {
 
 private struct InProgressPoster: View {
     let item: LibraryItem
+    /// Your state for the title, for the poster's hold menu.
+    let viewer: UserMediaState?
     let action: () -> Void
 
     var body: some View {
@@ -2066,7 +2070,7 @@ private struct InProgressPoster: View {
                 mediaType: item.media.ref.mediaType,
                 orientation: item.media.posterOrientation
             )
-            .posterHoldMenu(item.media)
+            .posterHoldMenu(item.media, viewer: viewer)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("View \(item.media.title)")

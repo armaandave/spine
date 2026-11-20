@@ -69,6 +69,14 @@ extension View {
     }
 }
 
+extension LibraryItem {
+    /// Your state for the title with your row's tracking folded in (a show's actions, a book's read, a game's
+    /// playthrough), for its poster's hold menu. Only for your own rows: a friend's tracking is theirs.
+    var holdViewer: UserMediaState {
+        (media.userState ?? UserMediaState(isTracked: true)).applying(tracking)
+    }
+}
+
 /// A title page the hold menu opened, with what the page should open on it.
 private struct PosterHoldOpening: Identifiable {
     let id = UUID()
@@ -96,6 +104,8 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
                     menu(controller)
                 }
             }
+            // The row of buttons draws its icons in the tint: the app's white disappears on the menu's light glass.
+            .tint(.primary)
             .pushDestination(item: $opening) { opening in
                 if let titlePage {
                     titlePage.build(opening.ref, opening.handoff)
@@ -106,13 +116,11 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
     @ViewBuilder
     private func menu(_ controller: PosterHoldController) -> some View {
         let menu = PosterHoldMenu(ref: media.ref, viewer: controller.viewerState(for: media.ref, poster: viewer))
+        // A section's title doesn't show over the row of buttons, so the shelf is its own quiet line.
         if let shelf = menu.shelf {
-            Section(shelf) {
-                quickRow(menu, controller)
-            }
-        } else {
-            quickRow(menu, controller)
+            Text(shelf)
         }
+        quickRow(menu, controller)
         Section {
             Button("Add to List…", systemImage: "text.badge.plus") {
                 controller.addToList = media

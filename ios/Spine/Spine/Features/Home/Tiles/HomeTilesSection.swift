@@ -316,12 +316,12 @@ private struct HomeTile: View {
         }
     }
 
-    /// Your state for a poster's title, for its hold menu. In progress posters carry it; a Trending title's is the one
-    /// its rail loaded, and nil (no menu yet) until it has.
+    /// Your state for a poster's title, for its hold menu. In progress posters are your Library rows; a Trending
+    /// title's is the one its rail loaded, and nil (no menu yet) until it has.
     private func holdState(in tile: HomeTileID) -> (TilePoster) -> UserMediaState?? {
         switch tile {
         case .inProgress:
-            return { $0.media.userState }
+            return { [model] poster in model.item(id: poster.id)?.holdViewer ?? poster.media.userState }
         case .trending:
             let store = model.railStore
             return { poster in

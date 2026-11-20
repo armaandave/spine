@@ -83,9 +83,12 @@ final class PosterHoldMenuTests: XCTestCase {
         XCTAssertFalse(PosterHoldMenu(ref: ref("music", source: "apple_music"), viewer: completed).offersRemoval)
 
         let listed = UserMediaState(isTracked: true, tv: TVShowState(inLibrary: true, status: "Completed", availableActions: ["remove"]))
-        let unlisted = UserMediaState(isTracked: true, tv: TVShowState(inLibrary: true, status: "Completed"))
+        let withheld = UserMediaState(isTracked: true, tv: TVShowState(inLibrary: true, status: "Completed", availableActions: ["rewatch"]))
+        let listsCopy = UserMediaState(isTracked: true, tv: TVShowState(inLibrary: true, status: "Completed"))
         XCTAssertTrue(PosterHoldMenu(ref: ref("tv"), viewer: listed).offersRemoval, "When the server lists it")
-        XCTAssertFalse(PosterHoldMenu(ref: ref("tv"), viewer: unlisted).offersRemoval)
+        XCTAssertFalse(PosterHoldMenu(ref: ref("tv"), viewer: withheld).offersRemoval, "When the server leaves it out")
+        XCTAssertTrue(PosterHoldMenu(ref: ref("tv"), viewer: listsCopy).offersRemoval,
+                      "A list's copy sends no actions: offered, and the choice checks with the title first")
     }
 
     func testASeasonLeavesPlanningToItsShow() {

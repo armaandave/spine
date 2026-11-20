@@ -75,14 +75,21 @@ struct PosterHoldMenu: Equatable {
     }
 
     /// The pages that offer Remove from Library: a show's or anime's + menu when the server lists it, and a book's or
-    /// game's unless something blocks it. A movie or an album leaves the library from its eye, so it has none.
+    /// game's unless something blocks it. A movie or an album leaves the library from its eye, so it has none. A list's
+    /// copy of a show leaves its actions out: then it's offered, and the choice checks with the title before asking.
     private static func pageOffersRemoval(ref: MediaRef, viewer: UserMediaState?) -> Bool {
         guard let viewer else { return false }
-        if ref.isAnime, let anime = viewer.anime { return anime.availableActions.contains("remove") }
-        if ref.mediaType == "tv", let tv = viewer.tv { return tv.availableActions.contains("remove") }
+        if ref.isAnime { return offers("remove", in: viewer.anime?.availableActions) }
+        if ref.mediaType == "tv" { return offers("remove", in: viewer.tv?.availableActions) }
         if ref.readsLikeBook { return viewer.book?.canRemoveTracking != false }
         if ref.mediaType == "game" { return viewer.game?.canRemoveTracking != false }
         return false
+    }
+
+    /// An action the server listed, or any action when it sent no list at all.
+    private static func offers(_ action: String, in actions: [String]?) -> Bool {
+        guard let actions, !actions.isEmpty else { return true }
+        return actions.contains(action)
     }
 
     private static func matches(_ status: String?, _ name: String) -> Bool {
