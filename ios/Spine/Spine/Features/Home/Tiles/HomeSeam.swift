@@ -44,6 +44,9 @@ struct HomeSeam: View {
                 .offset(x: -margin - pad, y: TileGeometry.seamRestTop - pad)
                 .opacity(isOpen ? 0 : 1)
         }
+            // Takes no room: the crossbar is wider than the section, and the section measures its own width to lay
+            // out the row, so a seam that sized it would widen the row forever (Home froze on the launch screen).
+            .frame(width: 0, height: 0, alignment: .topLeading)
             .animation(TileMotion.frame(closing: !isOpen, reduceMotion: reduceMotion), value: open)
             .onAppear {
                 // Restarted on every appearance: a repeating animation does not survive the view leaving the screen.
