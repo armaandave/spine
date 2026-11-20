@@ -60,9 +60,9 @@ struct HomeSeam: View {
     }
 }
 
-/// The crossbar of the T: as wide as the screen, brightest in the middle and fading out towards both edges, curving
-/// down into the line's top on both sides of the middle. Its glow is the line's, so where the two meet nothing
-/// changes but the direction. Drawn once into a texture, like the line.
+/// The crossbar of the T: as wide as the screen, fading out towards both edges and dimming into the middle, where it
+/// bends down into the line's top on both sides. Its glow is the line's, and the line starts at the bend's own light,
+/// so where the two meet nothing changes but the direction. Drawn once into a texture, like the line.
 private struct SeamBar: View {
     let width: CGFloat
 
@@ -126,7 +126,7 @@ private struct SeamTexture: View {
             .fill(LinearGradient(
                 stops: [
                     .init(color: .white.opacity(TileGeometry.seamBarStops.last?.opacity ?? 0.95), location: 0),
-                    .init(color: .white.opacity(0.95), location: 0.12),
+                    .init(color: .white.opacity(0.95), location: TileGeometry.seamLineRamp),
                     .init(color: .white.opacity(0.95), location: 0.84),
                     .init(color: .white.opacity(0), location: 1),
                 ],

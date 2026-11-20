@@ -342,18 +342,21 @@ nonisolated enum TileGeometry {
 
     // MARK: Seam
 
-    /// The seam is a T. Its crossbar runs 8 pt above the row's top, just under "Home" and the profile picture, fading
-    /// out towards both screen edges, and curves down into the line on a 4 pt radius; the line starts exactly where
-    /// the curves end and runs down the page's middle to the row's bottom. While a tile is open the line glides to the
-    /// edge the tile's posters came from (In progress's to the right, Trending's to the left) and runs from 24 to
-    /// 384 pt, softer.
+    /// The seam is a T with a soft bend. Its crossbar runs 8 pt above the row's top, just under "Home" and the profile
+    /// picture, brightest a third of the way in from each edge and dimming both ways: out to the screen's edges and in
+    /// to the middle, where it bends down into the line on a wide 24 pt curve, so the turn is felt more than seen. The
+    /// line starts exactly where the curves end, at the same dim light, and brightens as it runs down to the row's
+    /// bottom. While a tile is open the line glides to the edge the tile's posters came from (In progress's to the
+    /// right, Trending's to the left) and runs from 24 to 384 pt, softer.
     static let seamBarTop: CGFloat = -8
-    static let seamCornerRadius: CGFloat = 4
+    static let seamCornerRadius: CGFloat = 24
     static let seamRestTop: CGFloat = seamBarTop + seamWidth / 2 + seamCornerRadius
     static let seamRestHeight: CGFloat = closedHeight - seamRestTop
     /// The crossbar's brightness across the screen, mirrored about the middle (where the line meets it): the share of
     /// the width each stop sits at, and its opacity. The line starts at the middle's opacity and brightens below.
-    static let seamBarStops: [(location: CGFloat, opacity: Double)] = [(0, 0), (0.2, 0.12), (0.35, 0.35), (0.5, 0.55)]
+    static let seamBarStops: [(location: CGFloat, opacity: Double)] = [(0, 0), (0.2, 0.3), (0.35, 0.5), (0.5, 0.12)]
+    /// How far down the line (a share of its length) it takes to brighten from the bend's light to full.
+    static let seamLineRamp: CGFloat = 0.25
     static let seamOpenTop: CGFloat = 24
     static let seamOpenHeight: CGFloat = 360
     static let seamOpenOpacity: Double = 0.55
