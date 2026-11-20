@@ -208,6 +208,28 @@ what is offered (the post page's `viewer`, below); the app holds no rule of its 
   mode `min` is null and `max` is the title's length, if it has one.
 - It adds nothing to the calculation: the rows are the saves, read as ever.
 
+## AC-10: A log's bar
+
+A log that finishes a read draws the bar its read was on, ending in a check (the Check
+cap), so a log and a day's progress on the same title read apart.
+
+- **What it shows:** what the read held before the log, then the log's own part lit, to
+  where the log ended, of the title's length. The lit part is what the log added (AC-2):
+  Little Secrets saved to p. 110 then finished lights 110 to 368. A log after the last page
+  was saved lights nothing and still ends in its check. A reread with no saves lights all of it.
+- **By type:** a book in pages, or in percent when its read was typed in percent; a manga in
+  chapters and a comic in issues, to the log's number (a comic's total can run past it); a
+  game in the percent its log recorded, from where the playthrough stood when the log came
+  (it can finish short of 100, GM-200); a TV season or show log and an anime log over every
+  episode it covers (TV-400), the episodes it told lit from the end back.
+- **No bar:** a film or album log, an episode log, a game with hours alone, a book or series
+  with no length, a length under two, and an old TV or anime log with nothing stamped. The
+  card ends the log's marks in the check instead.
+- **The card:** the bar sits where a progress day's does. A log with a review line or the
+  spoilers chip grows one line (136 pt) to keep it; every other card stays 115 pt. A
+  progress day never ends in a check. The log's page shows the card's amount and bar when
+  opened from Home.
+
 ## Wire shape
 
 `/api/v1/users/<username>/activity/` and `/api/v1/feed/` return cursor pages in
@@ -235,7 +257,9 @@ the shape installed apps read. `consumed_at` is the item's calendar day
   on a day with no number saved (a start or a status move alone).
 - A log's `object` also has `amount`, `unit`, `time_label` and `label`, what the log
   added in the units it was told in with no plus sign ("200 pages", "3 episodes", "2h");
-  movie and album logs send no `label`.
+  movie and album logs send no `label`. It also has `bar` (AC-10):
+  `{"unit", "from", "to", "total"}`, `unit` being `pages`, `percent`, `chapters`, `issues`
+  or `episodes`, the log lighting `from` to `to` of `total`; null when the log has none.
 - A day of Planning adds (AC-8), only when asked: `type` is `planning_added`, `id` is
   negative like a progress day's, `media` is the day's earliest add, and `object` is
   `{"type": "planning", "id", "summary", "label", "count", "media_type"}`: `summary`
@@ -317,6 +341,8 @@ saved change keeps the lowest change id; any other day (TV, anime, or no change)
   day, and each post removed writes a `SocialAuditLog` row.
 
 ## Review status
+
+AC-10 is provisional until its phone test accepts it.
 
 AC-8, AC-9 and AC-1's Planning adds are provisional until the phone test of Activity's
 fifth phase accepts them.

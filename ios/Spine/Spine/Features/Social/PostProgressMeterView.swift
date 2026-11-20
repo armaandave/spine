@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// The bar a progress day's feed card draws, on that day's post page: the same meter, tinted with the poster's colors
-/// the way the card tints it (the server's palette, else the colors counted on this phone, else the plain bar). The page
-/// is always white text on darkened art, so it takes the card's dark-ink look.
+/// The bar a feed card draws, on its post page: the same meter, tinted with the poster's colors the way the card tints
+/// it (the server's palette, else the colors counted on this phone, else the plain bar). The page is always white text
+/// on darkened art, so it takes the card's dark-ink look. A log's bar ends in its check, as on the card.
 struct PostProgressMeterView: View {
     let meter: ProgressMeterModel
     let art: FeedCardArtSpec
+    let check: Bool
 
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -13,9 +14,10 @@ struct PostProgressMeterView: View {
 
     private let ink = ArtInk.dark
 
-    init(meter: ProgressMeterModel, art: FeedCardArtSpec) {
+    init(meter: ProgressMeterModel, art: FeedCardArtSpec, check: Bool = false) {
         self.meter = meter
         self.art = art
+        self.check = check
         _counted = State(initialValue: Self.known(art: art))
     }
 
@@ -24,12 +26,18 @@ struct PostProgressMeterView: View {
         let tint = FeedMeterColors.tint(
             server: art.posterPalette, counted: counted, highContrast: contrast == .increased, ink: ink
         )
-        ZStack(alignment: .topLeading) {
-            ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: nil))
-                .opacity(tint == nil ? 1 : 0)
-            if let tint {
-                ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: tint))
-                    .transition(.opacity)
+        HStack(alignment: .top, spacing: HomeDesign.Metric.checkGap) {
+            ZStack(alignment: .topLeading) {
+                ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: nil))
+                    .opacity(tint == nil ? 1 : 0)
+                if let tint {
+                    ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: tint))
+                        .transition(.opacity)
+                }
+            }
+            if check {
+                LogCheckMark(color: FeedMeterColors.palette(ink: ink, accent: accent, tint: tint).todayColor)
+                    .offset(y: (ProgressMeterMetrics.tickHeight - HomeDesign.Metric.checkSize) / 2)
             }
         }
         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tint != nil)
