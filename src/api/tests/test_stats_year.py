@@ -52,6 +52,7 @@ class StatsYearTests(ActivityBase):
                 self.assertEqual(year["year"], 2026)
                 self.assertEqual(year["range"], summary["range"])
                 self.assertEqual(year["audience"], summary["audience"])
+                # Every type is on, so the rows add up to the header's titles.
                 self.assertEqual(year["titles"], summary["header"]["titles"])
                 self.assertEqual(year["media_types"], summary["media_types"])
                 self.assertEqual(year["time"], summary["time"])
@@ -61,6 +62,19 @@ class StatsYearTests(ActivityBase):
         book = next(row for row in owner["time"]["rows"] if row["media_type"] == "book")
         self.assertEqual((book["unit"], book["value"]), ("pages", 40))
         self.assertEqual(self.year(self.stranger)["titles"], 2)
+
+    def test_a_type_turned_off_stays_out_of_the_total_and_the_wall(self):
+        self.log(self.item(MediaTypes.MOVIE.value, "film"), utc_day(2026, 3, 2))
+        self.log(self.item(MediaTypes.GAME.value, "game"), utc_day(2026, 4, 2))
+        self.owner.game_enabled = False
+        self.owner.save(update_fields=["game_enabled"])
+
+        year = self.year()
+        # Global's header still counts the game (STAT-301); the section adds its rows.
+        self.assertEqual(self.summary(YEAR_2026)["header"]["titles"], 2)
+        self.assertEqual(year["titles"], 1)
+        self.assertNotIn("game", [row["media_type"] for row in year["media_types"]])
+        self.assertEqual([poster["ref"]["media_id"] for poster in year["posters"]], ["film"])
 
     def test_the_year_is_this_year_on_the_owners_calendar(self):
         self.set_zone("Pacific/Auckland")
@@ -94,7 +108,8 @@ class StatsYearTests(ActivityBase):
         self.assertTrue(all(poster["user_state"] is None for poster in posters))
 
         scope = stats_year.year_scope(self.owner, self.owner)
-        self.assertEqual([poster["ref"]["media_id"] for poster in stats_year.wall_posters(scope, limit=2)], ["m2", "logged"])
+        wall = stats_year.wall_posters(scope, ["movie", "book", "music"], limit=2)
+        self.assertEqual([poster["ref"]["media_id"] for poster in wall], ["m2", "logged"])
 
     def test_a_profile_the_viewer_cant_see_has_no_year(self):
         self.owner.profile_private = True

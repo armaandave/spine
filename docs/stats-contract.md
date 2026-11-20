@@ -1109,8 +1109,9 @@ No parameters. The range is this calendar year on the owner's calendar (STAT-005
 }
 ```
 
-- `titles`, `media_types` and `time` are the summary's `header.titles`, `media_types` and `time` for that range and viewer, worked out by the same code, so they always agree.
-- `posters` is the wall behind the numbers: this year's titles (STAT-105) with artwork, at most 36. Each type's titles are ordered by their latest event (STAT-106), newest first, and the types are dealt one title each in turn in `primary_media_types()` order. A title with no artwork is left out. Each is a media summary (STAT-304) with `user_state` null: the wall has no tap.
+- `media_types` and `time` are the summary's `media_types` and `time` for that range and viewer, worked out by the same code, so they always agree. The section shows only the types the owner has turned on: `media_types`' rows.
+- `titles` adds up those rows' `titles`, so it is what the rows add up to. It equals the summary's `header.titles` unless the owner turned a type off that has titles this year: Global's header still counts those (STAT-301).
+- `posters` is the wall behind the numbers: this year's titles (STAT-105) of the turned-on types with artwork, at most 36. Each type's titles are ordered by their latest event (STAT-106), newest first, and the types are dealt one title each in turn in `primary_media_types()` order. A title with no artwork is left out. Each is a media summary (STAT-304) with `user_state` null: the wall has no tap.
 - The app shows the wall from 9 posters up, in the largest grid of at most 6 across that the posters fill with no gaps and whose cells stay within 20% of a 2:3 poster; fewer than 9 show the numbers alone.
 
 ### STAT-311: Errors

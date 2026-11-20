@@ -2,20 +2,23 @@
 
 It reads the same scope the Stats page builds for this calendar year on Global
 (docs/stats-contract.md STAT-001, STAT-300), on the owner's calendar (STAT-005), so each
-number is the one the Stats page shows for this year:
+type's numbers are the ones the Stats page shows for this year:
 
-- ``titles``: the header's titles (STAT-105), every type included.
 - ``media_types``: each type the owner has turned on, with its titles and logs
   (STAT-301), zero included.
 - ``time``: each type's time in its own unit, from the calculation (STAT-201, STAT-202):
   pages read this year count whether or not the book was finished.
+- ``titles``: the turned-on types' titles added up, so the total is what the rows add up
+  to. Global's header (STAT-105) also counts the types the owner turned off; the section
+  shows only the turned-on ones (STAT-312).
 
 Only what the section shows is worked out, not the whole Stats page.
 
-``posters`` is the wall behind the numbers: this year's titles that have artwork, each
-type newest activity first (its latest event, STAT-106), dealt one per type in turn in
-the app's type order, at most WALL_LIMIT. They are a backdrop with no tap, so they carry
-no viewer state, which keeps the cached answer the same for everyone in an audience.
+``posters`` is the wall behind the numbers: this year's titles of the turned-on types
+that have artwork, each type newest activity first (its latest event, STAT-106), dealt
+one per type in turn in the app's type order, at most WALL_LIMIT. They are a backdrop
+with no tap, so they carry no viewer state, which keeps the cached answer the same for
+everyone in an audience.
 """
 
 from __future__ import annotations
@@ -51,23 +54,25 @@ def year_scope(owner, viewer, *, request=None):
 
 def build_year(scope):
     """Return the This Year payload for a year scope."""
+    rows = media_type_rows(scope)
+    media_types = [row["media_type"] for row in rows]
     return {
         "year": scope.start_date.year,
         "range": scope.range_payload(),
         "audience": scope.audience,
-        "titles": scope.titles.count(),
-        "media_types": media_type_rows(scope),
+        "titles": sum(row["titles"] for row in rows),
+        "media_types": rows,
         "time": stats_v2_activity.build_time(scope),
-        "posters": wall_posters(scope),
+        "posters": wall_posters(scope, media_types),
     }
 
 
-def wall_order(scope):
-    """Return this year's title IDs in wall order.
+def wall_order(scope, media_types):
+    """Return this year's title IDs of ``media_types`` in wall order.
 
     Each type's titles are ordered by their latest event, newest first (a tie goes to
     the higher ID); a title with no event goes after its type's dated ones. The types
-    are then dealt one title each in turn, in the app's type order, until each runs out.
+    are then dealt one title each in turn, in ``media_types``' order, until all run out.
     """
     title_ids = set(scope.titles.values_list("id", flat=True))
     latest = {}
@@ -82,8 +87,7 @@ def wall_order(scope):
         undated[MediaTypes.TV.value if media_type in TV_ITEM_TYPES else media_type].append(title_id)
 
     queues = []
-    others = sorted((set(by_type) | set(undated)) - set(scope.primary_types))
-    for media_type in [*scope.primary_types, *others]:
+    for media_type in media_types:
         dated = [title_id for _day, title_id in sorted(by_type.get(media_type, []), reverse=True)]
         queue = deque(dated + sorted(undated.get(media_type, []), reverse=True))
         if queue:
@@ -95,12 +99,12 @@ def wall_order(scope):
     return order
 
 
-def wall_posters(scope, limit=WALL_LIMIT):
-    """Return up to ``limit`` media summaries for the wall, in wall order.
+def wall_posters(scope, media_types, limit=WALL_LIMIT):
+    """Return up to ``limit`` media summaries of ``media_types`` for the wall, in order.
 
     A title with no artwork is skipped, so the wall has no blank tiles.
     """
-    order = wall_order(scope)
+    order = wall_order(scope, media_types)
     posters = []
     for start in range(0, len(order), _SUMMARY_BATCH):
         batch = order[start : start + _SUMMARY_BATCH]
