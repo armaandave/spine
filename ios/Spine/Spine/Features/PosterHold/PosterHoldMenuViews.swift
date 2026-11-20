@@ -155,9 +155,10 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
             ForEach(Array(menu.quick.enumerated()), id: \.offset) { _, quick in
                 switch quick {
                 case let .watched(word):
-                    let shown = title.eye ?? false
-                    Button(shown ? "Undo \(word)" : "Mark as \(word)", systemImage: shown ? "eye.slash.fill" : "eye") {
-                        controller.run(.watched(wasFilled: shown), on: media.ref, flips: menu.eyeStaysOpen, open: open)
+                    // Closed while the mark is on its way; once it lands, the row gives way to the shelf line.
+                    let marking = title.eye ?? false
+                    Button("Mark as \(word)", systemImage: marking ? "eye.slash.fill" : "eye") {
+                        controller.run(.markWatched, on: media.ref, flips: menu.eyeStaysOpen, open: open)
                     }
                     .menuActionDismissBehavior(menu.eyeStaysOpen ? .disabled : .automatic)
                 case let .planning(isFilled):

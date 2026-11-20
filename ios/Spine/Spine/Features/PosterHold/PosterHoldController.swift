@@ -31,9 +31,9 @@ final class PosterHoldTitle {
 @Observable
 final class PosterHoldController {
     enum Choice: Equatable {
-        /// The eye, as the menu showed it: nothing happens if the title has changed since.
-        case watched(wasFilled: Bool)
-        /// The bookmark, as the menu showed it.
+        /// The eye: marks the title watched. Nothing happens if it's watched already.
+        case markWatched
+        /// The bookmark, as the menu showed it: nothing happens if the title has changed since.
         case planning(wasFilled: Bool)
         case removeFromLibrary
     }
@@ -71,6 +71,7 @@ final class PosterHoldController {
     }
 
     @ObservationIgnored private var loaded: [MediaRef.ID: Loaded] = [:]
+    @ObservationIgnored private var loading: [MediaRef.ID: Task<MediaDetailViewModel?, Never>] = [:]
     @ObservationIgnored private var recency: [MediaRef.ID] = []
     @ObservationIgnored private var titles: [MediaRef.ID: PosterHoldTitle] = [:]
     /// Titles whose state is being read again after a change made elsewhere, and ones changed again meanwhile.
@@ -123,8 +124,13 @@ final class PosterHoldController {
         let title = title(for: ref)
         if flips {
             switch choice {
-            case let .watched(wasFilled): title.eye = !wasFilled
-            case let .planning(wasFilled): title.planning = !wasFilled
+            case .markWatched:
+                // A second tap while the first is on its way does nothing.
+                guard title.eye == nil else { return }
+                title.eye = true
+            case let .planning(wasFilled):
+                guard title.planning == nil else { return }
+                title.planning = !wasFilled
             case .removeFromLibrary: break
             }
             tapFeedback.impactOccurred()
@@ -136,6 +142,9 @@ final class PosterHoldController {
                 return
             }
             active = model
+            // The menu now shows the title as it is, in case the poster's copy was out of date (a choice that no
+            // longer applies then does nothing, and the menu has already changed to say why).
+            title.fresh = .some(model.viewer)
             let write = perform(choice, model: model, detail: detail, open: open)
             guard flips else { return }
             // Nothing written: the title changed since the menu opened, or the page has to finish it.
@@ -168,9 +177,9 @@ final class PosterHoldController {
     ) -> Task<Bool, Never>? {
         let config = model.viewer.map { TrendingRailConfig.make(title: detail.displayTitle, ref: detail.ref, viewer: $0) }
         switch choice {
-        case let .watched(wasFilled):
-            guard (config?.isEyeSelected ?? false) == wasFilled else { return nil }
-            return watch(isFilled: wasFilled, model: model, detail: detail, open: open)
+        case .markWatched:
+            guard config?.isEyeSelected != true else { return nil }
+            return markWatched(model: model, detail: detail, open: open)
         case let .planning(wasFilled):
             guard PosterHoldMenu.planning(ref: detail.ref, viewer: model.viewer) == (wasFilled ? .remove : .add) else {
                 return nil
@@ -182,16 +191,16 @@ final class PosterHoldController {
         }
     }
 
-    /// The page's eye (`TrendingRailRouter.eye`).
-    private func watch(
-        isFilled: Bool,
+    /// The page's eye on a title you haven't finished (`TrendingRailRouter.eye`): it marks the title watched, or hands it
+    /// to the page when the page has to finish it.
+    private func markWatched(
         model: MediaDetailViewModel,
         detail: MediaDetail,
         open: (RailHandoff) -> Void
     ) -> Task<Bool, Never>? {
         let ref = detail.ref
         if ref.isTVFamily || model.tracksAnime {
-            // Marks every aired episode, or asks first; a filled eye undoes only what it added.
+            // Marks every aired episode, or asks first.
             model.tapTVEye()
             return nil
         }
@@ -201,27 +210,27 @@ final class PosterHoldController {
             return nil
         }
         if ref.isSingleWeight {
-            return isFilled ? model.removeTracking(for: detail) : model.markConsumed(for: detail)
+            return model.markConsumed(for: detail)
         }
         if ref.mediaType == "game" {
             if model.viewer?.game?.hasLivePlaythrough == true {
                 open(.eye)
                 return nil
             }
-            return model.performGameAction(isFilled ? "undo_completed" : "mark_completed", for: detail)
+            return model.performGameAction("mark_completed", for: detail)
         }
         if ref.readsLikeBook {
-            switch ReadingRouting.eyeTap(book: model.viewer?.book, isRead: isFilled, noun: ref.mediaType) {
+            switch ReadingRouting.eyeTap(book: model.viewer?.book, isRead: false, noun: ref.mediaType) {
             case .openLog:
                 open(.eye)
                 return nil
-            case .undoRead:
-                return model.performBookAction("undo_read", for: detail)
             case let .explain(reason):
                 model.quickActionErrorMessage = reason
                 return nil
             case .markRead:
                 return model.performBookAction("mark_read", for: detail)
+            case .undoRead:
+                return nil
             }
         }
         open(.eye)
@@ -293,13 +302,23 @@ final class PosterHoldController {
     // MARK: Models
 
     /// The title's page model with its detail and tracking loaded, as Home's Trending rail loads it: not the page's
-    /// `load()`, which also fetches reviews, friends and outside ratings.
+    /// `load()`, which also fetches reviews, friends and outside ratings. A load already on its way is shared, so two
+    /// quick taps write through one model.
     private func model(for ref: MediaRef, reportsFailure: Bool = true) async -> MediaDetailViewModel? {
         if let entry = loaded[ref.id],
            entry.model.hasPendingWrites || Date().timeIntervalSince(entry.at) < Self.freshFor {
             touch(ref.id)
             return entry.model
         }
+        if let loading = loading[ref.id] { return await loading.value }
+        let load = Task { await self.load(ref, reportsFailure: reportsFailure) }
+        loading[ref.id] = load
+        let model = await load.value
+        loading[ref.id] = nil
+        return model
+    }
+
+    private func load(_ ref: MediaRef, reportsFailure: Bool) async -> MediaDetailViewModel? {
         let model = MediaDetailViewModel(
             ref: ref,
             mediaRepository: mediaRepository,
