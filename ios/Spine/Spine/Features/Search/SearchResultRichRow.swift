@@ -32,12 +32,7 @@ struct SearchResultRichRow: View {
                     .font(.system(size: 17))
                     .lineLimit(2)
 
-                if let meta {
-                    meta
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .lineLimit(1)
-                }
+                SearchRowMadeByLine(result: result, showsKind: showsKind)
 
                 if standing != nil || friends != nil {
                     HStack(spacing: 8) {
@@ -47,6 +42,9 @@ struct SearchResultRichRow: View {
                     .padding(.top, 5)
                 }
             }
+            // The words take the row's width before the spacer does, so the line under the title is measured against
+            // the whole column, not an even split with the spacer.
+            .layoutPriority(1)
 
             Spacer(minLength: 8)
 
@@ -70,21 +68,6 @@ struct SearchResultRichRow: View {
         let match = Text(found.match).fontWeight(.heavy).foregroundStyle(.white)
         let after = Text(found.after).fontWeight(.semibold).foregroundStyle(quiet)
         return Text("\(before)\(match)\(after)")
-    }
-
-    private var metaLine: String? {
-        SearchRowText.meta(
-            mediaType: result.ref.mediaType,
-            subtitle: result.subtitle,
-            releaseDate: result.releaseDate,
-            showsKind: showsKind
-        )
-    }
-
-    /// Explicit albums lead the line with Apple Music's "E", as Apple Music's own lists do.
-    private var meta: Text? {
-        guard MusicContentRating.isExplicit(result.contentRating) else { return metaLine.map { Text($0) } }
-        return metaLine.map { Text("\(Text.explicitBadge) \($0)") } ?? Text.explicitBadge
     }
 
     private var standing: SearchRowText.Standing? {
@@ -141,7 +124,15 @@ struct SearchResultRichRow: View {
 
     private var accessibilityText: String {
         var parts = [result.displayTitle]
-        if let metaLine { parts.append(metaLine) }
+        if MusicContentRating.isExplicit(result.contentRating) { parts.append("Explicit") }
+        if let line = SearchRowText.spokenLine(
+            mediaType: result.ref.mediaType,
+            makers: result.madeBy,
+            year: SearchRowText.year(of: result),
+            showsKind: showsKind
+        ) {
+            parts.append(line)
+        }
         switch standing {
         case let .rated(stars, liked):
             parts.append("You rated it \(stars) stars" + (liked ? ", liked" : ""))
@@ -154,6 +145,61 @@ struct SearchResultRichRow: View {
         }
         if let friendsLine = friends.flatMap(SearchRowText.friendsLine) { parts.append("Friends: \(friendsLine)") }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// The line under a result's title: the kind's icon when the search covers every kind, an explicit album's "E", then
+/// who made it and the year ("Denis Villeneuve · 2021"). The year is never cut: a name too long for the line ends in
+/// "…". With no maker known it says the year, with no year the maker, and with neither the kind ("Game").
+private struct SearchRowMadeByLine: View {
+    let result: MediaSummary
+    let showsKind: Bool
+
+    var body: some View {
+        let credits = SearchRowText.credits(result.madeBy)
+        let year = SearchRowText.year(of: result)
+        HStack(spacing: 5) {
+            if showsKind {
+                // The media picker's own icon, in a slot as wide as the widest, so every row's words start together.
+                MediaTypeGlyph(theme: .theme(for: result.ref.mediaType), size: 10)
+                    .saturation(0)
+                    .opacity(0.6)
+                    .frame(width: 16)
+            }
+            if MusicContentRating.isExplicit(result.contentRating) {
+                Text.explicitBadge
+            }
+            if credits.count > 1 {
+                ViewThatFits(in: .horizontal) {
+                    credit(credits[0], year: year)
+                    credit(credits[1], year: year)
+                }
+            } else if let only = credits.first {
+                credit(only, year: year)
+            } else if let plain = year ?? TrendingTileModel.kind(of: result.ref.mediaType) {
+                Text(plain)
+                    .lineLimit(1)
+            }
+        }
+        .font(.system(size: 13.5, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.6))
+    }
+
+    private func credit(_ credit: SearchRowText.Credit, year: String?) -> some View {
+        HStack(spacing: 0) {
+            Text(credit.name)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if credit.more > 0 {
+                Text(" +\(credit.more)")
+                    .monospacedDigit()
+                    .fixedSize()
+            }
+            if let year {
+                Text(" · \(year)")
+                    .fixedSize()
+            }
+        }
     }
 }
 

@@ -20,28 +20,53 @@ enum SearchRowText {
         case liked
     }
 
-    /// "Movie · 2024", "Album · 2021 · Hans Zimmer", "Anime · TV · 2023 · 28 episodes": the kind when the search
-    /// covers every kind, then the year, then the result's own line. Neither the year nor the kind is said twice when
-    /// that line has it too ("Toto · 1984 · Album").
-    static func meta(mediaType: String, subtitle: String?, releaseDate: String?, showsKind: Bool) -> String? {
-        let kind = TrendingTileModel.kind(of: mediaType)
-        var own: String? = subtitle?
-            .components(separatedBy: " · ")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && $0.caseInsensitiveCompare(kind ?? "") != .orderedSame }
-            .joined(separator: " · ")
-        if own?.isEmpty == true { own = nil }
-        var year = TrendingTileModel.year(from: releaseDate)
-        if let line = own, TrendingTileModel.year(from: line) == line {
-            // A line that is only a year is the year.
-            year = year ?? line
-            own = nil
+    /// One way the line under a title can say who made it: a name, then "+N" for the others credited too.
+    struct Credit: Equatable {
+        let name: String
+        let more: Int
+    }
+
+    /// Who made a result, in the ways its line can say it, fullest first; the row shows the first that fits. One
+    /// maker: their full name. Two: both ("Alan Moore & Dave Gibbons"), else the first and "+1". Three or more: the
+    /// first and "+N". Never first names alone.
+    static func credits(_ makers: [String]?) -> [Credit] {
+        let names = madeBy(makers)
+        switch names.count {
+        case 0: return []
+        case 1: return [Credit(name: names[0], more: 0)]
+        case 2: return [Credit(name: "\(names[0]) & \(names[1])", more: 0), Credit(name: names[0], more: 1)]
+        default: return [Credit(name: names[0], more: names.count - 1)]
         }
-        if let line = own, let shown = year, line.contains(shown) {
-            year = nil
+    }
+
+    /// The year a result came out: the server's, else its release date's, else its own line's when that's only a
+    /// year (a title opened before the server sent years).
+    static func year(of result: MediaSummary) -> String? {
+        if let year = result.year, year > 0 { return String(year) }
+        if let year = TrendingTileModel.year(from: result.releaseDate) { return year }
+        guard let line = result.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        return TrendingTileModel.year(from: line) == line ? line : nil
+    }
+
+    /// What VoiceOver reads for that line: the kind when the search covers every kind, everyone who made it, and the
+    /// year ("Comic, Alan Moore and Dave Gibbons, 1986").
+    static func spokenLine(mediaType: String, makers: [String]?, year: String?, showsKind: Bool) -> String? {
+        let names = madeBy(makers)
+        let parts = [
+            showsKind ? TrendingTileModel.kind(of: mediaType) : nil,
+            names.isEmpty ? nil : names.formatted(.list(type: .and)),
+            year,
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
+    private static func madeBy(_ makers: [String]?) -> [String] {
+        var names: [String] = []
+        for maker in makers ?? [] {
+            let name = maker.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty, !names.contains(name) { names.append(name) }
         }
-        let parts = [showsKind ? kind : nil, year, own].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return names
     }
 
     static func match(in title: String, query: String) -> TitleMatch? {

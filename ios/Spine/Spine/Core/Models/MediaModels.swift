@@ -219,6 +219,11 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
     var posterPalette: [PosterSwatch]? = nil
     /// Search results only: the people you follow who've done something with the title. Nil when none have.
     var friends: MediaFriendsSummary? = nil
+    /// Search results only: who made it, in credit order: a movie's directors, a show's networks, an anime's or a
+    /// game's studios, a book's or a manga's authors, a comic's publisher, an album's artist (one name).
+    var madeBy: [String]? = nil
+    /// Search results only: the year it came out, however its provider says it.
+    var year: Int? = nil
 
     var id: String { ref.id }
 
@@ -272,6 +277,8 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         case showTitle
         case episodeTitle
         case posterPalette
+        case madeBy
+        case year
     }
 
     init(
@@ -382,6 +389,8 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         )
         self.posterPalette = posterPalette
         friends = container.decodeLossily(MediaFriendsSummary.self, forKey: .friends)
+        madeBy = container.decodeLossily([String].self, forKey: .madeBy)
+        year = container.decodeLossily(Int.self, forKey: .year)
     }
 }
 

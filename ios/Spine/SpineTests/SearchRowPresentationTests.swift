@@ -6,29 +6,39 @@ import XCTest
 
 @MainActor
 final class SearchRowPresentationTests: XCTestCase {
-    func testTheYearIsSaidOnceEvenWhenTheResultsOwnLineHasIt() {
-        let line = SearchRowText.meta(
-            mediaType: "anime", subtitle: "TV · 2023 · 28 episodes", releaseDate: "2023-09-29", showsKind: true
-        )
-        XCTAssertEqual(line?.components(separatedBy: "2023").count, 2)
+    func testWhoMadeItIsNamedInFullAndTheRestAreCounted() {
+        typealias Credit = SearchRowText.Credit
 
-        let movie = SearchRowText.meta(mediaType: "movie", subtitle: "2024", releaseDate: "2024-03-01", showsKind: false)
-        XCTAssertEqual(movie, "2024")
+        XCTAssertEqual(SearchRowText.credits(nil), [])
+        XCTAssertEqual(SearchRowText.credits([" Ryan Coogler ", "Ryan Coogler", ""]), [Credit(name: "Ryan Coogler", more: 0)])
+        // Two: both when they fit, else the first and "+1".
+        XCTAssertEqual(
+            SearchRowText.credits(["Alan Moore", "Dave Gibbons"]),
+            [Credit(name: "Alan Moore & Dave Gibbons", more: 0), Credit(name: "Alan Moore", more: 1)]
+        )
+        XCTAssertEqual(
+            SearchRowText.credits(["Brian Herbert", "Kevin J. Anderson", "Raúl Allén", "Patricia Martín"]),
+            [Credit(name: "Brian Herbert", more: 3)]
+        )
     }
 
-    func testTheKindLeadsOnlyWhenTheSearchCoversEveryKind() throws {
-        let kind = try XCTUnwrap(TrendingTileModel.kind(of: "music"))
-        let every = SearchRowText.meta(mediaType: "music", subtitle: "Hans Zimmer", releaseDate: "2021-10-22", showsKind: true)
-        let one = SearchRowText.meta(mediaType: "music", subtitle: "Hans Zimmer", releaseDate: "2021-10-22", showsKind: false)
+    func testTheYearIsTheServersElseTheReleaseDatesElseALineThatIsOnlyAYear() {
+        let ref = MediaRef(itemId: nil, source: "comicvine", mediaType: "comic", mediaId: "3622", seasonNumber: nil, episodeNumber: nil)
+        var sent = MediaSummary(ref: ref, title: "Watchmen", releaseDate: "1987-01-01")
+        sent.year = 1986
 
-        XCTAssertEqual(every?.hasPrefix(kind), true)
-        XCTAssertEqual(one?.contains(kind), false)
+        XCTAssertEqual(SearchRowText.year(of: sent), "1986")
+        XCTAssertEqual(SearchRowText.year(of: MediaSummary(ref: ref, title: "Watchmen", releaseDate: "1986-09-01")), "1986")
+        XCTAssertEqual(SearchRowText.year(of: MediaSummary(ref: ref, title: "Watchmen", subtitle: "1986")), "1986")
+        XCTAssertNil(SearchRowText.year(of: MediaSummary(ref: ref, title: "Watchmen", subtitle: "1986 · DC Comics")))
+    }
 
-        // An album's own line already says "Album": it's said once, up front.
-        let album = SearchRowText.meta(mediaType: "music", subtitle: "Toto · 1984 · Album", releaseDate: "1984-12-01", showsKind: true)
-        XCTAssertEqual(album?.components(separatedBy: kind).count, 2)
-        XCTAssertEqual(album?.hasPrefix(kind), true)
-        XCTAssertNil(SearchRowText.meta(mediaType: "book", subtitle: " ", releaseDate: nil, showsKind: false))
+    func testVoiceOverNamesEveryoneWhoMadeItAndTheKindOnlyWhenEveryKindIsSearched() {
+        let every = SearchRowText.spokenLine(mediaType: "comic", makers: ["Alan Moore", "Dave Gibbons"], year: "1986", showsKind: true)
+        let one = SearchRowText.spokenLine(mediaType: "game", makers: [], year: nil, showsKind: false)
+
+        XCTAssertEqual(every, "Comic, Alan Moore and Dave Gibbons, 1986")
+        XCTAssertNil(one)
     }
 
     func testTheTypedTextIsFoundWhateverItsCaseOrAccents() throws {
@@ -115,9 +125,10 @@ final class SearchRowPresentationTests: XCTestCase {
         let json = #"""
         [
           {"ref": {"item_id": 7, "source": "tmdb", "media_type": "movie", "media_id": "693134"}, "title": "Dune: Part Two",
-           "friends": {"count": 5, "people": [{"id": 2, "username": "maya", "display_name": "Maya", "avatar_url": null}]}},
+           "friends": {"count": 5, "people": [{"id": 2, "username": "maya", "display_name": "Maya", "avatar_url": null}]},
+           "made_by": ["Denis Villeneuve"], "year": 2024},
           {"ref": {"item_id": 8, "source": "tmdb", "media_type": "movie", "media_id": "438631"}, "title": "Dune",
-           "friends": {"count": "lots"}},
+           "friends": {"count": "lots"}, "made_by": "Denis Villeneuve", "year": "soon"},
           {"ref": {"item_id": null, "source": "tmdb", "media_type": "movie", "media_id": "841"}, "title": "Dune",
            "friends": null}
         ]
@@ -129,6 +140,15 @@ final class SearchRowPresentationTests: XCTestCase {
         XCTAssertEqual(results[0].friends?.people.first?.username, "maya")
         XCTAssertNil(results[1].friends)
         XCTAssertNil(results[2].friends)
+        XCTAssertEqual(results[0].madeBy, ["Denis Villeneuve"])
+        XCTAssertEqual(results[0].year, 2024)
+        XCTAssertNil(results[1].madeBy)
+        XCTAssertNil(results[1].year)
+
+        // Recently opened keeps who made a title and its year.
+        let kept = try JSONDecoder().decode([MediaSummary].self, from: JSONEncoder().encode(results))
+        XCTAssertEqual(kept[0].madeBy, ["Denis Villeneuve"])
+        XCTAssertEqual(kept[0].year, 2024)
     }
 
     private func face(_ username: String) -> MediaFriendFace {
