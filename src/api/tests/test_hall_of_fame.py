@@ -7,7 +7,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import Item, MediaTypes, Sources
+from app.models import Item, MediaTypes, Movie, Sources, Status
 from users import hall_of_fame
 
 
@@ -181,3 +181,15 @@ class ProfilePayloadTests(HallOfFameApiBase):
         self.assertEqual(response.data["hof"]["movie"]["title"], "Movie A")
         self.assertEqual(response.data["hof"]["book"]["title"], "Book")
         self.assertIsNone(response.data["hof"]["tv"])
+
+    def test_picks_carry_the_viewers_own_state_not_the_owners(self):
+        movie = make_item(MediaTypes.MOVIE.value, "1", "Movie A")
+        hall_of_fame.set_picks(self.user, [movie])
+        Movie.objects.create(item=movie, user=self.user, status=Status.PLANNING.value)
+        viewer = get_user_model().objects.create_user(username="visitor", password="strong-password-123")
+        Movie.objects.create(item=movie, user=viewer, status=Status.COMPLETED.value)
+        self.client.force_authenticate(viewer)
+
+        response = self.client.get(f"/api/v1/users/{self.user.username}/")
+
+        self.assertEqual(response.data["hall_of_fame"][0]["user_state"]["status"], Status.COMPLETED.value)

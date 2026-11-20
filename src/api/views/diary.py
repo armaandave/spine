@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from api.pagination import StandardResultsSetPagination
 from api.permissions import can_view_user_profile
+from api.serializers.common import prime_viewer_state
 from api.serializers.diary import DiaryEntryWriteSerializer
 from api.services import diary as diary_service
 from api.services import filters as filter_service
@@ -114,6 +115,7 @@ class DiaryListView(APIView):
         page = list(paginator.paginate_queryset(entries, request, view=self))
         diary_service.prime_diary_likes(page, request.user)
         diary_service.prime_show_titles(page)
+        prime_viewer_state([entry.item for entry in page], request.user)
         response = paginator.get_paginated_response(
             [
                 diary_service.diary_payload(entry, request=request, viewer=request.user)

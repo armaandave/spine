@@ -923,7 +923,8 @@ class MilestoneTests(ActivityBase):
         self.assertEqual([(row["number"], row["entry_id"]) for row in tv_tab], [(1, tv_log.id)])
         self.assertEqual(tv_tab[0]["media_type"], "tv")
         self.assertEqual(tv_tab[0]["media"]["ref"]["item_id"], show.id)
-        self.assertIsNone(tv_tab[0]["media"]["user_state"])
+        # The poster carries the viewer's own state for the show, as every poster does.
+        self.assertTrue(tv_tab[0]["media"]["user_state"]["tv"]["in_library"])
         global_tab = self.summary(ALL_TIME)["milestones"]
         self.assertEqual([(row["number"], row["media_type"]) for row in global_tab], [(1, "movie")])
 

@@ -23,7 +23,7 @@ from api.serializers.common import (
     get_or_create_item_from_metadata,
     image_url,
     media_summary_from_item,
-    prime_collection_items,
+    prime_viewer_state,
     user_summary,
 )
 from api.serializers.lists import (
@@ -73,18 +73,28 @@ HEADER_BACKDROP_MEDIA_TYPES = {
 HEADER_BACKDROP_ATTEMPTS = 5
 
 
-def _list_item_summaries(items, request, *, resolve_header):
+def _prime_titles(items, viewer, with_user_state):
+    """Prime a list's titles: with the viewer's state for a list's own, else artwork."""
+    if with_user_state:
+        prime_viewer_state(items, viewer)
+    else:
+        prime_curated_artwork(items)
+
+
+def _list_item_summaries(items, request, *, resolve_header, with_user_state=False):
     """Serialize items, resolving the header backdrop the app shows above the list.
 
     The first few items that can have a backdrop are tried in order until one has
-    it, so a list still gets a header when its first title has no backdrop.
+    it, so a list still gets a header when its first title has no backdrop. A list's
+    own titles also carry the viewer's state (``with_user_state``, items primed by
+    ``prime_viewer_state``); previews don't.
     """
     attempts = HEADER_BACKDROP_ATTEMPTS if resolve_header else 0
     found = False
     summaries = []
     for item in items:
         resolve = not found and attempts > 0 and item.media_type in HEADER_BACKDROP_MEDIA_TYPES
-        summary = _list_item_summary(item, request, resolve_backdrop=resolve)
+        summary = _list_item_summary(item, request, resolve_backdrop=resolve, with_user_state=with_user_state)
         if resolve:
             attempts -= 1
             found = bool(summary.get("backdrop_url") or summary.get("custom_backdrop_url"))
@@ -92,7 +102,7 @@ def _list_item_summaries(items, request, *, resolve_header):
     return summaries
 
 
-def _list_item_summary(item, request, *, resolve_backdrop):
+def _list_item_summary(item, request, *, resolve_backdrop, with_user_state=False):
     """Serialize a list item; only the header item pays for a provider backdrop."""
     try:
         return media_summary_from_item(
@@ -100,7 +110,7 @@ def _list_item_summary(item, request, *, resolve_backdrop):
             request=request,
             user=request.user,
             include_resolved_backdrop=resolve_backdrop,
-            include_user_state=False,
+            include_user_state=with_user_state,
         )
     except (provider_services.ProviderAPIError, requests.exceptions.RequestException):
         # The header backdrop is decoration: a provider outage must not fail the list.
@@ -108,7 +118,7 @@ def _list_item_summary(item, request, *, resolve_backdrop):
             item,
             request=request,
             user=request.user,
-            include_user_state=False,
+            include_user_state=with_user_state,
         )
 
 
@@ -224,11 +234,12 @@ def list_payload(
             if include_preview_items and not include_items:
                 list_items = list_items[:LIST_PREVIEW_ITEM_LIMIT]
             list_items = list(list_items)
-            prime_curated_artwork(list_item.item for list_item in list_items)
+            _prime_titles([list_item.item for list_item in list_items], request.user, include_items)
             summaries = _list_item_summaries(
                 [list_item.item for list_item in list_items],
                 request,
                 resolve_header=include_items,
+                with_user_state=include_items,
             )
             for list_item, item in zip(list_items, summaries, strict=True):
                 item["position"] = list_item.position
@@ -763,7 +774,7 @@ class ListItemsView(APIView):
 
         paginator = StandardResultsSetPagination()
         page = list(paginator.paginate_queryset(list_items, request, view=self))
-        prime_collection_items([list_item.item for list_item in page], request.user)
+        prime_viewer_state([list_item.item for list_item in page], request.user)
         notes = featured_entry_notes(custom_list)
         # Only the plain first page, which the app opens a list with, resolves the
         # header backdrop; filtered, sorted and later pages make no provider calls.
@@ -772,6 +783,7 @@ class ListItemsView(APIView):
             request,
             resolve_header=paginator.page.number == 1
             and set(request.query_params) <= {"page", "page_size"},
+            with_user_state=True,
         )
         response = paginator.get_paginated_response(
             [

@@ -51,7 +51,12 @@ from django.db.models import (
 from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Coalesce, TruncDate
 
-from api.serializers.common import media_summary_from_item, prime_collection_items
+from api.serializers.common import (
+    media_summary_from_item,
+    prime_collection_items,
+    prime_viewer_tracking,
+    user_state_for_item,
+)
 from api.services import activity as activity_service
 from api.services import activity_rows
 from api.services import filters as filter_service
@@ -776,20 +781,24 @@ class StatsScope:
         """Media summaries by Item ID, with the owner's artwork (STAT-304).
 
         Loads only Items not serialized yet in this request, in one batch, primed
-        through prime_collection_items; no tracking state, no provider call.
+        through prime_collection_items; the viewer's own state, no provider call.
         """
         wanted = [item_id for item_id in dict.fromkeys(item_ids) if item_id is not None]
         missing = [item_id for item_id in wanted if item_id not in self._summaries]
         if missing:
             items = Item.objects.in_bulk(missing)
             prime_collection_items(items.values(), self.owner)
+            prime_viewer_tracking(items.values(), self.viewer)
             for item_id, item in items.items():
-                self._summaries[item_id] = media_summary_from_item(
-                    item,
-                    request=self.request,
-                    user=self.owner,
-                    include_user_state=False,
-                )
+                self._summaries[item_id] = {
+                    **media_summary_from_item(
+                        item,
+                        request=self.request,
+                        user=self.owner,
+                        include_user_state=False,
+                    ),
+                    "user_state": user_state_for_item(self.viewer, item),
+                }
         return {item_id: self._summaries[item_id] for item_id in wanted if item_id in self._summaries}
 
     def media_summary(self, item_id):

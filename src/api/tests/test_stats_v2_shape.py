@@ -588,7 +588,7 @@ class StatsScopeTests(StatsV2Base):
         self.assertEqual(build_scope(self.owner, self.follower, params).audience, "follower")
         self.assertEqual(build_scope(self.owner, self.stranger, params).audience, "public")
 
-    def test_media_summaries_are_loaded_once_with_no_tracking_state(self):
+    def test_media_summaries_are_loaded_once_with_the_viewers_state(self):
         film = self.item(MediaTypes.MOVIE.value, "film", title="Film")
         scope = build_scope(self.owner, self.stranger, {"start_date": "all", "end_date": "all"})
 
@@ -598,7 +598,7 @@ class StatsScopeTests(StatsV2Base):
 
         self.assertEqual(list(summaries), [film.id])
         self.assertEqual(summaries[film.id]["title"], "Film")
-        self.assertIsNone(summaries[film.id]["user_state"])
+        self.assertFalse(summaries[film.id]["user_state"]["is_tracked"])
         self.assertIs(again, summaries[film.id])
 
     def test_star_strings(self):

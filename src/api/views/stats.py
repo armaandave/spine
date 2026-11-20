@@ -11,7 +11,11 @@ from rest_framework.views import APIView
 
 from api.pagination import StandardResultsSetPagination
 from api.permissions import can_view_user_profile
-from api.serializers.common import media_summary_from_item
+from api.serializers.common import (
+    media_summary_from_item,
+    prime_viewer_tracking,
+    user_state_for_item,
+)
 from api.services import stats as stats_service
 from api.services import stats_cache, stats_v2_lists, stats_v2_people, stats_v2_ratings
 from api.services.stats_scope import COLLECTION_TABS, build_scope
@@ -38,14 +42,18 @@ def stats_payload(user, request):
         score_distribution, top_rated = legacy_stats.get_score_distribution(user_media)
         score_distribution = _wire_score_distribution(score_distribution, user_media)
         prime_curated_artwork(media.item for media in top_rated)
+        prime_viewer_tracking([media.item for media in top_rated], request.user)
         legacy_top_rated = [
             {
-                "media": media_summary_from_item(
-                    media.item,
-                    request=request,
-                    user=None,
-                    include_user_state=False,
-                ),
+                "media": {
+                    **media_summary_from_item(
+                        media.item,
+                        request=request,
+                        user=None,
+                        include_user_state=False,
+                    ),
+                    "user_state": user_state_for_item(request.user, media.item),
+                },
                 "rating": (
                     str(stats_service.wire_rating(media.score, media.item.media_type))
                     if media.score is not None

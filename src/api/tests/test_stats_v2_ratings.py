@@ -299,6 +299,32 @@ class HighestRatedTests(RatingsBase):
                 stored = [Decimal(row["stars"]) for row in rows]
                 self.assertEqual(stored, sorted(stored, reverse=True))
 
+    def test_posters_carry_the_viewers_own_state_not_the_owners(self):
+        film = self.item(MediaTypes.MOVIE.value, "film")
+        self.log(film, rating=Decimal("9.0"))
+        self.log(film, JUN_2025, rating=Decimal("9.0"))
+        Movie.objects.create(user=self.owner, item=film, status=Status.PLANNING.value)
+        Movie.objects.create(user=self.stranger, item=film, status=Status.COMPLETED.value)
+        params = YEAR_2025
+        user_path = self.user_path
+        pages = {
+            "preview": self.stats(self.stranger, params, path=user_path())["highest_rated"]["items"],
+            "highest rated": self.get(self.stranger, params, path=user_path("highest-rated")).data["results"],
+            "most logged": self.get(
+                self.stranger,
+                {**params, "schema": "2"},
+                path=user_path("most-logged"),
+            ).data["results"],
+            "legacy most logged": self.get(
+                self.stranger,
+                {"start_date": "2025-01-01", "end_date": "2025-12-31"},
+                path=user_path("most-logged"),
+            ).data["results"],
+        }
+        for name, rows in pages.items():
+            with self.subTest(name):
+                self.assertEqual(rows[0]["media"]["user_state"]["status"], Status.COMPLETED.value)
+
     def test_title_ratings_helper_matches_highest_rated(self):
         film = self.item(MediaTypes.MOVIE.value, "film")
         unrated = self.item(MediaTypes.MOVIE.value, "unrated")

@@ -954,6 +954,23 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(backdrops, [None, "https://example.com/second-banner.jpg", None])
         self.assertEqual(enrich_mock.call_count, 2)
 
+    def test_list_items_carry_the_viewers_own_state_not_the_owners(self):
+        users = get_user_model().objects
+        owner = users.create_user(username="list-state-owner", password="strong-password-123")
+        viewer = users.create_user(username="list-state-viewer", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=owner, name="Shared", visibility="public")
+        movie = Item.objects.create(source=Sources.TMDB.value, media_type=MediaTypes.MOVIE.value, media_id="9", title="Nine")
+        CustomListItem.objects.create(custom_list=custom_list, item=movie, position=1)
+        Movie.objects.create(item=movie, user=owner, status=Status.PLANNING.value)
+        Movie.objects.create(item=movie, user=viewer, status=Status.COMPLETED.value)
+        self.client.force_authenticate(viewer)
+
+        # A sort keeps the first-page header lookup (a provider call) out of the test.
+        for query in ({"sort": "title"}, {"sort": "title", "page_size": 1}):
+            response = self.client.get(f"/api/v1/lists/{custom_list.id}/items/", query)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data["results"][0]["user_state"]["status"], Status.COMPLETED.value)
+
     @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
     @patch(
         "app.providers.services.get_media_metadata",

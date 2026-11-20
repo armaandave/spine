@@ -174,6 +174,25 @@ class DailyProgressTests(TestCase):
 
         self.assertEqual(self.activity(), [])
 
+    def test_each_item_carries_the_viewers_own_state_of_the_title_not_the_owners(self):
+        book = self.item(MediaTypes.BOOK.value)
+        self.save(book_tracking.start, book, at(24))
+        self.save(book_tracking.update_progress, book, at(24), progress_type="pages", value=30)
+        movie = self.item(MediaTypes.MOVIE.value)
+        self.log(movie, at(25))
+        apps.get_model("app", "movie").objects.create(item=movie, user=self.viewer, status=Status.COMPLETED.value)
+        book_tracking.start(self.viewer, book)
+        wanted = {"book one": Status.IN_PROGRESS.value, "movie one": Status.COMPLETED.value}
+
+        for params in ({}, {"view": "list"}):
+            with self.subTest(params):
+                states = {
+                    row["media"]["title"]: row["media"]["user_state"]["status"]
+                    for row in self.activity(viewer=self.viewer, **params)
+                    if row["media"]["title"] in wanted
+                }
+                self.assertEqual(states, wanted)
+
     def test_a_fix_that_lowers_a_number_takes_it_off_the_newest_save(self):
         book = self.item(MediaTypes.BOOK.value)
         self.save(book_tracking.start, book, at(20))

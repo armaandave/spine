@@ -75,6 +75,14 @@ class DayRowTests(PlanningRowBase):
         self.assertLess(row["id"], 0)
         self.assertEqual(-row["id"], row["object"]["id"])
 
+    def test_the_row_and_its_day_carry_the_viewers_own_state_not_the_adders(self):
+        movie = self.add(1)[0]
+        self.put(movie, Status.COMPLETED.value, user=self.friend)
+        row = self.planning(self.home())[0]
+        self.assertEqual(row["media"]["user_state"]["status"], Status.COMPLETED.value)
+        opened = self.get(f"/api/v1/planning/{row['object']['id']}/", user=self.friend)
+        self.assertEqual(opened["results"][0]["user_state"]["status"], Status.COMPLETED.value)
+
     def test_the_wire_shape(self):
         self.add(2)
         row = self.planning(self.home())[0]
