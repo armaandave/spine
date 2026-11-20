@@ -15,16 +15,6 @@ final class ListMediaTypeIconsTests: XCTestCase {
         XCTAssertNil(older.mediaTypesLabel)
     }
 
-    func testListDetailKeepsItsMediaTypesWhenItsRowsArriveSeparately() throws {
-        let detail = try JSONDecoder.api.decode(
-            CustomListDetail.self,
-            from: Data(listJSON(extra: #""media_types": ["movie"],"#).utf8)
-        )
-
-        XCTAssertEqual(detail.withItems([]).mediaTypes, ["movie"])
-        XCTAssertEqual(detail.withPeople([]).mediaTypes, ["movie"])
-    }
-
     func testOneTypeShowsItsIconAndAnyMixShowsTheGlobe() {
         XCTAssertEqual(ListMediaTypeIcons.shownTypes([]), [])
         XCTAssertEqual(ListMediaTypeIcons.shownTypes(["movie"]), ["movie"])

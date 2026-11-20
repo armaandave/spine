@@ -39,6 +39,22 @@ final class InPlaceRefreshTests: XCTestCase {
         XCTAssertNil(viewModel.errorMessage)
     }
 
+    func testListKeepsItsMediaTypesOnceItsRowsLoad() async throws {
+        let repository = PagedListRepository(pages: try Self.listPages(count: 2, pageSize: 2))
+        let viewModel = ProfileListDetailViewModel(
+            listId: 7,
+            listRepository: repository,
+            filterOptionsRepository: EmptyFilterOptionsRepository(),
+            onUnauthorized: {}
+        )
+
+        await viewModel.load()
+        XCTAssertEqual(viewModel.list?.mediaTypes, ["movie"])
+
+        await viewModel.refreshLoadedItems()
+        XCTAssertEqual(viewModel.list?.mediaTypes, ["movie"])
+    }
+
     func testListRefreshKeepsTheNextPageToLoad() async throws {
         let repository = PagedListRepository(pages: try Self.listPages(count: 6, pageSize: 2))
         let viewModel = ProfileListDetailViewModel(
@@ -237,7 +253,7 @@ private final class PagedListRepository: ListRepository {
     func detail(id: Int) async throws -> CustomListDetail {
         let json = """
         {"id": \(id), "name": "IMDb Top 250", "slug": "imdb-top-250", "description": "", "visibility": "public",
-         "is_ranked": true, "list_type": "media",
+         "is_ranked": true, "list_type": "media", "media_types": ["movie"],
          "owner": {"id": 1, "username": "Spine", "display_name": "Spine", "avatar_url": null},
          "items_count": \(pages.reduce(0) { $0 + $1.count }), "like_count": 0, "items": []}
         """
