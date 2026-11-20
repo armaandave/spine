@@ -139,7 +139,7 @@ enum ProfileYearWall {
     static let maximumAcross = 6
     /// A poster is 2 wide by 3 tall.
     static let posterHeightPerWidth: CGFloat = 1.5
-    static let gap: CGFloat = 2
+    static let gap: CGFloat = 0
     /// How far the top runs up under the Stats row.
     static let tuck: CGFloat = 48
     /// Full strength this far below the menu's bottom edge.
