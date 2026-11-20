@@ -7,8 +7,9 @@ enum RatingsChartGeometry {
     static let stepCount = 10
     /// Just the curve, the photos and room for the glow under the floor: no axis.
     static let height: CGFloat = 152
-    /// Room left of the first step and right of the last.
-    static let inset: CGFloat = 14
+    /// Room left of the first step and right of the last: enough that a photo at half a star or five stars (24 pt,
+    /// plus your 2 pt outline) sits inside the box with a little air, instead of touching its edge.
+    static let inset: CGFloat = 24
     static let floorY: CGFloat = 140
     /// How far above the floor the busiest step reaches.
     static let amplitude: CGFloat = 92

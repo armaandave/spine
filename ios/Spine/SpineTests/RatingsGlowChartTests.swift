@@ -33,13 +33,19 @@ final class RatingsGlowChartTests: XCTestCase {
     }
 
     func testStepsSpanTheWidthWithAnInsetEitherSide() {
-        XCTAssertEqual(G.x(step: 0, chartWidth: width), 14)
-        XCTAssertEqual(G.x(step: 9, chartWidth: width), 360, accuracy: 0.001)
+        XCTAssertEqual(G.x(step: 0, chartWidth: width), G.inset)
+        XCTAssertEqual(G.x(step: 9, chartWidth: width), width - G.inset, accuracy: 0.001)
+    }
+
+    func testTheEndPhotosStayInsideTheChart() {
+        let half = G.photoSize / 2 + 2
+        XCTAssertGreaterThanOrEqual(G.x(step: 0, chartWidth: width) - half, 8)
+        XCTAssertLessThanOrEqual(G.x(step: 9, chartWidth: width) + half, width - 8)
     }
 
     func testTheAverageSitsBetweenItsSteps() {
-        XCTAssertEqual(G.averageX(stars: 0.5, chartWidth: width), 14)
-        XCTAssertEqual(G.averageX(stars: 5, chartWidth: width), 360, accuracy: 0.001)
+        XCTAssertEqual(G.averageX(stars: 0.5, chartWidth: width), G.inset)
+        XCTAssertEqual(G.averageX(stars: 5, chartWidth: width), width - G.inset, accuracy: 0.001)
         let half = (G.x(step: 7, chartWidth: width) + G.x(step: 8, chartWidth: width)) / 2
         XCTAssertEqual(G.averageX(stars: 4.25, chartWidth: width), half, accuracy: 0.001)
     }
@@ -49,8 +55,8 @@ final class RatingsGlowChartTests: XCTestCase {
         let slopes = G.slopes(ys)
         XCTAssertEqual(slopes[0], 0)
         XCTAssertEqual(slopes[2], 0, "a peak is flat")
-        var x: CGFloat = 14
-        while x <= 360 {
+        var x: CGFloat = G.inset
+        while x <= width - G.inset {
             let y = G.curveY(at: x, ys: ys, slopes: slopes, chartWidth: width)
             XCTAssertLessThanOrEqual(y, G.floorY + 0.001, "never dips under the floor at \(x)")
             XCTAssertGreaterThanOrEqual(y, ys.min()! - 0.001, "never rises over the busiest step at \(x)")
