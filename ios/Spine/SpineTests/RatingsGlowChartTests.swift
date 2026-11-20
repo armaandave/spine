@@ -138,6 +138,25 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(G.average(payload: nil, counts: [Int](repeating: 0, count: 10)), 0)
     }
 
+    // MARK: Stars beside the number
+
+    func testStarsFillWholeThenToTheFractionAndDrawNothingForTheRest() {
+        XCTAssertEqual(G.starFills(average: 5), [1, 1, 1, 1, 1])
+        XCTAssertEqual(G.starFills(average: 4.5), [1, 1, 1, 1, 0.5])
+        XCTAssertEqual(G.starFills(average: 3), [1, 1, 1])
+        XCTAssertEqual(G.starFills(average: 0.5), [0.5])
+        let sliver = G.starFills(average: 4.1)
+        XCTAssertEqual(sliver.count, 5)
+        XCTAssertEqual(sliver.last ?? 0, 0.1, accuracy: 0.000_1)
+    }
+
+    func testStarsFillToTheAverageAsTheNumberShowsIt() {
+        // 3.96 shows as 4.0: four whole stars, no sliver of a fifth.
+        XCTAssertEqual(G.starFills(average: 3.96), [1, 1, 1, 1])
+        // 4.06 shows as 4.1.
+        XCTAssertEqual(G.starFills(average: 4.06).last ?? 0, 0.1, accuracy: 0.000_1)
+    }
+
     // MARK: People in the faces row
 
     func testAnEpisodePageChartsTheEpisodeStarsAndEveryOtherPageTheTitles() {

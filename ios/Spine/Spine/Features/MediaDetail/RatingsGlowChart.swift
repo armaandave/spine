@@ -126,6 +126,19 @@ enum RatingsChartGeometry {
         return path
     }
 
+    // MARK: Stars
+
+    /// The stars beside the number, each filled 0...1 from the left, for the average as the number shows it (one
+    /// decimal): a whole star per whole star, then one filled to the fraction (4.1 is four stars and a tenth of the
+    /// fifth), and nothing for the rest.
+    static func starFills(average: Double) -> [Double] {
+        let shown = Double(String(format: "%.1f", average)) ?? average
+        return (0..<5).compactMap { index in
+            let fill = min(max(shown - Double(index), 0), 1)
+            return fill > 0 ? fill : nil
+        }
+    }
+
     // MARK: Faces row
 
     /// A face in the row under the box.
@@ -219,23 +232,35 @@ struct RatingChartPerson: Identifiable, Equatable {
     }
 }
 
-/// The title's color by Home's own rule (`HomeTitleTint`), counted from the poster the page shows.
+/// The page's colors by Home's own rules (`HomeTitleTint`), counted from the poster the page shows: the title's color,
+/// and the second one Home's date takes.
 enum MediaPageTint {
-    static func known(_ posterURL: String?) -> Color? {
-        guard let url = posterURL.flatMap(URL.init(string:)),
-              let swatches = PosterPaletteStore.homePicture.known(server: nil, url: url) else { return nil }
-        return HomeTitleTint.color(from: swatches)?.color
+    struct Colors {
+        let title: Color
+        /// Home's date color: the poster's most common other color, clearly a different hue, else a lighter title color.
+        let second: Color
     }
 
-    static func load(_ posterURL: String?) async -> Color? {
+    static func known(_ posterURL: String?) -> Colors? {
+        guard let url = posterURL.flatMap(URL.init(string:)),
+              let swatches = PosterPaletteStore.homePicture.known(server: nil, url: url) else { return nil }
+        return colors(from: swatches)
+    }
+
+    static func load(_ posterURL: String?) async -> Colors? {
         guard let url = posterURL.flatMap(URL.init(string:)),
               let swatches = await PosterPaletteStore.homePicture.swatches(server: nil, url: url) else { return nil }
-        return HomeTitleTint.color(from: swatches)?.color
+        return colors(from: swatches)
+    }
+
+    private static func colors(from swatches: [PosterSwatch]) -> Colors? {
+        guard let title = HomeTitleTint.color(from: swatches) else { return nil }
+        return Colors(title: title.color, second: (HomeTitleTint.dateColor(from: swatches) ?? title).color)
     }
 }
 
-/// The header (the average, big, in the title's color) and the glowing curve under it, with the average as a hairline
-/// and the people who rated as a row of faces under the box.
+/// The header (the average, big, in the title's color, with stars beside it in the poster's second color) and the
+/// glowing curve under it, with the average as a hairline and the people who rated as a row of faces under the box.
 struct RatingsGlowChart: View {
     typealias G = RatingsChartGeometry
 
@@ -245,6 +270,9 @@ struct RatingsGlowChart: View {
     let totalCount: Int
     /// The title's color; white when the poster gave none.
     let tint: Color?
+    /// The poster's second color (Home's date color), for the stars and the average's hairline; white when the poster
+    /// gave none.
+    let secondTint: Color?
     let people: [RatingChartPerson]
     /// "96 reviews", or nil when there are none to open.
     let reviewsTitle: String?
@@ -253,11 +281,11 @@ struct RatingsGlowChart: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
-    /// The number's line, then "N reviews ›" under it; just the number's line when there are no reviews.
-    private var headerHeight: CGFloat { reviewsTitle == nil ? 58 : 80 }
+    /// The number's line, then the count's line under it ("1,284 👁 · 96 reviews ›").
+    private static let headerHeight: CGFloat = 80
     /// The number's own line box: its top sits 10 pt down (20 pt from the box's top).
     private static let numberHeight: CGFloat = 48
-    /// The reviews line under the number (its text; the button's tap area reaches past it).
+    /// The count's line under the number (its text; the reviews button's tap area reaches past it).
     private static let reviewsLineHeight: CGFloat = 18
     /// Air above the header, so the box's top edge sits 2 pt above the number's line.
     private static let topInset: CGFloat = 8
@@ -281,13 +309,14 @@ struct RatingsGlowChart: View {
     }()
 
     private var color: Color { tint ?? .white }
+    private var secondColor: Color { secondTint ?? .white }
 
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
             ZStack(alignment: .topLeading) {
                 innerLightBox
-                    .frame(width: width - 2, height: G.floorY + Self.topInset + headerHeight - Self.boxTop)
+                    .frame(width: width - 2, height: G.floorY + Self.topInset + Self.headerHeight - Self.boxTop)
                     .offset(x: 1, y: Self.boxTop)
                 VStack(alignment: .leading, spacing: 0) {
                     header
@@ -298,7 +327,7 @@ struct RatingsGlowChart: View {
                 .accessibilityElement(children: .contain)
             }
         }
-        .frame(height: Self.topInset + headerHeight + G.height + (people.isEmpty ? 0 : G.facesRowHeight))
+        .frame(height: Self.topInset + Self.headerHeight + G.height + (people.isEmpty ? 0 : G.facesRowHeight))
         // Friends load after the chart: the row's room opens smoothly instead of shoving the page.
         .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: people.isEmpty)
         .onAppear {
@@ -357,6 +386,12 @@ struct RatingsGlowChart: View {
                     // Softer than Home's title glow.
                     .shadow(color: color.opacity(0.24), radius: 6)
                     .shadow(color: color.opacity(0.14), radius: 14)
+                AverageStars(fills: G.starFills(average: average), color: secondColor)
+            }
+            .lineLimit(1)
+            .accessibilityHidden(true)
+
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(totalCount.formatted())
                         .font(.system(size: 13, weight: .semibold))
@@ -366,33 +401,39 @@ struct RatingsGlowChart: View {
                         .font(.system(size: 8, weight: .semibold))
                 }
                 .foregroundStyle(.white.opacity(0.62))
+                .accessibilityHidden(true)
+
+                if let reviewsTitle {
+                    Text("·")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.38))
+                        .padding(.horizontal, 7)
+                        .accessibilityHidden(true)
+                    Button(action: onSeeReviews) {
+                        HStack(spacing: 5) {
+                            Text(reviewsTitle)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .heavy))
+                        }
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(.white.opacity(0.82))
+                        .frame(height: Self.reviewsLineHeight)
+                        // A 44 pt tap area around the line, taken back out so the text sits right under the number.
+                        .padding(.vertical, 13)
+                        .padding(.trailing, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, -13)
+                    .accessibilityHint("Opens every written review")
+                }
             }
             .lineLimit(1)
-            .accessibilityHidden(true)
-
-            if let reviewsTitle {
-                Button(action: onSeeReviews) {
-                    HStack(spacing: 5) {
-                        Text(reviewsTitle)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .heavy))
-                    }
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.82))
-                    .frame(height: Self.reviewsLineHeight)
-                    // A 44 pt tap area around the line, taken back out so the text sits right under the number.
-                    .padding(.vertical, 13)
-                    .padding(.trailing, 12)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.vertical, -13)
-                .accessibilityHint("Opens every written review")
-            }
+            .frame(height: Self.reviewsLineHeight)
         }
         .padding(.top, 10)
         .padding(.horizontal, Self.sideInset)
-        .frame(maxWidth: .infinity, minHeight: headerHeight, maxHeight: headerHeight, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: Self.headerHeight, maxHeight: Self.headerHeight, alignment: .topLeading)
     }
 
     // MARK: Chart
@@ -416,7 +457,8 @@ struct RatingsGlowChart: View {
         )
     }
 
-    /// The average: a 1 pt line from the top to the floor, brightest where it crosses the curve and clear at both ends.
+    /// The average: a 1 pt line in the second color from the top to the floor, brightest where it crosses the curve and
+    /// clear at both ends.
     private func hairline(x: CGFloat, crossing: CGFloat, animate: Bool) -> some View {
         let length = G.floorY - G.hairlineTop
         let location = min(max((crossing - G.hairlineTop) / length, 0.1), 0.9)
@@ -424,17 +466,17 @@ struct RatingsGlowChart: View {
             .fill(
                 LinearGradient(
                     stops: [
-                        .init(color: color.opacity(0), location: 0),
-                        .init(color: color.opacity(0.95), location: location),
-                        .init(color: color.opacity(0), location: 1),
+                        .init(color: secondColor.opacity(0), location: 0),
+                        .init(color: secondColor.opacity(0.95), location: location),
+                        .init(color: secondColor.opacity(0), location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
             .frame(width: 1, height: length)
-            .shadow(color: color.opacity(0.6), radius: 3)
-            .shadow(color: color.opacity(0.35), radius: 10)
+            .shadow(color: secondColor.opacity(0.6), radius: 3)
+            .shadow(color: secondColor.opacity(0.35), radius: 10)
             .opacity(appeared ? 1 : 0)
             .animation(animate ? .easeInOut(duration: 0.6).delay(1.4) : nil, value: appeared)
             .position(x: x, y: G.hairlineTop + length / 2)
@@ -476,6 +518,37 @@ struct RatingsGlowChart: View {
                 }
             }
             .modifier(YourGlow(isYou: person.isYou))
+    }
+}
+
+/// The average as stars beside the number: the app's star mark (as on the friends' cards), filled from the left to
+/// each star's share (`RatingsChartGeometry.starFills`), with nothing drawn for the rest, in `color` with the marks' glow.
+private struct AverageStars: View {
+    let fills: [Double]
+    let color: Color
+
+    private static let size: CGFloat = 12
+
+    var body: some View {
+        // The marks' glow, as `FeedMarkImages` bakes it: the stars once under each layer.
+        ZStack {
+            ForEach(Array(FeedMarkImages.glowLayers(for: .dark, size: Self.size).enumerated()), id: \.offset) { _, layer in
+                stars.shadow(color: color.opacity(layer.opacity), radius: layer.radius)
+            }
+        }
+    }
+
+    private var stars: some View {
+        HStack(spacing: 1.5) {
+            ForEach(Array(fills.enumerated()), id: \.offset) { _, fill in
+                Image(systemName: FeedMark.star.symbolName)
+                    .font(.system(size: Self.size, weight: .bold))
+                    .foregroundStyle(color)
+                    .mask(alignment: .leading) {
+                        Rectangle().scale(x: fill, y: 1, anchor: .leading)
+                    }
+            }
+        }
     }
 }
 

@@ -8359,13 +8359,14 @@ private func aniListDestination(_ rawValue: String?) -> URL? {
 struct SpineRatingDistributionSection: View {
     let community: CommunityStats?
     let reviewCount: Int
-    /// The poster the page shows: the number and the curve take the title's color from it, as Home's title does.
+    /// The poster the page shows: the number and the curve take the title's color from it, as Home's title does, and the
+    /// stars and the average's hairline its second color, as Home's date does.
     var posterURL: String?
     /// You and the friends who rated, drawn as a row of faces under the box.
     var people: [RatingChartPerson] = []
     let onSeeReviews: () -> Void
 
-    @State private var tint: Color?
+    @State private var tint: MediaPageTint.Colors?
 
     init(
         community: CommunityStats?,
@@ -8397,7 +8398,8 @@ struct SpineRatingDistributionSection: View {
                     counts: counts,
                     average: average,
                     totalCount: community?.ratingCount ?? counts.reduce(0, +),
-                    tint: tint,
+                    tint: tint?.title,
+                    secondTint: tint?.second,
                     people: people,
                     reviewsTitle: reviewCount > 0 ? reviewsButtonTitle : nil,
                     onSeeReviews: onSeeReviews
