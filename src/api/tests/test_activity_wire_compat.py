@@ -71,7 +71,7 @@ LOG_OBJECT = {
     # AC-10 adds a log's bar beside them; installed builds ignore it.
     "bar": (dict, NONE),
 }
-VIEWER ={"can_view": bool, "has_liked": bool}
+VIEWER = {"can_view": bool, "has_liked": bool}
 LATEST_KEYS = {"id": int, "previous": dict, "current": dict, "created_at": str}
 SNAPSHOT_KEYS = {"kind", "value", "max", "unit", "journey_id"}
 
