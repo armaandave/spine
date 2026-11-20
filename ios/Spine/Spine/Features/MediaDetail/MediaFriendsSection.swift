@@ -112,7 +112,7 @@ struct MediaFriendsSection: View {
         self.friends = friends
         self.onSeeAll = onSeeAll
         self.onSelect = onSelect
-        _tint = State(initialValue: MediaPageTint.known(posterURL)?.title)
+        _tint = State(initialValue: MediaPageTint.known(posterURL))
     }
 
     /// From three friends the rail needs a swipe to see them all, so the header opens the full list.
@@ -142,9 +142,9 @@ struct MediaFriendsSection: View {
             // The page is always dark; light-mode glass would wash out the white text.
             .environment(\.colorScheme, .dark)
             .task(id: posterURL) {
-                tint = MediaPageTint.known(posterURL)?.title
+                tint = MediaPageTint.known(posterURL)
                 if tint == nil {
-                    let loaded = await MediaPageTint.load(posterURL)?.title
+                    let loaded = await MediaPageTint.load(posterURL)
                     withAnimation(.easeInOut(duration: 0.4)) { tint = loaded }
                 }
             }
