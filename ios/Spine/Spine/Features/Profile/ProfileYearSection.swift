@@ -188,10 +188,11 @@ enum ProfileYearWall {
     static let fadeBelow: CGFloat = 56
     /// The wall between the menu and the plate.
     static let above: CGFloat = 120
-    /// The wall under the plate, inside the section.
-    static let below: CGFloat = 200
     /// ProfileView's space under its last section, which the wall runs on into.
     static let pageBottom: CGFloat = 100
+    /// The wall under the plate, inside the section: the plate sits centered on the wall, with as much of it below
+    /// (down to the tab bar, when the page is scrolled to its end) as above (up to the Stats row).
+    static var below: CGFloat { above + pageBottom }
     /// Drawn past the page's end, under the tab bar, down to the screen's bottom edge.
     static let bleed: CGFloat = 140
     /// The fade out starts this far above the plate's bottom edge.
