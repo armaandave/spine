@@ -16,6 +16,10 @@ nonisolated enum BlurredArt {
         case glow
         /// Behind a post page.
         case page
+        /// Behind a list's glass plate, under its backdrop: the backdrop's colors, bright enough to light the glass.
+        case plate
+        /// The top of a list with no backdrop: its first item as the backdrop. The page darkens it with a wash.
+        case listTop
 
         /// The thumbnail Nuke decodes, in points.
         var thumbnailSize: CGSize {
@@ -24,6 +28,8 @@ nonisolated enum BlurredArt {
             case .tile: CGSize(width: 40, height: 40)
             case .glow: CGSize(width: 64, height: 77)
             case .page: CGSize(width: 54, height: 93)
+            case .plate: CGSize(width: 64, height: 43)
+            case .listTop: CGSize(width: 64, height: 64)
             }
         }
 
@@ -33,7 +39,7 @@ nonisolated enum BlurredArt {
         var bakedAspect: CGFloat? {
             switch self {
             case .card: 3.1
-            case .tile, .glow, .page: nil
+            case .tile, .glow, .page, .plate, .listTop: nil
             }
         }
 
@@ -45,6 +51,8 @@ nonisolated enum BlurredArt {
             case .tile: 14
             case .glow: 16
             case .page: 15
+            case .plate: 14
+            case .listTop: 14
             }
         }
 
@@ -55,6 +63,8 @@ nonisolated enum BlurredArt {
             case .tile: 1.0
             case .glow: 1.75
             case .page: 1.6
+            case .plate: 1.25
+            case .listTop: 1.18
             }
         }
 
@@ -65,6 +75,8 @@ nonisolated enum BlurredArt {
             case .tile: 0.5
             case .glow: 0.82
             case .page: 0.6
+            case .plate: 0.85
+            case .listTop: 1
             }
         }
 
