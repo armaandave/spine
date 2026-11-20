@@ -1,11 +1,13 @@
 import Foundation
 
-/// A game's + menu (GM-009 to GM-012), worked out from its state the way `ReadingMenu` works out a book's: the rows
-/// you can use, the current status ticked, and a line for Remove from Library when it can't be used yet. Planning is
-/// the rail's bookmark, so it isn't here.
+/// A game's + menu (GM-009 to GM-012), worked out from its state the way `ReadingMenu` works out a book's: Planning,
+/// Playing (Resume when Paused, Replay once Completed), Paused, Dropped, Log, Update Progress, then Remove from Library.
+/// Any shelf can be picked directly. Only rows you can use are listed, and the current status, ticked; a line under the
+/// menu says why Planning or Remove can't be used.
 nonisolated struct GameMenu: Equatable {
     nonisolated struct Row: Equatable, Identifiable {
         enum Command: Equatable {
+            case planning
             /// Starts a playthrough: Playing, or Replay on a finished game.
             case playing
             case resume
@@ -26,20 +28,25 @@ nonisolated struct GameMenu: Equatable {
     }
 
     let rows: [Row]
-    /// Remove from Library is listed for a game in the library past Planning (the bookmark takes a planned one out)
-    /// when nothing blocks it.
+    /// Remove from Library is listed for a game in the library when nothing blocks it.
     let offersRemoval: Bool
-    /// A line under the menu for a row people look for that can't be used yet.
+    /// Lines under the menu for a row people look for that can't be used now: Planning during a playthrough, Remove
+    /// from Library while playthroughs or logs hold the game.
     let notes: [String]
     /// The shelf it sits on: "Playing", "Completed", "Not in your library".
     let shelf: String
 
     init(status: String?, game: GameTrackingState?) {
+        // A playthrough in progress or paused: Planning waits until it's finished or dropped (GM-011).
         let isLive = game?.hasLivePlaythrough == true
-        // Paused and Dropped wait until it's started: a status past Planning, or a playthrough on record.
-        let started = (status != nil && status != "Planning") || game?.currentPlaythrough != nil
-
         var rows: [Row] = []
+        var notes: [String] = []
+
+        if isLive {
+            notes.append("Finish or drop this playthrough to move it to Planning.")
+        } else {
+            rows.append(Row(title: "Planning", systemImage: "bookmark", command: .planning, isSelected: status == "Planning"))
+        }
         if status == "Completed" {
             rows.append(Row(title: "Replay", systemImage: "arrow.counterclockwise", command: .playing))
         } else if status == "Paused" {
@@ -48,21 +55,35 @@ nonisolated struct GameMenu: Equatable {
             let playing = status == "In progress" || game?.hasPlayingPlaythrough == true
             rows.append(Row(title: "Playing", systemImage: "play.fill", command: .playing, isSelected: playing))
         }
-        if started {
-            rows.append(Row(title: "Paused", systemImage: "pause.fill", command: .paused, isSelected: status == "Paused"))
-            rows.append(Row(title: "Dropped", systemImage: "xmark", command: .dropped(asks: isLive), isSelected: status == "Dropped"))
-        }
+        rows.append(Row(title: "Paused", systemImage: "pause.fill", command: .paused, isSelected: status == "Paused"))
+        rows.append(Row(title: "Dropped", systemImage: "xmark", command: .dropped(asks: isLive), isSelected: status == "Dropped"))
         rows.append(Row(title: "Log", systemImage: "square.and.pencil", command: .log))
         if game?.canUpdateProgress == true {
             rows.append(Row(title: "Update Progress", systemImage: "slider.horizontal.3", command: .updateProgress))
         }
         self.rows = rows
 
-        let pastPlanning = status != nil && status != "Planning"
         let canRemove = game?.canRemoveTracking != false
-        offersRemoval = pastPlanning && canRemove
-        notes = pastPlanning && !canRemove ? ["To remove this game, delete its playthroughs and logs first."] : []
+        offersRemoval = status != nil && canRemove
+        if status != nil, !canRemove {
+            notes.append("To remove this game, delete its playthroughs and logs first.")
+        }
+        self.notes = notes
         shelf = status.map { $0 == "In progress" ? "Playing" : $0 } ?? "Not in your library"
+    }
+}
+
+/// The rail's slot after the eye, the same on every type: the stars once the title is finished or rated, else the
+/// Planning bookmark while it can be planned, else nothing. It's one slot, so nothing slides in or out as a title is
+/// watched, unwatched or liked.
+nonisolated enum RailOpinionSlot: Equatable {
+    case stars
+    case bookmark
+    case none
+
+    static func make(finished: Bool, rated: Bool, bookmark: PlanningBookmark) -> RailOpinionSlot {
+        if finished || rated { return .stars }
+        return bookmark == .hidden ? .none : .bookmark
     }
 }
 

@@ -86,7 +86,7 @@ A show tracked under both TV and anime stays two separate things, and Spine does
 ### AN-002: A single works like a movie
 
 A single has no episode rows, no up next, no earlier-episodes question and no number anywhere.
-It has the eye, stars, the heart, the Planning bookmark (TV-006), and a + menu with Log and Remove from Library.
+It has the eye, stars, the heart, the Planning bookmark (TV-006), and a + menu with Planning, Log and Remove from Library.
 Watching, Pause and Drop are refused with a reason, and a webhook's play does nothing.
 
 - The eye and direct stars or a heart mark it watched, undated, and it moves to Completed.

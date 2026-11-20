@@ -3058,6 +3058,17 @@ private struct MediaDetailPageView: View {
     /// artwork this title's source has choices for.
     private func moreMenu(_ detail: MediaDetail) -> some View {
         Menu {
+            let bookmark = PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer)
+            if bookmark != .hidden {
+                Section {
+                    Button(
+                        bookmark == .remove ? "Remove from Planning" : "Add to Planning",
+                        systemImage: bookmark == .remove ? "bookmark.fill" : "bookmark"
+                    ) {
+                        choose { planningAction(for: detail) }
+                    }
+                }
+            }
             let season = parentSeasonRef(detail)
             let show = parentTVRef(detail)
             if season != nil || show != nil {
@@ -3651,12 +3662,17 @@ private struct MediaDetailPageView: View {
         let isEpisode = detail.ref.mediaType == "episode"
         let episodeSteps = isEpisode ? tvEpisodeRatingSteps() : nil
         let unavailableReason = isEpisode ? nil : tvRatingUnavailableReason()
-        let planning = planningButton(detail)
+        let rated = isEpisode ? (episodeSteps ?? 0) > 0 : (viewModel.viewer?.rating?.ratingHalfSteps ?? 0) > 0
+        let slot = RailOpinionSlot.make(
+            finished: isEyeCompleted(detail),
+            rated: rated,
+            bookmark: PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer)
+        )
         return ActionRail(
             ratingPicker: $ratingPicker,
             isLiked: viewModel.viewer?.hasLiked ?? false,
             showsEye: true,
-            showsRating: true,
+            showsRating: slot == .stars,
             offersRatingAfterBaseAction: false,
             trackLabel: tvTrackLabel(detail),
             eyeLabel: tvEyeLabel(detail),
@@ -3667,8 +3683,7 @@ private struct MediaDetailPageView: View {
             onRatingTap: isEpisode
                 ? { openTVComposer(ratingSteps: episodeSteps) }
                 : unavailableReason.map { reason in { viewModel.tvNotice = reason } },
-            center: planning,
-            slotWidth: Self.railSlotWidth(buttonCount: planning == nil ? 4 : 5),
+            planning: slot == .bookmark ? planningButton(detail) : nil,
             onTrack: { trackAction(for: detail) },
             onLike: { likeAction(for: detail) },
             onEye: { eyeAction(for: detail) },
@@ -3711,11 +3726,6 @@ private struct MediaDetailPageView: View {
         }
     }
 
-    /// Five buttons sit a little closer, as on Home's Trending rail, so the rail clears the Home and Search buttons.
-    private static func railSlotWidth(buttonCount: Int) -> CGFloat {
-        buttonCount >= 5 ? 44 : ActionRail.buttonSize
-    }
-
     private func tvTrackLabel(_ detail: MediaDetail) -> String {
         switch detail.ref.mediaType {
         case "anime": "Track anime"
@@ -3727,15 +3737,17 @@ private struct MediaDetailPageView: View {
 
     private func standardActionRail(_ detail: MediaDetail) -> some View {
         let usesQuickActions = usesBookGameActions(detail)
-        let showsRating = (detail.ref.isSingleWeight && isEyeCompleted(detail)) || usesQuickActions
-        // A movie's or an album's bookmark sits where its stars appear once it's watched, so its rail stays four wide.
-        let planning = planningButton(detail)
+        let slot = RailOpinionSlot.make(
+            finished: isEyeCompleted(detail),
+            rated: (viewModel.viewer?.rating?.ratingHalfSteps ?? 0) > 0,
+            bookmark: PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer)
+        )
 
         return ActionRail(
             ratingPicker: $ratingPicker,
             isLiked: viewModel.viewer?.hasLiked ?? false,
             showsEye: true,
-            showsRating: showsRating,
+            showsRating: slot == .stars,
             offersRatingAfterBaseAction: detail.ref.isSingleWeight
                 || (detail.ref.readsLikeBook && bookState(detail)?.hasLiveJourney != true)
                 || (detail.ref.mediaType == "game" && gameState(detail)?.hasLivePlaythrough != true),
@@ -3747,8 +3759,7 @@ private struct MediaDetailPageView: View {
                 : (usesQuickActions ? bookGameCopy(for: detail.ref.mediaType).finished : nil),
             isEyeSelected: isEyeCompleted(detail),
             isEyeLoading: viewModel.confirmingEyeWrite,
-            center: planning,
-            slotWidth: Self.railSlotWidth(buttonCount: 3 + (showsRating ? 1 : 0) + (planning == nil ? 0 : 1)),
+            planning: slot == .bookmark ? planningButton(detail) : nil,
             onTrack: { trackAction(for: detail) },
             onLike: { likeAction(for: detail) },
             onEye: { eyeAction(for: detail) },
@@ -5557,7 +5568,7 @@ private struct BookGameActionSheet: View {
     }
 
     /// The same list as the game sheet, sized to its rows: what you can do, the current status ticked, the shelf under
-    /// the title, and a line under the list when Remove from Library can't be used yet.
+    /// the title, and a line under the list when Planning or Remove from Library can't be used.
     private var bookActions: some View {
         let menu = ReadingMenu(mediaType: mediaType, status: shown.status, book: shown.bookState)
         return NavigationStack {
@@ -5631,6 +5642,7 @@ private struct BookGameActionSheet: View {
 
     private func perform(_ command: ReadingMenu.Row.Command) {
         switch command {
+        case .planning: commit { onAction(.planning) }
         case .reading, .resume: commit { onAction(.currently) }
         case .keepReading: commit { onReadingAction("keep_reading") }
         case .reread: commit { onReadingAction("reread") }

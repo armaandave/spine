@@ -895,7 +895,8 @@ final class AnimeTrackingTests: XCTestCase {
         anime.availableActions = ["pause", "drop", "log", "remove", "rate"]
         anime.actionReasons = ["planning": "You've started this anime. Pause or drop it instead."]
         var menu = TVTrackingPresentation.animeMenu(for: anime)
-        XCTAssertEqual(menu.items.map(\.key), ["watching", "pause", "drop", "log", "remove"], "Planning is the rail's bookmark")
+        XCTAssertEqual(menu.items.map(\.key), ["watching", "pause", "drop", "log", "remove"])
+        XCTAssertEqual(menu.notes.count, 1, "A started anime can't go back to Planning, and a line says so")
         XCTAssertTrue(menu.items[0].isSelected)
         XCTAssertEqual(menu.items[2].command, .confirmDrop)
         XCTAssertEqual(menu.items[4].command, .confirmRemove)
@@ -922,16 +923,16 @@ final class AnimeTrackingTests: XCTestCase {
         anime.actionReasons = ["rewatch": "You're already rewatching this."]
         XCTAssertEqual(TVTrackingPresentation.animeMenu(for: anime).items.map(\.key), ["pause", "drop", "log", "stop_rewatch"])
 
-        // Not in the library and not started: no Paused, Dropped or Remove.
+        // Not in the library: every shelf can be picked, and there's nothing to remove.
         let untracked = AnimeState(availableActions: ["watching", "planning", "pause", "drop", "log"])
-        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: untracked).items.map(\.key), ["watching", "log"])
+        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: untracked).items.map(\.key),
+                       ["planning", "watching", "pause", "drop", "log"])
     }
 
     func testAN002ASingleHasLogAndRemoveAndNoNumberAnywhere() {
         var single = AnimeState(inLibrary: true, status: "Completed", finished: true, single: true, watchedCount: 1, airedCount: 1, removeCount: 1)
         single.availableActions = ["planning", "log", "remove", "rate"]
-        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: single).items.map(\.key), ["log", "remove"],
-                       "Planning is the rail's bookmark")
+        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: single).items.map(\.key), ["planning", "log", "remove"])
         XCTAssertEqual(AnimeTrackingPresentation.pageLines(for: single), [])
         XCTAssertNil(AnimeTrackingPresentation.gridBadge(for: single))
         XCTAssertNil(AnimeTrackingPresentation.cardLine(for: single))

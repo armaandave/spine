@@ -211,37 +211,44 @@ final class TVTrackingPresentationTests: XCTestCase {
         let tv = try JSONDecoder.api.decode(TVShowState.self, from: Data(TVTrackingModelsTests.showDetailJSON.utf8))
         let menu = TVTrackingPresentation.showMenu(for: tv)
         XCTAssertEqual(menu.items.map(\.key), ["watching", "pause", "drop", "log", "remove"],
-                       "Planning is the rail's bookmark, and a row that can't be used isn't listed")
+                       "A row that can't be used isn't listed")
         XCTAssertTrue(menu.items.first?.isSelected == true, "The current status is ticked, not offered again")
         XCTAssertEqual(menu.items.first { $0.key == "drop" }?.command, .confirmDrop, "Drop asks first (TV-007).")
         XCTAssertEqual(menu.items.first { $0.key == "remove" }?.command, .confirmRemove)
         XCTAssertEqual(menu.items.first { $0.key == "log" }?.command, .log)
         XCTAssertTrue(menu.items.dropFirst().allSatisfy(\.isAvailable))
-        XCTAssertEqual(menu.notes, [])
+        XCTAssertEqual(menu.notes.count, 1, "A started show can't go back to Planning, and a line under the menu says so")
         XCTAssertEqual(menu.opening, .menu)
     }
 
-    func testTV005PausedAndDroppedWaitUntilTheShowIsStarted() {
+    // Any shelf can be picked before starting, so a show watched before Spine can go straight to Dropped. Only a show
+    // with nothing aired waits: it can be planned, and a line under the menu says why the rest isn't there.
+    func testTV005EveryShelfBeforeStartingExceptOnAShowNotOutYet() {
         let untracked = TVShowState(availableActions: ["watching", "planning", "pause", "drop", "log"])
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: untracked).items.map(\.key), ["watching", "log"])
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: untracked).items.map(\.key),
+                       ["planning", "watching", "pause", "drop", "log"])
 
-        // Paused before starting stays ticked and can be picked back up; Dropped waits for a start.
         let pausedFirst = TVShowState(inLibrary: true, status: "Paused", choice: "Paused", selectedAction: "pause",
                                       availableActions: ["watching", "resume", "planning", "drop", "log", "remove"])
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: pausedFirst).items.map(\.key), ["resume", "pause", "log", "remove"])
-    }
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: pausedFirst).items.map(\.key),
+                       ["planning", "resume", "pause", "drop", "log", "remove"])
 
-    func testTV005NothingToDoGivesANoticeAndLogAloneOpensTheComposer() {
         let upcoming = TVShowState(availableActions: ["planning", "pause", "drop"],
                                    actionReasons: ["watching": "Nothing has aired yet.", "log": "Nothing has aired yet."])
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: upcoming).opening, .notice("Nothing has aired yet."))
+        let upcomingMenu = TVTrackingPresentation.showMenu(for: upcoming)
+        XCTAssertEqual(upcomingMenu.items.map(\.key), ["planning"])
+        XCTAssertEqual(upcomingMenu.notes.count, 1)
+        XCTAssertEqual(upcomingMenu.opening, .menu)
 
-        // Planned and not out yet: the bookmark takes it back out, so + has nothing to offer.
         let planned = TVShowState(inLibrary: true, status: "Planning", choice: "Planning", selectedAction: "planning",
                                   availableActions: ["pause", "drop", "remove"],
                                   actionReasons: ["watching": "Nothing has aired yet.", "log": "Nothing has aired yet."])
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: planned).opening, .notice("Nothing has aired yet."))
+        let plannedMenu = TVTrackingPresentation.showMenu(for: planned)
+        XCTAssertEqual(plannedMenu.items.map(\.key), ["planning", "remove"])
+        XCTAssertTrue(plannedMenu.items[0].isSelected)
+    }
 
+    func testTV005NothingToDoGivesANoticeAndLogAloneOpensTheComposer() {
         let airing = TVSeasonState(seasonNumber: 3, started: true, state: .airing, availableActions: ["log_season"])
         XCTAssertEqual(TVTrackingPresentation.seasonMenu(for: airing).opening, .log, "No one-row menu")
         let unaired = TVSeasonState(seasonNumber: 4, state: .unaired, actionReasons: ["log_season": "Nothing has aired yet."])
@@ -312,10 +319,10 @@ final class TVTrackingPresentationTests: XCTestCase {
         XCTAssertFalse(TVTrackingPresentation.showMenu(for: offered).items.contains { $0.key == "remove" })
         XCTAssertEqual(TVTrackingPresentation.showMenu(for: offered).notes, [])
 
-        // Only planned: the bookmark takes it back out, so + doesn't offer Remove.
+        // Only planned: still in the library, so it can be removed.
         let planned = TVShowState(inLibrary: true, status: "Planning", selectedAction: "planning",
                                   availableActions: ["watching", "pause", "drop", "log", "remove"])
-        XCTAssertFalse(TVTrackingPresentation.showMenu(for: planned).items.contains { $0.key == "remove" })
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: planned).items.last?.command, .confirmRemove)
 
         let tracked = TVShowState(inLibrary: true, status: "In progress", selectedAction: "watching", started: true,
                                   availableActions: ["pause", "drop", "log", "remove"])

@@ -1,7 +1,7 @@
 import XCTest
 @testable import Spine
 
-/// A game's + menu and the rail's Planning bookmark: what each state offers.
+/// A game's + menu, the rail's Planning bookmark and the slot it shares with the stars: what each state offers.
 @MainActor
 final class TrackMenuPresentationTests: XCTestCase {
     private func game(_ status: String, canRemove: Bool = true) -> GameTrackingState {
@@ -18,15 +18,15 @@ final class TrackMenuPresentationTests: XCTestCase {
         MediaRef(itemId: nil, source: "tmdb", mediaType: mediaType, mediaId: "1", seasonNumber: season, episodeNumber: nil)
     }
 
-    // Before a playthrough starts the menu is Playing and Log: Paused and Dropped wait for a start, Planning is the
-    // rail's bookmark, and the bookmark takes a planned game back out.
+    // Before a playthrough starts any shelf can be picked, so a game played before Spine can go straight to Dropped.
     func testGameMenuBeforeItStarts() {
         let untracked = GameMenu(status: nil, game: nil)
-        XCTAssertEqual(untracked.rows.map(\.command), [.playing, .log])
-        XCTAssertFalse(untracked.offersRemoval)
+        XCTAssertEqual(untracked.rows.map(\.command), [.planning, .playing, .paused, .dropped(asks: false), .log])
+        XCTAssertFalse(untracked.offersRemoval, "Nothing to remove")
         let planned = GameMenu(status: "Planning", game: .untracked)
-        XCTAssertEqual(planned.rows.map(\.command), [.playing, .log])
-        XCTAssertFalse(planned.offersRemoval)
+        XCTAssertEqual(planned.rows.map(\.command), [.planning, .playing, .paused, .dropped(asks: false), .log])
+        XCTAssertEqual(planned.rows.filter(\.isSelected).map(\.command), [.planning])
+        XCTAssertTrue(planned.offersRemoval)
     }
 
     func testGameMenuDuringAPlaythrough() {
@@ -34,7 +34,7 @@ final class TrackMenuPresentationTests: XCTestCase {
         XCTAssertEqual(playing.rows.map(\.command), [.playing, .paused, .dropped(asks: true), .log, .updateProgress])
         XCTAssertEqual(playing.rows.filter(\.isSelected).map(\.command), [.playing])
         XCTAssertFalse(playing.offersRemoval)
-        XCTAssertEqual(playing.notes.count, 1, "A Remove that can't be used is a line under the menu, not a row")
+        XCTAssertEqual(playing.notes.count, 2, "Planning and a Remove that can't be used are lines under the menu, not rows")
 
         let paused = GameMenu(status: "Paused", game: game("Paused", canRemove: false))
         XCTAssertEqual(paused.rows.map(\.command), [.resume, .paused, .dropped(asks: true), .log, .updateProgress])
@@ -43,10 +43,21 @@ final class TrackMenuPresentationTests: XCTestCase {
 
     func testGameMenuOnceFinished() {
         let completed = GameMenu(status: "Completed", game: game("Completed"))
-        XCTAssertEqual(completed.rows.first?.command, .playing, "Replay starts a new playthrough")
+        XCTAssertEqual(completed.rows.map(\.command), [.planning, .playing, .paused, .dropped(asks: false), .log, .updateProgress],
+                       "Replay starts a new playthrough")
         XCTAssertFalse(completed.rows.contains(where: \.isSelected), "Completed has no row; the title says it")
         XCTAssertTrue(completed.offersRemoval)
         XCTAssertEqual(completed.notes, [])
+    }
+
+    // The slot after the eye is the same on every type: the stars once the title is finished or rated, else the bookmark
+    // while it can be planned, else nothing.
+    func testTheRailSlotAfterTheEye() {
+        XCTAssertEqual(RailOpinionSlot.make(finished: false, rated: false, bookmark: .add), .bookmark)
+        XCTAssertEqual(RailOpinionSlot.make(finished: false, rated: false, bookmark: .remove), .bookmark)
+        XCTAssertEqual(RailOpinionSlot.make(finished: true, rated: false, bookmark: .hidden), .stars)
+        XCTAssertEqual(RailOpinionSlot.make(finished: false, rated: true, bookmark: .add), .stars, "A rating stays in view")
+        XCTAssertEqual(RailOpinionSlot.make(finished: false, rated: false, bookmark: .hidden), .none, "Started, unfinished")
     }
 
     // The bookmark shows until the title is started, filled while it's in Planning.

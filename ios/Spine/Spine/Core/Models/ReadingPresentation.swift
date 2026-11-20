@@ -1,11 +1,14 @@
 import Foundation
 
 /// The + menu of a book, a manga or a comic (BK-100, MC-200), worked out from its state as `TVTrackingPresentation`
-/// does a show's: the rows you can use, the current status ticked, and a line for Remove from Library when it can't be
-/// used yet. Planning is the rail's bookmark, so it isn't here.
+/// does a show's: Planning, Reading (Resume when Paused; Keep Reading or Reread once Completed), Paused, Dropped, Log,
+/// Update Progress during a read, then Remove from Library. Any shelf can be picked directly, so a book read before
+/// Spine can go straight to Dropped. Only rows you can use are listed, and the current status, ticked; a line under
+/// the menu says why Planning or Remove can't be used.
 nonisolated struct ReadingMenu: Equatable {
     nonisolated struct Row: Equatable, Identifiable {
         enum Command: Equatable {
+            case planning
             case reading
             case keepReading
             case reread
@@ -27,21 +30,26 @@ nonisolated struct ReadingMenu: Equatable {
     }
 
     let rows: [Row]
-    /// Remove from Library is listed for a title in the library past Planning (the bookmark takes a planned one out)
-    /// when nothing blocks it.
+    /// Remove from Library is listed for a title in the library when nothing blocks it.
     let offersRemoval: Bool
-    /// A line under the menu for a row people look for that can't be used yet.
+    /// Lines under the menu for a row people look for that can't be used now: Planning during a read, Remove from
+    /// Library while reads or logs hold the title.
     let notes: [String]
     /// The shelf it sits on: "Reading", "Completed", "Not in your library".
     let shelf: String
 
     init(mediaType: String, status: String?, book: BookTrackingState?) {
         let isSeries = ["manga", "comic"].contains(mediaType)
+        // A read in progress or paused: Planning waits until it's finished or dropped (BK-100).
         let isLive = book?.hasLiveJourney == true
-        // Paused and Dropped wait until it's started: a status past Planning, or a read on record.
-        let started = (status != nil && status != "Planning") || book?.currentJourney != nil
-
         var rows: [Row] = []
+        var notes: [String] = []
+
+        if isLive {
+            notes.append("Finish or drop this read to move it to Planning.")
+        } else {
+            rows.append(Row(title: "Planning", systemImage: "bookmark", command: .planning, isSelected: status == "Planning"))
+        }
         if status == "Completed" {
             // Picking it back up says how: from the old place when a series has more out, or from the top (MC-200).
             if isSeries, book?.offersKeepReading == true {
@@ -54,22 +62,20 @@ nonisolated struct ReadingMenu: Equatable {
         } else {
             rows.append(Row(title: "Reading", systemImage: "book.pages", command: .reading, isSelected: status == "In progress"))
         }
-        if started {
-            rows.append(Row(title: "Paused", systemImage: "pause.fill", command: .paused, isSelected: status == "Paused"))
-            rows.append(Row(title: "Dropped", systemImage: "xmark", command: .dropped(asks: isLive), isSelected: status == "Dropped"))
-        }
+        rows.append(Row(title: "Paused", systemImage: "pause.fill", command: .paused, isSelected: status == "Paused"))
+        rows.append(Row(title: "Dropped", systemImage: "xmark", command: .dropped(asks: isLive), isSelected: status == "Dropped"))
         rows.append(Row(title: "Log", systemImage: "square.and.pencil", command: .log))
         if isLive {
             rows.append(Row(title: "Update Progress", systemImage: "slider.horizontal.3", command: .updateProgress))
         }
         self.rows = rows
 
-        let pastPlanning = status != nil && status != "Planning"
         let canRemove = book?.canRemoveTracking != false
-        offersRemoval = pastPlanning && canRemove
-        notes = pastPlanning && !canRemove
-            ? ["To remove this \(isSeries ? "series" : "book"), delete its reads and logs first."]
-            : []
+        offersRemoval = status != nil && canRemove
+        if status != nil, !canRemove {
+            notes.append("To remove this \(isSeries ? "series" : "book"), delete its reads and logs first.")
+        }
+        self.notes = notes
         shelf = status.map { $0 == "In progress" ? MediaRef.inProgressWord(mediaType: mediaType) : $0 }
             ?? "Not in your library"
     }

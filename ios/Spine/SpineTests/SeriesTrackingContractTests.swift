@@ -583,16 +583,16 @@ final class SeriesTrackingContractTests: XCTestCase {
         )
     }
 
-    // BK-100: before a read starts, the menu is Reading and Log. Paused and Dropped wait for a start, Planning is the
-    // rail's bookmark, and a planned title is taken out by the bookmark, not Remove.
+    // BK-100: before a read starts any shelf can be picked, so a book read before Spine can go straight to Dropped.
     func testTheMenuBeforeAReadStarts() {
         let untracked = ReadingMenu(mediaType: "manga", status: nil, book: nil)
-        XCTAssertEqual(untracked.rows.map(\.command), [.reading, .log])
-        XCTAssertFalse(untracked.offersRemoval)
+        XCTAssertEqual(untracked.rows.map(\.command), [.planning, .reading, .paused, .dropped(asks: false), .log])
+        XCTAssertFalse(untracked.offersRemoval, "Nothing to remove")
         XCTAssertEqual(untracked.notes, [])
         let planned = ReadingMenu(mediaType: "book", status: "Planning", book: BookTrackingState(canRemoveTracking: true))
-        XCTAssertEqual(planned.rows.map(\.command), [.reading, .log])
-        XCTAssertFalse(planned.offersRemoval)
+        XCTAssertEqual(planned.rows.map(\.command), [.planning, .reading, .paused, .dropped(asks: false), .log])
+        XCTAssertEqual(planned.rows.filter(\.isSelected).map(\.command), [.planning])
+        XCTAssertTrue(planned.offersRemoval)
     }
 
     // BK-100, BK-104: during a read, Reading is ticked, Dropped asks first and Update Progress is on offer.
@@ -600,6 +600,7 @@ final class SeriesTrackingContractTests: XCTestCase {
         let menu = ReadingMenu(mediaType: "comic", status: "In progress", book: live())
         XCTAssertEqual(menu.rows.map(\.command), [.reading, .paused, .dropped(asks: true), .log, .updateProgress])
         XCTAssertEqual(menu.rows.filter(\.isSelected).map(\.command), [.reading])
+        XCTAssertEqual(menu.notes.count, 1, "Planning waits for the read to end, and a line under the menu says so")
     }
 
     // BK-100, BK-303: when Paused, Resume takes Reading's place, as it takes Watching's on a show.
@@ -613,11 +614,11 @@ final class SeriesTrackingContractTests: XCTestCase {
     // book starts again from the top.
     func testTheMenuOfAReadSeries() {
         let more = ReadingMenu(mediaType: "manga", status: "Completed", book: BookTrackingState(offersKeepReading: true))
-        XCTAssertEqual(more.rows.map(\.command), [.keepReading, .reread, .paused, .dropped(asks: false), .log])
+        XCTAssertEqual(more.rows.map(\.command), [.planning, .keepReading, .reread, .paused, .dropped(asks: false), .log])
         let done = ReadingMenu(mediaType: "comic", status: "Completed", book: BookTrackingState(offersKeepReading: false))
-        XCTAssertEqual(done.rows.map(\.command), [.reread, .paused, .dropped(asks: false), .log])
+        XCTAssertEqual(done.rows.map(\.command), [.planning, .reread, .paused, .dropped(asks: false), .log])
         let book = ReadingMenu(mediaType: "book", status: "Completed", book: BookTrackingState())
-        XCTAssertEqual(book.rows.map(\.command), [.reading, .paused, .dropped(asks: false), .log])
+        XCTAssertEqual(book.rows.map(\.command), [.planning, .reading, .paused, .dropped(asks: false), .log])
     }
 
     // BK-002: Remove from Library is offered when nothing blocks it; when something does, a line under the menu says

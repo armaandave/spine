@@ -286,6 +286,7 @@ struct GameActionSheet: View {
 
     private func perform(_ command: GameMenu.Row.Command) {
         switch command {
+        case .planning: commit { onAction(.planning) }
         case .playing, .resume: commit { onAction(.currently) }
         case .paused: commit { onAction(.paused) }
         case .dropped(asks: true): confirmDrop = true

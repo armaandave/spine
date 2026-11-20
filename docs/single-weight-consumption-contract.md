@@ -227,10 +227,16 @@ history as a side effect of removing an item from the library.
 
 A movie or an album has no + menu: + opens the log composer. Planning is a bookmark in the
 rail, in the place the stars take once the title is consumed, so the rail stays four buttons
-wide. Tapping it puts the title in Planning; tapping the filled bookmark takes it back out of
-the library. Marking or logging the title moves it to Completed, and the stars replace the
-bookmark. Every other type has the same bookmark until it's started; theirs sits beside the
-stars (the maintainer's decision of 2026-11-19).
+wide, and a row at the top of the ⋯ menu (Add to Planning, or Remove from Planning once it's
+planned). Tapping the bookmark puts the title in Planning; tapping the filled bookmark takes
+it back out of the library. Marking or logging the title moves it to Completed, and the stars
+replace the bookmark.
+
+Every type shares that slot (the maintainer's decisions of 2026-11-19): the stars show once
+the title is finished or has a rating, the bookmark shows while it can still be planned, and
+a title that's started but unfinished shows neither. The stars never show by default. It's one
+button whose icon changes, so watching, unwatching or hearting a title never slides a button
+in or out. Types with a + menu also list Planning there (TV-005, BK-100, GM-011).
 
 ## Rating laws
 

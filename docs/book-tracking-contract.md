@@ -95,19 +95,21 @@ separate destructive action requiring explicit confirmation.
 The book media page uses the same bottom action rail pattern as movies. The plus
 control opens book actions rather than only a diary composer.
 
-It lists, in this order, only what can be done now:
+It lists, in this order, what can be done now:
 
+- Planning, except during a read (in progress or paused);
 - Reading, or Resume in its place when the book is Paused, or Reread once it's Completed;
-- Paused and Dropped, once the book has been started (a status past Planning, or a read on
-  record);
+- Paused and Dropped, whether or not the book has been started, so a book read before Spine
+  can go straight to either (BK-101);
 - Log;
 - Update Progress, during a read; and
-- Remove from Library, in its own section, for a book past Planning when nothing blocks it.
+- Remove from Library, in its own section, for a book in the library when nothing blocks it.
 
 The current status is ticked, and the line under the menu's title names the shelf. An option
-that can't be used isn't listed. When Remove from Library is blocked, a line under the menu
-says why instead. Planning is the rail's bookmark (SW-013), so it isn't in this menu, and the
-bookmark takes a planned book back out. Mark as Read remains on the eye.
+that can't be used isn't listed. A line under the menu says why when Planning waits for a
+read to be finished or dropped, or when something blocks Remove from Library. The rail's
+bookmark also plans a book until it's started, and takes a planned book back out (SW-013).
+Mark as Read remains on the eye.
 
 ### BK-101: Retrospective status assignment does not invent history
 
