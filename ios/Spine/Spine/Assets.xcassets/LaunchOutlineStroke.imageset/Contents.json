@@ -1,12 +1,12 @@
 {
   "images" : [
     {
-      "filename" : "LaunchLogo@2x.png",
+      "filename" : "LaunchOutlineStroke@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "LaunchLogo@3x.png",
+      "filename" : "LaunchOutlineStroke@3x.png",
       "idiom" : "universal",
       "scale" : "3x"
     }
