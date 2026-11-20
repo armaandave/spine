@@ -10,58 +10,81 @@ final class TileGeometryTests: XCTestCase {
 
     // MARK: Section
 
-    func testTileSideAndContainerHeight() {
-        XCTAssertEqual(TileGeometry.tileSide(contentWidth: 358), 173)
-        // A closed tile is 168 tall whatever its width: no longer square, no band of nothing under its text.
-        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 358, isOpen: false), 168)
-        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 358, isOpen: true), 410)
-        XCTAssertEqual(TileGeometry.containerHeight(contentWidth: 370, isOpen: false), 168)
-        // The space under the count's letters matches the 16 above the front poster (the count's baseline is about
-        // 11 below its line's top), and the front poster of the fan sits above the title.
-        let countBaseline = TileGeometry.subtitleTop(isOpen: false) + 11
-        XCTAssertEqual(TileGeometry.closedHeight - countBaseline, HomeDesign.Metric.fan(index: 0, tileSide: 173).y, accuracy: 2)
-        XCTAssertLessThan(HomeDesign.Metric.fan(index: 0, tileSide: 173).y + 99, TileGeometry.titleClosedTop)
+    func testContainerHeight() {
+        // The closed row is 196 tall whatever the width; open it is 410.
+        XCTAssertEqual(TileGeometry.containerHeight(isOpen: false), 196)
+        XCTAssertEqual(TileGeometry.containerHeight(isOpen: true), 410)
+        // The posters end above the labels, which end inside the row; the seam runs from 8 pt to the row's foot.
+        let front = HomeDesign.Metric.fan(index: 0, side: -1, contentWidth: width)
+        XCTAssertLessThan(front.y + front.height, TileGeometry.titleTop(isOpen: false))
+        XCTAssertLessThan(TileGeometry.subtitleTop(isOpen: false) + 15, TileGeometry.closedHeight)
+        XCTAssertEqual(TileGeometry.seamRestTop + TileGeometry.seamRestHeight, TileGeometry.closedHeight)
     }
 
     func testClosedFrames() {
-        let left = TileGeometry.frame(tile: 0, open: nil, contentWidth: width)
-        XCTAssertEqual(left, TileFrame(
-            left: 0, width: 173, height: 168, slide: 0, scale: 1, opacity: 1, z: 1, isOpen: false, hitTestable: true
-        ))
-        let right = TileGeometry.frame(tile: 1, open: nil, contentWidth: width)
-        XCTAssertEqual(right.left, 185, "173 and a 12 pt gap")
-        XCTAssertEqual(right.width, 173)
-        XCTAssertEqual(right.height, 168)
-        XCTAssertTrue(right.hitTestable)
-        XCTAssertEqual(TileGeometry.frame(tile: 1, open: nil, contentWidth: 370).left, 191)
+        let left = TileGeometry.frame(tile: 0, open: nil)
+        XCTAssertEqual(left, TileFrame(height: 196, slide: 0, opacity: 1, z: 1, isOpen: false, hitTestable: true))
+        XCTAssertEqual(TileGeometry.frame(tile: 1, open: nil), left)
     }
 
-    func testTheOpenTileFillsTheWidthAt410() {
+    func testTheOpenTileIs410Tall() {
         for tile in 0 ... 1 {
-            let frame = TileGeometry.frame(tile: tile, open: tile, contentWidth: width)
-            XCTAssertEqual(frame, TileFrame(
-                left: 0, width: 358, height: 410, slide: 0, scale: 1, opacity: 1, z: 3, isOpen: true, hitTestable: true
+            XCTAssertEqual(TileGeometry.frame(tile: tile, open: tile), TileFrame(
+                height: 410, slide: 0, opacity: 1, z: 3, isOpen: true, hitTestable: true
             ))
         }
-        XCTAssertEqual(TileGeometry.frame(tile: 0, open: 0, contentWidth: 370).width, 370)
     }
 
-    func testTheOtherTileSlidesAwayShrinksAndFades() {
-        let leftWhenRightOpens = TileGeometry.frame(tile: 0, open: 1, contentWidth: width)
-        XCTAssertEqual(leftWhenRightOpens.left, 0)
-        XCTAssertEqual(leftWhenRightOpens.width, 173)
-        XCTAssertEqual(leftWhenRightOpens.slide, -80)
-        XCTAssertEqual(leftWhenRightOpens.scale, 0.82)
+    func testTheOtherTileSlidesAwayFromTheSeamAndFades() {
+        let leftWhenRightOpens = TileGeometry.frame(tile: 0, open: 1)
+        XCTAssertEqual(leftWhenRightOpens.height, 196)
+        XCTAssertEqual(leftWhenRightOpens.slide, -130)
         XCTAssertEqual(leftWhenRightOpens.opacity, 0)
         XCTAssertFalse(leftWhenRightOpens.hitTestable)
         XCTAssertFalse(leftWhenRightOpens.isOpen)
 
-        let rightWhenLeftOpens = TileGeometry.frame(tile: 1, open: 0, contentWidth: width)
-        XCTAssertEqual(rightWhenLeftOpens.left, 185)
-        XCTAssertEqual(rightWhenLeftOpens.slide, 100)
-        XCTAssertEqual(rightWhenLeftOpens.scale, 0.82)
+        let rightWhenLeftOpens = TileGeometry.frame(tile: 1, open: 0)
+        XCTAssertEqual(rightWhenLeftOpens.slide, 130)
         XCTAssertEqual(rightWhenLeftOpens.opacity, 0)
         XCTAssertFalse(rightWhenLeftOpens.hitTestable)
+    }
+
+    func testTheStripCentersAndTheSeamOnA430PhoneAndTheSeamsRestAndOpenPlaces() {
+        // 430 pt wide: 398 of content between 16 pt margins, so a section x is the screen's less 16.
+        let contentWidth: CGFloat = 398
+        let margin = HomeDesign.Metric.pageMargin
+        // Role r is 54 + 92 r from the seam: In progress to its left, Trending to its right.
+        let expected: [[CGFloat]] = [[161, 69, -23], [269, 361, 453]]
+        for tile in 0 ... 1 {
+            for index in 0 ..< 3 {
+                let natural = TileGeometry.naturalCenter(index: index, contentWidth: contentWidth)
+                let pose = TileGeometry.fanPose(tile: tile, index: index, contentWidth: contentWidth)
+                XCTAssertEqual(
+                    natural.x + pose.offsetX + margin, expected[tile][index], accuracy: accuracy, "tile \(tile) role \(index)"
+                )
+                XCTAssertEqual(natural.y + pose.offsetY, HomeDesign.Metric.stripCenterY, accuracy: accuracy)
+            }
+        }
+        // The seam is 1 pt wide, centered on the screen at rest, 9 pt in from its right edge once In progress is
+        // open and 8 pt from its left once Trending is.
+        XCTAssertEqual(TileGeometry.seamLeft(open: nil, contentWidth: contentWidth) + margin, 214.5, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.seamLeft(open: 0, contentWidth: contentWidth) + margin, 430 - 9, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.seamLeft(open: 1, contentWidth: contentWidth) + margin, 8, accuracy: accuracy)
+        // The labels end 13.5 before it and start 14 after it.
+        XCTAssertEqual(
+            TileGeometry.labelLeft(tile: 0, isOpen: false, contentWidth: contentWidth) + TileGeometry.labelWidth + margin,
+            215 - 13.5, accuracy: accuracy
+        )
+        XCTAssertEqual(TileGeometry.labelLeft(tile: 1, isOpen: false, contentWidth: contentWidth) + margin, 215 + 14, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.labelLeft(tile: 0, isOpen: true, contentWidth: contentWidth), 16)
+    }
+
+    func testTheEmptyPlacesAreTheOnesNoTitleFills() {
+        XCTAssertEqual(TileGeometry.emptyRoles(count: 0), [1, 2])
+        XCTAssertEqual(TileGeometry.emptyRoles(count: 1), [1, 2])
+        XCTAssertEqual(TileGeometry.emptyRoles(count: 2), [2])
+        XCTAssertEqual(TileGeometry.emptyRoles(count: 3), [])
+        XCTAssertEqual(TileGeometry.emptyRoles(count: 10), [])
     }
 
     // MARK: Carousel layout
@@ -85,59 +108,65 @@ final class TileGeometryTests: XCTestCase {
     // MARK: Fan
 
     func testTheFanPosesAreTheMocksFanTurnedIntoTransforms() {
-        let front = TileGeometry.fanPose(index: 0, contentWidth: width)
-        XCTAssertEqual(front.scale, 0.55, accuracy: accuracy, "66 over 120")
-        XCTAssertEqual(front.offsetX, -92.5, accuracy: accuracy)
-        XCTAssertEqual(front.offsetY, -94.5, accuracy: accuracy)
+        // In progress at 358 of content: the natural center of the first poster is the section's middle, 179.
+        let front = TileGeometry.fanPose(tile: 0, index: 0, contentWidth: width)
+        XCTAssertEqual(front.scale, 0.7, accuracy: accuracy, "84 over 120")
+        XCTAssertEqual(front.offsetX, -54, accuracy: accuracy)
+        XCTAssertEqual(front.offsetY, -79, accuracy: accuracy)
         XCTAssertEqual(front.degrees, 0)
         XCTAssertEqual(front.brightness, 1)
         XCTAssertEqual(front.opacity, 1)
         XCTAssertEqual(front.z, 5)
+        XCTAssertEqual(front.radius, 10)
 
-        let leftWing = TileGeometry.fanPose(index: 1, contentWidth: width)
-        XCTAssertEqual(leftWing.scale, 56.0 / 120.0, accuracy: accuracy)
-        XCTAssertEqual(leftWing.scale, 0.467, accuracy: 0.001)
-        XCTAssertEqual(leftWing.offsetX, -307.5, accuracy: accuracy)
-        XCTAssertEqual(leftWing.offsetY, -94, accuracy: accuracy)
-        XCTAssertEqual(leftWing.degrees, 0)
-        XCTAssertEqual(leftWing.brightness, 0.62)
-        XCTAssertEqual(leftWing.opacity, 1)
-        XCTAssertEqual(leftWing.z, 4)
+        let second = TileGeometry.fanPose(tile: 0, index: 1, contentWidth: width)
+        XCTAssertEqual(second.scale, 0.7, accuracy: accuracy)
+        XCTAssertEqual(second.offsetX, -280, accuracy: accuracy)
+        XCTAssertEqual(second.offsetY, -79, accuracy: accuracy)
+        XCTAssertEqual(second.brightness, 0.88, accuracy: accuracy)
+        XCTAssertEqual(second.opacity, 1)
+        XCTAssertEqual(second.z, 4)
 
-        let rightWing = TileGeometry.fanPose(index: 2, contentWidth: width)
-        XCTAssertEqual(rightWing.scale, 56.0 / 120.0, accuracy: accuracy)
-        XCTAssertEqual(rightWing.offsetX, -279.5, accuracy: accuracy)
-        XCTAssertEqual(rightWing.offsetY, -94, accuracy: accuracy)
-        XCTAssertEqual(rightWing.degrees, 0)
-        XCTAssertEqual(rightWing.brightness, 0.62)
-        XCTAssertEqual(rightWing.z, 3)
+        let third = TileGeometry.fanPose(tile: 0, index: 2, contentWidth: width)
+        XCTAssertEqual(third.offsetX, -506, accuracy: accuracy)
+        XCTAssertEqual(third.brightness, 0.66, accuracy: accuracy)
+        XCTAssertEqual(third.z, 3)
+
+        // Trending mirrors it.
+        XCTAssertEqual(TileGeometry.fanPose(tile: 1, index: 0, contentWidth: width).offsetX, 54, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.fanPose(tile: 1, index: 1, contentWidth: width).offsetX, 12, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.fanPose(tile: 1, index: 2, contentWidth: width).offsetX, -30, accuracy: accuracy)
     }
 
     func testPostersPastTheFanAreHiddenBehindIt() {
         for index in 3 ..< 10 {
-            let pose = TileGeometry.fanPose(index: index, contentWidth: width)
+            let pose = TileGeometry.fanPose(tile: 0, index: index, contentWidth: width)
             XCTAssertEqual(pose.opacity, 0, "poster \(index)")
-            XCTAssertEqual(pose.brightness, 0.5)
+            XCTAssertEqual(pose.brightness, 0.66, accuracy: accuracy)
             XCTAssertEqual(pose.degrees, 0)
             XCTAssertEqual(pose.z, 1)
-            XCTAssertEqual(pose.scale, 56.0 / 120.0, accuracy: accuracy)
+            XCTAssertEqual(pose.scale, 0.7, accuracy: accuracy)
         }
-        XCTAssertEqual(TileGeometry.fanPose(index: 3, contentWidth: width).offsetX, -494.5, accuracy: accuracy)
-        XCTAssertEqual(TileGeometry.fanPose(index: 4, contentWidth: width).offsetX, -628.5, accuracy: accuracy)
-        XCTAssertEqual(TileGeometry.fanPose(index: 3, contentWidth: width).offsetY, -96, accuracy: accuracy)
+        // At the third place: 179 - 238 = -59, from the natural centers 581 and 715.
+        XCTAssertEqual(TileGeometry.fanPose(tile: 0, index: 3, contentWidth: width).offsetX, -640, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.fanPose(tile: 0, index: 4, contentWidth: width).offsetX, -774, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.fanPose(tile: 0, index: 3, contentWidth: width).offsetY, -79, accuracy: accuracy)
     }
 
     func testEveryFanPosterLandsOnTheFansCenterForEveryCount() {
         // Whatever the count, a poster's natural center plus its offset is where the fan wants it.
         for contentWidth: CGFloat in [343, 358, 370] {
-            let side = TileGeometry.tileSide(contentWidth: contentWidth)
-            for index in 0 ..< 10 {
-                let fan = HomeDesign.Metric.fan(index: index, tileSide: side)
-                let natural = TileGeometry.naturalCenter(index: index, contentWidth: contentWidth)
-                let pose = TileGeometry.fanPose(index: index, contentWidth: contentWidth)
-                XCTAssertEqual(natural.x + pose.offsetX, fan.x + fan.width / 2, accuracy: accuracy)
-                XCTAssertEqual(natural.y + pose.offsetY, fan.y + fan.height / 2, accuracy: accuracy)
-                XCTAssertEqual(pose.scale * TileGeometry.posterSize.width, fan.width, accuracy: accuracy)
+            for tile in 0 ... 1 {
+                for index in 0 ..< 10 {
+                    let fan = HomeDesign.Metric.fan(
+                        index: index, side: TileGeometry.side(tile: tile), contentWidth: contentWidth
+                    )
+                    let natural = TileGeometry.naturalCenter(index: index, contentWidth: contentWidth)
+                    let pose = TileGeometry.fanPose(tile: tile, index: index, contentWidth: contentWidth)
+                    XCTAssertEqual(natural.x + pose.offsetX, fan.x + fan.width / 2, accuracy: accuracy)
+                    XCTAssertEqual(natural.y + pose.offsetY, fan.y + fan.height / 2, accuracy: accuracy)
+                    XCTAssertEqual(pose.scale * TileGeometry.posterSize.width, fan.width, accuracy: accuracy)
+                }
             }
         }
     }
@@ -177,11 +206,11 @@ final class TileGeometryTests: XCTestCase {
 
     func testPoseChoosesTheFanOrTheOpenCarousel() {
         XCTAssertEqual(
-            TileGeometry.pose(index: 1, focus: 0, isOpen: false, contentWidth: width),
-            TileGeometry.fanPose(index: 1, contentWidth: width)
+            TileGeometry.pose(tile: 0, index: 1, focus: 0, isOpen: false, contentWidth: width),
+            TileGeometry.fanPose(tile: 0, index: 1, contentWidth: width)
         )
         XCTAssertEqual(
-            TileGeometry.pose(index: 1, focus: 0, isOpen: true, contentWidth: width),
+            TileGeometry.pose(tile: 0, index: 1, focus: 0, isOpen: true, contentWidth: width),
             TileGeometry.openPose(index: 1, focus: 0)
         )
     }
@@ -191,8 +220,10 @@ final class TileGeometryTests: XCTestCase {
         for focus in 0 ..< 10 {
             for index in 0 ..< 10 {
                 XCTAssertEqual(
-                    TileGeometry.pose(index: index, focus: focus, isOpen: false, rest: 4, count: 10, contentWidth: width),
-                    TileGeometry.fanPose(index: index, rest: 4, count: 10, contentWidth: width)
+                    TileGeometry.pose(
+                        tile: 1, index: index, focus: focus, isOpen: false, rest: 4, count: 10, contentWidth: width
+                    ),
+                    TileGeometry.fanPose(tile: 1, index: index, rest: 4, count: 10, contentWidth: width)
                 )
             }
         }
@@ -201,35 +232,35 @@ final class TileGeometryTests: XCTestCase {
     // MARK: Rest
 
     func testTheFanIsBuiltAroundTheTitleTheTileRestsOn() {
-        // In the middle: the title in front, the one before it left, the one after it right.
+        // In the middle: the title beside the seam, the one before it next, then the one after it.
         var slots = TileGeometry.fanSlots(rest: 4, count: 10)
-        XCTAssertEqual([slots.front, slots.left, slots.right], [4, 3, 5])
+        XCTAssertEqual([slots.front, slots.second, slots.third], [4, 3, 5])
         slots = TileGeometry.fanSlots(rest: 1, count: 3)
-        XCTAssertEqual([slots.front, slots.left, slots.right], [1, 0, 2])
+        XCTAssertEqual([slots.front, slots.second, slots.third], [1, 0, 2])
         // At the first title: today's fan, 1, 2 and 3 (indexes 0, 1, 2).
         slots = TileGeometry.fanSlots(rest: 0, count: 10)
-        XCTAssertEqual([slots.front, slots.left, slots.right], [0, 1, 2])
+        XCTAssertEqual([slots.front, slots.second, slots.third], [0, 1, 2])
         // At the last: the last in front and the two before it behind.
         slots = TileGeometry.fanSlots(rest: 9, count: 10)
-        XCTAssertEqual([slots.front, slots.left, slots.right], [9, 7, 8])
+        XCTAssertEqual([slots.front, slots.second, slots.third], [9, 7, 8])
         slots = TileGeometry.fanSlots(rest: 2, count: 3)
-        XCTAssertEqual([slots.front, slots.left, slots.right], [2, 0, 1])
+        XCTAssertEqual([slots.front, slots.second, slots.third], [2, 0, 1])
     }
 
     func testShortListsFillOnlyTheSlotsTheyHave() {
         var slots = TileGeometry.fanSlots(rest: 0, count: 1)
         XCTAssertEqual(slots.front, 0)
-        XCTAssertNil(slots.left)
-        XCTAssertNil(slots.right)
+        XCTAssertNil(slots.second)
+        XCTAssertNil(slots.third)
         slots = TileGeometry.fanSlots(rest: 0, count: 2)
-        XCTAssertEqual([slots.front, slots.left], [0, 1])
-        XCTAssertNil(slots.right)
+        XCTAssertEqual([slots.front, slots.second], [0, 1])
+        XCTAssertNil(slots.third)
         slots = TileGeometry.fanSlots(rest: 1, count: 2)
-        XCTAssertEqual([slots.front, slots.left], [1, 0])
-        XCTAssertNil(slots.right)
+        XCTAssertEqual([slots.front, slots.second], [1, 0])
+        XCTAssertNil(slots.third)
         slots = TileGeometry.fanSlots(rest: 0, count: 0)
         XCTAssertEqual(slots.front, 0)
-        XCTAssertNil(slots.left)
+        XCTAssertNil(slots.second)
     }
 
     func testARestPastTheEndsIsKeptInsideTheList() {
@@ -240,14 +271,14 @@ final class TileGeometryTests: XCTestCase {
     func testEachPosterHasOneRoleAndTheRestAreHidden() {
         let roles = (0 ..< 10).map { TileGeometry.fanRole(index: $0, rest: 5, count: 10) }
         XCTAssertEqual(roles[5], .front)
-        XCTAssertEqual(roles[4], .left)
-        XCTAssertEqual(roles[6], .right)
+        XCTAssertEqual(roles[4], .second)
+        XCTAssertEqual(roles[6], .third)
         XCTAssertEqual(roles.filter { $0 == .hidden }.count, 7)
         // The first title's fan is the original one.
         for index in 0 ..< 10 {
             XCTAssertEqual(
-                TileGeometry.fanPose(index: index, rest: 0, count: 10, contentWidth: width),
-                TileGeometry.fanPose(index: index, contentWidth: width)
+                TileGeometry.fanPose(tile: 0, index: index, rest: 0, count: 10, contentWidth: width),
+                TileGeometry.fanPose(tile: 0, index: index, contentWidth: width)
             )
         }
     }
@@ -255,16 +286,21 @@ final class TileGeometryTests: XCTestCase {
     func testTheFrontPosterLandsInTheFrontSlotWhateverTheRest() {
         // A closed carousel is scrolled to the rest title, so its natural place is that far to the left.
         for contentWidth: CGFloat in [343, 358, 370] {
-            let side = TileGeometry.tileSide(contentWidth: contentWidth)
-            for rest in 0 ..< 10 {
-                for index in 0 ..< 10 {
-                    let role = TileGeometry.fanRole(index: index, rest: rest, count: 10)
-                    let fan = HomeDesign.Metric.fan(index: role.slot, tileSide: side)
-                    let natural = TileGeometry.naturalCenter(index: index, contentWidth: contentWidth)
-                    let pose = TileGeometry.fanPose(index: index, rest: rest, count: 10, contentWidth: contentWidth)
-                    let onScreenX = natural.x - TileGeometry.scrollX(forIndex: rest) + pose.offsetX
-                    XCTAssertEqual(onScreenX, fan.x + fan.width / 2, accuracy: accuracy, "rest \(rest) poster \(index)")
-                    XCTAssertEqual(natural.y + pose.offsetY, fan.y + fan.height / 2, accuracy: accuracy)
+            for tile in 0 ... 1 {
+                for rest in 0 ..< 10 {
+                    for index in 0 ..< 10 {
+                        let role = TileGeometry.fanRole(index: index, rest: rest, count: 10)
+                        let fan = HomeDesign.Metric.fan(
+                            index: role.slot, side: TileGeometry.side(tile: tile), contentWidth: contentWidth
+                        )
+                        let natural = TileGeometry.naturalCenter(index: index, contentWidth: contentWidth)
+                        let pose = TileGeometry.fanPose(
+                            tile: tile, index: index, rest: rest, count: 10, contentWidth: contentWidth
+                        )
+                        let onScreenX = natural.x - TileGeometry.scrollX(forIndex: rest) + pose.offsetX
+                        XCTAssertEqual(onScreenX, fan.x + fan.width / 2, accuracy: accuracy, "rest \(rest) poster \(index)")
+                        XCTAssertEqual(natural.y + pose.offsetY, fan.y + fan.height / 2, accuracy: accuracy)
+                    }
                 }
             }
         }
@@ -272,11 +308,11 @@ final class TileGeometryTests: XCTestCase {
 
     func testTheFrontPosterIsAlwaysOnTopOfTheFan() {
         for rest in 0 ..< 10 {
-            let front = TileGeometry.fanPose(index: rest, rest: rest, count: 10, contentWidth: width)
-            XCTAssertEqual(front.scale, 0.55, accuracy: accuracy)
+            let front = TileGeometry.fanPose(tile: 0, index: rest, rest: rest, count: 10, contentWidth: width)
+            XCTAssertEqual(front.scale, 0.7, accuracy: accuracy)
             XCTAssertEqual(front.brightness, 1)
             for index in 0 ..< 10 where index != rest {
-                let other = TileGeometry.fanPose(index: index, rest: rest, count: 10, contentWidth: width)
+                let other = TileGeometry.fanPose(tile: 0, index: index, rest: rest, count: 10, contentWidth: width)
                 XCTAssertGreaterThan(front.z, other.z, "poster \(index) at rest \(rest)")
             }
         }
@@ -369,18 +405,22 @@ final class TileGeometryTests: XCTestCase {
     }
 
     func testABackPosterSlidesBehindTheFrontOne() {
-        let side = TileGeometry.tileSide(contentWidth: width)
-        let front = HomeDesign.Metric.fan(index: 0, tileSide: side)
-        for role in [TileGeometry.FanRole.left, .right] {
-            let back = HomeDesign.Metric.fan(index: role.slot, tileSide: side)
-            let slide = TileGeometry.foldSlide(role: role, contentWidth: width)
-            XCTAssertEqual(back.x + back.width / 2 + slide.width, front.x + front.width / 2, accuracy: accuracy)
-            XCTAssertEqual(back.y + back.height / 2 + slide.height, front.y + front.height / 2, accuracy: accuracy)
+        for tile in 0 ... 1 {
+            let side = TileGeometry.side(tile: tile)
+            let front = HomeDesign.Metric.fan(index: 0, side: side, contentWidth: width)
+            for role in [TileGeometry.FanRole.second, .third] {
+                let back = HomeDesign.Metric.fan(index: role.slot, side: side, contentWidth: width)
+                let slide = TileGeometry.foldSlide(tile: tile, role: role, contentWidth: width)
+                XCTAssertEqual(back.x + back.width / 2 + slide.width, front.x + front.width / 2, accuracy: accuracy)
+                XCTAssertEqual(back.y + back.height / 2 + slide.height, front.y + front.height / 2, accuracy: accuracy)
+            }
         }
-        XCTAssertGreaterThan(TileGeometry.foldSlide(role: .left, contentWidth: width).width, 0, "left moves right")
-        XCTAssertLessThan(TileGeometry.foldSlide(role: .right, contentWidth: width).width, 0, "right moves left")
-        XCTAssertTrue(TileGeometry.FanRole.left.folds)
-        XCTAssertTrue(TileGeometry.FanRole.right.folds)
+        // Toward the seam's side's front poster: In progress's back posters move right, Trending's left.
+        XCTAssertEqual(TileGeometry.foldSlide(tile: 0, role: .second, contentWidth: width).width, 92, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.foldSlide(tile: 0, role: .third, contentWidth: width).width, 184, accuracy: accuracy)
+        XCTAssertEqual(TileGeometry.foldSlide(tile: 1, role: .second, contentWidth: width).width, -92, accuracy: accuracy)
+        XCTAssertTrue(TileGeometry.FanRole.second.folds)
+        XCTAssertTrue(TileGeometry.FanRole.third.folds)
         XCTAssertFalse(TileGeometry.FanRole.front.folds)
         XCTAssertFalse(TileGeometry.FanRole.hidden.folds)
     }
@@ -417,13 +457,19 @@ final class TileGeometryTests: XCTestCase {
 
     // MARK: Corner radius
 
-    func testTheCornerRadiusReadsTwelveAtEverySize() {
-        for scale: CGFloat in [0.467, 0.55, 0.84, 1] {
-            let radius = TileGeometry.cornerRadius(forScale: scale)
-            XCTAssertEqual(radius * scale, 12, accuracy: accuracy, "scale \(scale)")
+    func testTheCornerRadiusReadsTheSameAtEverySize() {
+        for scale: CGFloat in [0.467, 0.7, 0.84, 1] {
+            for onScreen: CGFloat in [10, 12] {
+                let radius = TileGeometry.cornerRadius(onScreen, forScale: scale)
+                XCTAssertEqual(radius * scale, onScreen, accuracy: accuracy, "scale \(scale)")
+            }
         }
-        XCTAssertEqual(TileGeometry.cornerRadius(forScale: 1), 12)
-        XCTAssertEqual(TileGeometry.cornerRadius(forScale: 0), 1200, "a zero scale cannot divide by zero")
+        XCTAssertEqual(TileGeometry.cornerRadius(12, forScale: 1), 12)
+        XCTAssertEqual(TileGeometry.cornerRadius(12, forScale: 0), 1200, "a zero scale cannot divide by zero")
+        // Ten in the strip and twelve once open.
+        XCTAssertEqual(TileGeometry.fanPose(tile: 0, index: 0, contentWidth: width).radius, 10)
+        XCTAssertEqual(TileGeometry.openPose(index: 0, focus: 0).radius, 12)
+        XCTAssertEqual(TileGeometry.openPose(index: 1, focus: 0).radius, 12)
     }
 
     // MARK: Opacity
@@ -434,7 +480,7 @@ final class TileGeometryTests: XCTestCase {
             for index in 0 ..< 10 {
                 let role = TileGeometry.fanRole(index: index, rest: rest, count: 10)
                 let open = TileGeometry.openPose(index: index, focus: rest)
-                let fan = TileGeometry.fanPose(index: index, rest: rest, count: 10, contentWidth: width)
+                let fan = TileGeometry.fanPose(tile: 0, index: index, rest: rest, count: 10, contentWidth: width)
                 let fresh = TileGeometry.cellOpacity(pose: open, role: role, isOpen: true, entered: false)
                 XCTAssertEqual(fresh, role == .hidden ? 0 : 1, "index \(index), rest \(rest)")
                 XCTAssertEqual(TileGeometry.cellOpacity(pose: open, role: role, isOpen: true, entered: true), 1)
@@ -478,10 +524,10 @@ final class TileGeometryTests: XCTestCase {
     // MARK: Label
 
     func testTheLabelGrowsAndRises() {
-        XCTAssertEqual(TileGeometry.titleTop(isOpen: false), 120)
+        XCTAssertEqual(TileGeometry.titleTop(isOpen: false), 156)
         XCTAssertEqual(TileGeometry.titleTop(isOpen: true), 18)
-        XCTAssertEqual(TileGeometry.titleOpenScale, 1.5)
-        XCTAssertEqual(TileGeometry.subtitleTop(isOpen: false), 140.4, accuracy: 0.0001)
+        XCTAssertEqual(TileGeometry.titleOpenScale, 24.0 / 17.0, accuracy: 0.0001, "17 grows to 24")
+        XCTAssertEqual(TileGeometry.subtitleTop(isOpen: false), 176.55, accuracy: 0.0001)
         XCTAssertEqual(TileGeometry.subtitleTop(isOpen: true), 47.6, accuracy: 0.0001)
     }
 
@@ -543,7 +589,7 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileMotion.slide(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.fade(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.art(reduceMotion: true), reduced)
-        for role in [TileGeometry.FanRole.front, .left, .right, .hidden] {
+        for role in [TileGeometry.FanRole.front, .second, .third, .hidden] {
             XCTAssertEqual(TileMotion.open(role: role, reduceMotion: true), reduced)
         }
         XCTAssertEqual(TileMotion.focus(reduceMotion: true), reduced)
@@ -551,14 +597,13 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileMotion.dim(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.panelRise(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.closePop(reduceMotion: true), reduced)
-        for role in [TileGeometry.FanRole.front, .left, .right, .hidden] {
+        for role in [TileGeometry.FanRole.front, .second, .third, .hidden] {
             XCTAssertEqual(TileMotion.close(role: role, reduceMotion: true), reduced)
         }
         XCTAssertEqual(TileMotion.closeFade(reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.frame(closing: true, reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.slide(closing: true, reduceMotion: true), reduced)
         XCTAssertEqual(TileMotion.fade(closing: true, reduceMotion: true), reduced)
-        XCTAssertEqual(TileMotion.art(closing: true, reduceMotion: true), reduced)
     }
 
     @MainActor
@@ -577,10 +622,6 @@ final class TileGeometryTests: XCTestCase {
                 TileMotion.fade(closing: closing, reduceMotion: false),
                 TileMotion.fade(closing: true, reduceMotion: false)
             )
-            XCTAssertEqual(
-                TileMotion.art(closing: closing, reduceMotion: false),
-                TileMotion.art(closing: true, reduceMotion: false)
-            )
         }
 
         let curve = HomeDesign.Motion.closeCurve
@@ -588,13 +629,13 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileMotion.frame(closing: true, reduceMotion: false), closeFrame)
         // The poster the tile closes on lands with the tile, and its neighbors travel with it, with no delay.
         XCTAssertEqual(TileMotion.close(role: .front, reduceMotion: false), closeFrame)
-        XCTAssertEqual(TileMotion.close(role: .left, reduceMotion: false), closeFrame.delay(0))
-        XCTAssertEqual(TileMotion.close(role: .right, reduceMotion: false), closeFrame.delay(0))
+        XCTAssertEqual(TileMotion.close(role: .second, reduceMotion: false), closeFrame.delay(0))
+        XCTAssertEqual(TileMotion.close(role: .third, reduceMotion: false), closeFrame.delay(0))
         XCTAssertEqual(
             TileMotion.close(role: .hidden, reduceMotion: false),
             .timingCurve(curve.c1x, curve.c1y, curve.c2x, curve.c2y, duration: 0.383)
         )
-        XCTAssertEqual(TileMotion.closeFade(reduceMotion: false), .easeOut(duration: 0.191))
+        XCTAssertEqual(TileMotion.closeFade(reduceMotion: false), .easeOut(duration: 0.04))
         // The mounted posters are kept until the longest close is over.
         XCTAssertGreaterThan(TileMotion.unmountDelay, .seconds(0.548))
     }
@@ -614,8 +655,8 @@ final class TileGeometryTests: XCTestCase {
         }
         // The front poster and its neighbors travel together over the close's whole length.
         XCTAssertEqual(TileMotion.open(role: .front, reduceMotion: false), timing(0.548).delay(0))
-        XCTAssertEqual(TileMotion.open(role: .left, reduceMotion: false), timing(0.548))
-        XCTAssertEqual(TileMotion.open(role: .right, reduceMotion: false), timing(0.548))
+        XCTAssertEqual(TileMotion.open(role: .second, reduceMotion: false), timing(0.548))
+        XCTAssertEqual(TileMotion.open(role: .third, reduceMotion: false), timing(0.548))
         // The rest start late, so they end with them, and appear only in the last 0.191 s.
         XCTAssertEqual(
             TileMotion.open(role: .hidden, reduceMotion: false),

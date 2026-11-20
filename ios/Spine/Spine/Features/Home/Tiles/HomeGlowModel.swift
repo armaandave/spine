@@ -107,7 +107,7 @@ enum GlowSpec {
     }
 
     /// Where the closed tiles end on a 393-402 pt phone, until they have been measured.
-    static let estimatedTilesBottom: CGFloat = 322
+    static let estimatedTilesBottom: CGFloat = 350
     /// The open tile's poster row's bottom edge until the open tile has been measured.
     static let estimatedOpenRowBottom: CGFloat = 360
     /// How tall the glow is at rest, behind the picture: down to where the closed tiles start.

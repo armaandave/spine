@@ -578,13 +578,13 @@ final class HomeTilesStateTests: XCTestCase {
         let tapTarget = try tapTargetSource()
         let buttons = tapTarget.components(separatedBy: "Button(action:").count - 1
         XCTAssertEqual(buttons, 2, "the open button and the offer button")
-        XCTAssertEqual(tapTarget.components(separatedBy: "TileTapArea(shape: shape)").count - 1, buttons)
+        XCTAssertEqual(tapTarget.components(separatedBy: "TileTapArea()").count - 1, buttons)
         XCTAssertFalse(tapTarget.contains("fill(Color.clear)"))
         XCTAssertFalse(tapTarget.contains(".contentShape("), "a content shape outside the Button never reaches its label")
 
         let section = try tileSource("HomeTilesSection.swift")
         let areaStart = try XCTUnwrap(section.range(of: "private struct TileTapArea")).lowerBound
-        XCTAssertTrue(section[areaStart...].prefix(400).contains("Color.clear.contentShape(shape)"))
+        XCTAssertTrue(section[areaStart...].prefix(400).contains("Color.clear.contentShape(Rectangle())"))
     }
 
     /// An explicit `accessibilityHidden(false)` above a part that hides itself un-hides it, so no tile-level modifier
@@ -672,14 +672,12 @@ final class HomeTilesStateTests: XCTestCase {
         XCTAssertEqual(model.shownFace(for: .trending), .message("Nothing yet"), "A tile with no titles is not held")
     }
 
-    func testARevealWaitsForTheFansPostersAndTheFrontPostersArt() throws {
+    func testARevealWaitsForTheStripsPosters() throws {
         let posters = ["a", "b", "c", "d", "e"].map { TilePoster(id: id($0), media: media($0)) }
-        // Resting on the third: it is in front, the second and fourth behind it.
+        // Resting on the third: it is beside the seam, the second and fourth after it.
         let requests = TileReveal.requests(for: posters, rest: 2)
-        let fan = [posters[2], posters[1], posters[3]].map { TilePosterArt.request(for: $0.media)?.url }
-        let art = BlurredArt.request(url: URL(string: "https://example.com/c.jpg"), style: .tile)
-        XCTAssertEqual(requests.map(\.url), fan + [art?.url])
-        XCTAssertFalse(try XCTUnwrap(requests.last).processors.isEmpty, "The art is the blurred one")
+        let strip = [posters[2], posters[1], posters[3]].map { TilePosterArt.request(for: $0.media)?.url }
+        XCTAssertEqual(requests.map(\.url), strip)
         XCTAssertTrue(TileReveal.requests(for: [], rest: 0).isEmpty)
     }
 

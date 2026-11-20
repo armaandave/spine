@@ -15,18 +15,18 @@ nonisolated struct PosterPose: Equatable {
     var brightness: Double
     var opacity: Double
     var z: Double
+    /// The corner radius it reads as on screen, whatever its scale.
+    var radius: CGFloat = HomeDesign.Metric.posterRadius
 
     var dim: Double { 1 - brightness }
 }
 
-/// A tile's frame inside the section, in the section's own coordinates, and how it leaves when its sibling opens.
+/// A tile's height inside the section, and how it leaves when its sibling opens. Both tiles are as wide as the section
+/// and start at its left: the closed row is one strip across the page, split at the seam.
 nonisolated struct TileFrame: Equatable {
-    var left: CGFloat
-    var width: CGFloat
     var height: CGFloat
-    /// The slide-out of the tile that is not open: a shift from `left` and a scale about its own center.
+    /// The slide-out of the tile that is not open: a shift away from the seam.
     var slide: CGFloat
-    var scale: CGFloat
     var opacity: Double
     var z: Double
     var isOpen: Bool
@@ -34,8 +34,9 @@ nonisolated struct TileFrame: Equatable {
 }
 
 /// The Home tiles' numbers as pure functions of the content width, so they can be tested without a screen. The
-/// mock's script (R3HomeLeft) is the spec: `fanPose` and `openPose` are its `fanPoster` and open poses turned into
-/// transforms of one natural frame per poster.
+/// mock's script is the spec: `fanPose` and `openPose` are its closed and open poses turned into transforms of one
+/// natural frame per poster. Coordinates are the section's: the page's content width wide, the 16 pt margins left out,
+/// so the screen's middle (where the seam is) is half the content width.
 nonisolated enum TileGeometry {
     /// The width the mock is drawn at (a 390 pt phone less two 16 pt margins), used until the section has measured.
     static let referenceContentWidth: CGFloat = 358
@@ -46,46 +47,43 @@ nonisolated enum TileGeometry {
     static let spacing = HomeDesign.Metric.carouselStep - HomeDesign.Metric.carouselPoster.width
     static let top = HomeDesign.Metric.carouselTop
 
-    /// Posters mounted while a tile is closed: the three the fan shows.
+    /// Posters mounted while a tile is closed: the three the strip shows.
     static let fanMountedCount = 3
     /// The most posters a tile holds.
     static let maxPosters = 10
 
     // MARK: Section
 
-    /// A closed tile's width: half the content less half the gap.
-    static func tileSide(contentWidth: CGFloat) -> CGFloat {
-        HomeDesign.Metric.tileSide(contentWidth: contentWidth)
-    }
-
-    /// A closed tile's height, whatever the width: the fan, the title and the count.
+    /// The closed row's height: the labels, the strip of posters and the seam.
     static let closedHeight = HomeDesign.Metric.tileClosedHeight
 
-    /// The section's height: one tile closed, 410 open.
-    static func containerHeight(contentWidth: CGFloat, isOpen: Bool) -> CGFloat {
+    /// The section's height: the row closed, 410 open.
+    static func containerHeight(isOpen: Bool) -> CGFloat {
         isOpen ? HomeDesign.Metric.tileOpenHeight : closedHeight
     }
 
-    /// Tile `tile` (0 left, 1 right) while tile `open` is open (nil when none is). The open tile fills the width;
-    /// the other keeps its place, shrinks to 0.82, slides away (left by 80, right by 100) and fades out.
-    static func frame(tile: Int, open: Int?, contentWidth: CGFloat) -> TileFrame {
-        let side = tileSide(contentWidth: contentWidth)
-        let closedLeft = CGFloat(tile) * (side + HomeDesign.Metric.tileGap)
+    /// How far the tile that is not open slides away from the seam as it fades out.
+    static let otherSlide: CGFloat = 130
+
+    /// Which side of the seam tile `tile` (0 In progress, 1 Trending) sits on: -1 left, 1 right.
+    static func side(tile: Int) -> CGFloat {
+        tile == 0 ? -1 : 1
+    }
+
+    /// Tile `tile` (0 left, 1 right) while tile `open` is open (nil when none is). The open tile is 410 tall; the
+    /// other keeps its place, slides away from the seam and fades out.
+    static func frame(tile: Int, open: Int?) -> TileFrame {
         guard let open else {
-            return TileFrame(
-                left: closedLeft, width: side, height: closedHeight, slide: 0, scale: 1, opacity: 1, z: 1,
-                isOpen: false, hitTestable: true
-            )
+            return TileFrame(height: closedHeight, slide: 0, opacity: 1, z: 1, isOpen: false, hitTestable: true)
         }
         if open == tile {
             return TileFrame(
-                left: 0, width: contentWidth, height: HomeDesign.Metric.tileOpenHeight, slide: 0, scale: 1,
-                opacity: 1, z: 3, isOpen: true, hitTestable: true
+                height: HomeDesign.Metric.tileOpenHeight, slide: 0, opacity: 1, z: 3, isOpen: true, hitTestable: true
             )
         }
         return TileFrame(
-            left: closedLeft, width: side, height: closedHeight, slide: tile == 0 ? -80 : 100, scale: 0.82, opacity: 0,
-            z: 1, isOpen: false, hitTestable: false
+            height: closedHeight, slide: side(tile: tile) * otherSlide, opacity: 0, z: 1, isOpen: false,
+            hitTestable: false
         )
     }
 
@@ -106,32 +104,33 @@ nonisolated enum TileGeometry {
 
     // MARK: Fan
 
-    /// Which place of the fan a poster has on a closed tile.
+    /// Which place of the strip a poster has on a closed tile, counted from the seam outward.
     nonisolated enum FanRole: Equatable {
+        /// Beside the seam.
         case front
-        case left
-        case right
-        /// Behind the front poster and invisible.
+        case second
+        case third
+        /// Waiting at the third place, invisible.
         case hidden
 
         /// The place in `HomeDesign.Metric.fan`.
         var slot: Int {
             switch self {
             case .front: 0
-            case .left: 1
-            case .right: 2
+            case .second: 1
+            case .third: 2
             case .hidden: 3
             }
         }
 
         /// Whether the poster folds in behind the front one as the page scrolls.
-        var folds: Bool { self == .left || self == .right }
+        var folds: Bool { self == .second || self == .third }
     }
 
-    /// The posters a closed tile shows when it rests on `rest`: that title in front, the one before it on its left
-    /// and the one after it on its right. At the first title the side places are the second and third; at the last,
-    /// the two before it (the mirror image).
-    static func fanSlots(rest: Int, count: Int) -> (front: Int, left: Int?, right: Int?) {
+    /// The posters a closed tile shows when it rests on `rest`: that title beside the seam, then the one before it,
+    /// then the one after it. At the first title the other two are the second and third; at the last, the two before
+    /// it (the mirror image).
+    static func fanSlots(rest: Int, count: Int) -> (front: Int, second: Int?, third: Int?) {
         guard count > 0 else { return (0, nil, nil) }
         let front = min(max(rest, 0), count - 1)
         let back: [Int]
@@ -148,17 +147,17 @@ nonisolated enum TileGeometry {
     static func fanRole(index: Int, rest: Int, count: Int) -> FanRole {
         let slots = fanSlots(rest: rest, count: count)
         if index == slots.front { return .front }
-        if index == slots.left { return .left }
-        if index == slots.right { return .right }
+        if index == slots.second { return .second }
+        if index == slots.third { return .third }
         return .hidden
     }
 
-    /// Poster `index` in the fan on a closed tile resting on `rest`: the `HomeDesign.Metric.fan` frame as a scale, a
+    /// Poster `index` in the strip of tile `tile` resting on `rest`: the `HomeDesign.Metric.fan` frame as a scale, a
     /// rotation and an offset from the natural frame. A closed carousel sits scrolled to `rest`, so the natural frame
     /// is that far to the left.
-    static func fanPose(index: Int, rest: Int, count: Int, contentWidth: CGFloat) -> PosterPose {
+    static func fanPose(tile: Int, index: Int, rest: Int, count: Int, contentWidth: CGFloat) -> PosterPose {
         let role = fanRole(index: index, rest: rest, count: count)
-        let fan = HomeDesign.Metric.fan(index: role.slot, tileSide: tileSide(contentWidth: contentWidth))
+        let fan = HomeDesign.Metric.fan(index: role.slot, side: side(tile: tile), contentWidth: contentWidth)
         let natural = naturalCenter(index: index, contentWidth: contentWidth)
         return PosterPose(
             offsetX: fan.x + fan.width / 2 - natural.x + scrollX(forIndex: rest),
@@ -167,13 +166,20 @@ nonisolated enum TileGeometry {
             degrees: fan.degrees,
             brightness: fan.brightness,
             opacity: fan.opacity,
-            z: fan.z
+            z: fan.z,
+            radius: HomeDesign.Metric.stripCorner
         )
     }
 
-    /// The fan resting on the first title.
-    static func fanPose(index: Int, contentWidth: CGFloat) -> PosterPose {
-        fanPose(index: index, rest: 0, count: maxPosters, contentWidth: contentWidth)
+    /// The strip resting on the first title.
+    static func fanPose(tile: Int, index: Int, contentWidth: CGFloat) -> PosterPose {
+        fanPose(tile: tile, index: index, rest: 0, count: maxPosters, contentWidth: contentWidth)
+    }
+
+    /// The places from the seam outward that no title fills, which hold a hairline outline: the second and third of
+    /// a tile with fewer than three titles (and, with none, the front place holds the offer's glyph).
+    static func emptyRoles(count: Int) -> [Int] {
+        (1 ... 2).filter { $0 >= count }
     }
 
     // MARK: Poses
@@ -194,16 +200,16 @@ nonisolated enum TileGeometry {
     }
 
     static func pose(
-        index: Int, focus: Int, isOpen: Bool, rest: Int = 0, count: Int = maxPosters, contentWidth: CGFloat
+        tile: Int, index: Int, focus: Int, isOpen: Bool, rest: Int = 0, count: Int = maxPosters, contentWidth: CGFloat
     ) -> PosterPose {
         isOpen
             ? openPose(index: index, focus: focus)
-            : fanPose(index: index, rest: rest, count: count, contentWidth: contentWidth)
+            : fanPose(tile: tile, index: index, rest: rest, count: count, contentWidth: contentWidth)
     }
 
-    /// The radius that reads as 12 pt once the poster is drawn at `scale`: the mock keeps 12 while it resizes.
-    static func cornerRadius(forScale scale: CGFloat) -> CGFloat {
-        HomeDesign.Metric.posterRadius / max(scale, 0.01)
+    /// The radius that reads as `radius` pt once the poster is drawn at `scale`: the mock keeps it while it resizes.
+    static func cornerRadius(_ radius: CGFloat, forScale scale: CGFloat) -> CGFloat {
+        radius / max(scale, 0.01)
     }
 
     /// Which poster the carousel is on for a horizontal scroll distance from rest (0 on the first poster, 134 on
@@ -291,10 +297,10 @@ nonisolated enum TileGeometry {
     static let foldDim: CGFloat = 0.45
 
     /// Where a back poster's center has to move, in points, to sit centered behind the front poster.
-    static func foldSlide(role: FanRole, contentWidth: CGFloat) -> CGSize {
-        let side = tileSide(contentWidth: contentWidth)
-        let front = HomeDesign.Metric.fan(index: FanRole.front.slot, tileSide: side)
-        let back = HomeDesign.Metric.fan(index: role.slot, tileSide: side)
+    static func foldSlide(tile: Int, role: FanRole, contentWidth: CGFloat) -> CGSize {
+        let side = side(tile: tile)
+        let front = HomeDesign.Metric.fan(index: FanRole.front.slot, side: side, contentWidth: contentWidth)
+        let back = HomeDesign.Metric.fan(index: role.slot, side: side, contentWidth: contentWidth)
         return CGSize(
             width: front.x + front.width / 2 - (back.x + back.width / 2),
             height: front.y + front.height / 2 - (back.y + back.height / 2)
@@ -303,13 +309,18 @@ nonisolated enum TileGeometry {
 
     // MARK: Label
 
+    /// The open label's left, and the width of the box each label is laid out in.
     static let labelLeading: CGFloat = 16
-    static let titleClosedTop: CGFloat = 120
+    static let labelWidth: CGFloat = 150
+    /// How far the closed labels stand from the middle of the page: In progress ends 13.5 pt before it and Trending
+    /// starts 14 pt after it.
+    static let labelInnerLeft: CGFloat = 13.5
+    static let labelInnerRight: CGFloat = 14
+    static let titleClosedTop: CGFloat = 156
     static let titleOpenTop: CGFloat = 18
-    /// 24 over 16: the title is drawn at its closed size and scaled up, anchored at its top-leading corner.
-    static let titleOpenScale: CGFloat = 24.0 / 16.0
+    /// 24 over 17: the title is drawn at its closed size and scaled up, anchored at its top-leading corner.
+    static let titleOpenScale: CGFloat = 24.0 / 17.0
     static let titleLineHeight: CGFloat = 1.15
-    static let subtitleGap: CGFloat = 2
 
     static func titleTop(isOpen: Bool) -> CGFloat {
         isOpen ? titleOpenTop : titleClosedTop
@@ -317,7 +328,41 @@ nonisolated enum TileGeometry {
 
     /// The subtitle sits under the title's line box, which grows with the title's size.
     static func subtitleTop(isOpen: Bool) -> CGFloat {
-        titleTop(isOpen: isOpen) + (isOpen ? 24 : 16) * titleLineHeight + subtitleGap
+        titleTop(isOpen: isOpen) + (isOpen ? 24 : 17) * titleLineHeight + (isOpen ? 2 : 1)
+    }
+
+    /// The left of a label's box: open, at the page's margin; closed, In progress's ends before the seam (its text is
+    /// right-aligned in the box) and Trending's starts after it.
+    static func labelLeft(tile: Int, isOpen: Bool, contentWidth: CGFloat) -> CGFloat {
+        if isOpen { return labelLeading }
+        return tile == 0
+            ? contentWidth / 2 - labelInnerLeft - labelWidth
+            : contentWidth / 2 + labelInnerRight
+    }
+
+    // MARK: Seam
+
+    /// The seam is one line down the page's middle. Closed it runs from 8 pt below the row's top to its bottom, 188 pt; while a tile is open
+    /// it glides to the edge the tile's posters came from (In progress's to the right, Trending's to the left) and
+    /// runs from 24 to 384 pt, softer.
+    static let seamRestTop: CGFloat = 8
+    static let seamRestHeight: CGFloat = 188
+    static let seamOpenTop: CGFloat = 24
+    static let seamOpenHeight: CGFloat = 360
+    static let seamOpenOpacity: Double = 0.55
+    /// How far the open seam is from the screen's edge.
+    static let seamOpenInset: CGFloat = 8
+    static let seamWidth: CGFloat = 1
+
+    /// The seam's left edge. Open on In progress it is 9 pt from the screen's right edge, on Trending 8 pt from the
+    /// left (the screen is the content plus a margin on each side).
+    static func seamLeft(open: Int?, contentWidth: CGFloat) -> CGFloat {
+        let margin = HomeDesign.Metric.pageMargin
+        switch open {
+        case nil: return contentWidth / 2 - seamWidth / 2
+        case 0: return contentWidth + 2 * margin - (seamOpenInset + seamWidth) - margin
+        default: return seamOpenInset - margin
+        }
     }
 
     // MARK: Panel
@@ -355,8 +400,8 @@ nonisolated enum TileGeometry {
 /// The colors and strokes of a tile that the mock draws and `HomeDesign` has no token for. Everything else a tile
 /// uses comes from `HomeDesign`.
 nonisolated enum TileStyle {
-    /// The tiles' border (the ring and the top line, `TileOutline`, and the loading tiles' ring) at this share of the
-    /// mock's: half, so the tiles' edges are quiet.
+    /// The border of Up next's tile (the ring and the top line, `TileOutline`) at this share of the mock's: half, so
+    /// the edges are quiet.
     static let outlineStrength = 0.5
     /// rgba(18, 18, 18, 0.3) under the baked art.
     static let veil = Color(red: 18.0 / 255, green: 18.0 / 255, blue: 18.0 / 255).opacity(0.3)
@@ -369,6 +414,10 @@ nonisolated enum TileStyle {
     /// The poster's hairline: 0 0 0 0.5px rgba(255, 255, 255, 0.16).
     static let posterHairline = Color.white.opacity(0.16)
     static let subtitle = Color.white.opacity(0.84)
+    /// The closed row's subtitles, under the titles' glow.
+    static let subtitleRest = Color.white.opacity(0.72)
+    /// The hairline that holds an empty place in the closed row.
+    static let emptySlot = Color.white.opacity(0.15)
     static let panelSecondary = Color.white.opacity(0.88)
 
     // The tile panel's meter: the mock's own greys, not the card's.
@@ -434,11 +483,6 @@ enum TileMotion {
         reduceMotion ? HomeDesign.Motion.reduced : ease(0.5)
     }
 
-    /// The baked art's fade, opening or closing: the same both ways.
-    static func art(closing _: Bool, reduceMotion: Bool) -> Animation {
-        reduceMotion ? HomeDesign.Motion.reduced : ease(HomeDesign.Motion.closeArtDuration)
-    }
-
     /// How a poster moves as its tile opens, by the place it starts in: the close played backwards in time. The front
     /// poster zooms out of its fan spot and the two beside it fly from their places in the row, together; the posters
     /// that were hidden behind them start late and end with them.
@@ -448,7 +492,7 @@ enum TileMotion {
         case .front:
             return HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeFrameDuration, reduceMotion: false)
                 .delay(HomeDesign.Motion.openFrontDelay)
-        case .left, .right:
+        case .second, .third:
             return HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeNeighborDuration, reduceMotion: false)
         case .hidden:
             return HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeRestDuration, reduceMotion: false)
@@ -482,16 +526,31 @@ enum TileMotion {
         HomeDesign.Motion.closing(duration: HomeDesign.Motion.closeRestDuration, reduceMotion: reduceMotion)
     }
 
-    /// A poster's opacity while the tile closes: the rest are gone in 0.3 s, as they draw in.
+    /// A poster's opacity while the tile closes: the rest are gone at once. They wait off screen in the carousel and
+    /// the row is no longer clipped, so a slower fade would show them crossing the other half as dark shapes.
     static func closeFade(reduceMotion: Bool) -> Animation {
-        reduceMotion ? HomeDesign.Motion.reduced : .easeOut(duration: HomeDesign.Motion.closeFadeDuration)
+        reduceMotion ? HomeDesign.Motion.reduced : .easeOut(duration: 0.04)
+    }
+
+    /// The count and "Swipe to browse" trading places under the title: the line that leaves is gone in the first half,
+    /// the one that arrives fades in the second, so the two are never printed on top of each other.
+    static func labelSwap(appearing: Bool, reduceMotion: Bool) -> Animation {
+        guard !reduceMotion else { return HomeDesign.Motion.reduced }
+        return appearing ? .easeOut(duration: 0.06).delay(0.06) : .easeOut(duration: 0.06)
+    }
+
+    /// The label of the tile that is not open: it is gone before the open tile's label sets out across the row, and it
+    /// returns once that label has gone past, so the two are never on top of each other.
+    static func labelYield(yielding: Bool, reduceMotion: Bool) -> Animation {
+        guard !reduceMotion else { return HomeDesign.Motion.reduced }
+        return yielding ? .easeOut(duration: 0.12) : .easeOut(duration: 0.2).delay(0.3)
     }
 
     /// How a poster moves as its tile closes, by the place it ends in.
     static func close(role: TileGeometry.FanRole, reduceMotion: Bool) -> Animation {
         switch role {
         case .front: closeFront(reduceMotion: reduceMotion)
-        case .left, .right: closeNeighbor(reduceMotion: reduceMotion)
+        case .second, .third: closeNeighbor(reduceMotion: reduceMotion)
         case .hidden: closeRest(reduceMotion: reduceMotion)
         }
     }
