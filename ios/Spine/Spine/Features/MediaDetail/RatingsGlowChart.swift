@@ -250,9 +250,12 @@ struct RatingsGlowChart: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
-    private static let headerHeight: CGFloat = 58
-    /// The number's own line box, at the header's bottom: its top sits 10 pt down (20 pt from the box's top).
+    /// The number's line, then "N reviews ›" under it; just the number's line when there are no reviews.
+    private var headerHeight: CGFloat { reviewsTitle == nil ? 58 : 80 }
+    /// The number's own line box: its top sits 10 pt down (20 pt from the box's top).
     private static let numberHeight: CGFloat = 48
+    /// The reviews line under the number (its text; the button's tap area reaches past it).
+    private static let reviewsLineHeight: CGFloat = 18
     /// Air above the header, so the box's top edge sits 2 pt above the number's line.
     private static let topInset: CGFloat = 8
     /// The Inner light box: from 6 pt down to the floor, 1 pt in from each side. It has no bottom edge.
@@ -281,7 +284,7 @@ struct RatingsGlowChart: View {
             let width = geometry.size.width
             ZStack(alignment: .topLeading) {
                 innerLightBox
-                    .frame(width: width - 2, height: G.floorY + Self.topInset + Self.headerHeight - Self.boxTop)
+                    .frame(width: width - 2, height: G.floorY + Self.topInset + headerHeight - Self.boxTop)
                     .offset(x: 1, y: Self.boxTop)
                 VStack(alignment: .leading, spacing: 0) {
                     header
@@ -292,7 +295,7 @@ struct RatingsGlowChart: View {
                 .accessibilityElement(children: .contain)
             }
         }
-        .frame(height: Self.topInset + Self.headerHeight + G.height + (people.isEmpty ? 0 : G.facesRowHeight))
+        .frame(height: Self.topInset + headerHeight + G.height + (people.isEmpty ? 0 : G.facesRowHeight))
         // Friends load after the chart: the row's room opens smoothly instead of shoving the page.
         .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: people.isEmpty)
         .onAppear {
@@ -340,29 +343,30 @@ struct RatingsGlowChart: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(String(format: "%.1f", average))
-                .font(Self.numberFont)
-                .tracking(-2)
-                // The board's 48 pt line box, so the baseline lands where it does there.
-                .frame(height: Self.numberHeight)
-                .foregroundStyle(color)
-                // Softer than Home's title glow.
-                .shadow(color: color.opacity(0.24), radius: 6)
-                .shadow(color: color.opacity(0.14), radius: 14)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(totalCount.formatted())
-                Image(systemName: "eye")
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(String(format: "%.1f", average))
+                    .font(Self.numberFont)
+                    .tracking(-2)
+                    // The board's 48 pt line box, so the baseline lands where it does there.
+                    .frame(height: Self.numberHeight)
+                    .foregroundStyle(color)
+                    // Softer than Home's title glow.
+                    .shadow(color: color.opacity(0.24), radius: 6)
+                    .shadow(color: color.opacity(0.14), radius: 14)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(totalCount.formatted())
+                        .font(.system(size: 13, weight: .semibold))
+                        .monospacedDigit()
+                    // 60% of the count's size.
+                    Image(systemName: "eye")
+                        .font(.system(size: 8, weight: .semibold))
+                }
+                .foregroundStyle(.white.opacity(0.62))
             }
-            .font(.system(size: 13, weight: .semibold))
-            .monospacedDigit()
-            .foregroundStyle(.white.opacity(0.62))
-        }
-        .lineLimit(1)
-        .accessibilityHidden(true)
-        .padding(.horizontal, Self.sideInset)
-        .frame(maxWidth: .infinity, minHeight: Self.headerHeight, maxHeight: Self.headerHeight, alignment: .bottomLeading)
-        .overlay(alignment: .topTrailing) {
+            .lineLimit(1)
+            .accessibilityHidden(true)
+
             if let reviewsTitle {
                 Button(action: onSeeReviews) {
                     HStack(spacing: 5) {
@@ -372,18 +376,20 @@ struct RatingsGlowChart: View {
                     }
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(.white.opacity(0.82))
-                    // 10 pt of tappable air around the text; the outer padding below takes it back out.
-                    .padding(10)
+                    .frame(height: Self.reviewsLineHeight)
+                    // A 44 pt tap area around the line, taken back out so the text sits right under the number.
+                    .padding(.vertical, 13)
+                    .padding(.trailing, 12)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(height: 44)
-                // The text sits 14 pt below the header's top, 22 pt in from the chart's right edge.
-                .padding(.top, 1)
-                .padding(.trailing, 12)
+                .padding(.vertical, -13)
                 .accessibilityHint("Opens every written review")
             }
         }
+        .padding(.top, 10)
+        .padding(.horizontal, Self.sideInset)
+        .frame(maxWidth: .infinity, minHeight: headerHeight, maxHeight: headerHeight, alignment: .topLeading)
     }
 
     // MARK: Chart
