@@ -342,11 +342,14 @@ nonisolated enum TileGeometry {
 
     // MARK: Seam
 
-    /// The seam is one line down the page's middle. Closed it runs from 8 pt below the row's top to its bottom, 188 pt; while a tile is open
-    /// it glides to the edge the tile's posters came from (In progress's to the right, Trending's to the left) and
-    /// runs from 24 to 384 pt, softer.
-    static let seamRestTop: CGFloat = 8
-    static let seamRestHeight: CGFloat = 188
+    /// The seam is a T with soft corners. Its crossbar runs 8 pt above the row's top, just under "Home" and the profile
+    /// picture, from screen edge to screen edge, and curves down into the line on a 14 pt radius; the line then runs
+    /// down the page's middle to the row's bottom, 190 pt. While a tile is open the line glides to the edge the tile's
+    /// posters came from (In progress's to the right, Trending's to the left) and runs from 24 to 384 pt, softer.
+    static let seamBarTop: CGFloat = -8
+    static let seamCornerRadius: CGFloat = 14
+    static let seamRestTop: CGFloat = seamBarTop + seamCornerRadius
+    static let seamRestHeight: CGFloat = 190
     static let seamOpenTop: CGFloat = 24
     static let seamOpenHeight: CGFloat = 360
     static let seamOpenOpacity: Double = 0.55

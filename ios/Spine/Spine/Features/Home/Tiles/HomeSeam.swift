@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The seam: a thin glowing T. Its line runs down the middle of the closed row, between In progress and Trending, and
-/// its crossbar runs across the row's top to both screen edges. Idle it breathes. While a tile is open the line glides
+/// The seam: a thin glowing T with soft corners. Its crossbar runs just under the header to both screen edges and
+/// curves down into its line, which runs down the middle of the closed row, between In progress and Trending. Idle it breathes. While a tile is open the line glides
 /// to the edge that tile's posters came from, runs longer and softer, and the crossbar fades; both come back when the
 /// tile closes.
 ///
@@ -36,12 +36,12 @@ struct HomeSeam: View {
                     y: top - pad * scaleY
                 )
                 .opacity(isOpen ? TileGeometry.seamOpenOpacity : 1)
-            // The T's crossbar: across the top of the closed row from screen edge to screen edge. It fades while a
-            // tile is open, as the line glides to the edge.
+            // The T's crossbar: just under the header, from screen edge to screen edge, curving down into the line's
+            // top. It fades while a tile is open, as the line glides to the edge.
             SeamBar(width: contentWidth + 2 * margin)
                 .opacity(breath)
                 .animation(breathAnimation, value: breathing)
-                .offset(x: -margin - pad, y: TileGeometry.seamRestTop - pad)
+                .offset(x: -margin - pad, y: TileGeometry.seamBarTop - pad)
                 .opacity(isOpen ? 0 : 1)
         }
             // Takes no room: the crossbar is wider than the section, and the section measures its own width to lay
@@ -60,19 +60,41 @@ struct HomeSeam: View {
     }
 }
 
-/// The crossbar of the T: the line's white and glow, one point tall and as wide as the screen. Drawn once into a
-/// texture, like the line.
+/// The crossbar of the T: the line's white and glow, as wide as the screen, curving down into the line's top on
+/// both sides of the middle. Drawn once into a texture, like the line.
 private struct SeamBar: View {
     let width: CGFloat
 
     var body: some View {
-        Rectangle()
-            .fill(.white.opacity(0.95))
-            .frame(width: width, height: TileGeometry.seamWidth)
+        let radius = TileGeometry.seamCornerRadius
+        SeamBarShape(radius: radius)
+            .stroke(.white.opacity(0.95), lineWidth: TileGeometry.seamWidth)
+            .frame(width: width, height: radius + TileGeometry.seamWidth)
             .shadow(color: .white.opacity(0.5), radius: 3)
             .shadow(color: .white.opacity(0.28), radius: 8)
             .padding(SeamTexture.padding)
             .drawingGroup()
+    }
+}
+
+/// From each screen edge along the top, then a quarter turn down into the middle, where the line starts.
+private struct SeamBarShape: Shape {
+    let radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let y = rect.minY + TileGeometry.seamWidth / 2
+        let mid = rect.midX
+        let end = CGPoint(x: mid, y: y + radius)
+        // A quarter circle as a cubic: the control points sit this share of the radius along each tangent.
+        let k = radius * 0.5523
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: y))
+        path.addLine(to: CGPoint(x: mid - radius, y: y))
+        path.addCurve(to: end, control1: CGPoint(x: mid - radius + k, y: y), control2: CGPoint(x: mid, y: end.y - k))
+        path.move(to: CGPoint(x: rect.maxX, y: y))
+        path.addLine(to: CGPoint(x: mid + radius, y: y))
+        path.addCurve(to: end, control1: CGPoint(x: mid + radius - k, y: y), control2: CGPoint(x: mid, y: end.y - k))
+        return path
     }
 }
 
