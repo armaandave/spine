@@ -7,7 +7,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from app.providers import nytbooks
-from lists.featured import order, overrides, registry
+from lists.featured import order, overrides, registry, sources
 from lists.featured.adapters import ADAPTERS
 from lists.featured.adapters import static as static_adapter
 from lists.featured.definitions import static as static_definitions
@@ -24,6 +24,24 @@ class RegistryContractTests(SimpleTestCase):
 
     def test_curated_order_names_only_real_keys(self):
         self.assertEqual(order.problems(registry.all_definitions()), [])
+
+    def test_source_names_and_icons_are_real(self):
+        self.assertEqual(sources.problems(registry.all_definitions()), [])
+
+    def test_source_problems_name_typos_missing_icons_and_repeats(self):
+        definitions = [make_definition(source_name="The Academy"), make_definition(key="other", source_name="Pitchfork")]
+        table = {"The Academy": ("Oscars", "oscars"), "The Acadmy": ("", ""), "Pitchfork": ("", "no-such-icon")}
+        with patch.object(sources, "SOURCES", table), patch.object(sources, "LEAD", ("Oscars", "Oscars", "Grammys")):
+            found = sources.problems(definitions)
+        self.assertEqual(
+            found,
+            [
+                "SOURCES: no list comes from 'The Acadmy'",
+                "SOURCES['Pitchfork']: no icon file no-such-icon.png",
+                "LEAD: repeated names",
+                "LEAD: no source shows as 'Grammys'",
+            ],
+        )
 
     def test_keys_and_identities_are_unique(self):
         definitions = registry.all_definitions()

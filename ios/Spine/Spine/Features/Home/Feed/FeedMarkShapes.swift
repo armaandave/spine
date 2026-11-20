@@ -7,6 +7,8 @@ nonisolated enum FeedMark: Equatable, Hashable, Sendable {
     case rewatch
     case star
     case halfStar
+    /// A review hidden behind a spoiler warning (a friend's card).
+    case spoiler
 
     /// The mark for one of a rating's star symbols ("star.fill", "star.leadinghalf.filled"); nil for any other name.
     init?(starSymbol: String) {
@@ -23,6 +25,7 @@ nonisolated enum FeedMark: Equatable, Hashable, Sendable {
         case .rewatch: "arrow.clockwise"
         case .star: "star.fill"
         case .halfStar: "star.leadinghalf.filled"
+        case .spoiler: "eye.slash.fill"
         }
     }
 
@@ -32,6 +35,7 @@ nonisolated enum FeedMark: Equatable, Hashable, Sendable {
         case .rewatch: "rewatch"
         case .star: "star"
         case .halfStar: "halfStar"
+        case .spoiler: "spoiler"
         }
     }
 
@@ -42,6 +46,7 @@ nonisolated enum FeedMark: Equatable, Hashable, Sendable {
         case .heart: ink.heart
         case .rewatch: ink.rewatch
         case .star, .halfStar: ink.star
+        case .spoiler: HomeDesign.Palette.spoilerRed
         }
     }
 }

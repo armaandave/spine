@@ -891,15 +891,15 @@ final class AnimeTrackingTests: XCTestCase {
     func testTV005TheMenu() {
         var anime = AnimeState(status: "In progress", selectedAction: "watching", removeCount: 13)
         anime.inLibrary = true
+        anime.started = true
         anime.availableActions = ["pause", "drop", "log", "remove", "rate"]
         anime.actionReasons = ["planning": "You've started this anime. Pause or drop it instead."]
-        var items = TVTrackingPresentation.animeMenu(for: anime)
-        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Remove from Library"])
-        XCTAssertTrue(items[0].isSelected)
-        XCTAssertFalse(items[1].isAvailable)
-        XCTAssertEqual(items[1].reason, "You've started this anime. Pause or drop it instead.")
-        XCTAssertEqual(items[3].command, .confirmDrop)
-        XCTAssertEqual(items[5].command, .confirmRemove)
+        var menu = TVTrackingPresentation.animeMenu(for: anime)
+        XCTAssertEqual(menu.items.map(\.key), ["watching", "pause", "drop", "log", "remove"])
+        XCTAssertEqual(menu.notes.count, 1, "A started anime can't go back to Planning, and a line says so")
+        XCTAssertTrue(menu.items[0].isSelected)
+        XCTAssertEqual(menu.items[2].command, .confirmDrop)
+        XCTAssertEqual(menu.items[4].command, .confirmRemove)
         XCTAssertEqual(AnimeTrackingPresentation.removePrompt(for: anime), "Remove this anime? Your 13 watched episodes will be unmarked.")
         XCTAssertEqual(AnimeTrackingPresentation.dropPrompt, "Drop this anime? Your progress will be kept.")
 
@@ -907,32 +907,32 @@ final class AnimeTrackingTests: XCTestCase {
         anime.status = "Paused"
         anime.selectedAction = "pause"
         anime.availableActions = ["resume", "drop", "log", "remove", "rate"]
-        items = TVTrackingPresentation.animeMenu(for: anime)
-        XCTAssertEqual(items.map(\.title), ["Resume", "Planning", "Pause", "Drop", "Log", "Remove from Library"])
-        XCTAssertEqual(items[0].command, .action(.resume))
+        menu = TVTrackingPresentation.animeMenu(for: anime)
+        XCTAssertEqual(menu.items.map(\.key), ["resume", "pause", "drop", "log", "remove"])
+        XCTAssertEqual(menu.items[0].command, .action(.resume))
 
-        // A finished title offers Rewatch; during one, Stop Rewatching takes its place.
+        // A finished title offers Rewatch after Log; with logs, Remove gives way to a line saying why.
         anime.status = "Completed"
         anime.selectedAction = nil
         anime.availableActions = ["pause", "drop", "rewatch", "log", "rate"]
         anime.actionReasons = ["watching": "You've watched everything that has aired.", "remove": "Delete this anime's logs first."]
-        items = TVTrackingPresentation.animeMenu(for: anime)
-        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Rewatch", "Remove from Library"],
-                       "Rewatch, which appears when the title finishes, comes after Log")
-        XCTAssertEqual(items.last?.reason, "Delete this anime's logs first.")
-        XCTAssertEqual(items[0].reason, "You've watched everything that has aired.")
+        menu = TVTrackingPresentation.animeMenu(for: anime)
+        XCTAssertEqual(menu.items.map(\.key), ["pause", "drop", "log", "rewatch"])
+        XCTAssertEqual(menu.notes.count, 1)
         anime.availableActions = ["pause", "drop", "stop_rewatch", "log", "rate"]
         anime.actionReasons = ["rewatch": "You're already rewatching this."]
-        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: anime).map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Stop Rewatching", "Remove from Library"])
+        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: anime).items.map(\.key), ["pause", "drop", "log", "stop_rewatch"])
 
-        // Not in the library: nothing to remove.
-        XCTAssertFalse(TVTrackingPresentation.animeMenu(for: AnimeState()).map(\.title).contains("Remove from Library"))
+        // Not in the library: every shelf can be picked, and there's nothing to remove.
+        let untracked = AnimeState(availableActions: ["watching", "planning", "pause", "drop", "log"])
+        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: untracked).items.map(\.key),
+                       ["planning", "watching", "pause", "drop", "log"])
     }
 
-    func testAN002ASingleHasPlanningLogAndRemoveAndNoNumberAnywhere() {
+    func testAN002ASingleHasLogAndRemoveAndNoNumberAnywhere() {
         var single = AnimeState(inLibrary: true, status: "Completed", finished: true, single: true, watchedCount: 1, airedCount: 1, removeCount: 1)
         single.availableActions = ["planning", "log", "remove", "rate"]
-        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: single).map(\.title), ["Planning", "Log", "Remove from Library"])
+        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: single).items.map(\.key), ["planning", "log", "remove"])
         XCTAssertEqual(AnimeTrackingPresentation.pageLines(for: single), [])
         XCTAssertNil(AnimeTrackingPresentation.gridBadge(for: single))
         XCTAssertNil(AnimeTrackingPresentation.cardLine(for: single))
@@ -1160,7 +1160,7 @@ final class AnimeTrackingTests: XCTestCase {
 
         var dropped = Self.watching(upNext: 8, watched: 7, aired: 24)
         dropped.status = "Dropped"
-        XCTAssertEqual(line(dropped), "Stopped at E8")
+        XCTAssertEqual(line(dropped), "Dropped at E8")
         dropped.watchedCount = 0
         XCTAssertEqual(line(dropped), "Dropped")
 

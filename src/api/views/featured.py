@@ -34,7 +34,7 @@ from api.views.lists import (
 from app import exposure
 from app.models import MediaTypes
 from app.providers import tmdb
-from lists.featured import health, order, registry
+from lists.featured import health, order, registry, sources
 from lists.models import CustomList, CustomListItem, PersonListItem, held_media_types
 from social.models import ContentLike
 
@@ -518,6 +518,8 @@ def _shelf(key, media_type, cards, limit, render, *, see_all=None, kind_counts=N
         "kind_counts": kind_counts if kind_counts is not None else {},
         "lists": [render(card) for card in shown],
         "see_all": see_all,
+        # The Now shelf mixes every kind's charts and Search shows no sources for it.
+        "sources": [] if key == "now" else sources.shelf_sources([card.definition for card in cards], render.request),
     }
 
 

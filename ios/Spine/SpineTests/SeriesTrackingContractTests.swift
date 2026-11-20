@@ -50,22 +50,22 @@ final class SeriesTrackingContractTests: XCTestCase {
 
     // MARK: Words and shelves (MC-000, BK-001)
 
-    // MC-000 (BK-001): five sections with the book's words.
-    func testFiveShelvesWithTheBooksWords() {
+    // MC-000 (BK-001): five sections, in the words every type shares, with Reading for In progress.
+    func testFiveShelvesWithTheSharedWords() {
         for mediaType in ["manga", "comic"] {
             XCTAssertEqual(LibraryShelf.available(for: mediaType), [.planning, .currentlyReading, .paused, .didNotFinish, .read], mediaType)
             XCTAssertTrue(LibraryShelf.usesStatusShelves(mediaType))
             XCTAssertEqual(LibraryShelf.defaultShelf(for: mediaType), .currentlyReading)
-            XCTAssertEqual(LibraryShelf.planning.title(mediaType: mediaType), "To Read")
-            XCTAssertEqual(LibraryShelf.currentlyReading.title(mediaType: mediaType), "Currently Reading")
-            XCTAssertEqual(LibraryShelf.didNotFinish.title(mediaType: mediaType), "Did Not Finish")
-            XCTAssertEqual(LibraryShelf.read.title(mediaType: mediaType), "Read")
+            XCTAssertEqual(LibraryShelf.planning.title(mediaType: mediaType), "Planning")
+            XCTAssertEqual(LibraryShelf.currentlyReading.title(mediaType: mediaType), "Reading")
+            XCTAssertEqual(LibraryShelf.didNotFinish.title(mediaType: mediaType), "Dropped")
+            XCTAssertEqual(LibraryShelf.read.title(mediaType: mediaType), "Completed")
             let ref = Self.ref(mediaType)
-            XCTAssertEqual(ref.trackingStatusLabel("Planning"), "To Read")
-            XCTAssertEqual(ref.trackingStatusLabel("In progress"), "Currently Reading")
+            XCTAssertEqual(ref.trackingStatusLabel("Planning"), "Planning")
+            XCTAssertEqual(ref.trackingStatusLabel("In progress"), "Reading")
             XCTAssertEqual(ref.trackingStatusLabel("Paused"), "Paused")
-            XCTAssertEqual(ref.trackingStatusLabel("Dropped"), "Did Not Finish")
-            XCTAssertEqual(ref.trackingStatusLabel("Completed"), "Read")
+            XCTAssertEqual(ref.trackingStatusLabel("Dropped"), "Dropped")
+            XCTAssertEqual(ref.trackingStatusLabel("Completed"), "Completed")
             XCTAssertEqual(ref.repeatLabel, "Reread")
         }
         XCTAssertEqual(LibraryShelf.available(for: "movie"), [.tracked, .planning], "Not movies")
@@ -583,71 +583,57 @@ final class SeriesTrackingContractTests: XCTestCase {
         )
     }
 
-    // BK-100: what isn't in the library has nothing to remove.
-    func testTheMenuOfAnUntrackedSeries() {
-        let menu = ReadingMenu(mediaType: "manga", status: nil, book: nil)
-        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Currently Reading", "Paused", "Did Not Finish", "Log Read"])
-        XCTAssertFalse(menu.rows.contains(where: \.isDisabled))
-        XCTAssertEqual(menu.rows.map(\.command)[3], .didNotFinish(asks: false))
-        XCTAssertNil(menu.liveReason)
-        XCTAssertNil(menu.removal)
+    // BK-100: before a read starts any shelf can be picked, so a book read before Spine can go straight to Dropped.
+    func testTheMenuBeforeAReadStarts() {
+        let untracked = ReadingMenu(mediaType: "manga", status: nil, book: nil)
+        XCTAssertEqual(untracked.rows.map(\.command), [.planning, .reading, .paused, .dropped(asks: false), .log])
+        XCTAssertFalse(untracked.offersRemoval, "Nothing to remove")
+        XCTAssertEqual(untracked.notes, [])
+        let planned = ReadingMenu(mediaType: "book", status: "Planning", book: BookTrackingState(canRemoveTracking: true))
+        XCTAssertEqual(planned.rows.map(\.command), [.planning, .reading, .paused, .dropped(asks: false), .log])
+        XCTAssertEqual(planned.rows.filter(\.isSelected).map(\.command), [.planning])
+        XCTAssertTrue(planned.offersRemoval)
     }
 
-    // BK-100, BK-104: during a read, To Read is out and Update Progress is on offer, with the server's reason.
+    // BK-100, BK-104: during a read, Reading is ticked, Dropped asks first and Update Progress is on offer.
     func testTheMenuDuringARead() {
-        let reason = "Pause or mark this attempt Did Not Finish first."
-        let menu = ReadingMenu(mediaType: "comic", status: "In progress", book: live(reasons: ["planning": reason]))
-        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Currently Reading ✓", "Paused", "Did Not Finish", "Log Read"])
-        XCTAssertEqual(menu.rows.filter(\.isDisabled).map(\.title), ["To Read", "Currently Reading ✓"])
-        XCTAssertEqual(menu.rows.map(\.command)[3], .didNotFinish(asks: true))
-        XCTAssertEqual(menu.liveReason, reason)
+        let menu = ReadingMenu(mediaType: "comic", status: "In progress", book: live())
+        XCTAssertEqual(menu.rows.map(\.command), [.reading, .paused, .dropped(asks: true), .log, .updateProgress])
+        XCTAssertEqual(menu.rows.filter(\.isSelected).map(\.command), [.reading])
+        XCTAssertEqual(menu.notes.count, 1, "Planning waits for the read to end, and a line under the menu says so")
     }
 
-    // BK-100, BK-303: Resume when Paused.
+    // BK-100, BK-303: when Paused, Resume takes Reading's place, as it takes Watching's on a show.
     func testTheMenuWhilePaused() {
         let menu = ReadingMenu(mediaType: "manga", status: "Paused", book: live("Paused"))
-        XCTAssertEqual(
-            menu.rows.map(\.title),
-            ["To Read", "Currently Reading", "Paused ✓", "Did Not Finish", "Resume Reading", "Log Read"]
-        )
-        XCTAssertEqual(menu.rows.first { $0.title == "Resume Reading" }?.command, .resume)
+        XCTAssertEqual(menu.rows.map(\.command), [.resume, .paused, .dropped(asks: true), .log, .updateProgress])
+        XCTAssertEqual(menu.rows.filter(\.isSelected).map(\.command), [.paused])
     }
 
-    // MC-200: a Read series with more offers both; with nothing more, Reread only. A book keeps its row.
+    // MC-200: a finished series with more out offers Keep Reading and Reread; with nothing more, Reread only. A finished
+    // book starts again from the top.
     func testTheMenuOfAReadSeries() {
         let more = ReadingMenu(mediaType: "manga", status: "Completed", book: BookTrackingState(offersKeepReading: true))
-        XCTAssertEqual(more.rows.map(\.title), ["To Read", "Keep Reading", "Reread", "Paused", "Did Not Finish", "Log Read"])
-        XCTAssertEqual(more.rows[1].command, .keepReading)
-        XCTAssertEqual(more.rows[2].command, .reread)
+        XCTAssertEqual(more.rows.map(\.command), [.planning, .keepReading, .reread, .paused, .dropped(asks: false), .log])
         let done = ReadingMenu(mediaType: "comic", status: "Completed", book: BookTrackingState(offersKeepReading: false))
-        XCTAssertEqual(done.rows.map(\.title), ["To Read", "Reread", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(done.rows.map(\.command), [.planning, .reread, .paused, .dropped(asks: false), .log])
         let book = ReadingMenu(mediaType: "book", status: "Completed", book: BookTrackingState())
-        XCTAssertEqual(book.rows.map(\.title), ["To Read", "Currently Reading", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(book.rows.map(\.command), [.planning, .reading, .paused, .dropped(asks: false), .log])
     }
 
-    // BK-002: removal says why it can't happen, in the series' words.
+    // BK-002: Remove from Library is offered when nothing blocks it; when something does, a line under the menu says
+    // so instead of a row that can't be tapped.
     func testTheMenusRemoval() {
         let blocked = ReadingMenu(
             mediaType: "manga",
             status: "Completed",
             book: BookTrackingState(canRemoveTracking: false, removeTrackingReason: "Delete reading attempts and logs first.")
         )
-        XCTAssertEqual(blocked.removal, ReadingMenu.Removal(title: "Remove from Library", isDisabled: true, reason: "Delete reading attempts and logs first."))
-        let free = ReadingMenu(mediaType: "comic", status: "Planning", book: BookTrackingState(canRemoveTracking: true))
-        XCTAssertEqual(free.removal, ReadingMenu.Removal(title: "Remove from Library", isDisabled: false, reason: nil))
-        XCTAssertEqual(ReadingMenu(mediaType: "book", status: "Planning", book: nil).removal?.title, "Remove Tracking")
-    }
-
-    // MC-000: a series speaks of attempts, whatever the server left out. A book of its journeys.
-    func testTheMenusFallbackWords() {
-        XCTAssertEqual(
-            ReadingMenu(mediaType: "manga", status: "In progress", book: live()).liveReason,
-            "Pause or mark this attempt Did Not Finish first."
-        )
-        XCTAssertEqual(
-            ReadingMenu(mediaType: "book", status: "In progress", book: live()).liveReason,
-            "Pause or finish the active journey before moving this book to To Read."
-        )
+        XCTAssertFalse(blocked.offersRemoval)
+        XCTAssertEqual(blocked.notes.count, 1)
+        let free = ReadingMenu(mediaType: "comic", status: "Dropped", book: BookTrackingState(canRemoveTracking: true))
+        XCTAssertTrue(free.offersRemoval)
+        XCTAssertEqual(free.notes, [])
     }
 
     // MARK: Routing (BK-102, MC-104)

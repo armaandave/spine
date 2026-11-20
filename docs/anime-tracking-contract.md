@@ -86,7 +86,7 @@ A show tracked under both TV and anime stays two separate things, and Spine does
 ### AN-002: A single works like a movie
 
 A single has no episode rows, no up next, no earlier-episodes question and no number anywhere.
-It has the eye, stars, the heart, and a + menu with Planning, Log and Remove from Library.
+It has the eye, stars, the heart, the Planning bookmark (TV-006), and a + menu with Planning, Log and Remove from Library.
 Watching, Pause and Drop are refused with a reason, and a webhook's play does nothing.
 
 - The eye and direct stars or a heart mark it watched, undated, and it moves to Completed.
@@ -278,7 +278,7 @@ A rewatch counts again in activity and stats (AN-703, AN-704).
 | Watching | "E8 next · 7 of 24", "Caught up · E8 on Thu", "Caught up", or "Rewatching · E3 next" |
 | Planning | The premiere date while nothing has aired, for example "Premieres Mar 12" |
 | Paused | "Paused at E8", naming up next |
-| Dropped | "Stopped at E8", naming up next |
+| Dropped | "Dropped at E8", naming up next |
 | Completed | Nothing extra |
 
 A Paused or Dropped title with nothing watched reads "Paused" or "Dropped".

@@ -57,8 +57,9 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
     """Search for books on Hardcover."""
     query = cap_search_query(query)
     match_suffix = "_match" if preserve_ranking_fields else ""
+    # v2: a row keeps its year and authors after ranking (``release_year``, ``made_by``).
     cache_key = (
-        f"search_{Sources.HARDCOVER.value}_{MediaTypes.BOOK.value}_{query}_{page}{match_suffix}"
+        f"search_{Sources.HARDCOVER.value}_{MediaTypes.BOOK.value}_v2_{query}_{page}{match_suffix}"
     )
     data = cache.get(cache_key)
 
@@ -108,6 +109,9 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
                 # Hardcover's search documents carry release_year and author_names.
                 "first_publish_year": hit["document"].get("release_year"),
                 "author_name": hit["document"].get("author_names"),
+                # Ranking drops the two above; the row's year and who made it stay.
+                "release_year": hit["document"].get("release_year"),
+                "made_by": _authors(hit["document"]),
             }
             for hit in hits
         ]
@@ -129,6 +133,19 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
         cache.set(cache_key, data)
 
     return data
+
+
+def _authors(document):
+    """A search document's authors, in its order: its translators and narrators left out."""
+    contributions = [entry for entry in document.get("contributions") or [] if isinstance(entry, dict)]
+    if not contributions:
+        return list(document.get("author_names") or [])
+    names = [
+        ((entry.get("author") or {}).get("name") or "").strip()
+        for entry in contributions
+        if (entry.get("contribution") or "Author") == "Author"
+    ]
+    return list(dict.fromkeys(name for name in names if name))
 
 
 def search_people(query, *, limit=10, timeout=None):

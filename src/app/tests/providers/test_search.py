@@ -1026,7 +1026,7 @@ class Search(TestCase):
             "id,name,image,deck,publisher,start_year,count_of_issues",
         )
         self.assertTrue(
-            mock_cache.set.call_args.args[0].startswith("search_v3_comicvine_comic_"),
+            mock_cache.set.call_args.args[0].startswith("search_v4_comicvine_comic_"),
         )
         # Real covers came back, so there's no extra cover request.
         mock_api_request.assert_called_once()
@@ -1212,7 +1212,7 @@ class Search(TestCase):
         )
         capped_query = "The Short Story of Architecture: A Pocket Guide to"
         cache.delete(
-            f"search_{Sources.HARDCOVER.value}_{MediaTypes.BOOK.value}_"
+            f"search_{Sources.HARDCOVER.value}_{MediaTypes.BOOK.value}_v2_"
             f"{capped_query}_1",
         )
         mock_api_request.return_value = {

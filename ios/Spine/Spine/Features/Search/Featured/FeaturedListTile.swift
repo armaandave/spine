@@ -198,43 +198,6 @@ struct FeaturedStatusBadge: View {
     }
 }
 
-/// A landing tile, about 148×162 pt.
-struct FeaturedListTile: View {
-    let card: FeaturedListCard
-    var showsMediaTypes = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            FeaturedPosterStack(card: card)
-
-            HStack(spacing: 6) {
-                FeaturedStatusBadge(card: card)
-                Spacer(minLength: 4)
-                if showsMediaTypes {
-                    FeaturedMediaTypeIcons(mediaTypes: card.mediaTypes, size: 9)
-                        .opacity(0.6)
-                }
-            }
-            .frame(height: 14)
-            .padding(.top, 9)
-
-            Text(card.name)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.leading)
-                .lineLimit(2, reservesSpace: true)
-                .padding(.top, 4)
-
-            Text(card.countText)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
-                .lineLimit(1)
-                .padding(.top, 2)
-        }
-        .frame(width: FeaturedPosterStack.Style.tile.width, alignment: .leading)
-    }
-}
-
 /// A see-all tile: bigger posters and a line of description.
 struct FeaturedMediumTile: View {
     let card: FeaturedListCard
@@ -276,32 +239,6 @@ struct FeaturedMediumTile: View {
                 .padding(.top, 2)
         }
         .frame(width: width, alignment: .leading)
-    }
-}
-
-/// The end of a shelf: "See all N".
-struct FeaturedSeeAllTile: View {
-    let count: Int
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "arrow.right")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(.white.opacity(0.1), in: Circle())
-
-            Text("See all \(count.formatted())")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.7))
-        }
-        .frame(width: 104, height: PosterSlot.searchRow.size.height)
-        .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.white.opacity(0.045), lineWidth: 1)
-        }
-        .accessibilityElement(children: .combine)
     }
 }
 

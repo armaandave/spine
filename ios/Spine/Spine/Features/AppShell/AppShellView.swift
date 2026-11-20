@@ -110,6 +110,7 @@ struct AppShellView: View {
                     socialRepository: session.repositories.social,
                     mediaLensStore: mediaLensStore,
                     currentUserId: currentUserId,
+                    enabledMediaTypes: currentUserMediaTypes,
                     selectedTab: selectedTab,
                     focusRequest: searchFocusRequest,
                     findPeopleRequest: findPeopleRequest,

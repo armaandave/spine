@@ -220,6 +220,41 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         self.assertEqual(mixed["title"], "Across Media")
         self.assertEqual([card["slug"] for card in mixed["lists"]], ["across"])
 
+    def add_sourced_lists(self, *sourced):
+        """Sync a two-item list per ``(key, source_name, media_type)`` and serve it."""
+        added = []
+        for index, (key, source_name, media_type) in enumerate(sourced):
+            definition = make_definition(
+                key=key, name=key, position=120 + index, source_name=source_name, media_types=(media_type,),
+            )
+            source = "musicbrainz" if media_type == "music" else "tmdb"
+            with registry.override_definitions([*self.definitions, *added, definition]):
+                self.run_list(definition, movie_entries(key, 2, media_type=media_type, source=source))
+            added.append(definition)
+        self.definitions = [*self.definitions, *added]
+
+    def test_shelves_name_their_sources_best_known_first(self):
+        self.add_sourced_lists(
+            ("zine-top", "A Zine", "movie"),
+            ("netflix-a", "Netflix", "movie"),
+            ("oscars-a", "The Academy", "movie"),
+            ("netflix-b", "Netflix", "movie"),
+            ("blog-a", "B Blog", "movie"),
+            ("blog-b", "B Blog", "movie"),
+        )
+        movie = self.shelves()["shelves"][1]
+        # Lead names in order, then the rest by how many lists they made, then by name.
+        self.assertEqual([source["name"] for source in movie["sources"]], ["Oscars", "Netflix", "B Blog", "A Zine"])
+        oscars, netflix, blog, _ = movie["sources"]
+        self.assertTrue(oscars["icon_url"].endswith("/static/img/sources/oscars.png"))
+        self.assertEqual((netflix["lists"], blog["lists"]), (2, 2))
+        self.assertIsNone(blog["icon_url"])
+
+    def test_source_names_shown_alike_count_once(self):
+        self.add_sourced_lists(("grammys-a", "Recording Academy", "music"), ("grammys-b", "The Recording Academy", "music"))
+        music = next(shelf for shelf in self.shelves()["shelves"] if shelf["key"] == "music")
+        self.assertEqual([(source["name"], source["lists"]) for source in music["sources"]], [("Grammys", 2)])
+
     def test_card_shape(self):
         movie = self.shelves()["shelves"][1]
         live = movie["lists"][0]

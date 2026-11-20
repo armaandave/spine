@@ -329,11 +329,14 @@ extension APIError {
 
 // MARK: + menu (TV-005, TV-007, TV-003)
 
-/// The show's or a season's + menu, as a native list: base options always listed, the current status shown as
-/// selected, and unavailable options with the server's reason. Drop and Remove ask first.
+/// The show's or a season's + menu, as a native list: the rows you can use, the current status ticked, the shelf
+/// under the title, and a line at the bottom for a row people look for that can't be used yet. Drop and Remove ask
+/// first.
 struct TVActionSheet: View {
     let title: String
-    let items: [TVMenuItem]
+    /// The shelf it sits on: "Watching", "Completed", "Not in your library".
+    var subtitle: String?
+    let menu: TVMenu
     /// "Remove this show? Your 13 watched episodes will be unmarked."
     let removePrompt: String
     /// "Drop this show? Your progress will be kept."
@@ -345,26 +348,33 @@ struct TVActionSheet: View {
     @State private var confirmsDrop = false
     @State private var confirmsRemove = false
 
+    private var items: [TVMenuItem] { menu.items }
+
     var body: some View {
         let shown = rows.shown(live: items)
+        let removal = shown.filter { $0.command == .confirmRemove }
         NavigationStack {
             List {
                 Section {
                     ForEach(shown.filter { $0.command != .confirmRemove }) { item in
                         row(item)
                     }
+                } footer: {
+                    if removal.isEmpty { notesFooter }
                 }
-                let removal = shown.filter { $0.command == .confirmRemove }
                 if !removal.isEmpty {
                     Section {
                         ForEach(removal) { item in
                             row(item, role: .destructive)
                         }
+                    } footer: {
+                        notesFooter
                     }
                 }
             }
             .fitsSheetToContent()
             .navigationTitle(title)
+            .navigationSubtitle(subtitle ?? "")
             .navigationBarTitleDisplayMode(.inline)
             .confirmationDialog(dropPrompt, isPresented: $confirmsDrop, titleVisibility: .visible) {
                 Button("Drop", role: .destructive) { commit(.action(.drop)) }
@@ -379,16 +389,26 @@ struct TVActionSheet: View {
         .onAppear { rows.open(items) }
     }
 
+    @ViewBuilder
+    private var notesFooter: some View {
+        if !menu.notes.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(menu.notes, id: \.self) { Text($0) }
+            }
+        }
+    }
+
     private func row(_ item: TVMenuItem, role: ButtonRole? = nil) -> some View {
         Button(role: role) {
             tap(item)
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                Label(item.isSelected ? "\(item.title) ✓" : item.title, systemImage: item.systemImage)
-                if let reason = item.reason {
-                    Text(reason)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            HStack {
+                Label(item.title, systemImage: item.systemImage)
+                if item.isSelected {
+                    Spacer()
+                    Image(systemName: "checkmark")
+                        .fontWeight(.semibold)
+                        .accessibilityLabel("Current")
                 }
             }
         }
