@@ -450,6 +450,8 @@ class QueryCostTests(PlanningRowBase):
         self.add(5, "game")
         large = self.count(ASK) - self.count({})
         # One for the day's rows, one per type to check they're still tracked, and the
-        # row's own people and artwork: not one per title.
-        self.assertLessEqual(small, 6)
+        # row's own people and artwork, and the viewer's own state for each row's face
+        # (a flat five: tracking rows, lists, latest log, like, progress): not one per
+        # title.
+        self.assertLessEqual(small, 10)
         self.assertLessEqual(large - small, 3)

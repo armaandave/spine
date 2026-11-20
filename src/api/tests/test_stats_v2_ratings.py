@@ -567,7 +567,7 @@ class RatingsQueryCountTests(RatingsBase):
         show = self.item(MediaTypes.TV.value, f"{prefix}show")
         season = self.item(MediaTypes.SEASON.value, f"{prefix}show", season=1)
         _tv, season_row = self.show_rows(show, season)
-        self.log(season, rating=Decimal("7.0"), visibility="private")
+        self.log(season, rating=Decimal("10.0"), visibility="private")
         for index in range(count):
             movie = self.item(MediaTypes.MOVIE.value, f"{prefix}m{index}")
             self.log(movie, rating=Decimal(index % 11))
@@ -575,8 +575,8 @@ class RatingsQueryCountTests(RatingsBase):
             self.movie_row(self.item(MediaTypes.MOVIE.value, f"{prefix}s{index}"), score=Decimal("8.0"))
             self.community(movie, "letterboxd", "3.0", 5, votes=100)
             episode = self.item(MediaTypes.EPISODE.value, f"{prefix}show", season=1, episode=index + 1)
-            self.viewing(season_row, episode, watched_on=date(2025, 3, 2))
-            self.viewing(season_row, episode, watched_on=date(2025, 3, 3))
+            self.viewing(season_row, episode, watched_on=date(2025, 12, 1))
+            self.viewing(season_row, episode, watched_on=date(2025, 12, 2))
 
     def queries(self, viewer, audience, start, end):
         counts = {}
