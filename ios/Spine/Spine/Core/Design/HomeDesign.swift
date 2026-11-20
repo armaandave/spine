@@ -162,10 +162,10 @@ nonisolated enum HomeDesign {
         // Opening is the close played backwards in time, on the same curve and over the same lengths: the front
         // poster and its two neighbors travel together for `closeNeighborDuration`, and the posters that were
         // hidden behind the front one start late so that each ends exactly with the others. They stay invisible
-        // until the last `closeFadeDuration`, by which time they are all but in their places.
+        // until they have landed, off the screen's edges: the row is not clipped, so a fade in flight showed them.
         static let openFrontDelay = closeNeighborDelay
         static let openRestDelay = closeNeighborDuration - closeRestDuration
-        static let openFadeDelay = closeNeighborDuration - closeFadeDuration
+        static let openFadeDelay = closeNeighborDuration
 
         static func soft(duration: Double, reduceMotion: Bool) -> Animation {
             guard !reduceMotion else { return reduced }

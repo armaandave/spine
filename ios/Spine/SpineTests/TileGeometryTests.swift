@@ -657,7 +657,7 @@ final class TileGeometryTests: XCTestCase {
         XCTAssertEqual(TileMotion.open(role: .front, reduceMotion: false), timing(0.548).delay(0))
         XCTAssertEqual(TileMotion.open(role: .second, reduceMotion: false), timing(0.548))
         XCTAssertEqual(TileMotion.open(role: .third, reduceMotion: false), timing(0.548))
-        // The rest start late, so they end with them, and appear only in the last 0.191 s.
+        // The rest start late, so they end with them, and appear only once they have landed.
         XCTAssertEqual(
             TileMotion.open(role: .hidden, reduceMotion: false),
             timing(0.383).delay(HomeDesign.Motion.openRestDelay)
@@ -667,7 +667,7 @@ final class TileGeometryTests: XCTestCase {
             TileMotion.openFade(reduceMotion: false),
             Animation.easeIn(duration: 0.191).delay(HomeDesign.Motion.openFadeDelay)
         )
-        XCTAssertEqual(HomeDesign.Motion.openFadeDelay, 0.357, accuracy: 0.0001)
+        XCTAssertEqual(HomeDesign.Motion.openFadeDelay, 0.548, accuracy: 0.0001)
     }
 
     @MainActor

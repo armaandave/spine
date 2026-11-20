@@ -500,8 +500,9 @@ enum TileMotion {
         }
     }
 
-    /// A poster's opacity as the tile opens: the posters from behind the fan appear in the last 0.3 s, when they are
-    /// nearly in their places (the others do not change opacity).
+    /// A poster's opacity as the tile opens: the posters from behind the fan appear once they have landed, off the
+    /// screen's edges (the others do not change opacity). Nothing clips the row, so a fade that started in flight showed
+    /// one of them crossing the right edge as In progress opened on a later title.
     static func openFade(reduceMotion: Bool) -> Animation {
         guard !reduceMotion else { return HomeDesign.Motion.reduced }
         return .easeIn(duration: HomeDesign.Motion.closeFadeDuration).delay(HomeDesign.Motion.openFadeDelay)

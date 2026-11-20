@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The seam: one thin glowing line down the middle of the closed row, between In progress and Trending. Idle it
-/// breathes. While a tile is open it glides to the edge that tile's posters came from, runs a little shorter and
-/// softer, and glides back to the middle when the tile closes.
+/// The seam: a thin glowing T. Its line runs down the middle of the closed row, between In progress and Trending, and
+/// its crossbar runs across the row's top to both screen edges. Idle it breathes. While a tile is open the line glides
+/// to the edge that tile's posters came from, runs longer and softer, and the crossbar fades; both come back when the
+/// tile closes.
 ///
 /// The line and its glow are drawn once into a texture (`SeamTexture`), and everything that moves is a transform or an
 /// opacity of that texture, so nothing is drawn again as it breathes or glides. The breath is one repeating animation
@@ -20,19 +21,29 @@ struct HomeSeam: View {
         let scaleY = isOpen ? TileGeometry.seamOpenHeight / TileGeometry.seamRestHeight : 1
         let top = isOpen ? TileGeometry.seamOpenTop : TileGeometry.seamRestTop
         let pad = SeamTexture.padding
-        SeamTexture()
-            // Reduce Motion holds it still.
-            .opacity(reduceMotion || breathing ? 1 : SeamTexture.lowOpacity)
-            .animation(
-                reduceMotion ? nil : .easeInOut(duration: SeamTexture.breathDuration).repeatForever(autoreverses: true),
-                value: breathing
-            )
-            .scaleEffect(y: scaleY, anchor: .top)
-            .offset(
-                x: TileGeometry.seamLeft(open: open?.index, contentWidth: contentWidth) - pad,
-                y: top - pad * scaleY
-            )
-            .opacity(isOpen ? TileGeometry.seamOpenOpacity : 1)
+        let margin = HomeDesign.Metric.pageMargin
+        // Reduce Motion holds it still.
+        let breath = reduceMotion || breathing ? 1 : SeamTexture.lowOpacity
+        let breathAnimation: Animation? = reduceMotion
+            ? nil : .easeInOut(duration: SeamTexture.breathDuration).repeatForever(autoreverses: true)
+        ZStack(alignment: .topLeading) {
+            SeamTexture()
+                .opacity(breath)
+                .animation(breathAnimation, value: breathing)
+                .scaleEffect(y: scaleY, anchor: .top)
+                .offset(
+                    x: TileGeometry.seamLeft(open: open?.index, contentWidth: contentWidth) - pad,
+                    y: top - pad * scaleY
+                )
+                .opacity(isOpen ? TileGeometry.seamOpenOpacity : 1)
+            // The T's crossbar: across the top of the closed row from screen edge to screen edge. It fades while a
+            // tile is open, as the line glides to the edge.
+            SeamBar(width: contentWidth + 2 * margin)
+                .opacity(breath)
+                .animation(breathAnimation, value: breathing)
+                .offset(x: -margin - pad, y: TileGeometry.seamRestTop - pad)
+                .opacity(isOpen ? 0 : 1)
+        }
             .animation(TileMotion.frame(closing: !isOpen, reduceMotion: reduceMotion), value: open)
             .onAppear {
                 // Restarted on every appearance: a repeating animation does not survive the view leaving the screen.
@@ -46,8 +57,24 @@ struct HomeSeam: View {
     }
 }
 
-/// The line: white, fading out at both ends, with two white glows round it. Drawn once, with room round it for the
-/// glow, into a texture.
+/// The crossbar of the T: the line's white and glow, one point tall and as wide as the screen. Drawn once into a
+/// texture, like the line.
+private struct SeamBar: View {
+    let width: CGFloat
+
+    var body: some View {
+        Rectangle()
+            .fill(.white.opacity(0.95))
+            .frame(width: width, height: TileGeometry.seamWidth)
+            .shadow(color: .white.opacity(0.5), radius: 3)
+            .shadow(color: .white.opacity(0.28), radius: 8)
+            .padding(SeamTexture.padding)
+            .drawingGroup()
+    }
+}
+
+/// The line: white, solid where it meets the crossbar at the top and fading out at the bottom, with two white glows
+/// round it. Drawn once, with room round it for the glow, into a texture.
 private struct SeamTexture: View {
     /// What the texture adds on every side of the line, for the glow.
     static let padding: CGFloat = 14
@@ -59,8 +86,7 @@ private struct SeamTexture: View {
         Rectangle()
             .fill(LinearGradient(
                 stops: [
-                    .init(color: .white.opacity(0), location: 0),
-                    .init(color: .white.opacity(0.95), location: 0.16),
+                    .init(color: .white.opacity(0.95), location: 0),
                     .init(color: .white.opacity(0.95), location: 0.84),
                     .init(color: .white.opacity(0), location: 1),
                 ],

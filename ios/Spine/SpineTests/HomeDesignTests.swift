@@ -149,7 +149,7 @@ final class HomeDesignTests: XCTestCase {
         typealias M = HomeDesign.Motion
         XCTAssertEqual(M.openFrontDelay + M.closeFrameDuration, M.closeNeighborDelay + M.closeNeighborDuration)
         XCTAssertEqual(M.openRestDelay + M.closeRestDuration, M.closeNeighborDuration, accuracy: 0.0001)
-        XCTAssertEqual(M.openFadeDelay + M.closeFadeDuration, M.closeNeighborDuration, accuracy: 0.0001)
+        XCTAssertEqual(M.openFadeDelay, M.closeNeighborDuration, accuracy: 0.0001)
     }
 
     func testOpeningAndClosingAreQuickerThanTheFirstCutAndNeverWhip() {
