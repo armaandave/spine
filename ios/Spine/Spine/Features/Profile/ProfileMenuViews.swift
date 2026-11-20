@@ -1960,15 +1960,12 @@ struct ProfileListDetailView: View {
         let hasBackdrop = backdropURL != nil
         // Never above the header, even before the width (and so the strip's height) is measured.
         let plateTop = max(0, CustomListHeaderLayout.plateTop(hasBackdrop: hasBackdrop, stripHeight: stripHeight))
-        let light = CustomListHeaderLayout.plateLight(hasBackdrop: hasBackdrop)
         return listPlate(list)
             .background {
-                // Behind the glass, as wide as the page, from just above the plate to just below it.
+                // Behind the glass and inside it only, so no light spills across the page.
                 if let lightURL = plateLightURL(list, artwork: artwork) {
-                    ProfileListPlateLight(url: lightURL, rampIn: light.rampIn)
-                        .padding(.horizontal, -14)
-                        .padding(.top, -light.lead)
-                        .padding(.bottom, -CustomListHeaderLayout.plateLightBleed)
+                    ProfileListPlateLight(url: lightURL)
+                        .clipShape(CustomListHeaderLayout.plateShape)
                 }
             }
             .padding(.horizontal, 14)
@@ -2097,7 +2094,7 @@ struct ProfileListDetailView: View {
         // The meta row's 44 pt already holds 11 under its words.
         .padding(.bottom, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .glassEffect(.regular, in: CustomListHeaderLayout.plateShape)
         // The page is always dark; light glass would wash out the white text.
         .environment(\.colorScheme, .dark)
     }
@@ -2387,14 +2384,7 @@ enum CustomListHeaderLayout {
         hasBackdrop ? stripHeight - plateOverlap : plateGap
     }
 
-    /// How far the light behind the plate reaches below it, fading out.
-    static let plateLightBleed: CGFloat = 30
-
-    /// The light behind the plate: how far above the plate it starts, and over how many points it fades in. Under a
-    /// backdrop it fades in slowly as the backdrop fades out; without one it is fully on at the plate's top edge.
-    static func plateLight(hasBackdrop: Bool) -> (lead: CGFloat, rampIn: CGFloat) {
-        hasBackdrop ? (6, 63) : (16, 16)
-    }
+    static let plateShape = RoundedRectangle(cornerRadius: 24, style: .continuous)
 }
 
 enum PeopleListGridLayout {
@@ -2491,25 +2481,32 @@ private struct ProfileListBackdropArtwork: View {
     }
 }
 
-/// The list's art, baked blurred, behind the glass plate so the plate takes the list's own colors: it fades in over
-/// `rampIn` points at its top and out over its last 120, whatever the plate's height.
+/// The list's art, baked blurred, behind the glass plate so the plate takes the list's own colors. Only art with a real
+/// color lights it, and light art less (`ListPlateLight`); a white, grey or black cover leaves the glass clear.
 private struct ProfileListPlateLight: View {
     let url: URL
-    let rampIn: CGFloat
 
-    private static let rampOut: CGFloat = 120
+    @State private var opacity: Double?
+
+    init(url: URL) {
+        self.url = url
+        _opacity = State(initialValue: ListPlateLight.opacity(for: PosterPaletteStore.shared.known(server: nil, url: url)))
+    }
 
     var body: some View {
-        BlurredArtBackground(url: url, accentHex: nil, style: .plate, baseOpacity: 0)
-            .mask {
-                VStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom)
-                        .frame(height: rampIn)
-                    Color.white
-                    LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: Self.rampOut)
-                }
+        ZStack {
+            if let opacity {
+                BlurredArtBackground(url: url, accentHex: nil, style: .plate, artOpacity: opacity, baseOpacity: 0)
+                    .transition(.opacity)
             }
+        }
+        .task(id: url) {
+            guard opacity == nil else { return }
+            let swatches = await PosterPaletteStore.shared.swatches(server: nil, url: url)
+            withAnimation(.easeOut(duration: 0.3)) {
+                opacity = ListPlateLight.opacity(for: swatches)
+            }
+        }
     }
 }
 
