@@ -1600,6 +1600,9 @@ struct ProfileListDetailView: View {
     @State private var isDeleteAlertPresented = false
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var listHeaderWidth: CGFloat = 0
+    @State private var listHeaderHeight: CGFloat = 0
+    /// How far the page has scrolled, so the blurred top of a list without a backdrop scrolls away with it.
+    @State private var scrollOffset: CGFloat = 0
 
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
@@ -1685,13 +1688,33 @@ struct ProfileListDetailView: View {
                 ? CustomListBackdropSelection.artwork(from: list.items)
                 : nil
         }
-        // Only a real backdrop takes the top of the page; a blurred cover only lights the glass.
+        // A real backdrop is the header's own strip. Without one, the first item, blurred, is the backdrop.
         let hasBackdrop = headerArtwork?.backdropURL != nil
+        let blurredTopURL = hasBackdrop ? nil : viewModel.list.flatMap { firstArtURL($0, artwork: headerArtwork) }
+        // Down to just past the plate, measured from the top of the safe area; it also reaches up under the status bar.
+        let blurredTopHeight = CustomListHeaderLayout.topPadding(hasBackdrop: false, topSafeAreaInset: topSafeAreaInset)
+            + listHeaderHeight + CustomListHeaderLayout.blurredTopBleed
 
         ZStack(alignment: .top) {
             // Black like Home and the post pages: the list's own art brings the color.
             HomeDesign.Palette.pageBackground
                 .ignoresSafeArea()
+
+            // Without a backdrop: the first item, blurred, fills the top of the page and bleeds off its top edge under
+            // the status bar and the buttons. The glass plate sits on it, and it scrolls away with the plate.
+            // Pulled down, it stretches with the plate instead of leaving it.
+            if let blurredTopURL {
+                Color.clear
+                    .frame(height: blurredTopHeight + max(-scrollOffset, 0))
+                    .frame(maxWidth: .infinity)
+                    .background(alignment: .bottom) {
+                        ProfileListBlurredTop(url: blurredTopURL)
+                            .ignoresSafeArea(edges: .top)
+                    }
+                    .offset(y: -max(scrollOffset, 0))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 14) {
@@ -1776,6 +1799,14 @@ struct ProfileListDetailView: View {
                 await viewModel.load()
             }
             .scrollContentBackground(.hidden)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                // Only the blurred top follows the scroll. Once it (and the status bar it reaches under, never 100 pt)
+                // is off the screen the offset stops changing, so scrolling a long list doesn't rebuild the page.
+                guard blurredTopURL != nil else { return 0 }
+                return min(geometry.contentOffset.y + geometry.contentInsets.top, blurredTopHeight + 100)
+            } action: { _, offset in
+                scrollOffset = offset
+            }
             .ignoresSafeArea(
                 edges: CustomListHeaderLayout.ignoredSafeAreaEdges(
                     hasBackdrop: hasBackdrop
@@ -1952,7 +1983,8 @@ struct ProfileListDetailView: View {
     }
 
     /// The top of a list: its backdrop across the page when it has one, nothing over it, then a glass plate lit from
-    /// behind by the list's own art. Without a backdrop the plate sits just under the top buttons.
+    /// behind by the backdrop's blur. Without a backdrop the plate sits just under the top buttons, on the blurred
+    /// first item the page draws behind it.
     private func listHeader(_ list: CustomListDetail, artwork: CustomListBackdropSelection.Artwork?) -> some View {
         // The same 3:2 backdrop strip as the media page.
         let stripHeight = BackdropLayout.stripHeight(width: listHeaderWidth, topInset: topSafeAreaInset)
@@ -1960,14 +1992,13 @@ struct ProfileListDetailView: View {
         let hasBackdrop = backdropURL != nil
         // Never above the header, even before the width (and so the strip's height) is measured.
         let plateTop = max(0, CustomListHeaderLayout.plateTop(hasBackdrop: hasBackdrop, stripHeight: stripHeight))
-        let light = CustomListHeaderLayout.plateLight(hasBackdrop: hasBackdrop)
         return listPlate(list)
             .background {
-                // Behind the glass, as wide as the page, from just above the plate to just below it.
-                if let lightURL = plateLightURL(list, artwork: artwork) {
-                    ProfileListPlateLight(url: lightURL, rampIn: light.rampIn)
+                // Under a backdrop: its blur behind the glass, as wide as the page, fading in as the backdrop fades out.
+                if let backdropURL, let lightURL = URL(string: backdropURL) {
+                    ProfileListPlateLight(url: lightURL, rampIn: CustomListHeaderLayout.plateLightRampIn)
                         .padding(.horizontal, -14)
-                        .padding(.top, -light.lead)
+                        .padding(.top, -CustomListHeaderLayout.plateLightLead)
                         .padding(.bottom, -CustomListHeaderLayout.plateLightBleed)
                 }
             }
@@ -1983,11 +2014,14 @@ struct ProfileListDetailView: View {
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listHeaderWidth = $0 }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                listHeaderWidth = size.width
+                listHeaderHeight = size.height
+            }
     }
 
-    /// What lights the plate: the backdrop or the first cover, blurred; a people list's first photo.
-    private func plateLightURL(_ list: CustomListDetail, artwork: CustomListBackdropSelection.Artwork?) -> URL? {
+    /// The list's art for its blurred top: the first cover; a people list's first photo.
+    private func firstArtURL(_ list: CustomListDetail, artwork: CustomListBackdropSelection.Artwork?) -> URL? {
         let url = list.listType == .people ? viewModel.displayedPeople.first?.profileUrl : artwork?.urlString
         return url.flatMap(URL.init(string:))
     }
@@ -2387,14 +2421,14 @@ enum CustomListHeaderLayout {
         hasBackdrop ? stripHeight - plateOverlap : plateGap
     }
 
-    /// How far the light behind the plate reaches below it, fading out.
+    /// Under a backdrop, the light behind the plate: it starts 6 pt above the plate, fades in over 63 pt as the
+    /// backdrop fades out, and reaches 30 pt below the plate, fading out.
+    static let plateLightLead: CGFloat = 6
+    static let plateLightRampIn: CGFloat = 63
     static let plateLightBleed: CGFloat = 30
 
-    /// The light behind the plate: how far above the plate it starts, and over how many points it fades in. Under a
-    /// backdrop it fades in slowly as the backdrop fades out; without one it is fully on at the plate's top edge.
-    static func plateLight(hasBackdrop: Bool) -> (lead: CGFloat, rampIn: CGFloat) {
-        hasBackdrop ? (6, 63) : (16, 16)
-    }
+    /// Without a backdrop, how far the blurred first item reaches below the header before it has faded out.
+    static let blurredTopBleed: CGFloat = 70
 }
 
 enum PeopleListGridLayout {
@@ -2491,8 +2525,40 @@ private struct ProfileListBackdropArtwork: View {
     }
 }
 
-/// The list's art, baked blurred, behind the glass plate so the plate takes the list's own colors: it fades in over
-/// `rampIn` points at its top and out over its last 120, whatever the plate's height.
+/// A list without a backdrop: its first item, baked blurred, as the backdrop. It fills the top of the page under a dark
+/// wash, solid down to 55% of its height, then fades into the black page.
+private struct ProfileListBlurredTop: View {
+    let url: URL
+
+    var body: some View {
+        BlurredArtBackground(url: url, accentHex: nil, style: .listTop, baseOpacity: 0)
+            .overlay {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.4), location: 0),
+                        .init(color: .black.opacity(0.18), location: 0.45),
+                        .init(color: .black.opacity(0.32), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white, location: 0.55),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+    }
+}
+
+/// The list's backdrop, baked blurred, behind the glass plate so the plate takes the list's own colors: it fades in
+/// over `rampIn` points at its top and out over its last 120, whatever the plate's height.
 private struct ProfileListPlateLight: View {
     let url: URL
     let rampIn: CGFloat
