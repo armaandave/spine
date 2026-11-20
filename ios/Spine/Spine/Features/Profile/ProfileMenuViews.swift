@@ -1602,7 +1602,7 @@ struct ProfileListDetailView: View {
     @State private var listHeaderWidth: CGFloat = 0
     @State private var listHeaderHeight: CGFloat = 0
     /// How far the page has scrolled, so the blurred top of a list without a backdrop scrolls away with it.
-    @State private var scrollOffset: CGFloat = 0
+    @State private var listScroll = ProfileListScroll()
 
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
@@ -1702,18 +1702,8 @@ struct ProfileListDetailView: View {
 
             // Without a backdrop: the first item, blurred, fills the top of the page and bleeds off its top edge under
             // the status bar and the buttons. The glass plate sits on it, and it scrolls away with the plate.
-            // Pulled down, it stretches with the plate instead of leaving it.
             if let blurredTopURL {
-                Color.clear
-                    .frame(height: blurredTopHeight + max(-scrollOffset, 0))
-                    .frame(maxWidth: .infinity)
-                    .background(alignment: .bottom) {
-                        ProfileListBlurredTop(url: blurredTopURL)
-                            .ignoresSafeArea(edges: .top)
-                    }
-                    .offset(y: -max(scrollOffset, 0))
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                ProfileListBlurredTop(url: blurredTopURL, height: blurredTopHeight, scroll: listScroll)
             }
 
             ScrollView(showsIndicators: false) {
@@ -1800,12 +1790,12 @@ struct ProfileListDetailView: View {
             }
             .scrollContentBackground(.hidden)
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                // Only the blurred top follows the scroll. Once it (and the status bar it reaches under, never 100 pt)
-                // is off the screen the offset stops changing, so scrolling a long list doesn't rebuild the page.
+                // Only the blurred top reads it. Once the top (and the status bar it reaches under, never 100 pt) is
+                // off the screen the offset stops changing.
                 guard blurredTopURL != nil else { return 0 }
                 return min(geometry.contentOffset.y + geometry.contentInsets.top, blurredTopHeight + 100)
             } action: { _, offset in
-                scrollOffset = offset
+                listScroll.offset = offset
             }
             .ignoresSafeArea(
                 edges: CustomListHeaderLayout.ignoredSafeAreaEdges(
@@ -2525,12 +2515,35 @@ private struct ProfileListBackdropArtwork: View {
     }
 }
 
-/// A list without a backdrop: its first item, baked blurred, as the backdrop. It fills the top of the page under a dark
-/// wash, solid down to 55% of its height, then fades into the black page.
+/// How far a list's page has scrolled. Only the blurred top reads it, so scrolling redraws that and not the whole page.
+@MainActor
+@Observable
+private final class ProfileListScroll {
+    var offset: CGFloat = 0
+}
+
+/// A list without a backdrop: its first item, baked blurred, as the backdrop. It runs `height` down from the top of the
+/// safe area and up under the status bar, under a dark wash, solid down to 55% of its height, then fades into the black
+/// page. It moves up with the page, and stretches with it when the page is pulled down.
 private struct ProfileListBlurredTop: View {
     let url: URL
+    let height: CGFloat
+    let scroll: ProfileListScroll
 
     var body: some View {
+        Color.clear
+            .frame(height: height + max(-scroll.offset, 0))
+            .frame(maxWidth: .infinity)
+            .background(alignment: .bottom) {
+                art
+                    .ignoresSafeArea(edges: .top)
+            }
+            .offset(y: -max(scroll.offset, 0))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private var art: some View {
         BlurredArtBackground(url: url, accentHex: nil, style: .listTop, baseOpacity: 0)
             .overlay {
                 LinearGradient(

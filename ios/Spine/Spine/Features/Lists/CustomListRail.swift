@@ -169,10 +169,10 @@ extension CustomListSummary {
     }
 
     /// "Anime and manga to start with, 10 titles, Anime and Manga": the name, the count in words, and what a mixed
-    /// list holds (a one-type list's count already says it).
+    /// list holds (a one-type list's count already says it), then "ranked" for a ranked list, which the rail doesn't show.
     var railAccessibilityLabel: String {
         let count = ListCountWords.text(count: railCount, mediaTypes: mediaTypes, isPeople: listType == .people)
         let holds = mediaTypes.count > 1 ? mediaTypesLabel : nil
-        return [name, count, holds].compactMap { $0 }.joined(separator: ", ")
+        return [name, count, holds, isRanked ? "ranked" : nil].compactMap { $0 }.joined(separator: ", ")
     }
 }
