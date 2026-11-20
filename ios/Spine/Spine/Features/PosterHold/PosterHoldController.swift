@@ -1,11 +1,32 @@
 import SwiftUI
+import UIKit
+
+/// One title's hold-menu state, watched by that title's posters only: your state after the latest change, newer than a
+/// poster's copy, and what a tap just asked for, shown at once while its write is on its way.
+@MainActor
+@Observable
+final class PosterHoldTitle {
+    /// Your state after the latest change, newer than the poster's copy: `.some(nil)` once it isn't in your library,
+    /// nil while there's nothing newer.
+    fileprivate(set) var fresh: UserMediaState??
+    /// The eye as just tapped, until its write lands or fails.
+    fileprivate(set) var eye: Bool?
+    /// The bookmark as just tapped, until its write lands or fails.
+    fileprivate(set) var planning: Bool?
+
+    fileprivate func clearTaps() {
+        eye = nil
+        planning = nil
+    }
+}
 
 /// Runs what a poster's hold menu asks for. Each title gets the page's own model (`MediaDetailViewModel`), filled the way
-/// Home's Trending rail fills it (`TrendingRailStore`), and each choice takes the rail's route (`TrendingRailRouter`):
-/// a write goes through the model's queue, and a screen (a log, a sheet) opens on the title's page as a handoff.
+/// Home's Trending rail fills it (`TrendingRailStore`), and each choice takes the page's route: a write goes through the
+/// model's queue, and a screen (a log, a sheet) opens on the title's page as a handoff.
 ///
-/// One per signed-in app, in the environment from `AppShellView`, where `posterHoldHost` shows its questions, notices
-/// and the Add to List sheet.
+/// The eye and the bookmark flip where they were tapped, with a tap you feel, and the menu stays open; a write that
+/// fails flips back with an error buzz. One per signed-in app, in the environment from `AppShellView`, where
+/// `posterHoldHost` shows its questions, notices and the Add to List sheet.
 @MainActor
 @Observable
 final class PosterHoldController {
@@ -51,10 +72,13 @@ final class PosterHoldController {
 
     @ObservationIgnored private var loaded: [MediaRef.ID: Loaded] = [:]
     @ObservationIgnored private var recency: [MediaRef.ID] = []
-    /// Your state for a title after a hold menu's write, newer than the copy a poster holds until its screen reloads.
-    /// A change made anywhere else drops it.
-    @ObservationIgnored private var fresh: [MediaRef.ID: UserMediaState?] = [:]
+    @ObservationIgnored private var titles: [MediaRef.ID: PosterHoldTitle] = [:]
+    /// Titles whose state is being read again after a change made elsewhere, and ones changed again meanwhile.
+    @ObservationIgnored private var refreshing: Set<MediaRef.ID> = []
+    @ObservationIgnored private var changedElsewhere: Set<MediaRef.ID> = []
     @ObservationIgnored private var observer: Task<Void, Never>?
+    @ObservationIgnored private let tapFeedback = UIImpactFeedbackGenerator(style: .medium)
+    @ObservationIgnored private let resultFeedback = UINotificationFeedbackGenerator()
 
     init(
         mediaRepository: MediaRepository,
@@ -78,90 +102,147 @@ final class PosterHoldController {
         }
     }
 
-    /// Your state for the title as the menu should show it: a hold menu's own newer answer, else the poster's copy.
+    /// A title's hold-menu state, made the first time a menu asks.
+    func title(for ref: MediaRef) -> PosterHoldTitle {
+        if let title = titles[ref.id] { return title }
+        let title = PosterHoldTitle()
+        titles[ref.id] = title
+        return title
+    }
+
+    /// Your state for the title as the menu should show it: the latest change's, else the poster's copy.
     func viewerState(for ref: MediaRef, poster: UserMediaState?) -> UserMediaState? {
-        if let state = fresh[ref.id] { return state }
+        if case let .some(state) = title(for: ref).fresh { return state }
         return poster
     }
 
-    /// Loads the title (or reuses it), then makes the choice the way the page would. `open` opens the title's page
-    /// with a handoff, for a choice the page finishes with its own screens.
-    func run(_ choice: Choice, on ref: MediaRef, open: @escaping (RailHandoff) -> Void) {
+    /// Loads the title (or reuses it), then makes the choice the way the page would. `flips` shows the tapped eye or
+    /// bookmark's new state at once, with a tap you feel, while the write is on its way (the menu stays open for it).
+    /// `open` opens the title's page with a handoff, for a choice the page finishes with its own screens.
+    func run(_ choice: Choice, on ref: MediaRef, flips: Bool = false, open: @escaping (RailHandoff) -> Void) {
+        let title = title(for: ref)
+        if flips {
+            switch choice {
+            case let .watched(wasFilled): title.eye = !wasFilled
+            case let .planning(wasFilled): title.planning = !wasFilled
+            case .removeFromLibrary: break
+            }
+            tapFeedback.impactOccurred()
+        }
         Task { [weak self] in
-            guard let self, let model = await model(for: ref), let detail = model.detail else { return }
+            guard let self else { return }
+            guard let model = await model(for: ref), let detail = model.detail else {
+                if flips { failed(title) }
+                return
+            }
             active = model
-            perform(choice, model: model, detail: detail, open: open)
+            let write = perform(choice, model: model, detail: detail, open: open)
+            guard flips else { return }
+            // Nothing written: the title changed since the menu opened, or the page has to finish it.
+            guard let write else {
+                title.clearTaps()
+                return
+            }
+            if await write.value {
+                title.fresh = .some(model.viewer)
+                title.clearTaps()
+            } else {
+                failed(title)
+            }
         }
     }
 
-    // MARK: The choices, by the rail's routes
+    private func failed(_ title: PosterHoldTitle) {
+        title.clearTaps()
+        resultFeedback.notificationOccurred(.error)
+    }
 
-    private func perform(_ choice: Choice, model: MediaDetailViewModel, detail: MediaDetail, open: (RailHandoff) -> Void) {
+    // MARK: The choices, by the page's routes
+
+    /// The choice's write, or nil when it wrote nothing here (it opened the page, asked first, or the title changed).
+    private func perform(
+        _ choice: Choice,
+        model: MediaDetailViewModel,
+        detail: MediaDetail,
+        open: (RailHandoff) -> Void
+    ) -> Task<Bool, Never>? {
         let config = model.viewer.map { TrendingRailConfig.make(title: detail.displayTitle, ref: detail.ref, viewer: $0) }
         switch choice {
         case let .watched(wasFilled):
-            guard (config?.isEyeSelected ?? false) == wasFilled else { return }
-            watch(isFilled: wasFilled, model: model, detail: detail, open: open)
+            guard (config?.isEyeSelected ?? false) == wasFilled else { return nil }
+            return watch(isFilled: wasFilled, model: model, detail: detail, open: open)
         case let .planning(wasFilled):
-            guard PosterHoldMenu.planning(ref: detail.ref, viewer: model.viewer) == (wasFilled ? .remove : .add) else { return }
-            plan(isPlanned: wasFilled, model: model, detail: detail)
+            guard PosterHoldMenu.planning(ref: detail.ref, viewer: model.viewer) == (wasFilled ? .remove : .add) else {
+                return nil
+            }
+            return plan(isPlanned: wasFilled, model: model, detail: detail)
         case .removeFromLibrary:
             remove(model: model, detail: detail)
+            return nil
         }
     }
 
     /// The page's eye (`TrendingRailRouter.eye`).
-    private func watch(isFilled: Bool, model: MediaDetailViewModel, detail: MediaDetail, open: (RailHandoff) -> Void) {
+    private func watch(
+        isFilled: Bool,
+        model: MediaDetailViewModel,
+        detail: MediaDetail,
+        open: (RailHandoff) -> Void
+    ) -> Task<Bool, Never>? {
         let ref = detail.ref
         if ref.isTVFamily || model.tracksAnime {
             // Marks every aired episode, or asks first; a filled eye undoes only what it added.
             model.tapTVEye()
-            return
+            return nil
         }
         if ref.isAnime {
             // With no anime state the log screen is the one way to say it's watched.
             open(.eye)
-            return
+            return nil
         }
         if ref.isSingleWeight {
-            _ = isFilled ? model.removeTracking(for: detail) : model.markConsumed(for: detail)
-            return
+            return isFilled ? model.removeTracking(for: detail) : model.markConsumed(for: detail)
         }
         if ref.mediaType == "game" {
             if model.viewer?.game?.hasLivePlaythrough == true {
                 open(.eye)
-            } else {
-                _ = model.performGameAction(isFilled ? "undo_completed" : "mark_completed", for: detail)
+                return nil
             }
-            return
+            return model.performGameAction(isFilled ? "undo_completed" : "mark_completed", for: detail)
         }
         if ref.readsLikeBook {
             switch ReadingRouting.eyeTap(book: model.viewer?.book, isRead: isFilled, noun: ref.mediaType) {
-            case .openLog: open(.eye)
-            case .undoRead: _ = model.performBookAction("undo_read", for: detail)
-            case let .explain(reason): model.quickActionErrorMessage = reason
-            case .markRead: _ = model.performBookAction("mark_read", for: detail)
+            case .openLog:
+                open(.eye)
+                return nil
+            case .undoRead:
+                return model.performBookAction("undo_read", for: detail)
+            case let .explain(reason):
+                model.quickActionErrorMessage = reason
+                return nil
+            case .markRead:
+                return model.performBookAction("mark_read", for: detail)
             }
-            return
         }
         open(.eye)
+        return nil
     }
 
     /// The page's bookmark (`planningAction`): adds the title to Planning, or takes a planned one back out.
-    private func plan(isPlanned: Bool, model: MediaDetailViewModel, detail: MediaDetail) {
+    private func plan(isPlanned: Bool, model: MediaDetailViewModel, detail: MediaDetail) -> Task<Bool, Never> {
         if !isPlanned {
             if detail.ref.isTVFamily || model.tracksAnime {
-                _ = model.performTVAction(.planning)
-            } else {
-                _ = model.performQuickAction(.planning, for: detail)
+                return model.performTVAction(.planning)
             }
-        } else if model.tracksAnime, let anime = model.viewer?.anime {
-            model.removeTVShow(expectedVersion: anime.version)
-        } else if detail.ref.isTVFamily, let tv = model.viewer?.tv {
-            model.removeTVShow(expectedVersion: tv.version)
-        } else {
-            _ = model.removeTracking(for: detail)
+            return model.performQuickAction(.planning, for: detail)
         }
+        if model.tracksAnime, let anime = model.viewer?.anime {
+            return model.removeTVShow(expectedVersion: anime.version)
+        }
+        if detail.ref.isTVFamily, let tv = model.viewer?.tv {
+            return model.removeTVShow(expectedVersion: tv.version)
+        }
+        return model.removeTracking(for: detail)
     }
 
     /// Remove from Library asks first, as on the page: a show or anime with its count (TV-003), a book or game plainly.
@@ -213,7 +294,7 @@ final class PosterHoldController {
 
     /// The title's page model with its detail and tracking loaded, as Home's Trending rail loads it: not the page's
     /// `load()`, which also fetches reviews, friends and outside ratings.
-    private func model(for ref: MediaRef) async -> MediaDetailViewModel? {
+    private func model(for ref: MediaRef, reportsFailure: Bool = true) async -> MediaDetailViewModel? {
         if let entry = loaded[ref.id],
            entry.model.hasPendingWrites || Date().timeIntervalSince(entry.at) < Self.freshFor {
             touch(ref.id)
@@ -238,7 +319,7 @@ final class PosterHoldController {
         } catch {
             if case APIError.unauthorized = error {
                 onUnauthorized()
-            } else {
+            } else if reportsFailure {
                 notice = "Spine couldn't load this title. Try again."
             }
             return nil
@@ -268,19 +349,34 @@ final class PosterHoldController {
 
     // MARK: Changes
 
-    /// A hold menu's own write keeps its answer for the menu; a change made anywhere else drops what was kept, so the
-    /// next menu and the next choice start from the poster's screen and the server again.
+    /// A hold menu's own write gives its title's menus the new state. A change made anywhere else (the title's page,
+    /// another screen) reads the title again, so a poster whose screen doesn't reload still opens on the truth.
     private func handleChange(_ userInfo: [AnyHashable: Any]?) {
-        guard let ref = userInfo?["ref"] as? MediaRef else { return }
+        guard let ref = userInfo?["ref"] as? MediaRef, let title = titles[ref.id] else { return }
         let origin = userInfo?["origin"] as? UUID
         if let entry = loaded[ref.id], origin == entry.model.changeOrigin {
-            fresh.updateValue(entry.model.viewer, forKey: ref.id)
+            title.fresh = .some(entry.model.viewer)
             return
         }
-        fresh[ref.id] = nil
-        if let entry = loaded[ref.id], !entry.model.hasPendingWrites, entry.model !== active {
-            loaded[ref.id] = nil
-            recency.removeAll { $0 == ref.id }
+        // A burst of changes (ticking episodes) reads the title once after it, and once more if more came meanwhile.
+        changedElsewhere.insert(ref.id)
+        guard !refreshing.contains(ref.id) else { return }
+        refreshing.insert(ref.id)
+        Task { [weak self] in
+            guard let self else { return }
+            while changedElsewhere.contains(ref.id) {
+                changedElsewhere.remove(ref.id)
+                try? await Task.sleep(for: .milliseconds(800))
+                // The loaded copy is out of date; one with a write still on its way is newer than the server.
+                if let entry = loaded[ref.id], !entry.model.hasPendingWrites {
+                    loaded[ref.id] = nil
+                    recency.removeAll { $0 == ref.id }
+                }
+                if let model = await model(for: ref, reportsFailure: false) {
+                    title.fresh = .some(model.viewer)
+                }
+            }
+            refreshing.remove(ref.id)
         }
     }
 }

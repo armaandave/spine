@@ -21,6 +21,9 @@ struct PosterHoldMenu: Equatable {
     let quick: [Quick]
     /// Remove from Library: for a title past Planning whose page offers it (shows, anime, books, manga, comics, games).
     let offersRemoval: Bool
+    /// The eye writes at once, so the menu stays open and the eye flips where you tapped it. Otherwise the tap opens the
+    /// title's log, explains why it can't, or asks first (a show or anime marks every aired episode), and the menu closes.
+    let eyeStaysOpen: Bool
 
     init(ref: MediaRef, viewer: UserMediaState?) {
         let inLibrary = viewer.map(TrendingRailConfig.isInLibrary) ?? false
@@ -29,18 +32,38 @@ struct PosterHoldMenu: Equatable {
 
         if Self.matches(status, "In progress") {
             quick = [.log]
+            eyeStaysOpen = false
         } else {
             let config = viewer.map { TrendingRailConfig.make(title: "", ref: ref, viewer: $0) }
-            var quick: [Quick] = [.watched(word: Self.watchedWord(for: ref), isFilled: config?.isEyeSelected ?? false)]
+            let isWatched = config?.isEyeSelected ?? false
+            var quick: [Quick] = [.watched(word: Self.watchedWord(for: ref), isFilled: isWatched)]
             switch Self.planning(ref: ref, viewer: viewer) {
             case .add: quick.append(.planning(isFilled: false))
             case .remove: quick.append(.planning(isFilled: true))
             case .hidden: break
             }
             self.quick = quick
+            eyeStaysOpen = Self.eyeWritesAtOnce(ref: ref, viewer: viewer, isWatched: isWatched)
         }
 
         offersRemoval = inLibrary && !Self.matches(status, "Planning") && Self.pageOffersRemoval(ref: ref, viewer: viewer)
+    }
+
+    /// Whether the eye's tap is a write by itself, the way the page's eye routes it (`TrendingRailRouter.eye`).
+    static func eyeWritesAtOnce(ref: MediaRef, viewer: UserMediaState?, isWatched: Bool) -> Bool {
+        // A show's or anime's eye marks every aired episode and can ask first.
+        if ref.isTVFamily || ref.isAnime { return false }
+        // Logs keep a movie or album watched: undoing it is explained, not written (SW-008).
+        if ref.isSingleWeight { return !(isWatched && (viewer?.diaryCount ?? 0) > 0) }
+        // A game played right now finishes in its log.
+        if ref.mediaType == "game" { return viewer?.game?.hasLivePlaythrough != true }
+        if ref.readsLikeBook {
+            switch ReadingRouting.eyeTap(book: viewer?.book, isRead: isWatched, noun: ref.mediaType) {
+            case .markRead, .undoRead: return true
+            case .openLog, .explain: return false
+            }
+        }
+        return false
     }
 
     /// The page's Planning bookmark (`PlanningBookmark`): seasons and episodes leave it to their show. A list's copy of

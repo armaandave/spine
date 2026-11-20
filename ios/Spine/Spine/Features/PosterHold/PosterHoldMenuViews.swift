@@ -104,7 +104,8 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
                     menu(controller)
                 }
             }
-            // The row of buttons draws its icons in the tint: the app's white disappears on the menu's light glass.
+            // The menu reads the tint from around it, not from inside it: the row's icons take it, and the app's white
+            // disappears on the menu's light glass.
             .tint(.primary)
             .pushDestination(item: $opening) { opening in
                 if let titlePage {
@@ -120,7 +121,7 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
         if let shelf = menu.shelf {
             Text(shelf)
         }
-        quickRow(menu, controller)
+        quickRow(menu, controller.title(for: media.ref), controller)
         Section {
             Button("Add to List…", systemImage: "text.badge.plus") {
                 controller.addToList = media
@@ -143,21 +144,25 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
         }
     }
 
-    /// The buttons along the top: Watched and Planning, or + Log.
-    private func quickRow(_ menu: PosterHoldMenu, _ controller: PosterHoldController) -> some View {
+    /// The icons along the top, as on the title page's rail: the eye (closed once watched), the bookmark, or +. The eye
+    /// and the bookmark flip where they're tapped and the menu stays open; + opens the title's log and closes it. A tap
+    /// still on its way shows its new state (`PosterHoldTitle`).
+    private func quickRow(_ menu: PosterHoldMenu, _ title: PosterHoldTitle, _ controller: PosterHoldController) -> some View {
         ControlGroup {
             ForEach(Array(menu.quick.enumerated()), id: \.offset) { _, quick in
                 switch quick {
                 case let .watched(word, isFilled):
-                    Button(word, systemImage: isFilled ? "eye.fill" : "eye") {
-                        controller.run(.watched(wasFilled: isFilled), on: media.ref, open: open)
+                    let shown = title.eye ?? isFilled
+                    Button(shown ? "Undo \(word)" : "Mark as \(word)", systemImage: shown ? "eye.slash.fill" : "eye") {
+                        controller.run(.watched(wasFilled: shown), on: media.ref, flips: menu.eyeStaysOpen, open: open)
                     }
-                    .accessibilityValue(isFilled ? "On" : "")
+                    .menuActionDismissBehavior(menu.eyeStaysOpen ? .disabled : .automatic)
                 case let .planning(isFilled):
-                    Button("Planning", systemImage: isFilled ? "bookmark.fill" : "bookmark") {
-                        controller.run(.planning(wasFilled: isFilled), on: media.ref, open: open)
+                    let shown = title.planning ?? isFilled
+                    Button(shown ? "Remove from Planning" : "Add to Planning", systemImage: shown ? "bookmark.fill" : "bookmark") {
+                        controller.run(.planning(wasFilled: shown), on: media.ref, flips: true, open: open)
                     }
-                    .accessibilityValue(isFilled ? "On" : "")
+                    .menuActionDismissBehavior(.disabled)
                 case .log:
                     Button("Log", systemImage: "plus") {
                         open(.log)
@@ -165,6 +170,8 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
                 }
             }
         }
+        // Icons only, as a palette (like Files' tag colors): their names are for VoiceOver.
+        .controlGroupStyle(.palette)
     }
 
     private func open(_ handoff: RailHandoff?) {

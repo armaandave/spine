@@ -91,6 +91,18 @@ final class PosterHoldMenuTests: XCTestCase {
                       "A list's copy sends no actions: offered, and the choice checks with the title first")
     }
 
+    func testTheEyeStaysOpenToFlipOnlyWhenItsTapIsAWriteByItself() {
+        XCTAssertTrue(PosterHoldMenu(ref: ref("movie"), viewer: nil).eyeStaysOpen)
+        XCTAssertTrue(PosterHoldMenu(ref: ref("movie"), viewer: UserMediaState(isTracked: true, status: "Completed")).eyeStaysOpen)
+        XCTAssertFalse(PosterHoldMenu(ref: ref("movie"), viewer: UserMediaState(isTracked: true, status: "Completed", diaryCount: 2)).eyeStaysOpen,
+                       "Logs keep it watched: undoing is explained, and the menu closes for it")
+        XCTAssertTrue(PosterHoldMenu(ref: ref("book", source: "hardcover"), viewer: nil).eyeStaysOpen)
+        XCTAssertFalse(PosterHoldMenu(ref: ref("tv"), viewer: nil).eyeStaysOpen, "A show's eye marks every aired episode, asking first")
+        XCTAssertFalse(PosterHoldMenu(ref: ref("anime", source: "mal"), viewer: nil).eyeStaysOpen)
+        XCTAssertFalse(PosterHoldMenu(ref: ref("movie"), viewer: UserMediaState(isTracked: true, status: "In progress")).eyeStaysOpen,
+                       "No eye while in progress")
+    }
+
     func testASeasonLeavesPlanningToItsShow() {
         let season = ref("season", season: 2)
         XCTAssertEqual(PosterHoldMenu(ref: season, viewer: nil).quick, [.watched(word: watchedWord("tv"), isFilled: false)])
