@@ -5401,6 +5401,30 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testProfileViewModelLoadsYourYearAfterTheProfile() async {
+        let year = ProfileYear(
+            year: 2026,
+            titles: 3,
+            mediaTypes: [StatsMediaTypeCount(mediaType: "movie", titles: 3, logs: 3)],
+            time: StatsTime(rows: [], hoursTotal: nil),
+            posters: []
+        )
+        let repository = HallOfFameProfileRepository(profile: profileFixture(), year: year)
+        let viewModel = ProfileViewModel(
+            profileRepository: repository,
+            trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
+            activityRepository: ScriptedHomeActivityRepository(items: []),
+            onUnauthorized: {}
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.year, year)
+        // Your own profile asks for your own year.
+        XCTAssertEqual(repository.yearUsernames, [nil])
+    }
+
+    @MainActor
     func testProfileViewModelPutsHallOfFamePickBackWhenRemoveFails() async {
         let movie = composerMedia("movie", itemID: 1, mediaType: "movie")
         let repository = HallOfFameProfileRepository(
@@ -8833,15 +8857,24 @@ private final class ScriptedProfileRepository: ProfileRepository {
 private final class HallOfFameProfileRepository: ProfileRepository {
     let profile: UserProfile
     var saveError: Error?
+    var year: ProfileYear?
     private(set) var savedRefs: [[MediaRef]] = []
+    private(set) var yearUsernames: [String?] = []
 
-    init(profile: UserProfile, saveError: Error? = nil) {
+    init(profile: UserProfile, saveError: Error? = nil, year: ProfileYear? = nil) {
         self.profile = profile
         self.saveError = saveError
+        self.year = year
     }
 
     func me() async throws -> UserProfile {
         profile
+    }
+
+    func statsYear(username: String?) async throws -> ProfileYear {
+        yearUsernames.append(username)
+        guard let year else { throw CancellationError() }
+        return year
     }
 
     func updateProfile(_ request: ProfileUpdateRequest) async throws -> UserProfile {

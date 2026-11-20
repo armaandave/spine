@@ -8,6 +8,8 @@ final class ProfileViewModel {
     var profile: UserProfile?
     var recentActivityItems: [ActivityItem] = []
     var inProgressItems: [LibraryItem] = []
+    /// The This Year section under the menu; nil until it loads, and on a restricted profile.
+    var year: ProfileYear?
     var isLoading = true
     var isLoadingInProgress = false
     var isLoadingActivity = false
@@ -102,10 +104,12 @@ final class ProfileViewModel {
         guard !isRestricted else {
             inProgressItems = []
             recentActivityItems = []
+            year = nil
             return
         }
         await loadInProgressItems(generation: generation)
         await loadRecentActivity(generation: generation)
+        await loadYear(generation: generation)
     }
 
     func block() async {
@@ -234,6 +238,20 @@ final class ProfileViewModel {
         } catch {
             guard generation == requestGeneration else { return }
             inProgressErrorMessage = error.localizedDescription
+            handleUnauthorized(error)
+        }
+    }
+
+    /// This year's numbers, the Stats page's own (STAT-312). The section sits last and is extra: a failed load keeps
+    /// what's on screen, and on a first load the section stays hidden.
+    private func loadYear(generation: Int) async {
+        do {
+            let loaded = try await profileRepository.statsYear(username: username)
+            guard generation == requestGeneration else { return }
+            year = loaded
+        } catch is CancellationError {
+            return
+        } catch {
             handleUnauthorized(error)
         }
     }
@@ -881,6 +899,14 @@ struct ProfileView: View {
                                 profileMenuSection(profile)
                                     .padding(.horizontal, 16)
                                     .padding(.top, 20)
+                                    // Over the This Year wall, whose top tucks under the Stats row.
+                                    .zIndex(1)
+                                if let year = viewModel.year, year.titles > 0 {
+                                    ProfileYearSection(year: year) { mediaType in
+                                        statsView(profile, period: .year(year.year), mediaType: mediaType)
+                                    }
+                                    .padding(.horizontal, 16)
+                                }
                             }
                         }
                         .padding(.bottom, 100)
@@ -1467,20 +1493,7 @@ struct ProfileView: View {
             .buttonStyle(ProfileMenuRowButtonStyle())
         case .stats:
             NavigationLink {
-                StatsView(
-                    profileRepository: profileRepository,
-                    mediaRepository: mediaRepository,
-                    trackingRepository: trackingRepository,
-                    diaryRepository: diaryRepository,
-                    listRepository: listRepository,
-                    currentUserId: currentUserId ?? viewModel.profile?.id,
-                    selectedTab: selectedTab,
-                    onSelectTab: onSelectTab,
-                    username: username,
-                    activityUsername: profile.username,
-                    enabledMediaTypes: isOwnProfile ? viewModel.profile?.preferences.enabledMediaTypes : nil,
-                    onUnauthorized: onUnauthorized
-                )
+                statsView(profile)
             } label: {
                 ProfileMenuRow(title: destination.title, count: nil, showsDivider: showsDivider)
             }
@@ -1549,6 +1562,26 @@ struct ProfileView: View {
             }
             .buttonStyle(ProfileMenuRowButtonStyle())
         }
+    }
+
+    /// The Stats page: All Time from the menu, or a year and type from the This Year section.
+    private func statsView(_ profile: UserProfile, period: StatsPeriod = .allTime, mediaType: String? = nil) -> some View {
+        StatsView(
+            profileRepository: profileRepository,
+            mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
+            diaryRepository: diaryRepository,
+            listRepository: listRepository,
+            currentUserId: currentUserId ?? viewModel.profile?.id,
+            selectedTab: selectedTab,
+            onSelectTab: onSelectTab,
+            username: username,
+            activityUsername: profile.username,
+            enabledMediaTypes: isOwnProfile ? viewModel.profile?.preferences.enabledMediaTypes : nil,
+            selectedPeriod: period,
+            selectedMediaType: mediaType,
+            onUnauthorized: onUnauthorized
+        )
     }
 
     private var inProgressSection: some View {
@@ -1833,7 +1866,7 @@ struct ProfileMenuRow: View {
 
 /// Inset-grouped surface for the profile menu: Liquid Glass on iOS 26, a
 /// lighter dark card with a faint border before that.
-private struct ProfileMenuGroupSurface: ViewModifier {
+struct ProfileMenuGroupSurface: ViewModifier {
     let shape: RoundedRectangle
 
     func body(content: Content) -> some View {
@@ -1851,13 +1884,13 @@ private struct ProfileMenuGroupSurface: ViewModifier {
 }
 
 /// Fills the whole row while pressed; the group clips it to its rounded corners.
-private struct ProfileMenuRowButtonStyle: ButtonStyle {
+struct ProfileMenuRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         ProfileMenuRowPressHighlight(configuration: configuration)
     }
 }
 
-private struct ProfileMenuRowPressHighlight: View {
+struct ProfileMenuRowPressHighlight: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let configuration: ButtonStyleConfiguration

@@ -503,6 +503,8 @@ protocol ProfileRepository {
     func statsSummary(username: String?, period: StatsPeriod) async throws -> StatsSummary
     /// The v2 stats page (`schema=2`) for one period and tab; `mediaType` nil is Global.
     func statsSummary(username: String?, period: StatsPeriod, mediaType: String?) async throws -> StatsPage
+    /// The profile's This Year section (STAT-312): this year's Global numbers and the wall's posters.
+    func statsYear(username: String?) async throws -> ProfileYear
     func statsMostLogged(
         username: String?,
         period: StatsPeriod,
@@ -572,6 +574,11 @@ extension ProfileRepository {
 
     func statsSummary(username: String?, period: StatsPeriod) async throws -> StatsSummary {
         fatalError("Not implemented")
+    }
+
+    /// Fakes that don't stub it show no This Year section: the profile treats a cancelled load as nothing new.
+    func statsYear(username: String?) async throws -> ProfileYear {
+        throw CancellationError()
     }
 
     /// Repositories that only know the legacy call answer with the legacy fallback page.
@@ -1776,6 +1783,10 @@ struct APIProfileRepository: ProfileRepository {
         let page: StatsPage = try await client.get(Self.statsPath("summary", username: username), query: query, authenticated: true)
         // An older server ignores `schema=2` and `media_type` (STAT-902).
         return page.scoped(to: mediaType)
+    }
+
+    func statsYear(username: String?) async throws -> ProfileYear {
+        try await client.get(Self.statsPath("year", username: username), authenticated: true)
     }
 
     func statsMostLoggedTitles(

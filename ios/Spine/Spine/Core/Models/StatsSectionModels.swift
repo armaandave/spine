@@ -339,6 +339,20 @@ struct StatsHoursTotal: Decodable, Hashable {
     let approximate: Bool
 }
 
+// MARK: - The profile's This Year section (STAT-312)
+
+/// This calendar year's Global numbers for the profile: the same titles, types and time the Stats page shows for
+/// the year, worked out by the same server code, and the posters behind them, already in wall order.
+struct ProfileYear: Decodable, Hashable {
+    let year: Int
+    let titles: Int
+    /// The owner's turned-on types in the app's order, with their titles this year; zero included.
+    let mediaTypes: [StatsMediaTypeCount]
+    let time: StatsTime
+    /// This year's titles with artwork, at most 36: each type newest first, dealt one per type in turn.
+    let posters: [MediaSummary]
+}
+
 // MARK: - Top and Highest rated (STAT-205 to STAT-208)
 
 enum StatsTopSource: String, Hashable {
