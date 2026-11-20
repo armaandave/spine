@@ -137,7 +137,7 @@ struct FeedCardView: View, Equatable {
     /// Everything but the background and the author link: one accessibility element that opens the post.
     private func content(ink: ArtInk) -> some View {
         ZStack(alignment: .topLeading) {
-            FeedCardPoster(art: model.art, title: model.title)
+            FeedCardPoster(art: model.art, title: model.title, holdMedia: model.holdMedia)
             textColumn(ink: ink)
             if let meter = model.meter {
                 meterView(meter, ink: ink)

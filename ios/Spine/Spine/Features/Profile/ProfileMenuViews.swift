@@ -261,6 +261,7 @@ struct ProfileLikesView: View {
                         mediaType: item.ref.mediaType,
                         orientation: item.posterOrientation
                     )
+                    .posterHoldMenu(item)
                     .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
                 }
                 .buttonStyle(.plain)
@@ -2124,6 +2125,13 @@ struct ProfileListDetailView: View {
                             mediaType: item.ref.mediaType,
                             orientation: item.posterOrientation
                         )
+                        .posterHoldMenu(item, viewer: item.userState) {
+                            if viewModel.list?.canEdit(by: currentUserId) == true, item.ref.itemId != nil {
+                                Button("Remove from This List", systemImage: "minus.circle", role: .destructive) {
+                                    Task { await viewModel.remove(item) }
+                                }
+                            }
+                        }
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
                         if viewModel.list?.isRanked == true, let position = item.position {
                             Text("\(position)")

@@ -24,26 +24,30 @@ struct RailCenterButton {
     let action: () -> Void
 }
 
-/// What a tap on Home's rail leaves for the title's page to finish with its own screens (a log composer, a sheet): the
-/// page runs it once, after its first load has settled.
+/// What a tap on Home's rail, or a poster's hold menu, leaves for the title's page to finish with its own screens (a log
+/// composer, a sheet): the page runs it once, after its first load has settled.
 enum RailHandoff: Equatable {
     case track
     case eye
     case like
     case rate(halfSteps: Int)
+    /// The log screen the page's Log opens, straight away (the poster hold menu's + Log).
+    case log
 
     /// Runs the page's function for this handoff.
     func run(
         track: () -> Void,
         eye: () -> Void,
         like: () -> Void,
-        rate: (Int) -> Void
+        rate: (Int) -> Void,
+        log: () -> Void
     ) {
         switch self {
         case .track: track()
         case .eye: eye()
         case .like: like()
         case let .rate(halfSteps): rate(halfSteps)
+        case .log: log()
         }
     }
 }

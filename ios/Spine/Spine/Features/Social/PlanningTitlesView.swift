@@ -188,6 +188,7 @@ private struct PlanningTitleRow: View {
                 orientation: media.posterOrientation
             )
             .frame(width: 42, height: 63)
+            .posterHoldMenu(media)
             .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
 
             VStack(alignment: .leading, spacing: 5) {

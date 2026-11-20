@@ -134,7 +134,10 @@ struct StatsView: View {
         }
         .navigationDestination(item: $destination) { destination in
             destinationView(destination)
+                .environment(\.posterHoldOffersGoToTitle, isOwnStats)
         }
+        // Your own Stats' posters open your logs, so their hold menus add Go to Title.
+        .environment(\.posterHoldOffersGoToTitle, isOwnStats)
     }
 
     // MARK: Sections

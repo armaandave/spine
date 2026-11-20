@@ -62,16 +62,27 @@ struct HallOfFameCrownView: View {
         let position = card.position
         let visualSize = HallOfFameCrownLayout.visualSize(for: slot, cardSize: HallOfFameCrownLayout.cardSize)
         let revealIndex = slots.firstIndex(where: { $0.id == slot.id }) ?? placement.index
+        let rotation = crownRevealed ? placement.rotation : .zero
 
         return HallOfFameCrownCard(
             slot: slot,
             visualSize: visualSize,
             borderOpacity: borderOpacity,
-            onTap: onTap,
-            menu: menu
+            onTap: onTap
         )
         .scaleEffect(placement.scale, anchor: position.transformAnchor)
-        .rotationEffect(crownRevealed ? placement.rotation : .zero, anchor: position.transformAnchor)
+        .rotationEffect(rotation, anchor: position.transformAnchor)
+        // Held, the card lifts as it sits, tilted and scaled, instead of straightening.
+        .modifier(HallOfFameCardHold(
+            slot: slot,
+            lift: HallOfFameCardLift(
+                size: visualSize,
+                scale: placement.scale,
+                rotation: rotation,
+                anchor: position.transformAnchor
+            ),
+            menu: menu
+        ))
         .position(
             x: crownWidth / 2,
             y: position == .belowAvatar
@@ -92,10 +103,101 @@ struct HallOfFameCrownView: View {
     }
 }
 
-/// What a long press on one of your own crown's cards offers.
+/// What a long press on one of your own crown's cards adds to the card's hold menu.
 struct HallOfFameCrownMenu {
     let onEdit: () -> Void
     let onRemove: (FavoriteSlot) -> Void
+}
+
+/// A crown card's hold menu (`posterHoldMenu`), with your own crown's Edit and Remove. The menu takes the room the
+/// tilted card covers and the card's exact outline, so the card lifts as it sits.
+private struct HallOfFameCardHold: ViewModifier {
+    let slot: FavoriteSlot
+    let lift: HallOfFameCardLift
+    let menu: HallOfFameCrownMenu?
+
+    func body(content: Content) -> some View {
+        if let item = slot.item {
+            content
+                .padding(lift.margins)
+                .contentShape([.interaction, .contextMenuPreview], lift.outline)
+                .posterHoldMenu(item, viewer: item.userState) {
+                    if let menu {
+                        Button("Edit Hall of Fame", systemImage: "pencil") {
+                            menu.onEdit()
+                        }
+                        Button("Remove from Hall of Fame", systemImage: "trash", role: .destructive) {
+                            menu.onRemove(slot)
+                        }
+                    }
+                }
+                .padding(lift.margins.negated)
+        } else {
+            content
+        }
+    }
+}
+
+/// Where a crown card is drawn once it's scaled and turned about its anchor: how far it reaches past its frame, and its
+/// outline in that grown frame.
+struct HallOfFameCardLift: Equatable {
+    let size: CGSize
+    let scale: CGFloat
+    let rotation: Angle
+    let anchor: UnitPoint
+
+    /// The card's drawing in its own frame: scaled, then turned, both about the anchor (as `scaleEffect` then
+    /// `rotationEffect` draw it).
+    var transform: CGAffineTransform {
+        let pivot = CGPoint(x: anchor.x * size.width, y: anchor.y * size.height)
+        return CGAffineTransform(translationX: pivot.x, y: pivot.y)
+            .rotated(by: rotation.radians)
+            .scaledBy(x: scale, y: scale)
+            .translatedBy(x: -pivot.x, y: -pivot.y)
+    }
+
+    /// How far the drawn card reaches past its frame on each side.
+    var margins: EdgeInsets {
+        let corners = [
+            CGPoint.zero,
+            CGPoint(x: size.width, y: 0),
+            CGPoint(x: 0, y: size.height),
+            CGPoint(x: size.width, y: size.height),
+        ].map { $0.applying(transform) }
+        let xs = corners.map(\.x)
+        let ys = corners.map(\.y)
+        return EdgeInsets(
+            top: max(0, -(ys.min() ?? 0)),
+            leading: max(0, -(xs.min() ?? 0)),
+            bottom: max(0, (ys.max() ?? 0) - size.height),
+            trailing: max(0, (xs.max() ?? 0) - size.width)
+        )
+    }
+
+    /// The drawn card's rounded outline, in its frame grown by `margins`.
+    var outline: HallOfFameCardOutline {
+        let margins = margins
+        return HallOfFameCardOutline(
+            size: size,
+            transform: transform.concatenating(CGAffineTransform(translationX: margins.leading, y: margins.top))
+        )
+    }
+}
+
+struct HallOfFameCardOutline: Shape {
+    let size: CGSize
+    let transform: CGAffineTransform
+
+    func path(in rect: CGRect) -> Path {
+        Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 8, style: .continuous)
+            .applying(transform)
+    }
+}
+
+private extension EdgeInsets {
+    var negated: EdgeInsets {
+        EdgeInsets(top: -top, leading: -leading, bottom: -bottom, trailing: -trailing)
+    }
 }
 
 private struct HallOfFameCrownCardPlacement {
@@ -109,37 +211,17 @@ private struct HallOfFameCrownCard: View {
     let visualSize: CGSize
     let borderOpacity: Double
     let onTap: (FavoriteSlot) -> Void
-    let menu: HallOfFameCrownMenu?
 
     var body: some View {
         if let item = slot.item {
-            card(item)
+            HallOfFameCrownFilledCard(item: item, visualSize: visualSize, borderOpacity: borderOpacity)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .onTapGesture {
+                    onTap(slot)
+                }
+                .accessibilityLabel("Hall of Fame, \(item.title)")
+                .accessibilityAddTraits(.isButton)
                 .frame(width: visualSize.width, height: visualSize.height)
-        }
-    }
-
-    @ViewBuilder
-    private func card(_ item: MediaSummary) -> some View {
-        let filled = HallOfFameCrownFilledCard(item: item, visualSize: visualSize, borderOpacity: borderOpacity)
-            .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .onTapGesture {
-                onTap(slot)
-            }
-            .accessibilityLabel("Hall of Fame, \(item.title)")
-            .accessibilityAddTraits(.isButton)
-
-        if let menu {
-            filled.contextMenu {
-                Button("Edit Hall of Fame", systemImage: "pencil") {
-                    menu.onEdit()
-                }
-                Button("Remove from Hall of Fame", systemImage: "trash", role: .destructive) {
-                    menu.onRemove(slot)
-                }
-            }
-        } else {
-            filled
         }
     }
 }

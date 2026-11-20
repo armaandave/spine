@@ -2066,6 +2066,7 @@ private struct InProgressPoster: View {
                 mediaType: item.media.ref.mediaType,
                 orientation: item.media.posterOrientation
             )
+            .posterHoldMenu(item.media)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("View \(item.media.title)")
@@ -2110,6 +2111,7 @@ private struct RecentActivityPoster: View {
                 mediaType: media.ref.mediaType,
                 orientation: media.posterOrientation
             )
+            .posterHoldMenu(media)
         case let .person(person):
             VStack(alignment: .center, spacing: 3) {
                 PersonArtwork(

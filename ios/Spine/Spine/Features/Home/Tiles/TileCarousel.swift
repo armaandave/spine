@@ -205,6 +205,8 @@ private struct TilePosterCell: View {
     let contentWidth: CGFloat
     let state: HomeTilesState
     let glow: HomeGlowModel
+    /// Your state for the title, for its hold menu; nil while it isn't known yet. Read only for the focused poster.
+    let holdState: () -> UserMediaState??
     let onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -228,6 +230,7 @@ private struct TilePosterCell: View {
             x: 0.5 + fanPose.offsetX / TileGeometry.posterSize.width,
             y: 0.5 + fanPose.offsetY / TileGeometry.posterSize.height
         )
+        let hold: UserMediaState?? = isFocused ? holdState() : nil
         Button(action: onTap) {
             MediaArtwork(
                 url: media.displayPosterURL,
@@ -238,6 +241,8 @@ private struct TilePosterCell: View {
                 // Dark, not the media type's colors, while a poster is still loading.
                 placeholderFill: TileStyle.artBase
             )
+            // Only the middle poster of an open tile: tapping a side poster slides it to the middle.
+            .posterHoldMenu(media, viewer: hold ?? nil, isEnabled: hold != nil)
             .overlay {
                 Color.black.opacity(pose.dim)
                     .allowsHitTesting(false)
@@ -303,6 +308,8 @@ struct TileCarousel: View {
     let contentWidth: CGFloat
     /// The focused poster was tapped: open its title.
     let onOpenTitle: (TilePoster) -> Void
+    /// Your state for a poster's title, for its hold menu; nil while it isn't known yet (a Trending title loading).
+    var holdState: (TilePoster) -> UserMediaState?? = { $0.media.userState }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var focusTicks = 0
@@ -327,6 +334,7 @@ struct TileCarousel: View {
                                 contentWidth: contentWidth,
                                 state: state,
                                 glow: glow,
+                                holdState: { holdState(poster) },
                                 onTap: { tapped(poster, proxy: proxy) }
                             )
                         } else {

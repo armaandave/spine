@@ -165,6 +165,8 @@ struct ListMediaPickerView: View {
                         showsMediaType: selectedSearchType == APIConstants.allMedia,
                         accessory: .selection(isSelected: viewModel.contains(item))
                     )
+                    // Picking titles for a list: no hold menus.
+                    .environment(\.posterHoldMenusEnabled, false)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                 }

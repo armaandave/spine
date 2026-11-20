@@ -250,6 +250,7 @@ struct MediaDiscoverView: View {
                                         mediaType: media.ref.mediaType,
                                         orientation: media.posterOrientation
                                     )
+                                    .posterHoldMenu(media)
                                     .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
                                 }
                                 .buttonStyle(.plain)

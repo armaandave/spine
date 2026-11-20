@@ -137,10 +137,13 @@ struct TVSeasonCard: View {
     let card: TVSeasonCardModel
     let label: String?
     let width: CGFloat
+    /// The season as a title, with your state for it, for the poster's hold menu.
+    let hold: (MediaSummary, UserMediaState?)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             MediaArtwork(url: card.imageUrl, title: card.title, slot: .seasonCard, mediaType: "season")
+                .posterHoldMenu(hold.0, viewer: hold.1)
             Text(card.title)
                 .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(.white)

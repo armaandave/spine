@@ -191,6 +191,7 @@ struct SeriesDetailView: View {
                                     mediaType: item.ref.mediaType,
                                     orientation: item.posterOrientation
                                 )
+                                .posterHoldMenu(item)
                                 .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
                                 if detail.mediaType == "anime" {
                                     Text(item.displayTitle)

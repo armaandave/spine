@@ -18,6 +18,8 @@ struct MediaArtwork: View {
         .frame(width: artworkSize.width, height: artworkSize.height)
         .clipShape(RoundedRectangle(cornerRadius: slot.cornerRadius, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: slot.cornerRadius, style: .continuous))
+        // A held poster lifts with its own corners.
+        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: slot.cornerRadius, style: .continuous))
         .accessibilityLabel(title)
     }
 

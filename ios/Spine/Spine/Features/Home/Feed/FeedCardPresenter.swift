@@ -79,7 +79,8 @@ enum FeedCardPresenter {
             accessibilityHint: hint,
             destination: ActivityDestination.resolve(item),
             height: height,
-            meterCheck: isLogBar
+            meterCheck: isLogBar,
+            holdMedia: item.media
         )
     }
 

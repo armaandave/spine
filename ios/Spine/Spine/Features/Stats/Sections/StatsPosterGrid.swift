@@ -82,6 +82,7 @@ struct StatsPosterCell<Caption: View>: View {
                     mediaType: media.ref.mediaType,
                     orientation: media.posterOrientation
                 )
+                .posterHoldMenu(media)
                 .shadow(color: .black.opacity(0.28), radius: 8, y: 4)
                 .frame(
                     width: StatsPosterGridLayout.cellSize.width,
@@ -144,6 +145,7 @@ struct StatsMediaRow<Detail: View, Trailing: View>: View {
                 mediaType: media.ref.mediaType,
                 orientation: media.posterOrientation
             )
+            .posterHoldMenu(media)
             .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
             .frame(width: Self.artworkCell.width, height: Self.artworkCell.height)
 

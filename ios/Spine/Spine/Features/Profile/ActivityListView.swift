@@ -261,6 +261,8 @@ struct ActivityListRow: View {
                         mediaType: mediaType,
                         orientation: activity.media?.posterOrientation
                     )
+                    // A tap opens the post; holding the poster is about the title.
+                    .posterHoldMenu(ifAny: activity.media)
                     .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
                 }
             }
