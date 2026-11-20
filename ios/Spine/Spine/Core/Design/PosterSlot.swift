@@ -9,6 +9,8 @@ enum PosterSlot {
     case profileRow
     case profileRail
     case listPreview
+    /// A poster in a list's glass rail on the Lists page.
+    case listRail
     case hero
     case carousel
     case seasonCard
@@ -42,6 +44,8 @@ enum PosterSlot {
             CGSize(width: 70, height: 105)
         case .listPreview:
             CGSize(width: 45, height: 67)
+        case .listRail:
+            CGSize(width: 52, height: 78)
         case .hero:
             CGSize(width: 191, height: 286.5)
         case .carousel:
@@ -77,6 +81,8 @@ enum PosterSlot {
             4
         case .diaryEntry:
             6
+        case .listRail:
+            7
         case .hero, .logSheet, .postHero:
             10
         case .homeCarousel:

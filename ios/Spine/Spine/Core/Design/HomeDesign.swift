@@ -8,10 +8,8 @@ nonisolated enum HomeDesign {
         static let pageMargin: CGFloat = 16
         static let tileGap: CGFloat = 12
         static let tileOpenHeight: CGFloat = 410
-        /// A closed tile is as tall as its fan, its title and its count need: the space under the count's letters
-        /// matches the 16 pt above the fan's front poster. It is no longer square: the square left a band of nothing
-        /// under the text.
-        static let tileClosedHeight: CGFloat = 168
+        /// The closed row: the labels on top and the strip of posters under them, with room for the seam.
+        static let tileClosedHeight: CGFloat = 196
         static let tileCorner: CGFloat = 30
 
         /// 30% shorter than the mock's 164.
@@ -47,15 +45,9 @@ nonisolated enum HomeDesign {
         static let carouselRestBrightness: Double = 0.5
         static let posterRadius: CGFloat = 12
 
-        /// Two tiles side by side across the content width: 173 at 358.
-        static func tileSide(contentWidth: CGFloat) -> CGFloat {
-            floor((contentWidth - tileGap) / 2)
-        }
-
-        /// One of the posters over a closed tile: the front one, one lined up on each side of it as in a row that
-        /// runs on past the tile's edges, and the rest hidden behind the front one. `x` and `y` are the poster's
-        /// top-left inside the tile, `degrees` its rotation, `brightness` the multiplier the mock applies (1 is
-        /// untouched).
+        /// One of the posters in the closed row: the three on each side of the seam. `x` and `y` are the poster's
+        /// top-left in the row (the page's content width wide, the page margins left out), `degrees` its rotation,
+        /// `brightness` what the black overlay leaves of it (1 is untouched).
         nonisolated struct Fan: Equatable {
             let x: CGFloat
             let y: CGFloat
@@ -67,26 +59,33 @@ nonisolated enum HomeDesign {
             let opacity: Double
         }
 
-        /// The space between a closed tile's front poster and the poster on each side of it. Wide enough that the
-        /// side posters run past the tile's edges.
-        static let fanGap: CGFloat = 20
+        static let stripPoster = CGSize(width: 84, height: 126)
+        /// The posters' vertical center, below the row's top.
+        static let stripCenterY: CGFloat = 81
+        /// From the seam to the center of the poster beside it (so the two inner posters are 24 pt apart), and from one
+        /// poster's center to the next (8 pt apart).
+        static let stripInner: CGFloat = 54
+        static let stripStep: CGFloat = 92
+        static let stripCorner: CGFloat = 10
+        /// The black laid over the poster at each place from the seam outward.
+        static let stripDim: [Double] = [0, 0.12, 0.34]
 
-        static func fan(index: Int, tileSide: CGFloat) -> Fan {
-            let cx = tileSide / 2
-            switch index {
-            case 0:
-                return Fan(x: cx - 33, y: 16, width: 66, height: 99, degrees: 0, brightness: 1, z: 5, opacity: 1)
-            case 1:
-                return Fan(
-                    x: cx - 33 - fanGap - 56, y: 24, width: 56, height: 84, degrees: 0, brightness: 0.62, z: 4, opacity: 1
-                )
-            case 2:
-                return Fan(
-                    x: cx + 33 + fanGap, y: 24, width: 56, height: 84, degrees: 0, brightness: 0.62, z: 3, opacity: 1
-                )
-            default:
-                return Fan(x: cx - 28, y: 22, width: 56, height: 84, degrees: 0, brightness: 0.5, z: 1, opacity: 0)
-            }
+        /// The poster at `index` (0 beside the seam, 1 and 2 outward, anything else waiting hidden at the last place)
+        /// on the side `side` of the seam: -1 for In progress, which sits left of it, and 1 for Trending.
+        static func fan(index: Int, side: CGFloat, contentWidth: CGFloat) -> Fan {
+            let role = min(max(index, 0), 2)
+            let center = contentWidth / 2 + side * (stripInner + stripStep * CGFloat(role))
+            let shown = index <= 2
+            return Fan(
+                x: center - stripPoster.width / 2,
+                y: stripCenterY - stripPoster.height / 2,
+                width: stripPoster.width,
+                height: stripPoster.height,
+                degrees: 0,
+                brightness: 1 - stripDim[role],
+                z: shown ? Double(5 - role) : 1,
+                opacity: shown ? 1 : 0
+            )
         }
     }
 
@@ -122,7 +121,7 @@ nonisolated enum HomeDesign {
         static let pill = Font.system(size: 12.5, weight: .bold)
         /// The day after a card's username.
         static let day = Font.system(size: 12, weight: .medium)
-        static let tileTitle = Font.system(size: 16, weight: .heavy)
+        static let tileTitle = Font.system(size: 17, weight: .heavy)
         static let tileTitleOpen = Font.system(size: 24, weight: .heavy)
         static let tileSubtitle = Font.system(size: 12, weight: .semibold)
         static let panelTitle = Font.system(size: 19, weight: .heavy)
@@ -162,8 +161,6 @@ nonisolated enum HomeDesign {
         /// The other tile going out and coming back in: its slide and shrink and its fade.
         static let closeSlideDuration = 0.446
         static let closeTileFadeDuration = 0.289
-        /// The blurred art fading.
-        static let closeArtDuration = 0.446
         static let closeNeighborDelay = 0.0
         static let closeNeighborDuration = 0.548
         /// The posters that end hidden behind the front one draw in while they fade.
@@ -173,10 +170,10 @@ nonisolated enum HomeDesign {
         // Opening is the close played backwards in time, on the same curve and over the same lengths: the front
         // poster and its two neighbors travel together for `closeNeighborDuration`, and the posters that were
         // hidden behind the front one start late so that each ends exactly with the others. They stay invisible
-        // until the last `closeFadeDuration`, by which time they are all but in their places.
+        // until they have landed, off the screen's edges: the row is not clipped, so a fade in flight showed them.
         static let openFrontDelay = closeNeighborDelay
         static let openRestDelay = closeNeighborDuration - closeRestDuration
-        static let openFadeDelay = closeNeighborDuration - closeFadeDuration
+        static let openFadeDelay = closeNeighborDuration
 
         static func soft(duration: Double, reduceMotion: Bool) -> Animation {
             guard !reduceMotion else { return reduced }

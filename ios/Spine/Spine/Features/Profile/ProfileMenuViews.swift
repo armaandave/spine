@@ -572,8 +572,31 @@ private struct ProfileTagsHeader: View {
 private struct ProfileTagSearchField: View {
     @Binding var text: String
     var placeholder = "Search tags"
+    /// The Lists page's slimmer glass capsule, 36 pt tall.
+    var isGlass = false
 
     var body: some View {
+        if isGlass {
+            field
+                .font(.system(size: 15, weight: .medium))
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .glassEffect(.regular, in: .capsule)
+                .environment(\.colorScheme, .dark)
+        } else {
+            field
+                .font(.system(size: 15, weight: .semibold))
+                .padding(.horizontal, 13)
+                .frame(height: 44)
+                .background(.white.opacity(0.08), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(.white.opacity(0.08))
+                }
+        }
+    }
+
+    private var field: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.white.opacity(0.54))
@@ -595,14 +618,6 @@ private struct ProfileTagSearchField: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear tag search")
             }
-        }
-        .font(.system(size: 15, weight: .semibold))
-        .padding(.horizontal, 13)
-        .frame(height: 44)
-        .background(.white.opacity(0.08), in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(.white.opacity(0.08))
         }
     }
 }
@@ -807,7 +822,9 @@ struct ProfileListsView: View {
 
     var body: some View {
         ZStack {
-            SpinePageBackground()
+            // Black like Home: the lists' own art brings the color.
+            HomeDesign.Palette.pageBackground
+                .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 12) {
@@ -918,7 +935,8 @@ struct ProfileListsView: View {
 
     @ViewBuilder
     private var listsContent: some View {
-        ProfileTagSearchField(text: $searchText, placeholder: "Search lists")
+        ProfileTagSearchField(text: $searchText, placeholder: "Search lists", isGlass: true)
+            .padding(.horizontal, 2)
 
         if filteredLists.isEmpty {
             DiaryStateCard(
@@ -928,37 +946,35 @@ struct ProfileListsView: View {
             )
         } else {
             ForEach(filteredLists) { list in
-                ProfileListRowContainer {
-                    NavigationLink {
-                        ProfileListDetailView(
-                            listId: list.id,
-                            profileRepository: profileRepository,
-                            listRepository: listRepository,
-                            peopleRepository: peopleRepository,
-                            mediaRepository: mediaRepository,
-                            trackingRepository: trackingRepository,
-                            diaryRepository: diaryRepository,
-                            activityRepository: activityRepository,
-                            importCoordinator: importCoordinator,
-                            storygraphImportCoordinator: storygraphImportCoordinator,
-                            goodreadsImportCoordinator: goodreadsImportCoordinator,
-                            marginsImportCoordinator: marginsImportCoordinator,
-                            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
-                            currentUserId: currentUserId,
-                            onLogout: onLogout,
-                            onOpenDiary: onOpenDiary,
-                            onOpenLibrary: onOpenLibrary,
-                            selectedTab: selectedTab,
-                            onSelectTab: onSelectTab,
-                            onUnauthorized: onUnauthorized
-                        )
-                    } label: {
-                        ProfileListRow(list: list)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(list.accessibilityLabel)
-                    .accessibilityHint("Opens list")
+                NavigationLink {
+                    ProfileListDetailView(
+                        listId: list.id,
+                        profileRepository: profileRepository,
+                        listRepository: listRepository,
+                        peopleRepository: peopleRepository,
+                        mediaRepository: mediaRepository,
+                        trackingRepository: trackingRepository,
+                        diaryRepository: diaryRepository,
+                        activityRepository: activityRepository,
+                        importCoordinator: importCoordinator,
+                        storygraphImportCoordinator: storygraphImportCoordinator,
+                        goodreadsImportCoordinator: goodreadsImportCoordinator,
+                        marginsImportCoordinator: marginsImportCoordinator,
+                        myAnimeListImportCoordinator: myAnimeListImportCoordinator,
+                        currentUserId: currentUserId,
+                        onLogout: onLogout,
+                        onOpenDiary: onOpenDiary,
+                        onOpenLibrary: onOpenLibrary,
+                        selectedTab: selectedTab,
+                        onSelectTab: onSelectTab,
+                        onUnauthorized: onUnauthorized
+                    )
+                } label: {
+                    CustomListRail(list: list)
                 }
+                .buttonStyle(CustomListRailButtonStyle())
+                .accessibilityLabel(list.railAccessibilityLabel)
+                .accessibilityHint("Opens list")
             }
         }
     }
@@ -1081,10 +1097,6 @@ extension CustomListSummary {
             ? (count == 1 ? "person" : "people")
             : (count == 1 ? "item" : "items")
         return "\(count.formatted()) \(noun)"
-    }
-
-    var accessibilityLabel: String {
-        [name, mediaTypesLabel, countLabel].compactMap { $0 }.joined(separator: ", ")
     }
 }
 
@@ -1536,6 +1548,7 @@ private extension CustomListDetail {
             visibility: visibility,
             isRanked: isRanked,
             listType: listType,
+            mediaTypes: mediaTypes,
             owner: owner,
             imageUrl: imageUrl,
             itemsCount: itemsCount,
@@ -1561,6 +1574,7 @@ private extension CustomListDetail {
             visibility: visibility,
             isRanked: isRanked,
             listType: listType,
+            mediaTypes: mediaTypes,
             owner: owner,
             imageUrl: imageUrl,
             itemsCount: itemsCount,
@@ -1587,6 +1601,9 @@ struct ProfileListDetailView: View {
     @State private var isDeleteAlertPresented = false
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var listHeaderWidth: CGFloat = 0
+    @State private var listHeaderHeight: CGFloat = 0
+    /// How far the page has scrolled, so the blurred top of a list without a backdrop scrolls away with it.
+    @State private var listScroll = ProfileListScroll()
 
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
@@ -1672,9 +1689,23 @@ struct ProfileListDetailView: View {
                 ? CustomListBackdropSelection.artwork(from: list.items)
                 : nil
         }
+        // A real backdrop is the header's own strip. Without one, the first item, blurred, is the backdrop.
+        let hasBackdrop = headerArtwork?.backdropURL != nil
+        let blurredTopURL = hasBackdrop ? nil : viewModel.list.flatMap { firstArtURL($0, artwork: headerArtwork) }
+        // Down to just past the plate, measured from the top of the safe area; it also reaches up under the status bar.
+        let blurredTopHeight = CustomListHeaderLayout.topPadding(hasBackdrop: false, topSafeAreaInset: topSafeAreaInset)
+            + listHeaderHeight + CustomListHeaderLayout.blurredTopBleed
 
         ZStack(alignment: .top) {
-            SpinePageBackground()
+            // Black like Home and the post pages: the list's own art brings the color.
+            HomeDesign.Palette.pageBackground
+                .ignoresSafeArea()
+
+            // Without a backdrop: the first item, blurred, fills the top of the page and bleeds off its top edge under
+            // the status bar and the buttons. The glass plate sits on it, and it scrolls away with the plate.
+            if let blurredTopURL {
+                ProfileListBlurredTop(url: blurredTopURL, height: blurredTopHeight, scroll: listScroll)
+            }
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 14) {
@@ -1706,7 +1737,7 @@ struct ProfileListDetailView: View {
                                 .padding(
                                     .top,
                                     CustomListHeaderLayout.topPadding(
-                                        hasBackdrop: headerArtwork != nil,
+                                        hasBackdrop: hasBackdrop,
                                         topSafeAreaInset: topSafeAreaInset
                                     )
                                 )
@@ -1759,9 +1790,17 @@ struct ProfileListDetailView: View {
                 await viewModel.load()
             }
             .scrollContentBackground(.hidden)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                // Only the blurred top reads it. Once the top (and the status bar it reaches under, never 100 pt) is
+                // off the screen the offset stops changing.
+                guard blurredTopURL != nil else { return 0 }
+                return min(geometry.contentOffset.y + geometry.contentInsets.top, blurredTopHeight + 100)
+            } action: { _, offset in
+                listScroll.offset = offset
+            }
             .ignoresSafeArea(
                 edges: CustomListHeaderLayout.ignoredSafeAreaEdges(
-                    hasBackdrop: headerArtwork != nil
+                    hasBackdrop: hasBackdrop
                 )
             )
 
@@ -1934,47 +1973,57 @@ struct ProfileListDetailView: View {
         }
     }
 
+    /// The top of a list: its backdrop across the page when it has one, nothing over it, then a glass plate lit from
+    /// behind by the backdrop's blur. Without a backdrop the plate sits just under the top buttons, on the blurred
+    /// first item the page draws behind it.
     private func listHeader(_ list: CustomListDetail, artwork: CustomListBackdropSelection.Artwork?) -> some View {
-        let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
-        // The same 3:2 backdrop strip as the media page, with the owner and title over its lower edge.
+        // The same 3:2 backdrop strip as the media page.
         let stripHeight = BackdropLayout.stripHeight(width: listHeaderWidth, topInset: topSafeAreaInset)
-        return VStack(alignment: .leading, spacing: 0) {
-        listHeaderText(list)
-            .padding(.horizontal, 18)
-            // A description is the header's next line, just below the title.
-            .padding(.bottom, description.isEmpty ? 20 : 7)
-            .padding(
-                .top,
-                artwork == nil ? 18 : max(topSafeAreaInset + 56, stripHeight - 96)
-            )
+        let backdropURL = artwork?.backdropURL
+        let hasBackdrop = backdropURL != nil
+        // Never above the header, even before the width (and so the strip's height) is measured.
+        let plateTop = max(0, CustomListHeaderLayout.plateTop(hasBackdrop: hasBackdrop, stripHeight: stripHeight))
+        return listPlate(list)
+            .background {
+                // Under a backdrop: its blur behind the glass, as wide as the page, fading in as the backdrop fades out.
+                if let backdropURL, let lightURL = URL(string: backdropURL) {
+                    ProfileListPlateLight(url: lightURL, rampIn: CustomListHeaderLayout.plateLightRampIn)
+                        .padding(.horizontal, -14)
+                        .padding(.top, -CustomListHeaderLayout.plateLightLead)
+                        .padding(.bottom, -CustomListHeaderLayout.plateLightBleed)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, plateTop)
+            // With the stack's 14, the grid starts 24 under the plate.
+            .padding(.bottom, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(alignment: .top) {
-                if let artwork {
-                    ProfileListBackdropArtwork(artwork: artwork)
+                if let backdropURL {
+                    ProfileListBackdropArtwork(url: backdropURL)
                         .frame(height: stripHeight)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listHeaderWidth = $0 }
-
-        // The description sits below the backdrop, so the title stays where it is on every
-        // list however long the description is.
-        if !description.isEmpty {
-            Text(description)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.72))
-                .lineLimit(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.bottom, 20)
-        }
-        }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                listHeaderWidth = size.width
+                listHeaderHeight = size.height
+            }
     }
 
-    private func listHeaderText(_ list: CustomListDetail) -> some View {
-        let isOwnerCurrentUser = list.owner.id == currentUserId
+    /// The list's art for its blurred top: the first cover; a people list's first photo.
+    private func firstArtURL(_ list: CustomListDetail, artwork: CustomListBackdropSelection.Artwork?) -> URL? {
+        let url = list.listType == .people ? viewModel.displayedPeople.first?.profileUrl : artwork?.urlString
+        return url.flatMap(URL.init(string:))
+    }
 
-        return VStack(alignment: .leading, spacing: 7) {
+    /// The plate: who made the list, its name, its description, its tags, then its count beside the completion
+    /// button.
+    private func listPlate(_ list: CustomListDetail) -> some View {
+        let isOwnerCurrentUser = list.owner.id == currentUserId
+        let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return VStack(alignment: .leading, spacing: 10) {
             if let featured = featuredCard {
                 FeaturedListLiveBanner(card: featured)
             }
@@ -2005,7 +2054,10 @@ struct ProfileListDetailView: View {
                 )
             } label: {
                 HStack(spacing: 9) {
-                    SpineAsyncImage(url: URL(string: list.owner.avatarUrl ?? "")) { phase in
+                    SpineAsyncImage(
+                        url: URL(string: list.owner.avatarUrl ?? ""),
+                        thumbnailSize: CGSize(width: 22, height: 22)
+                    ) { phase in
                         if case let .success(image) = phase {
                             image
                                 .resizable()
@@ -2016,94 +2068,99 @@ struct ProfileListDetailView: View {
                                 .foregroundStyle(.white.opacity(0.54))
                         }
                     }
-                    .frame(width: 21, height: 21)
+                    .frame(width: 22, height: 22)
                     .background(.white.opacity(0.12), in: Circle())
                     .clipShape(Circle())
 
                     Text(list.owner.username)
-                        .font(.system(size: 18, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.72))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.78))
                         .lineLimit(1)
                 }
+                .frame(minHeight: 26)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
 
             Text(list.name)
-                .font(.system(size: 34, weight: .black))
+                .font(.system(size: 30, weight: .black))
+                .tracking(-0.5)
                 .foregroundStyle(.white)
                 .lineLimit(3)
                 .minimumScaleFactor(0.72)
-                .shadow(color: .black.opacity(0.35), radius: 14, y: 8)
 
-            HStack(spacing: 8) {
-                Text(detailCountLabel(list))
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.72))
+            // The description comes before the tags.
+            if !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white.opacity(0.84))
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                ListMediaTypeIcons(mediaTypes: list.mediaTypes, isPeople: list.listType == .people, size: 12)
-                    .opacity(0.72)
+            if !list.tags.isEmpty {
+                tagRow(list.tags, owner: list.owner)
+            }
 
-                if list.isRanked {
-                    Text("Ranked")
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.76))
-                        .padding(.horizontal, 8)
-                        .frame(height: 22)
-                        .background(.white.opacity(0.13), in: Capsule())
-                }
+            // "24 films · Ranked", then the app's completion button as it ships. Its 44 pt tap area sets the row.
+            HStack(spacing: 10) {
+                Text(plateCountLabel(list))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.62))
 
                 if list.listType == .media,
                    let completion = list.completion,
                    completion.isVisible {
                     SWCompletionProgressButton(progress: completion, isCompact: true)
                         .accessibilityLabel("\(list.name) completion")
-                        .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
                 }
             }
-
-            if !list.tags.isEmpty {
-                tagRow(list.tags, owner: list.owner)
-            }
+            .frame(minHeight: 44)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        // The meta row's 44 pt already holds 11 under its words.
+        .padding(.bottom, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        // The page is always dark; light glass would wash out the white text.
+        .environment(\.colorScheme, .dark)
     }
 
-    /// The list's tags, each opening the owner's lists with that tag, as a log's tags open its tag page.
+    /// The list's tags, each opening the owner's lists with that tag, as a log's tags open its tag page. They wrap.
     private func tagRow(_ tags: [String], owner: UserSummary) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(tags, id: \.self) { tag in
-                    NavigationLink {
-                        TaggedListsView(
-                            tag: tag,
-                            owner: owner,
-                            profileRepository: profileRepository,
-                            listRepository: listRepository,
-                            peopleRepository: peopleRepository,
-                            mediaRepository: mediaRepository,
-                            trackingRepository: trackingRepository,
-                            diaryRepository: diaryRepository,
-                            activityRepository: activityRepository,
-                            importCoordinator: importCoordinator,
-                            storygraphImportCoordinator: storygraphImportCoordinator,
-                            goodreadsImportCoordinator: goodreadsImportCoordinator,
-                            marginsImportCoordinator: marginsImportCoordinator,
-                            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
-                            currentUserId: currentUserId,
-                            onLogout: onLogout,
-                            onOpenDiary: onOpenDiary,
-                            onOpenLibrary: onOpenLibrary,
-                            selectedTab: selectedTab,
-                            onSelectTab: onSelectTab,
-                            onUnauthorized: onUnauthorized
-                        )
-                    } label: {
-                        DiaryLogChip(text: tag, systemImage: "tag")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Tag: \(tag)")
-                    .accessibilityHint("Shows lists with this tag")
+        FlowLayout(spacing: 6) {
+            ForEach(tags, id: \.self) { tag in
+                NavigationLink {
+                    TaggedListsView(
+                        tag: tag,
+                        owner: owner,
+                        profileRepository: profileRepository,
+                        listRepository: listRepository,
+                        peopleRepository: peopleRepository,
+                        mediaRepository: mediaRepository,
+                        trackingRepository: trackingRepository,
+                        diaryRepository: diaryRepository,
+                        activityRepository: activityRepository,
+                        importCoordinator: importCoordinator,
+                        storygraphImportCoordinator: storygraphImportCoordinator,
+                        goodreadsImportCoordinator: goodreadsImportCoordinator,
+                        marginsImportCoordinator: marginsImportCoordinator,
+                        myAnimeListImportCoordinator: myAnimeListImportCoordinator,
+                        currentUserId: currentUserId,
+                        onLogout: onLogout,
+                        onOpenDiary: onOpenDiary,
+                        onOpenLibrary: onOpenLibrary,
+                        selectedTab: selectedTab,
+                        onSelectTab: onSelectTab,
+                        onUnauthorized: onUnauthorized
+                    )
+                } label: {
+                    PostTagChip(text: tag, isCompact: true)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Tag: \(tag)")
+                .accessibilityHint("Shows lists with this tag")
             }
         }
     }
@@ -2134,10 +2191,11 @@ struct ProfileListDetailView: View {
                         }
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
                         if viewModel.list?.isRanked == true, let position = item.position {
+                            // The rank says the list is ranked; quiet, under its poster.
                             Text("\(position)")
-                                .font(.system(size: 12, weight: .heavy))
+                                .font(.system(size: 11, weight: .semibold))
                                 .monospacedDigit()
-                                .foregroundStyle(.white.opacity(0.72))
+                                .foregroundStyle(.white.opacity(0.6))
                                 .frame(maxWidth: .infinity)
                         }
                         if let note = FeaturedEntryNote.text(item.note) {
@@ -2233,12 +2291,15 @@ struct ProfileListDetailView: View {
             .frame(maxWidth: .infinity)
     }
 
-    private func detailCountLabel(_ list: CustomListDetail) -> String {
-        let count = list.listType == .people ? list.entriesCount : list.itemsCount
-        let noun = list.listType == .people
-            ? (count == 1 ? "person" : "people")
-            : (count == 1 ? "item" : "items")
-        return "\(count.formatted()) \(noun)"
+    /// "24 films · Ranked", "18 books", "8 people".
+    private func plateCountLabel(_ list: CustomListDetail) -> String {
+        let isPeople = list.listType == .people
+        let count = ListCountWords.text(
+            count: isPeople ? list.entriesCount : list.itemsCount,
+            mediaTypes: list.mediaTypes,
+            isPeople: isPeople
+        )
+        return list.isRanked ? "\(count) · Ranked" : count
     }
 
     private func personAccessibilityLabel(_ person: PersonListEntry) -> String {
@@ -2304,6 +2365,11 @@ enum CustomListBackdropSelection {
             case let .backdrop(url), let .blurredCover(url): url
             }
         }
+
+        /// A real backdrop, which takes the top of the page; nil for a blurred cover.
+        var backdropURL: String? {
+            if case let .backdrop(url) = self { url } else { nil }
+        }
     }
 
     /// Every media type whose detail page has a backdrop (the server resolves the same ones).
@@ -2342,6 +2408,25 @@ enum CustomListHeaderLayout {
             ? BackdropLayout.topOffset
             : topSafeAreaInset + topControlTopPadding + topControlSize
     }
+
+    /// How far the glass plate reaches up into the faded foot of a backdrop.
+    static let plateOverlap: CGFloat = 32
+    /// The air between the top buttons and the plate when there's no backdrop.
+    static let plateGap: CGFloat = 13
+
+    /// Where the plate starts in the header: over the last 32 pt of the backdrop, or 13 pt under the buttons.
+    static func plateTop(hasBackdrop: Bool, stripHeight: CGFloat) -> CGFloat {
+        hasBackdrop ? stripHeight - plateOverlap : plateGap
+    }
+
+    /// Under a backdrop, the light behind the plate: it starts 6 pt above the plate, fades in over 63 pt as the
+    /// backdrop fades out, and reaches 30 pt below the plate, fading out.
+    static let plateLightLead: CGFloat = 6
+    static let plateLightRampIn: CGFloat = 63
+    static let plateLightBleed: CGFloat = 30
+
+    /// Without a backdrop, how far the blurred first item reaches below the header before it has faded out.
+    static let blurredTopBleed: CGFloat = 70
 }
 
 enum PeopleListGridLayout {
@@ -2391,41 +2476,30 @@ private struct ProfileListCircleIconLabel: View {
     }
 }
 
+/// The list's backdrop across the top of the page, uncovered: a light shade under the status bar, then the image
+/// fading into the black page over its last 40%.
 private struct ProfileListBackdropArtwork: View {
-    let artwork: CustomListBackdropSelection.Artwork
-    private let pageBackground = Color(red: 0.07, green: 0.07, blue: 0.065)
+    let url: String
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                SpineAsyncImage(url: URL(string: artwork.urlString)) { phase in
-                    switch phase {
-                    case let .success(image):
-                        let fitted = image
+                SpineAsyncImage(url: URL(string: url)) { phase in
+                    if case let .success(image) = phase {
+                        image
                             .resizable()
                             .scaledToFill()
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .clipped()
-                        if case .blurredCover = artwork {
-                            // Blurred like the media page's poster fallback; the shading below is the same.
-                            fitted
-                                .blur(radius: HeroArtwork.PosterFallback.blurRadius, opaque: true)
-                                .scaleEffect(HeroArtwork.PosterFallback.scale)
-                                .saturation(HeroArtwork.PosterFallback.saturation)
-                        } else {
-                            fitted
-                        }
-                    default:
+                    } else {
                         Color.clear
                     }
                 }
 
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.48), location: 0),
-                        .init(color: .black.opacity(0.2), location: 0.42),
-                        .init(color: pageBackground.opacity(0.1), location: 0.68),
-                        .init(color: pageBackground, location: 1),
+                        .init(color: .black.opacity(0.25), location: 0),
+                        .init(color: .black.opacity(0), location: 0.22),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -2435,8 +2509,7 @@ private struct ProfileListBackdropArtwork: View {
                 LinearGradient(
                     stops: [
                         .init(color: .white, location: 0),
-                        .init(color: .white, location: 0.58),
-                        .init(color: .white.opacity(0.34), location: 0.82),
+                        .init(color: .white, location: 0.6),
                         .init(color: .clear, location: 1),
                     ],
                     startPoint: .top,
@@ -2445,6 +2518,85 @@ private struct ProfileListBackdropArtwork: View {
             )
         }
         .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// How far a list's page has scrolled. Only the blurred top reads it, so scrolling redraws that and not the whole page.
+@MainActor
+@Observable
+private final class ProfileListScroll {
+    var offset: CGFloat = 0
+}
+
+/// A list without a backdrop: its first item, baked blurred, as the backdrop. It runs `height` down from the top of the
+/// safe area and up under the status bar, under a dark wash, solid down to 55% of its height, then fades into the black
+/// page. It moves up with the page, and stretches with it when the page is pulled down.
+private struct ProfileListBlurredTop: View {
+    let url: URL
+    let height: CGFloat
+    let scroll: ProfileListScroll
+
+    var body: some View {
+        Color.clear
+            .frame(height: height + max(-scroll.offset, 0))
+            .frame(maxWidth: .infinity)
+            .background(alignment: .bottom) {
+                art
+                    .ignoresSafeArea(edges: .top)
+            }
+            .offset(y: -max(scroll.offset, 0))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private var art: some View {
+        BlurredArtBackground(url: url, accentHex: nil, style: .listTop, baseOpacity: 0)
+            .overlay {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.4), location: 0),
+                        .init(color: .black.opacity(0.18), location: 0.45),
+                        .init(color: .black.opacity(0.32), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white, location: 0.55),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+    }
+}
+
+/// The list's backdrop, baked blurred, behind the glass plate so the plate takes the list's own colors: it fades in
+/// over `rampIn` points at its top and out over its last 120, whatever the plate's height.
+private struct ProfileListPlateLight: View {
+    let url: URL
+    let rampIn: CGFloat
+
+    private static let rampOut: CGFloat = 120
+
+    var body: some View {
+        BlurredArtBackground(url: url, accentHex: nil, style: .plate, baseOpacity: 0)
+            .mask {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom)
+                        .frame(height: rampIn)
+                    Color.white
+                    LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: Self.rampOut)
+                }
+            }
     }
 }
 

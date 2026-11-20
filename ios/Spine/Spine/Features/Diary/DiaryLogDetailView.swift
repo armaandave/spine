@@ -767,9 +767,11 @@ struct PostReviewBody: View {
     }
 }
 
-/// A tag under a review: 30 pt tall, fully rounded, a light fill with a hairline edge.
+/// A tag under a review: 30 pt tall, fully rounded, a light fill with a hairline edge. The compact one (a list's
+/// tags) is the same chip at 25 pt.
 struct PostTagChip: View {
     let text: String
+    var isCompact = false
 
     var body: some View {
         Label {
@@ -777,12 +779,12 @@ struct PostTagChip: View {
                 .lineLimit(1)
         } icon: {
             Image(systemName: "tag")
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: isCompact ? 10 : 11, weight: .bold))
         }
-        .font(.system(size: 13, weight: .semibold))
+        .font(.system(size: isCompact ? 12 : 13, weight: .semibold))
         .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .frame(height: PostPageStyle.chipHeight)
+        .padding(.horizontal, isCompact ? 10 : 12)
+        .frame(height: isCompact ? 25 : PostPageStyle.chipHeight)
         .background(.white.opacity(0.14), in: Capsule())
         .overlay { Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.5) }
     }
@@ -1205,29 +1207,6 @@ private struct DiaryLogTagsFullHeightKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
-    }
-}
-
-/// A log's tag; list pages show their tags with it too.
-struct DiaryLogChip: View {
-    let text: String
-    let systemImage: String?
-
-    var body: some View {
-        Label {
-            Text(text)
-                .lineLimit(1)
-        } icon: {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: 10, weight: .black))
-            }
-        }
-        .font(.system(size: 12, weight: .heavy))
-        .foregroundStyle(.white.opacity(0.82))
-        .padding(.horizontal, 10)
-        .frame(height: 30)
-        .background(.white.opacity(0.11), in: Capsule())
     }
 }
 

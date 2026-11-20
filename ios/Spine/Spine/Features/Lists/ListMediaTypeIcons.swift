@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// What a list holds: one media type's icon, both icons for two, a globe for more, and a people icon for a people list.
+/// What a list holds: its one media type's icon, the globe when it mixes types, and a people icon for a people list.
 struct ListMediaTypeIcons: View {
     let mediaTypes: [String]
     var isPeople = false
@@ -15,7 +15,7 @@ struct ListMediaTypeIcons: View {
                 .accessibilityHidden(true)
         } else if !mediaTypes.isEmpty {
             HStack(spacing: size * 0.45) {
-                ForEach(shownTypes, id: \.self) { mediaType in
+                ForEach(Self.shownTypes(mediaTypes), id: \.self) { mediaType in
                     MediaTypeGlyph(theme: MediaTypeTheme.theme(for: mediaType), size: size)
                 }
             }
@@ -24,8 +24,9 @@ struct ListMediaTypeIcons: View {
         }
     }
 
-    private var shownTypes: [String] {
-        mediaTypes.count > 2 ? [APIConstants.allMedia] : mediaTypes
+    /// One icon only: the type's own when the whole list is that type, else the globe.
+    static func shownTypes(_ mediaTypes: [String]) -> [String] {
+        mediaTypes.count > 1 ? [APIConstants.allMedia] : mediaTypes
     }
 
     /// "Movies and TV".
@@ -38,5 +39,30 @@ extension CustomListSummary {
     /// "Movies and TV", or nil when the list holds no media.
     var mediaTypesLabel: String? {
         mediaTypes.isEmpty ? nil : ListMediaTypeIcons.names(mediaTypes)
+    }
+}
+
+/// A list's count in plain words: "24 films", "18 books", "1 person". A list of one media type names it; a mix (or a
+/// list too new to have any) says "titles".
+enum ListCountWords {
+    static func text(count: Int, mediaTypes: [String], isPeople: Bool) -> String {
+        "\(count.formatted()) \(noun(count: count, mediaTypes: mediaTypes, isPeople: isPeople))"
+    }
+
+    static func noun(count: Int, mediaTypes: [String], isPeople: Bool) -> String {
+        let one = count == 1
+        if isPeople { return one ? "person" : "people" }
+        guard mediaTypes.count == 1, let mediaType = mediaTypes.first else { return one ? "title" : "titles" }
+        switch mediaType {
+        case "movie": return one ? "film" : "films"
+        case "tv", "season", "episode": return one ? "show" : "shows"
+        case "book": return one ? "book" : "books"
+        case "comic": return one ? "comic" : "comics"
+        case "game": return one ? "game" : "games"
+        case "music": return one ? "album" : "albums"
+        case "anime": return "anime"
+        case "manga": return "manga"
+        default: return one ? "title" : "titles"
+        }
     }
 }

@@ -42,20 +42,13 @@ final class HomeDesignTests: XCTestCase {
 
     // MARK: Metric
 
-    func testTileSideSplitsTheContentWidth() {
-        XCTAssertEqual(HomeDesign.Metric.tileSide(contentWidth: 358), 173)
-        XCTAssertEqual(HomeDesign.Metric.tileSide(contentWidth: 370), 179)
-        XCTAssertEqual(HomeDesign.Metric.tileSide(contentWidth: 359), 173)
-        XCTAssertEqual(HomeDesign.Metric.tileSide(contentWidth: 361), 174)
-    }
-
     func testMetricValues() {
         typealias M = HomeDesign.Metric
         XCTAssertEqual(M.pageMargin, 16)
         XCTAssertEqual(M.tileGap, 12)
         XCTAssertEqual(M.tileOpenHeight, 410)
         XCTAssertEqual(M.tileCorner, 30)
-        XCTAssertEqual(M.tileClosedHeight, 168)
+        XCTAssertEqual(M.tileClosedHeight, 196)
         XCTAssertEqual(M.cardHeight, 115)
         XCTAssertEqual(M.cardCorner, 20)
         XCTAssertEqual(M.cardInset, 12)
@@ -72,25 +65,45 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.carouselRestScale, 0.84)
         XCTAssertEqual(M.carouselRestBrightness, 0.5)
         XCTAssertEqual(M.posterRadius, 12)
+        XCTAssertEqual(M.stripPoster, CGSize(width: 84, height: 126))
+        XCTAssertEqual(M.stripCenterY, 81)
+        XCTAssertEqual(M.stripInner, 54)
+        XCTAssertEqual(M.stripStep, 92)
+        XCTAssertEqual(M.stripCorner, 10)
+        XCTAssertEqual(M.stripDim, [0, 0.12, 0.34])
     }
 
     func testFanTable() {
-        typealias Fan = HomeDesign.Metric.Fan
-        let side = HomeDesign.Metric.tileSide(contentWidth: 358)
-        let cx = side / 2
-        XCTAssertEqual(side, 173)
-        XCTAssertEqual(HomeDesign.Metric.fan(index: 0, tileSide: side), Fan(x: cx - 33, y: 16, width: 66, height: 99, degrees: 0, brightness: 1, z: 5, opacity: 1))
-        XCTAssertEqual(HomeDesign.Metric.fan(index: 1, tileSide: side), Fan(x: cx - 109, y: 24, width: 56, height: 84, degrees: 0, brightness: 0.62, z: 4, opacity: 1))
-        XCTAssertEqual(HomeDesign.Metric.fan(index: 2, tileSide: side), Fan(x: cx + 53, y: 24, width: 56, height: 84, degrees: 0, brightness: 0.62, z: 3, opacity: 1))
-        for index in [3, 4] {
-            XCTAssertEqual(
-                HomeDesign.Metric.fan(index: index, tileSide: side),
-                Fan(x: cx - 28, y: 22, width: 56, height: 84, degrees: 0, brightness: 0.5, z: 1, opacity: 0),
-                "index \(index)"
-            )
+        // A 430 pt phone: 398 of content, the seam at 199 in the section (215 on the screen).
+        let width: CGFloat = 398
+        func fan(_ index: Int, _ side: CGFloat) -> HomeDesign.Metric.Fan {
+            HomeDesign.Metric.fan(index: index, side: side, contentWidth: width)
         }
-        // The fan follows the tile's width.
-        XCTAssertEqual(HomeDesign.Metric.fan(index: 0, tileSide: 179).x, 89.5 - 33)
+        // In progress, left of the seam: 161, 69 and -23 on the screen, 16 less in the section.
+        for (index, left, brightness, z) in [(0, 103.0, 1.0, 5.0), (1, 11.0, 0.88, 4.0), (2, -81.0, 0.66, 3.0)] {
+            let poster = fan(index, -1)
+            XCTAssertEqual(poster.x, left, accuracy: 0.0001, "index \(index)")
+            XCTAssertEqual(poster.brightness, brightness, accuracy: 0.0001)
+            XCTAssertEqual(poster.z, z)
+            XCTAssertEqual([poster.y, poster.width, poster.height], [18, 84, 126])
+            XCTAssertEqual(poster.degrees, 0)
+            XCTAssertEqual(poster.opacity, 1)
+        }
+        // Trending is the mirror image: 269, 361 and 453.
+        XCTAssertEqual([fan(0, 1).x, fan(1, 1).x, fan(2, 1).x], [211, 303, 395])
+        // The two inner posters are 24 pt apart, the others 8.
+        XCTAssertEqual(fan(0, 1).x - (fan(0, -1).x + 84), 24)
+        XCTAssertEqual(fan(0, -1).x - (fan(1, -1).x + 84), 8)
+        // The rest wait hidden at the third place.
+        for index in [3, 4] {
+            let hidden = fan(index, -1)
+            XCTAssertEqual(hidden.x, fan(2, -1).x, "index \(index)")
+            XCTAssertEqual(hidden.opacity, 0)
+            XCTAssertEqual(hidden.z, 1)
+            XCTAssertEqual(hidden.brightness, 0.66, accuracy: 0.0001)
+        }
+        // The strip follows the page's width.
+        XCTAssertEqual(HomeDesign.Metric.fan(index: 0, side: -1, contentWidth: 358).x, 179 - 54 - 42)
     }
 
     // MARK: Palette and text
@@ -126,7 +139,6 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(M.closeFrameDuration, 0.548)
         XCTAssertEqual(M.closeSlideDuration, 0.446)
         XCTAssertEqual(M.closeTileFadeDuration, 0.289)
-        XCTAssertEqual(M.closeArtDuration, 0.446)
         XCTAssertEqual(M.closeNeighborDelay, 0)
         XCTAssertEqual(M.closeNeighborDuration, 0.548)
         XCTAssertEqual(M.closeRestDuration, 0.383)
@@ -137,7 +149,7 @@ final class HomeDesignTests: XCTestCase {
         typealias M = HomeDesign.Motion
         XCTAssertEqual(M.openFrontDelay + M.closeFrameDuration, M.closeNeighborDelay + M.closeNeighborDuration)
         XCTAssertEqual(M.openRestDelay + M.closeRestDuration, M.closeNeighborDuration, accuracy: 0.0001)
-        XCTAssertEqual(M.openFadeDelay + M.closeFadeDuration, M.closeNeighborDuration, accuracy: 0.0001)
+        XCTAssertEqual(M.openFadeDelay, M.closeNeighborDuration, accuracy: 0.0001)
     }
 
     func testOpeningAndClosingAreQuickerThanTheFirstCutAndNeverWhip() {

@@ -14,6 +14,13 @@ final class ListMediaTypeIconsTests: XCTestCase {
         XCTAssertEqual(older.mediaTypes, [])
         XCTAssertNil(older.mediaTypesLabel)
     }
+
+    func testOneTypeShowsItsIconAndAnyMixShowsTheGlobe() {
+        XCTAssertEqual(ListMediaTypeIcons.shownTypes([]), [])
+        XCTAssertEqual(ListMediaTypeIcons.shownTypes(["movie"]), ["movie"])
+        XCTAssertEqual(ListMediaTypeIcons.shownTypes(["anime", "manga"]), [APIConstants.allMedia])
+        XCTAssertEqual(ListMediaTypeIcons.shownTypes(["movie", "tv", "book"]), [APIConstants.allMedia])
+    }
 }
 
 private func listJSON(extra: String) -> String {

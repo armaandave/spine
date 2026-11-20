@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// What a featured list holds: one media type's glyph, both glyphs for two, a globe for more.
-///
-/// The `list-media-types` branch adds `ListMediaTypeIcons` for all lists; once both land, this can become it.
+/// What a featured list holds: its one media type's glyph, or the globe when it mixes types (the rule
+/// `ListMediaTypeIcons` uses for every list).
 struct FeaturedMediaTypeIcons: View {
     let mediaTypes: [String]
     var size: CGFloat = 10
@@ -10,7 +9,7 @@ struct FeaturedMediaTypeIcons: View {
     var body: some View {
         if !mediaTypes.isEmpty {
             HStack(spacing: size * 0.45) {
-                ForEach(shownTypes, id: \.self) { mediaType in
+                ForEach(ListMediaTypeIcons.shownTypes(mediaTypes), id: \.self) { mediaType in
                     MediaTypeGlyph(theme: MediaTypeTheme.theme(for: mediaType), size: size)
                 }
             }
@@ -19,9 +18,5 @@ struct FeaturedMediaTypeIcons: View {
                 byJoining: mediaTypes.map { MediaTypeTheme.theme(for: $0).displayName }
             ))
         }
-    }
-
-    private var shownTypes: [String] {
-        mediaTypes.count > 2 ? [APIConstants.allMedia] : mediaTypes
     }
 }

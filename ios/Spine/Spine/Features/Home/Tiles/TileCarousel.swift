@@ -21,19 +21,18 @@ enum TilePosterArt {
     }
 }
 
-/// What a tile waits for before its titles first show: the fan's three posters and the blurred art behind them, so
-/// they arrive together instead of one by one over placeholders.
+/// What a tile waits for before its titles first show: the strip's three posters, so they arrive together instead of
+/// one by one over placeholders.
 enum TileReveal {
     /// The longest a tile waits. Whatever is still loading then fills in on its own.
     static let longestWait: Duration = .seconds(1)
 
-    /// The fan's posters when it rests on `rest`, and its front poster's art: what the closed tile draws.
+    /// The strip's posters when it rests on `rest`: what the closed row draws.
     static func requests(for posters: [TilePoster], rest: Int) -> [ImageRequest] {
         guard !posters.isEmpty else { return [] }
         let fan = TileGeometry.fanSlots(rest: rest, count: posters.count)
-        let shown = [fan.front, fan.left, fan.right].compactMap { $0 }
-        let art = BlurredArt.request(url: TileURL.make(posters[fan.front].media.displayPosterURL), style: .tile)
-        return shown.compactMap { TilePosterArt.request(for: posters[$0].media) } + [art].compactMap { $0 }
+        let shown = [fan.front, fan.second, fan.third].compactMap { $0 }
+        return shown.compactMap { TilePosterArt.request(for: posters[$0].media) }
     }
 
     /// Loads `requests` into the image cache and returns once they are all in, or after `longest`, whichever is
@@ -74,29 +73,39 @@ private final class RevealGate {
     }
 }
 
-/// A poster's place in the fan or the carousel as one animatable value. The poster view never changes its frame: it
-/// moves by offset, scale and rotation, and the corner radius is worked out from the scale on every frame so the
-/// poster reads 12 pt at every size. The hairline and the baked shadow come with it, so nothing is a live effect.
+/// A poster's place in the strip or the carousel as one animatable value. The poster view never changes its frame: it
+/// moves by offset, scale and rotation, and the corner radius (10 in the strip, 12 in the carousel, animated with the
+/// rest) is divided by the scale on every frame so the poster reads that size at every size. The hairline and the
+/// baked shadow come with it, so nothing is a live effect.
 struct PosterPoseEffect: ViewModifier, Animatable {
     var scale: CGFloat
     var offsetX: CGFloat
     var offsetY: CGFloat
     var degrees: Double
+    /// The corner radius it reads as on screen.
+    var onScreenRadius: CGFloat
     /// The poster's art, which may be smaller than its 120 x 180 slot (a square album).
     let artSize: CGSize
 
-    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, Double>> {
-        get { AnimatablePair(AnimatablePair(scale, offsetX), AnimatablePair(offsetY, degrees)) }
+    var animatableData: AnimatablePair<
+        AnimatablePair<CGFloat, CGFloat>, AnimatablePair<AnimatablePair<CGFloat, Double>, CGFloat>
+    > {
+        get {
+            AnimatablePair(
+                AnimatablePair(scale, offsetX), AnimatablePair(AnimatablePair(offsetY, degrees), onScreenRadius)
+            )
+        }
         set {
             scale = newValue.first.first
             offsetX = newValue.first.second
-            offsetY = newValue.second.first
-            degrees = newValue.second.second
+            offsetY = newValue.second.first.first
+            degrees = newValue.second.first.second
+            onScreenRadius = newValue.second.second
         }
     }
 
     func body(content: Content) -> some View {
-        let radius = TileGeometry.cornerRadius(forScale: scale)
+        let radius = TileGeometry.cornerRadius(onScreenRadius, forScale: scale)
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
             .clipShape(shape)
@@ -112,7 +121,7 @@ struct PosterPoseEffect: ViewModifier, Animatable {
     }
 }
 
-/// Folds a closed tile's two side posters in behind the front one as the page scrolls: they slide in under it, shrink
+/// Folds a closed tile's two back posters in behind the front one as the page scrolls: they slide in under it, shrink
 /// and darken, one to one with how far the tile has scrolled off the top (`TileGeometry.foldProgress`), and unfold as
 /// you scroll back. Only transforms and one brightness: nothing is laid out again, and no view is added.
 ///
@@ -221,11 +230,14 @@ private struct TilePosterCell: View {
         let role = TileGeometry.fanRole(index: index, rest: rest, count: count)
         let isFocused = isOpen && focus == index
         let pose = TileGeometry.pose(
-            index: index, focus: focus, isOpen: isOpen, rest: rest, count: count, contentWidth: contentWidth
+            tile: tile.index, index: index, focus: focus, isOpen: isOpen, rest: rest, count: count,
+            contentWidth: contentWidth
         )
         let media = poster.media
         // Where the poster sits in its 120 x 180 frame, as a fraction of it: the point its fold turns and shrinks about.
-        let fanPose = TileGeometry.fanPose(index: index, rest: rest, count: count, contentWidth: contentWidth)
+        let fanPose = TileGeometry.fanPose(
+            tile: tile.index, index: index, rest: rest, count: count, contentWidth: contentWidth
+        )
         let foldAnchor = UnitPoint(
             x: 0.5 + fanPose.offsetX / TileGeometry.posterSize.width,
             y: 0.5 + fanPose.offsetY / TileGeometry.posterSize.height
@@ -255,6 +267,7 @@ private struct TilePosterCell: View {
             offsetX: pose.offsetX,
             offsetY: pose.offsetY,
             degrees: pose.degrees,
+            onScreenRadius: pose.radius,
             artSize: TilePosterArt.size(for: media)
         ))
         .frame(width: TileGeometry.posterSize.width, height: TileGeometry.posterSize.height)
@@ -263,7 +276,7 @@ private struct TilePosterCell: View {
             glow: glow,
             degrees: fanPose.degrees,
             anchor: foldAnchor,
-            slide: TileGeometry.foldSlide(role: role, contentWidth: contentWidth)
+            slide: TileGeometry.foldSlide(tile: tile.index, role: role, contentWidth: contentWidth)
         ))
         .modifier(PosterOpenFold(gain: isOpen ? 1 : 0, glow: glow))
         // The innermost of these two that applies wins, so an open or a close (a flight) beats a change of focus
