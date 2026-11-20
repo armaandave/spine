@@ -113,27 +113,21 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
         }
     }
 
+    /// A status in the words every type shares: Planning, Paused, Dropped and Completed. Only In progress takes the
+    /// type's own word.
     func trackingStatusLabel(_ status: String) -> String {
-        if mediaType == "game" { return status.lowercased() == "in progress" ? "Playing" : status }
-        if readsLikeBook {
-            switch status {
-            case "Planning": return "To Read"
-            case "In progress": return "Currently Reading"
-            case "Dropped": return "Did Not Finish"
-            case "Completed": return "Read"
-            default: return status
-            }
-        }
-        guard mediaType == "music" else { return status }
-        switch status {
-        case "In progress":
-            return "Listening"
-        case "Completed":
-            return "Listened"
-        case "Dropped":
-            return "Stopped"
-        default:
-            return status
+        status.caseInsensitiveCompare("In progress") == .orderedSame ? inProgressWord : status
+    }
+
+    /// In progress, in this type's words: Watching, Reading, Playing or Listening.
+    var inProgressWord: String { Self.inProgressWord(mediaType: mediaType) }
+
+    static func inProgressWord(mediaType: String) -> String {
+        switch mediaType {
+        case "game": "Playing"
+        case "book", "manga", "comic": "Reading"
+        case "music": "Listening"
+        default: "Watching"
         }
     }
 

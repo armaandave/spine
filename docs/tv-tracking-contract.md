@@ -44,7 +44,7 @@ The following rules are inherited without another approval step:
 | Show and season stars and hearts | SW-100 to SW-108, SW-200 to SW-203, BK-200 (its picker and unhearting sentences only), BK-202, GM-301, GM-303 | The show and each season have their own current stars and heart, with the shared source rules (TV-501). Stars or a heart mean the user finished what the page shows: they mark something not started (TV-303), open its log when it's partway, and just save once it's finished or caught up (TV-304). Clearing stars or turning a heart off never changes status, viewings or marks. |
 | Rewatch defaults | SW-010 (except that a claimed tick defaults off, TV-404), GM-217 | The server works out the composer's Rewatch default when it opens; the user can change it before saving (TV-404). On a season or show log the saved toggle never changes what the log fills, and decides what it counts when Stats read it: on, it counts what it covers again; off, it dates a mark it covers (STAT-104). On an episode log it also decides whether the log claims a tick or adds a viewing (TV-402). |
 | Saving, cancelling, one editor | SW-300 to SW-303 | A write, its fills and the worked-out state succeed together or not at all. Cancelling a composer saves nothing, including "Not now" on the season-finish composer (TV-403). The visible draft is what saves. Every surface opens the same editor. |
-| The + menu and statuses | BK-001 (its sections and single current status; TV-700 sets the card lines), BK-100, BK-101, GM-009, GM-011 (its first paragraph), GM-012 | The show's + menu holds the status actions, with base options always visible and unavailable ones explained (TV-005). Planning, Paused and Dropped can be chosen without inventing dates or viewings. Pause saves at once; Drop asks first (TV-007). Planning follows TV-006, which is stricter than GM-011. |
+| The + menu and statuses | BK-001 (its sections and single current status; TV-700 sets the card lines), BK-100, BK-101, GM-009, GM-011 (its first paragraph), GM-012 | The show's + menu holds the status actions it can take now, with Planning on the rail's bookmark (TV-005, TV-006). Planning, Paused and Dropped can be chosen without inventing dates or viewings. Pause saves at once; Drop asks first (TV-007). Planning follows TV-006, which is stricter than GM-011. |
 | Pause and Drop keep progress | BK-303, BK-305 (their progress-keeping rules only) | Pausing or dropping keeps every viewing, log and mark. Coming back continues from the same place (TV-007). |
 | Imports | SW-500 to SW-504 (an imported rating or like follows TV-800, not SW-501's direct consumption), GM-501 (its rule against inferring status from inactivity) | Imports use the same state model and create no feed activity. Spine never infers Paused or Dropped from provider inactivity. TV-800 to TV-804 add the TV rules. |
 | Consistency | BK-500, BK-501, SW-700 | The backend decides every transition. Retries and double taps never duplicate viewings or marks, and logs from the new build never duplicate (TV-705). Every surface shows the same state after a write. |
@@ -155,26 +155,24 @@ A show whose only history is specials is in Watching, with the first aired regul
 
 ### TV-005: The + menu on each page holds that level's actions
 
-The show's + menu offers:
+The show's + menu offers, when they can be used:
 
 - Watching, or Resume in its place when the show is Paused (one row, never both);
-- Planning;
-- Pause;
-- Drop;
+- Paused and Dropped, once the show is started;
 - Log, for a season or the whole show;
-- Rewatch when the show is finished, or Stop rewatching during a rewatch; and
-- Remove from Library, while the show is in the library.
+- Rewatch when the show is finished, or Stop Rewatching during a rewatch; and
+- Remove from Library, while the show is in the library past Planning.
 
+Planning is the rail's bookmark (TV-006), not a row.
 A season's + menu offers Log Season, then Rewatch Season once that season is finished and no rewatch is in progress (TV-600).
-An episode's + menu offers Log Episode.
+An episode's + opens Log Episode.
 Rewatch comes after Log because it appears when the show or season finishes.
 An open menu keeps the options it opened with: a write that lands while it's open, such as a finale's tick, changes them the next time it opens, so no option moves under the user's finger.
 
-Base options stay visible whatever the status.
-Remove from Library isn't one: a show that isn't in the library has nothing to remove, so the menu leaves it out, and the server sends neither the action nor a reason for it.
-Rewatch Season isn't one either: during a rewatch the menu leaves it out rather than showing it unavailable.
-The current status shows as selected rather than as a second action.
-An unavailable option says why; the server sends the available actions and their reasons with the state.
+The app lists only options the server says are available, plus the current status, which is ticked rather than offered again; the line under the menu's title names the shelf.
+An option that can't be used isn't listed. The one exception is Remove from Library: when logs block it, a line under the menu says to delete them first.
+When nothing is left to do, + shows a short notice instead of a menu (a show or season that hasn't aired: "Nothing has aired yet."). When Log is all that's left, + opens it directly.
+The server still sends every available action and each reason, for the website and installed builds.
 
 Choosing Watching for a show with nothing watched saves in one tap without a setup form.
 It puts the show in Watching with the first aired regular episode in show order up next.
@@ -190,6 +188,7 @@ Planning is available only while the show has no viewing, log or mark, specials 
 Otherwise it is unavailable, with the reason "You've started this show. Pause or drop it instead."
 Choosing Planning records no date and no viewing, and creates no season tracking.
 A Planning show leaves Planning when anything under it is ticked, logged or marked (TV-203).
+In the app, Planning is the rail's bookmark: it shows on the show page while the show can be planned, filled once it is, and a tap on the filled bookmark takes the show back out of the library. Once the show is started the bookmark goes away. Seasons and episodes leave it to the show's page.
 
 ### TV-007: Pause is immediate and Drop asks first
 

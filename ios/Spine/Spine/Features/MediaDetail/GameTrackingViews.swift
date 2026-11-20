@@ -233,40 +233,39 @@ struct GameActionSheet: View {
     private var shown: Snapshot { committed ?? Snapshot(status: status, game: game) }
 
     var body: some View {
-        let status = shown.status
-        let game = shown.game
+        let menu = GameMenu(status: shown.status, game: shown.game)
         NavigationStack {
             List {
                 Section {
-                    if status == "Paused" {
-                        // Resume takes Playing's place, as it takes Watching's on a show.
-                        Button("Resume", systemImage: "play.fill") { commit { onAction(.currently) } }
-                    } else {
-                        statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress", disabled: game?.hasPlayingPlaythrough == true)
+                    ForEach(menu.rows) { row in
+                        Button { perform(row.command) } label: {
+                            HStack {
+                                Label(row.title, systemImage: row.systemImage)
+                                if row.isSelected {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .fontWeight(.semibold)
+                                        .accessibilityLabel("Current")
+                                }
+                            }
+                        }
+                        .disabled(row.isSelected)
                     }
-                    statusButton("Planning", symbol: "bookmark", action: .planning, selected: status == "Planning", disabled: status == "Planning" || game?.hasLivePlaythrough == true)
-                    statusButton("Paused", symbol: "pause.fill", action: .paused, selected: status == "Paused")
-                    Button { if game?.hasLivePlaythrough == true { confirmDrop = true } else { commit { onAction(.stopped) } } } label: {
-                        Label(status == "Dropped" ? "Dropped ✓" : "Dropped", systemImage: "xmark")
-                    }.disabled(status == "Dropped")
-                    Button("Log", systemImage: "square.and.pencil") { commit(onLog) }
+                } footer: {
+                    if !menu.offersRemoval { notesFooter(menu.notes) }
                 }
-                if game?.hasLivePlaythrough == true {
-                    Text("Pause, drop, or delete the unfinished playthrough before choosing Planning.").font(.caption).foregroundStyle(.secondary)
-                }
-                if game?.canUpdateProgress == true { Button("Update Progress", systemImage: "slider.horizontal.3") { commit(onProgress) } }
-                if status != nil {
+                if menu.offersRemoval {
                     Section {
                         Button("Remove from Library", systemImage: "trash", role: .destructive) { confirmRemove = true }
-                            .disabled(game?.canRemoveTracking == false)
-                        if game?.canRemoveTracking == false {
-                            Text("Delete playthroughs and completion logs first. Custom lists stay unchanged.").font(.caption).foregroundStyle(.secondary)
-                        }
+                    } footer: {
+                        notesFooter(menu.notes)
                     }
                 }
             }
             .fitsSheetToContent()
-            .navigationTitle("Track this game").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Track this game")
+            .navigationSubtitle(menu.shelf)
+            .navigationBarTitleDisplayMode(.inline)
             .confirmationDialog("Drop this playthrough?", isPresented: $confirmDrop, titleVisibility: .visible) {
                 Button("Drop", role: .destructive) { commit { onAction(.stopped) } }
             } message: { Text("Your progress will be kept in history.") }
@@ -276,15 +275,30 @@ struct GameActionSheet: View {
         }.preferredColorScheme(.dark)
     }
 
+    @ViewBuilder
+    private func notesFooter(_ notes: [String]) -> some View {
+        if !notes.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(notes, id: \.self) { Text($0) }
+            }
+        }
+    }
+
+    private func perform(_ command: GameMenu.Row.Command) {
+        switch command {
+        case .playing, .resume: commit { onAction(.currently) }
+        case .paused: commit { onAction(.paused) }
+        case .dropped(asks: true): confirmDrop = true
+        case .dropped(asks: false): commit { onAction(.stopped) }
+        case .log: commit(onLog)
+        case .updateProgress: commit(onProgress)
+        }
+    }
+
     private func commit(_ choice: () -> Void) {
         guard committed == nil else { return }
         committed = Snapshot(status: status, game: game)
         choice()
-    }
-
-    private func statusButton(_ title: String, symbol: String, action: MediaDetailQuickAction, selected: Bool, disabled: Bool? = nil) -> some View {
-        Button { commit { onAction(action) } } label: { Label(selected ? "\(title) ✓" : title, systemImage: symbol) }
-            .disabled(disabled ?? selected)
     }
 }
 

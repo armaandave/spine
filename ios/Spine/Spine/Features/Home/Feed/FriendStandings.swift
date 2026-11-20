@@ -171,7 +171,7 @@ final class FriendStandings: FeedStandingProviding {
     /// How long a loaded pair is trusted before `prepare` loads it again, and how long a failed one is left alone.
     static let freshFor: TimeInterval = 10 * 60
     static let retryAfterFailure: TimeInterval = 60
-    /// The types with a position to show. A card's "Stopped" is the list status `Dropped`.
+    /// The types with a position to show. A card's "Dropped" is the list status `Dropped`.
     static let types: Set<String> = ["tv", "anime", "book", "manga", "comic", "game"]
 
     private let trackingRepository: TrackingRepository

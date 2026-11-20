@@ -148,7 +148,7 @@ final class TVTrackingSurfacesTests: XCTestCase {
                                            premiere: TVAiring(seasonNumber: 1, airDate: "2027-03-12"))),
                        "Premieres Mar 12")
         XCTAssertEqual(line(Self.showState(status: "Paused", watched: 12, aired: 20, upNext: (2, 3))), "Paused at S2 E3")
-        XCTAssertEqual(line(Self.showState(status: "Dropped", watched: 13, aired: 20, upNext: (2, 4))), "Stopped at S2 E4")
+        XCTAssertEqual(line(Self.showState(status: "Dropped", watched: 13, aired: 20, upNext: (2, 4))), "Dropped at S2 E4")
         XCTAssertEqual(line(Self.showState(status: "Paused", started: false)), "Paused", "Nothing watched names no episode")
         XCTAssertEqual(line(Self.showState(status: "Completed", watched: 20, aired: 20, finished: true, caughtUp: true,
                                            nextAiring: TVAiring(seasonNumber: 3, episodeNumber: 1, airDate: "2027-03-12"))),

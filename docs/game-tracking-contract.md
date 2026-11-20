@@ -171,9 +171,11 @@ Disable Planning while a Playing or Paused playthrough exists.
 Explain that the user can pause, drop, or delete an accidental playthrough instead.
 A status change must not discard an unfinished attempt.
 
-After dropping the attempt, the user can select Planning for a future attempt.
+After dropping the attempt, the server accepts Planning for a future attempt.
 Planning is available whenever no active or paused playthrough exists.
 This includes a directly assigned Paused status with no recorded playthrough.
+In the app, Planning is the rail's bookmark (SW-013), which shows until the game is started and takes a planned game back out.
+The + menu lists only what can be done now, in the book's order (BK-100): Playing (Resume when Paused, Replay once Completed), Paused and Dropped once started, Log, Update Progress, and Remove from Library when nothing blocks it.
 
 ### GM-012: Pause is immediate and Drop requires confirmation
 

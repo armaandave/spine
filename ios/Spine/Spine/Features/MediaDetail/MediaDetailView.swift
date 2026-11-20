@@ -3180,19 +3180,59 @@ private struct MediaDetailPageView: View {
         if detail.ref.isAnime, let anime = viewModel.viewer?.anime {
             TVActionSheet(
                 title: "Track this anime",
-                items: TVTrackingPresentation.animeMenu(for: anime),
+                subtitle: TVTrackingPresentation.shelfLine(
+                    inLibrary: anime.inLibrary, status: anime.status, rewatching: anime.rewatch != nil
+                ),
+                menu: TVTrackingPresentation.animeMenu(for: anime),
                 removePrompt: AnimeTrackingPresentation.removePrompt(for: anime),
                 dropPrompt: AnimeTrackingPresentation.dropPrompt,
                 onCommand: { command in performTVCommand(command, version: anime.version) }
             )
         } else if let tv = viewModel.viewer?.tv {
-            let season = detail.ref.mediaType == "season" ? tv.season : nil
-            TVActionSheet(
-                title: season.map { TVTrackingPresentation.seasonTitle($0.seasonNumber) } ?? "Track this show",
-                items: season.map { TVTrackingPresentation.seasonMenu(for: $0) } ?? TVTrackingPresentation.showMenu(for: tv),
-                removePrompt: TVTrackingPresentation.removePrompt(count: tv.removeCount),
-                onCommand: { command in performTVCommand(command, version: tv.version) }
-            )
+            if detail.ref.mediaType == "season", let season = tv.season {
+                TVActionSheet(
+                    title: TVTrackingPresentation.seasonTitle(season.seasonNumber),
+                    subtitle: TVTrackingPresentation.seasonLabel(for: season),
+                    menu: TVTrackingPresentation.seasonMenu(for: season),
+                    removePrompt: TVTrackingPresentation.removePrompt(count: tv.removeCount),
+                    onCommand: { command in performTVCommand(command, version: tv.version) }
+                )
+            } else {
+                TVActionSheet(
+                    title: "Track this show",
+                    subtitle: TVTrackingPresentation.shelfLine(
+                        inLibrary: tv.inLibrary, status: tv.status, rewatching: tv.rewatch != nil
+                    ),
+                    menu: TVTrackingPresentation.showMenu(for: tv),
+                    removePrompt: TVTrackingPresentation.removePrompt(count: tv.removeCount),
+                    onCommand: { command in performTVCommand(command, version: tv.version) }
+                )
+            }
+        }
+    }
+
+    /// The + menu this TV or anime page would open, to decide whether + opens it, opens Log, or says why it can't.
+    private func tvMenu(_ detail: MediaDetail) -> TVMenu? {
+        if detail.ref.isAnime, let anime = viewModel.viewer?.anime {
+            return TVTrackingPresentation.animeMenu(for: anime)
+        }
+        guard let tv = viewModel.viewer?.tv else { return nil }
+        if detail.ref.mediaType == "season" {
+            return tv.season.map { TVTrackingPresentation.seasonMenu(for: $0) }
+        }
+        return TVTrackingPresentation.showMenu(for: tv)
+    }
+
+    /// + on a show, a season or an anime title: a notice when there's nothing to do, Log when that's all, else the menu.
+    private func openTVMenu(for detail: MediaDetail) {
+        guard let menu = tvMenu(detail) else {
+            presentedSheet = .tvActions
+            return
+        }
+        switch menu.opening {
+        case let .notice(notice): viewModel.tvNotice = notice
+        case .log: openTVComposer()
+        case .menu: presentedSheet = .tvActions
         }
     }
 
@@ -3267,7 +3307,7 @@ private struct MediaDetailPageView: View {
             openTVComposer()
             return
         }
-        presentedSheet = .tvActions
+        openTVMenu(for: detail)
     }
 
     /// The episode page's stars show the newest rated log's stars and open Log Episode with them (TV-502).
@@ -3329,7 +3369,7 @@ private struct MediaDetailPageView: View {
         if detail.ref.isTVFamily {
             tvTrackAction(for: detail)
         } else if viewModel.tracksAnime {
-            presentedSheet = .tvActions
+            openTVMenu(for: detail)
         } else if usesBookGameActions(detail) {
             presentedSheet = .bookGameActions
         } else {
@@ -3611,6 +3651,7 @@ private struct MediaDetailPageView: View {
         let isEpisode = detail.ref.mediaType == "episode"
         let episodeSteps = isEpisode ? tvEpisodeRatingSteps() : nil
         let unavailableReason = isEpisode ? nil : tvRatingUnavailableReason()
+        let planning = planningButton(detail)
         return ActionRail(
             ratingPicker: $ratingPicker,
             isLiked: viewModel.viewer?.hasLiked ?? false,
@@ -3626,6 +3667,8 @@ private struct MediaDetailPageView: View {
             onRatingTap: isEpisode
                 ? { openTVComposer(ratingSteps: episodeSteps) }
                 : unavailableReason.map { reason in { viewModel.tvNotice = reason } },
+            center: planning,
+            slotWidth: Self.railSlotWidth(buttonCount: planning == nil ? 4 : 5),
             onTrack: { trackAction(for: detail) },
             onLike: { likeAction(for: detail) },
             onEye: { eyeAction(for: detail) },
@@ -3633,23 +3676,66 @@ private struct MediaDetailPageView: View {
         )
     }
 
+    /// The rail's bookmark: Planning on every type, until the title is started.
+    private func planningButton(_ detail: MediaDetail) -> RailCenterButton? {
+        let state = PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer)
+        guard state != .hidden else { return nil }
+        let planned = state == .remove
+        return RailCenterButton(
+            systemName: planned ? "bookmark.fill" : "bookmark",
+            label: planned ? "Remove from Planning" : "Add to Planning",
+            identifier: "media-detail.planning",
+            action: { planningAction(for: detail) }
+        )
+    }
+
+    /// The bookmark adds the title to Planning, or takes a planned one back out of the library.
+    private func planningAction(for detail: MediaDetail) {
+        switch PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer) {
+        case .add:
+            if detail.ref.isTVFamily || viewModel.tracksAnime {
+                viewModel.performTVAction(.planning)
+            } else {
+                viewModel.performQuickAction(.planning, for: detail)
+            }
+        case .remove:
+            if viewModel.tracksAnime, let anime = viewModel.viewer?.anime {
+                viewModel.removeTVShow(expectedVersion: anime.version)
+            } else if detail.ref.isTVFamily, let tv = viewModel.viewer?.tv {
+                viewModel.removeTVShow(expectedVersion: tv.version)
+            } else {
+                viewModel.removeTracking(for: detail)
+            }
+        case .hidden:
+            break
+        }
+    }
+
+    /// Five buttons sit a little closer, as on Home's Trending rail, so the rail clears the Home and Search buttons.
+    private static func railSlotWidth(buttonCount: Int) -> CGFloat {
+        buttonCount >= 5 ? 44 : ActionRail.buttonSize
+    }
+
     private func tvTrackLabel(_ detail: MediaDetail) -> String {
         switch detail.ref.mediaType {
         case "anime": "Track anime"
         case "episode": "Log episode"
-        case "season": "Season actions"
+        case "season": tvMenu(detail)?.opening == .log ? "Log season" : "Season actions"
         default: "Track show"
         }
     }
 
     private func standardActionRail(_ detail: MediaDetail) -> some View {
         let usesQuickActions = usesBookGameActions(detail)
+        let showsRating = (detail.ref.isSingleWeight && isEyeCompleted(detail)) || usesQuickActions
+        // A movie's or an album's bookmark sits where its stars appear once it's watched, so its rail stays four wide.
+        let planning = planningButton(detail)
 
         return ActionRail(
             ratingPicker: $ratingPicker,
             isLiked: viewModel.viewer?.hasLiked ?? false,
             showsEye: true,
-            showsRating: (detail.ref.isSingleWeight && isEyeCompleted(detail)) || usesQuickActions,
+            showsRating: showsRating,
             offersRatingAfterBaseAction: detail.ref.isSingleWeight
                 || (detail.ref.readsLikeBook && bookState(detail)?.hasLiveJourney != true)
                 || (detail.ref.mediaType == "game" && gameState(detail)?.hasLivePlaythrough != true),
@@ -3661,6 +3747,8 @@ private struct MediaDetailPageView: View {
                 : (usesQuickActions ? bookGameCopy(for: detail.ref.mediaType).finished : nil),
             isEyeSelected: isEyeCompleted(detail),
             isEyeLoading: viewModel.confirmingEyeWrite,
+            center: planning,
+            slotWidth: Self.railSlotWidth(buttonCount: 3 + (showsRating ? 1 : 0) + (planning == nil ? 0 : 1)),
             onTrack: { trackAction(for: detail) },
             onLike: { likeAction(for: detail) },
             onEye: { eyeAction(for: detail) },
@@ -4248,7 +4336,6 @@ private struct MediaDetailPageView: View {
                 if detail.ref.readsLikeBook, let book = bookState(detail) {
                     BookReadingHistorySection(
                         book: book,
-                        attempt: detail.ref.isSeries ? "attempt" : "journey",
                         isSaving: viewModel.hasPendingWrites,
                         onEdit: { viewModel.formErrorMessage = nil; editingBookJourney = $0 },
                         onDelete: { journey in
@@ -5380,7 +5467,7 @@ private struct BookGameActionSheet: View {
     }
 
     @State private var isRemoveConfirmationPresented = false
-    @State private var isDNFConfirmationPresented = false
+    @State private var isDropConfirmationPresented = false
     @State private var committed: Snapshot?
 
     let mediaType: String
@@ -5469,7 +5556,8 @@ private struct BookGameActionSheet: View {
         }
     }
 
-    /// The same list as the game sheet, sized to its rows.
+    /// The same list as the game sheet, sized to its rows: what you can do, the current status ticked, the shelf under
+    /// the title, and a line under the list when Remove from Library can't be used yet.
     private var bookActions: some View {
         let menu = ReadingMenu(mediaType: mediaType, status: shown.status, book: shown.bookState)
         return NavigationStack {
@@ -5477,44 +5565,44 @@ private struct BookGameActionSheet: View {
                 Section {
                     ForEach(menu.rows) { row in
                         Button { perform(row.command) } label: {
-                            if let image = row.systemImage {
-                                Label(row.title, systemImage: image)
-                            } else {
-                                Text(row.title)
+                            HStack {
+                                Label(row.title, systemImage: row.systemImage)
+                                if row.isSelected {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .fontWeight(.semibold)
+                                        .accessibilityLabel("Current")
+                                }
                             }
                         }
-                        .disabled(row.isDisabled)
+                        .disabled(row.isSelected)
                     }
+                } footer: {
+                    if !menu.offersRemoval { notesFooter(menu.notes) }
                 }
-                if let reason = menu.liveReason {
-                    Text(reason)
-                        .font(.caption).foregroundStyle(.secondary)
-                    Button("Update Progress", systemImage: "slider.horizontal.3") { commit(onUpdateProgress) }
-                }
-                if let removal = menu.removal {
+                if menu.offersRemoval {
                     Section {
-                        Button(removal.title, systemImage: "trash", role: .destructive) {
-                            if !removal.isDisabled { isRemoveConfirmationPresented = true }
+                        Button("Remove from Library", systemImage: "trash", role: .destructive) {
+                            isRemoveConfirmationPresented = true
                         }
-                        .disabled(removal.isDisabled)
-                        if let reason = removal.reason {
-                            Text(reason)
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                    } footer: {
+                        notesFooter(menu.notes)
                     }
                 }
             }
             .fitsSheetToContent()
-            .navigationTitle("Track this \(noun)").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Track this \(noun)")
+            .navigationSubtitle(menu.shelf)
+            .navigationBarTitleDisplayMode(.inline)
         }
         .preferredColorScheme(.dark)
-        .confirmationDialog("Mark this \(noun) as Did Not Finish?", isPresented: $isDNFConfirmationPresented, titleVisibility: .visible) {
-            Button("Did Not Finish", role: .destructive) {
+        .confirmationDialog("Drop this \(noun)?", isPresented: $isDropConfirmationPresented, titleVisibility: .visible) {
+            Button("Drop", role: .destructive) {
                 commit { onAction(.stopped) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your current progress will remain in reading history.")
+            Text("Your progress stays in your reading history.")
         }
         .confirmationDialog("Remove from Library?", isPresented: $isRemoveConfirmationPresented, titleVisibility: .visible) {
             Button("Remove", role: .destructive) {
@@ -5522,7 +5610,16 @@ private struct BookGameActionSheet: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(isSeries ? "Custom lists are kept." : "Diary logs are kept. Reading journeys must be deleted first.")
+            Text("Custom lists are kept.")
+        }
+    }
+
+    @ViewBuilder
+    private func notesFooter(_ notes: [String]) -> some View {
+        if !notes.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(notes, id: \.self) { Text($0) }
+            }
         }
     }
 
@@ -5534,14 +5631,14 @@ private struct BookGameActionSheet: View {
 
     private func perform(_ command: ReadingMenu.Row.Command) {
         switch command {
-        case .toRead: commit { onAction(.planning) }
-        case .currentlyReading, .resume: commit { onAction(.currently) }
+        case .reading, .resume: commit { onAction(.currently) }
         case .keepReading: commit { onReadingAction("keep_reading") }
         case .reread: commit { onReadingAction("reread") }
         case .paused: commit { onAction(.paused) }
-        case .didNotFinish(asks: true): isDNFConfirmationPresented = true
-        case .didNotFinish(asks: false): commit { onAction(.stopped) }
+        case .dropped(asks: true): isDropConfirmationPresented = true
+        case .dropped(asks: false): commit { onAction(.stopped) }
         case .log: commit(onLog)
+        case .updateProgress: commit(onUpdateProgress)
         }
     }
 
@@ -6210,8 +6307,6 @@ private struct BookReadingHistorySection: View {
     @State private var isUndatedDeletePresented = false
 
     let book: BookTrackingState
-    /// What this read is called: a book's journey, a manga's or a comic's attempt (MC-000).
-    let attempt: String
     let isSaving: Bool
     let onEdit: (BookJourneyState) -> Void
     let onDelete: (BookJourneyState) -> Void
@@ -6240,7 +6335,7 @@ private struct BookReadingHistorySection: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Read")
+                            Text("Completed")
                                 .font(.subheadline.weight(.bold))
                             Text("Date unknown")
                                 .font(.caption.weight(.medium))
@@ -6259,11 +6354,11 @@ private struct BookReadingHistorySection: View {
                     .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 14))
                 }
             }
-            .confirmationDialog("Delete this reading \(attempt)?", isPresented: Binding(
+            .confirmationDialog("Delete this read?", isPresented: Binding(
                 get: { pendingDeleteJourney != nil },
                 set: { if !$0 { pendingDeleteJourney = nil } }
             ), titleVisibility: .visible) {
-                Button("Delete \(attempt.capitalized)", role: .destructive) {
+                Button("Delete Read", role: .destructive) {
                     if let journey = pendingDeleteJourney { onDelete(journey) }
                     pendingDeleteJourney = nil
                 }
@@ -6271,13 +6366,13 @@ private struct BookReadingHistorySection: View {
             } message: {
                 Text(pendingDeleteJourney?.status == "Completed"
                     ? "This read will be removed."
-                    : "The Did Not Finish \(attempt) and its progress will be removed.")
+                    : "This dropped read and its progress will be removed.")
             }
-            .confirmationDialog("Delete undated Read?", isPresented: $isUndatedDeletePresented, titleVisibility: .visible) {
+            .confirmationDialog("Delete the undated read?", isPresented: $isUndatedDeletePresented, titleVisibility: .visible) {
                 Button("Delete Undated Read", role: .destructive, action: onDeleteUndated)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This removes only the date-unknown Read state.")
+                Text("This removes only the read with no date.")
             }
         }
     }
@@ -6293,7 +6388,7 @@ private struct BookReadingHistorySection: View {
                 .foregroundStyle(journey.status == "Completed" ? .green : .orange)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(journey.status == "Completed" ? "Read" : "Did Not Finish")
+                Text(journey.status == "Completed" ? "Completed" : "Dropped")
                     .font(.subheadline.weight(.bold))
                 Text(journeyDateLine(journey))
                     .font(.caption.weight(.medium))
@@ -6323,7 +6418,7 @@ private struct BookReadingHistorySection: View {
                     Button(role: .destructive) {
                         pendingDeleteJourney = journey
                     } label: {
-                        Label("Delete \(attempt.capitalized)", systemImage: "trash")
+                        Label("Delete Read", systemImage: "trash")
                     }
                 }
             } label: {

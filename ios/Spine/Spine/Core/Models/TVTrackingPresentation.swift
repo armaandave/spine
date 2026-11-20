@@ -46,7 +46,7 @@ nonisolated enum TVTrackingPresentation {
             return "Paused at \(upNext)"
         case "Dropped":
             guard tv.started, let upNext = tv.upNextCode else { return "Dropped" }
-            return "Stopped at \(upNext)"
+            return "Dropped at \(upNext)"
         case "Completed":
             return tv.caughtUp ? caughtUpLine(for: tv, today: today, calendar: calendar) : nil
         default:
@@ -308,80 +308,89 @@ nonisolated enum TVTrackingPresentation {
         }
     }
 
-    /// The show's + menu, in Library's words: Watching (Resume in its place when Paused), Planning, Paused, Dropped, Log,
-    /// Rewatch or Stop Rewatching, and Remove from Library for a show in the library. Base options are always listed;
-    /// unavailable ones carry the server's reason. A show that isn't in the library has nothing to remove, whatever the
-    /// server sends. Rewatch comes after Log because it appears when the show finishes.
-    static func showMenu(for tv: TVShowState) -> [TVMenuItem] {
-        var items: [TVMenuItem] = []
+    /// The show's + menu (TV-005): Watching (Resume in its place when Paused), Paused, Dropped, Log, Rewatch or Stop
+    /// Rewatching, then Remove from Library. Only rows you can use are listed, and the current status, ticked. Paused
+    /// and Dropped wait until the show is started. Planning lives in the rail's bookmark, so it isn't here, and a show
+    /// that's only planned leaves the bookmark to take it out again. Rewatch comes after Log because it appears when
+    /// the show finishes.
+    static func showMenu(for tv: TVShowState) -> TVMenu {
         let menu = MenuSource(available: tv.availableActions, reasons: tv.actionReasons, selected: tv.selectedAction)
+        var items: [TVMenuItem?] = []
         if tv.status == "Paused" {
             // One row: Resume continues where the user was, as Watching does (TV-007).
-            items.append(menu.optionalItem("resume", "Resume", "play.fill", .action(.resume))
-                ?? menu.item("watching", "Resume", "play.fill", .action(.watching)))
+            items.append(menu.offered("resume", "Resume", "play.fill", .action(.resume))
+                ?? menu.offered("watching", "Resume", "play.fill", .action(.watching)))
         } else {
-            items.append(menu.item("watching", "Watching", "play.fill", .action(.watching)))
+            items.append(menu.offered("watching", "Watching", "play.fill", .action(.watching)))
         }
-        items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
-        items.append(menu.item("pause", "Paused", "pause.fill", .action(.pause)))
-        items.append(menu.item("drop", "Dropped", "xmark", .confirmDrop))
-        items.append(menu.item("log", "Log", "square.and.pencil", .log))
-        if let rewatch = menu.optionalItem("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)) {
-            items.append(rewatch)
+        items.append(menu.offered("pause", "Paused", "pause.fill", .action(.pause), onlyIf: tv.started))
+        items.append(menu.offered("drop", "Dropped", "xmark", .confirmDrop, onlyIf: tv.started))
+        items.append(menu.offered("log", "Log", "square.and.pencil", .log))
+        items.append(menu.offered("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)))
+        items.append(menu.offered("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch)))
+        var notes: [String] = []
+        if tv.inLibrary, tv.status != "Planning" {
+            if let remove = menu.offered("remove", "Remove from Library", "trash", .confirmRemove) {
+                items.append(remove)
+            } else if tv.actionReasons["remove"] != nil {
+                notes.append("To remove this show, delete its logs first.")
+            }
         }
-        if let stop = menu.optionalItem("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch)) {
-            items.append(stop)
-        }
-        if tv.inLibrary {
-            items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
-        }
-        return items
+        return TVMenu(items: items.compactMap { $0 }, notes: notes, emptyNotice: tv.actionReasons["log"] ?? Self.nothingAired)
     }
 
     /// An anime title's + menu (TV-005, AN-000): the show's, with Rewatch or Stop Rewatching as one row. A single has
-    /// Planning, Log and Remove from Library (AN-002).
-    static func animeMenu(for anime: AnimeState) -> [TVMenuItem] {
+    /// Log and Remove from Library (AN-002); Planning is the rail's bookmark here too.
+    static func animeMenu(for anime: AnimeState) -> TVMenu {
         let menu = MenuSource(available: anime.availableActions, reasons: anime.actionReasons, selected: anime.selectedAction)
-        var items: [TVMenuItem] = []
+        var items: [TVMenuItem?] = []
         if !anime.single {
             if anime.status == "Paused" {
-                items.append(menu.optionalItem("resume", "Resume", "play.fill", .action(.resume))
-                    ?? menu.item("watching", "Resume", "play.fill", .action(.watching)))
+                items.append(menu.offered("resume", "Resume", "play.fill", .action(.resume))
+                    ?? menu.offered("watching", "Resume", "play.fill", .action(.watching)))
             } else {
-                items.append(menu.item("watching", "Watching", "play.fill", .action(.watching)))
+                items.append(menu.offered("watching", "Watching", "play.fill", .action(.watching)))
+            }
+            items.append(menu.offered("pause", "Paused", "pause.fill", .action(.pause), onlyIf: anime.started))
+            items.append(menu.offered("drop", "Dropped", "xmark", .confirmDrop, onlyIf: anime.started))
+        }
+        items.append(menu.offered("log", "Log", "square.and.pencil", .log))
+        if !anime.single {
+            items.append(menu.offered("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch))
+                ?? menu.offered("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)))
+        }
+        var notes: [String] = []
+        if anime.inLibrary, anime.status != "Planning" {
+            if let remove = menu.offered("remove", "Remove from Library", "trash", .confirmRemove) {
+                items.append(remove)
+            } else if anime.actionReasons["remove"] != nil {
+                notes.append("To remove this anime, delete its logs first.")
             }
         }
-        items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
-        if !anime.single {
-            items.append(menu.item("pause", "Paused", "pause.fill", .action(.pause)))
-            items.append(menu.item("drop", "Dropped", "xmark", .confirmDrop))
-        }
-        items.append(menu.item("log", "Log", "square.and.pencil", .log))
-        if !anime.single {
-            if let stop = menu.optionalItem("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch)) {
-                items.append(stop)
-            } else if let rewatch = menu.optionalItem("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)) {
-                items.append(rewatch)
-            }
-        }
-        if anime.inLibrary {
-            items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
-        }
-        return items
+        return TVMenu(items: items.compactMap { $0 }, notes: notes, emptyNotice: anime.actionReasons["log"] ?? Self.nothingAired)
     }
 
     /// A season's + menu: Log Season, and Rewatch Season once the season is finished. During a rewatch Rewatch
-    /// Season is left out rather than greyed out (TV-600).
-    static func seasonMenu(for season: TVSeasonState) -> [TVMenuItem] {
+    /// Season is left out (TV-600). With only Log Season left, + opens it directly; before anything airs it says so.
+    static func seasonMenu(for season: TVSeasonState) -> TVMenu {
         let menu = MenuSource(available: season.availableActions, reasons: season.actionReasons, selected: nil)
-        var items = [menu.item("log_season", "Log Season", "square.and.pencil", .log)]
-        if season.availableActions.contains("rewatch_season") {
-            items.append(menu.item(
-                "rewatch_season", "Rewatch Season", "arrow.counterclockwise", .rewatchSeason(season.seasonNumber)
-            ))
-        }
-        return items
+        let items = [
+            menu.offered("log_season", "Log Season", "square.and.pencil", .log),
+            menu.offered("rewatch_season", "Rewatch Season", "arrow.counterclockwise", .rewatchSeason(season.seasonNumber)),
+        ]
+        return TVMenu(items: items.compactMap { $0 }, emptyNotice: season.actionReasons["log_season"] ?? Self.nothingAired)
     }
+
+    /// The line under a show's or an anime title's + menu title: the shelf it sits on, in Library's words.
+    static func shelfLine(inLibrary: Bool, status: String?, rewatching: Bool) -> String {
+        guard inLibrary, let status else { return "Not in your library" }
+        switch status {
+        case "In progress": return rewatching ? "Rewatching" : "Watching"
+        default: return status
+        }
+    }
+
+    private static let nothingAired = "Nothing has aired yet."
 
     /// An episode's + menu: Log Episode.
     static func episodeMenu(for episode: TVEpisodeState) -> [TVMenuItem] {
@@ -409,12 +418,41 @@ nonisolated enum TVTrackingPresentation {
             )
         }
 
-        /// Options listed only in some states (Resume, Rewatch, Stop Rewatching): shown when the server lists them
-        /// as available or explains why they aren't.
-        func optionalItem(_ key: String, _ title: String, _ systemImage: String, _ command: TVMenuItem.Command) -> TVMenuItem? {
-            guard available.contains(key) || reasons[key] != nil || selected == key else { return nil }
-            return item(key, title, systemImage, command)
+        /// A row you can use, or the current status, ticked; nil for a row the server doesn't offer now. `onlyIf` false
+        /// leaves out a row that isn't the current status (Paused and Dropped before a show is started).
+        func offered(
+            _ key: String,
+            _ title: String,
+            _ systemImage: String,
+            _ command: TVMenuItem.Command,
+            onlyIf condition: Bool = true
+        ) -> TVMenuItem? {
+            let row = item(key, title, systemImage, command)
+            if row.isSelected { return row }
+            return row.isAvailable && condition ? row : nil
         }
+    }
+}
+
+/// What a show's, a season's or an anime title's + menu shows (TV-005): the rows you can use, the current status
+/// ticked, and a line under them for a row people look for that can't be used yet (Remove from Library).
+nonisolated struct TVMenu: Equatable {
+    var items: [TVMenuItem]
+    var notes: [String] = []
+    /// What + says instead of opening a menu with nothing in it.
+    var emptyNotice: String
+
+    /// What + does: a short notice when nothing can be done, Log directly when it's the only thing, else the menu.
+    enum Opening: Equatable {
+        case notice(String)
+        case log
+        case menu
+    }
+
+    var opening: Opening {
+        if items.isEmpty { return .notice(emptyNotice) }
+        if items.count == 1, items[0].command == .log, notes.isEmpty { return .log }
+        return .menu
     }
 }
 

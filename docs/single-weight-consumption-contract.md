@@ -223,6 +223,15 @@ one or more diary entries exist. All entry points must enforce the same
 invariant as the media-page eye. An operation must never silently delete diary
 history as a side effect of removing an item from the library.
 
+### SW-013: Planning is the rail's bookmark until it's consumed
+
+A movie or an album has no + menu: + opens the log composer. Planning is a bookmark in the
+rail, in the place the stars take once the title is consumed, so the rail stays four buttons
+wide. Tapping it puts the title in Planning; tapping the filled bookmark takes it back out of
+the library. Marking or logging the title moves it to Completed, and the stars replace the
+bookmark. Every other type has the same bookmark until it's started; theirs sits beside the
+stars (the maintainer's decision of 2026-11-19).
+
 ## Rating laws
 
 ### SW-100: Current and diary ratings are distinct

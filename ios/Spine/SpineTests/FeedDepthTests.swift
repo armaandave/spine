@@ -241,8 +241,8 @@ final class FeedDepthTests: XCTestCase {
 
     func testTheStatusWordsMapToTheirKinds() {
         XCTAssertEqual(FeedStatusPill.Kind(word: "Paused"), .paused)
-        XCTAssertEqual(FeedStatusPill.Kind(word: "Picked back up"), .pickedBackUp)
-        XCTAssertEqual(FeedStatusPill.Kind(word: "Stopped"), .stopped)
+        XCTAssertEqual(FeedStatusPill.Kind(word: "Resumed"), .pickedBackUp)
+        XCTAssertEqual(FeedStatusPill.Kind(word: "Dropped"), .stopped)
         XCTAssertEqual(FeedStatusPill.Kind(word: "Rewatching"), .other)
     }
 
@@ -268,11 +268,11 @@ final class FeedDepthTests: XCTestCase {
 
     func testTheStatusPillIsNineteenHighAndLongEnoughForItsLongestWord() throws {
         for ink in [ArtInk.dark, ArtInk.light] {
-            let image = try XCTUnwrap(ImageRenderer(content: FeedStatusPill(word: "Picked back up", ink: ink)).uiImage)
+            let image = try XCTUnwrap(ImageRenderer(content: FeedStatusPill(word: "Resumed", ink: ink)).uiImage)
             XCTAssertEqual(image.size.height, 19)
-            // 6 + 1 + 5 + 1 + 4 before the word, 8 after it; the word is about 78 pt at 11 bold.
-            XCTAssertGreaterThan(image.size.width, 100)
-            XCTAssertLessThan(image.size.width, 125)
+            // 6 + 1 + 5 + 1 + 4 before the word, 8 after it; the word is about 52 pt at 11 bold.
+            XCTAssertGreaterThan(image.size.width, 65)
+            XCTAssertLessThan(image.size.width, 95)
         }
     }
 

@@ -46,7 +46,7 @@ final class TVTrackingPresentationTests: XCTestCase {
         XCTAssertNil(line(planning), "Planning names a premiere only while nothing has aired.")
 
         XCTAssertEqual(line(show(status: "Paused", watched: 10, aired: 20, upNext: (2, 3))), "Paused at S2 E3")
-        XCTAssertEqual(line(show(status: "Dropped", watched: 11, aired: 20, upNext: (2, 4))), "Stopped at S2 E4")
+        XCTAssertEqual(line(show(status: "Dropped", watched: 11, aired: 20, upNext: (2, 4))), "Dropped at S2 E4")
         XCTAssertEqual(line(show(status: "Paused", watched: 0, aired: 20, upNext: (1, 1), started: false)), "Paused",
                        "Nothing watched names no episode.")
         XCTAssertEqual(line(show(status: "Dropped", watched: 20, aired: 20)), "Dropped", "No up next names no episode.")
@@ -207,26 +207,51 @@ final class TVTrackingPresentationTests: XCTestCase {
 
     // MARK: TV-005 + menu
 
-    func testTV005ShowMenuListsBaseOptionsWithReasonsAndTheSelectedStatus() throws {
+    func testTV005ShowMenuListsOnlyWhatYouCanUseWithTheCurrentStatusTicked() throws {
         let tv = try JSONDecoder.api.decode(TVShowState.self, from: Data(TVTrackingModelsTests.showDetailJSON.utf8))
-        let items = TVTrackingPresentation.showMenu(for: tv)
-        XCTAssertEqual(items.map(\.key), ["watching", "planning", "pause", "drop", "log", "remove"])
-        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Paused", "Dropped", "Log", "Remove from Library"])
+        let menu = TVTrackingPresentation.showMenu(for: tv)
+        XCTAssertEqual(menu.items.map(\.key), ["watching", "pause", "drop", "log", "remove"],
+                       "Planning is the rail's bookmark, and a row that can't be used isn't listed")
+        XCTAssertTrue(menu.items.first?.isSelected == true, "The current status is ticked, not offered again")
+        XCTAssertEqual(menu.items.first { $0.key == "drop" }?.command, .confirmDrop, "Drop asks first (TV-007).")
+        XCTAssertEqual(menu.items.first { $0.key == "remove" }?.command, .confirmRemove)
+        XCTAssertEqual(menu.items.first { $0.key == "log" }?.command, .log)
+        XCTAssertTrue(menu.items.dropFirst().allSatisfy(\.isAvailable))
+        XCTAssertEqual(menu.notes, [])
+        XCTAssertEqual(menu.opening, .menu)
+    }
 
-        let watching = try XCTUnwrap(items.first { $0.key == "watching" })
-        XCTAssertTrue(watching.isSelected, "The current status shows as selected, not as a second action.")
-        XCTAssertFalse(watching.isAvailable)
-        XCTAssertNil(watching.reason)
+    func testTV005PausedAndDroppedWaitUntilTheShowIsStarted() {
+        let untracked = TVShowState(availableActions: ["watching", "planning", "pause", "drop", "log"])
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: untracked).items.map(\.key), ["watching", "log"])
 
-        let planning = try XCTUnwrap(items.first { $0.key == "planning" })
-        XCTAssertFalse(planning.isAvailable)
-        XCTAssertEqual(planning.reason, "You've started this show. Pause or drop it instead.")
+        // Paused before starting stays ticked and can be picked back up; Dropped waits for a start.
+        let pausedFirst = TVShowState(inLibrary: true, status: "Paused", choice: "Paused", selectedAction: "pause",
+                                      availableActions: ["watching", "resume", "planning", "drop", "log", "remove"])
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: pausedFirst).items.map(\.key), ["resume", "pause", "log", "remove"])
+    }
 
-        XCTAssertEqual(items.first { $0.key == "pause" }?.command, .action(.pause))
-        XCTAssertEqual(items.first { $0.key == "drop" }?.command, .confirmDrop, "Drop asks first (TV-007).")
-        XCTAssertEqual(items.first { $0.key == "remove" }?.command, .confirmRemove)
-        XCTAssertEqual(items.first { $0.key == "log" }?.command, .log)
-        XCTAssertTrue(items.filter { ["pause", "drop", "log", "remove"].contains($0.key) }.allSatisfy(\.isAvailable))
+    func testTV005NothingToDoGivesANoticeAndLogAloneOpensTheComposer() {
+        let upcoming = TVShowState(availableActions: ["planning", "pause", "drop"],
+                                   actionReasons: ["watching": "Nothing has aired yet.", "log": "Nothing has aired yet."])
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: upcoming).opening, .notice("Nothing has aired yet."))
+
+        // Planned and not out yet: the bookmark takes it back out, so + has nothing to offer.
+        let planned = TVShowState(inLibrary: true, status: "Planning", choice: "Planning", selectedAction: "planning",
+                                  availableActions: ["pause", "drop", "remove"],
+                                  actionReasons: ["watching": "Nothing has aired yet.", "log": "Nothing has aired yet."])
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: planned).opening, .notice("Nothing has aired yet."))
+
+        let airing = TVSeasonState(seasonNumber: 3, started: true, state: .airing, availableActions: ["log_season"])
+        XCTAssertEqual(TVTrackingPresentation.seasonMenu(for: airing).opening, .log, "No one-row menu")
+        let unaired = TVSeasonState(seasonNumber: 4, state: .unaired, actionReasons: ["log_season": "Nothing has aired yet."])
+        XCTAssertEqual(TVTrackingPresentation.seasonMenu(for: unaired).opening, .notice("Nothing has aired yet."))
+        let finished = TVSeasonState(seasonNumber: 2, started: true, state: .watched,
+                                     availableActions: ["log_season", "rewatch_season", "rate"])
+        let finishedMenu = TVTrackingPresentation.seasonMenu(for: finished)
+        XCTAssertEqual(finishedMenu.items.map(\.key), ["log_season", "rewatch_season"])
+        XCTAssertEqual(finishedMenu.items.last?.command, .rewatchSeason(2))
+        XCTAssertEqual(finishedMenu.opening, .menu)
     }
 
     func testTV005AnOpenMenuKeepsItsRowsWhenAWriteLands() {
@@ -238,111 +263,78 @@ final class TVTrackingPresentationTests: XCTestCase {
         let finished = TVShowState(inLibrary: true, status: "Completed", started: true, finished: true,
                                    availableActions: ["rewatch", "pause", "drop", "log", "remove"])
         var rows = TVMenuRows()
-        rows.open(TVTrackingPresentation.showMenu(for: partway))
-        let live = TVTrackingPresentation.showMenu(for: finished)
-        XCTAssertEqual(rows.shown(live: live).map(\.key), ["watching", "planning", "pause", "drop", "log", "remove"],
+        rows.open(TVTrackingPresentation.showMenu(for: partway).items)
+        let live = TVTrackingPresentation.showMenu(for: finished).items
+        XCTAssertEqual(rows.shown(live: live).map(\.key), ["watching", "pause", "drop", "log", "remove"],
                        "No row appears or moves while the menu is open")
         rows.commit(live)
-        XCTAssertEqual(rows.shown(live: live).map(\.key), ["watching", "planning", "pause", "drop", "log", "remove"],
+        XCTAssertEqual(rows.shown(live: live).map(\.key), ["watching", "pause", "drop", "log", "remove"],
                        "Nor as it slides away after a choice")
 
         var reopened = TVMenuRows()
         reopened.open(live)
-        XCTAssertEqual(reopened.shown(live: live).map(\.key),
-                       ["watching", "planning", "pause", "drop", "log", "rewatch", "remove"],
-                       "The next open shows Rewatch, after Log")
+        XCTAssertEqual(reopened.shown(live: live).map(\.key), ["pause", "drop", "log", "rewatch", "remove"],
+                       "The next open shows Rewatch after Log, and no Watching once everything's watched")
     }
 
-    func testTV005ResumeRewatchAndStopRewatchAppearOnlyWhenListed() {
-        // A Paused show has one row, Resume, in place of Watching (TV-005, TV-007).
+    func testTV005ResumeTakesWatchingsPlaceAndRewatchRowsAppearOnlyWhenOffered() {
         var paused = TVShowState(inLibrary: true, status: "Paused", choice: "Paused", selectedAction: "pause", started: true,
-                                 availableActions: ["watching", "resume", "drop", "log"])
-        var keys = TVTrackingPresentation.showMenu(for: paused).map(\.key)
-        XCTAssertEqual(keys, ["resume", "planning", "pause", "drop", "log", "remove"])
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: paused).map(\.title).first, "Resume")
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: paused).first?.command, .action(.resume))
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: paused).first?.systemImage, "play.fill")
-        XCTAssertTrue(TVTrackingPresentation.showMenu(for: paused).first { $0.key == "pause" }?.isSelected == true)
+                                 availableActions: ["watching", "resume", "drop", "log", "remove"])
+        let menu = TVTrackingPresentation.showMenu(for: paused)
+        XCTAssertEqual(menu.items.map(\.key), ["resume", "pause", "drop", "log", "remove"])
+        XCTAssertEqual(menu.items.first?.command, .action(.resume))
+        XCTAssertTrue(menu.items.first { $0.key == "pause" }?.isSelected == true)
 
-        // Without a resume action the row still reads Resume and sends Watching, which continues the same way.
+        // Without a resume action the first row still resumes, by sending Watching (TV-007).
         paused.availableActions = ["watching", "drop"]
-        let resume = TVTrackingPresentation.showMenu(for: paused).first
-        XCTAssertEqual(resume?.title, "Resume")
-        XCTAssertEqual(resume?.command, .action(.watching))
-        XCTAssertTrue(resume?.isAvailable == true)
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: paused).filter { $0.title == "Watching" }.count, 0)
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: paused).items.first?.command, .action(.watching))
 
+        // With nothing aired there's nothing to resume, so the row isn't listed.
         paused.availableActions = ["drop"]
         paused.actionReasons = ["watching": "Nothing has aired yet."]
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: paused).first?.title, "Resume")
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: paused).first?.reason, "Nothing has aired yet.")
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: paused).items.map(\.key), ["pause", "drop"])
 
-        // A Dropped show keeps Watching.
         let dropped = TVShowState(inLibrary: true, status: "Dropped", choice: "Dropped", selectedAction: "drop", started: true,
                                   availableActions: ["watching", "pause", "log"])
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: dropped).first?.title, "Watching")
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: dropped).first?.command, .action(.watching))
-
-        let finished = TVShowState(inLibrary: true, status: "Completed", started: true, finished: true,
-                                   availableActions: ["rewatch", "pause", "drop", "log", "remove", "rate"],
-                                   actionReasons: ["watching": "You've watched everything that has aired."])
-        let finishedItems = TVTrackingPresentation.showMenu(for: finished)
-        keys = finishedItems.map(\.key)
-        XCTAssertEqual(keys, ["watching", "planning", "pause", "drop", "log", "rewatch", "remove"],
-                       "Rewatch, which appears when the show finishes, comes after Log")
-        XCTAssertEqual(finishedItems.first?.reason, "You've watched everything that has aired.")
-        XCTAssertFalse(finishedItems.contains { $0.key == "rate" }, "Stars live on the rail, not in the + menu.")
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: dropped).items.first?.command, .action(.watching))
 
         let rewatching = TVShowState(inLibrary: true, status: "In progress", selectedAction: "watching", started: true,
-                                     availableActions: ["stop_rewatch", "pause", "drop", "log"])
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: rewatching).first { $0.key == "stop_rewatch" }?.title, "Stop Rewatching")
-        XCTAssertFalse(TVTrackingPresentation.showMenu(for: rewatching).map(\.key).contains("rewatch"))
+                                     availableActions: ["stop_rewatch", "pause", "drop", "log"],
+                                     actionReasons: ["rewatch": "Finish or stop your rewatch first."])
+        let keys = TVTrackingPresentation.showMenu(for: rewatching).items.map(\.key)
+        XCTAssertTrue(keys.contains("stop_rewatch"))
+        XCTAssertFalse(keys.contains("rewatch"), "A Rewatch that can't be used isn't listed")
     }
 
-    func testTV003RemoveFromLibraryIsListedOnlyForAShowInTheLibrary() throws {
-        // A show that isn't in the library has nothing to remove: no row, whatever the server sends.
-        let untracked = TVShowState(availableActions: ["watching", "planning", "pause", "drop", "log"])
-        XCTAssertEqual(TVTrackingPresentation.showMenu(for: untracked).map(\.key),
-                       ["watching", "planning", "pause", "drop", "log"])
-        let offered = TVShowState(availableActions: ["watching", "planning", "pause", "drop", "log", "remove"],
-                                  actionReasons: ["remove": "Nothing to remove."])
-        XCTAssertFalse(TVTrackingPresentation.showMenu(for: offered).contains { $0.key == "remove" })
+    func testTV003RemoveFromLibrary() {
+        // Not in the library: nothing to remove, whatever the server sends.
+        let offered = TVShowState(availableActions: ["watching", "log", "remove"], actionReasons: ["remove": "Nothing to remove."])
+        XCTAssertFalse(TVTrackingPresentation.showMenu(for: offered).items.contains { $0.key == "remove" })
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: offered).notes, [])
 
-        // In the library: listed, and a blocked removal keeps its disabled row with the server's reason.
-        let tracked = TVShowState(inLibrary: true, status: "Planning", selectedAction: "planning",
-                                  availableActions: ["watching", "drop", "log", "remove"])
-        let remove = try XCTUnwrap(TVTrackingPresentation.showMenu(for: tracked).last)
-        XCTAssertEqual(remove.key, "remove")
-        XCTAssertTrue(remove.isAvailable)
-        XCTAssertEqual(remove.command, .confirmRemove)
+        // Only planned: the bookmark takes it back out, so + doesn't offer Remove.
+        let planned = TVShowState(inLibrary: true, status: "Planning", selectedAction: "planning",
+                                  availableActions: ["watching", "pause", "drop", "log", "remove"])
+        XCTAssertFalse(TVTrackingPresentation.showMenu(for: planned).items.contains { $0.key == "remove" })
 
+        let tracked = TVShowState(inLibrary: true, status: "In progress", selectedAction: "watching", started: true,
+                                  availableActions: ["pause", "drop", "log", "remove"])
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: tracked).items.last?.command, .confirmRemove)
+
+        // Blocked by logs: no row, and one line under the menu says why.
         let blocked = TVShowState(inLibrary: true, status: "In progress", selectedAction: "watching", started: true,
                                   availableActions: ["pause", "drop", "log"],
-                                  actionReasons: ["remove": "Delete the logs first."])
-        let blockedRemove = try XCTUnwrap(TVTrackingPresentation.showMenu(for: blocked).first { $0.key == "remove" })
-        XCTAssertFalse(blockedRemove.isAvailable)
-        XCTAssertEqual(blockedRemove.reason, "Delete the logs first.")
+                                  actionReasons: ["remove": "Delete this show's logs first."])
+        let menu = TVTrackingPresentation.showMenu(for: blocked)
+        XCTAssertFalse(menu.items.contains { $0.key == "remove" })
+        XCTAssertEqual(menu.notes.count, 1)
     }
 
-    func testTV005SeasonAndEpisodeMenus() {
-        let season = TVSeasonState(seasonNumber: 2, started: true, state: .watched,
-                                   availableActions: ["log_season", "rewatch_season", "rate"])
-        let items = TVTrackingPresentation.seasonMenu(for: season)
-        XCTAssertEqual(items.map(\.title), ["Log Season", "Rewatch Season"])
-        XCTAssertEqual(items.last?.command, .rewatchSeason(2))
-
-        let airing = TVSeasonState(seasonNumber: 3, started: true, state: .airing, availableActions: ["log_season"])
-        XCTAssertEqual(TVTrackingPresentation.seasonMenu(for: airing).map(\.key), ["log_season"])
-
-        // During a rewatch Rewatch Season is left out, not shown greyed out (TV-600).
-        let blocked = TVSeasonState(seasonNumber: 2, started: true, state: .watched, availableActions: ["log_season"],
-                                    actionReasons: ["rewatch_season": "Finish or stop your rewatch first."])
-        XCTAssertEqual(TVTrackingPresentation.seasonMenu(for: blocked).map(\.key), ["log_season"])
-
+    func testTV005EpisodeMenu() {
         let unaired = TVEpisodeState(seasonNumber: 3, episodeNumber: 7, aired: false,
                                      actionReasons: ["log_episode": "This episode hasn't aired yet."])
         let episodeItems = TVTrackingPresentation.episodeMenu(for: unaired)
-        XCTAssertEqual(episodeItems.map(\.title), ["Log Episode"])
+        XCTAssertEqual(episodeItems.map(\.key), ["log_episode"])
         XCTAssertEqual(episodeItems.first?.isAvailable, false)
         XCTAssertEqual(episodeItems.first?.reason, "This episode hasn't aired yet.")
     }

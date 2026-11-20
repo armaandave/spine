@@ -176,7 +176,7 @@ enum FeedCardPresenter {
         return ProgressDay(kind: .progress, headline: nil, meter: nil)
     }
 
-    /// "Paused", "Stopped", "Picked back up", in the order sent, each once.
+    /// "Paused", "Dropped", "Resumed", in the order sent, each once: the words menus and Library use.
     private static func pills(from moves: [String]?) -> [String] {
         var seen = Set<String>()
         var words: [String] = []
@@ -185,8 +185,8 @@ enum FeedCardPresenter {
             guard !key.isEmpty, seen.insert(key).inserted else { continue }
             switch key {
             case "paused": words.append("Paused")
-            case "stopped": words.append("Stopped")
-            case "picked_back_up": words.append("Picked back up")
+            case "stopped": words.append("Dropped")
+            case "picked_back_up": words.append("Resumed")
             default: words.append(capitalized(key.replacingOccurrences(of: "_", with: " ")))
             }
         }

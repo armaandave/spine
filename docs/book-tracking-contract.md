@@ -30,18 +30,21 @@ must coexist with progress and non-completion statuses.
 
 Book tracking has exactly one current status:
 
-- Planning, displayed as To Read;
-- In Progress, displayed as Currently Reading;
+- Planning;
+- In Progress, displayed as Reading;
 - Paused;
-- Dropped, displayed as Did Not Finish; or
-- Completed, displayed as Read.
+- Dropped; or
+- Completed.
+
+These are the words every type shares; only In Progress takes the type's own word (the maintainer's
+decision of 2026-11-19). Where an older rule below says To Read, Currently Reading, Did Not Finish or
+DNF, or Read, it means Planning, Reading, Dropped, or Completed.
 
 For the Dropped state specifically:
 
-- the library section is Did Not Finish;
-- compact badges use DNF;
-- actions use Mark as DNF; and
-- confirmation copy asks, "Mark this book as Did Not Finish?"
+- the library section is Dropped;
+- actions use Drop; and
+- confirmation copy asks, "Drop this book?"
 
 The backend may retain Dropped as its internal shared status value.
 
@@ -92,18 +95,19 @@ separate destructive action requiring explicit confirmation.
 The book media page uses the same bottom action rail pattern as movies. The plus
 control opens book actions rather than only a diary composer.
 
-It provides actions for:
+It lists, in this order, only what can be done now:
 
-- Currently Reading;
-- Planning, displayed as To Read;
-- Paused;
-- Did Not Finish;
-- Log.
+- Reading, or Resume in its place when the book is Paused, or Reread once it's Completed;
+- Paused and Dropped, once the book has been started (a status past Planning, or a read on
+  record);
+- Log;
+- Update Progress, during a read; and
+- Remove from Library, in its own section, for a book past Planning when nothing blocks it.
 
-These base options remain visible regardless of current status. The current
-status is displayed as selected or disabled rather than as a duplicate action.
-When the book is Paused, the menu additionally offers Resume. Mark as Read
-remains on the eye rather than appearing in this menu.
+The current status is ticked, and the line under the menu's title names the shelf. An option
+that can't be used isn't listed. When Remove from Library is blocked, a line under the menu
+says why instead. Planning is the rail's bookmark (SW-013), so it isn't in this menu, and the
+bookmark takes a planned book back out. Mark as Read remains on the eye.
 
 ### BK-101: Retrospective status assignment does not invent history
 
