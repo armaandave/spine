@@ -100,6 +100,8 @@ def wall_posters(scope, media_types, limit=WALL_LIMIT, rng=random):
         scope.media_summaries([title_id for queue in queues for title_id in islice(queue, _LOOKAHEAD)])
         for queue in queues:
             while queue:
+                # Titles with no artwork in a row load in batches too.
+                scope.media_summaries(list(islice(queue, _LOOKAHEAD)))
                 summary = scope.media_summary(queue.popleft())
                 if summary is not None and has_poster(summary):
                     posters.append({**summary, "user_state": None})
