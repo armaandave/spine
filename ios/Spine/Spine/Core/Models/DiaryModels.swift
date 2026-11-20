@@ -123,6 +123,9 @@ struct DiaryMedia: Codable {
     var showTitle: String? = nil
     /// An episode log's episode title from the stored listing; nil when unknown (TV-702).
     var episodeTitle: String? = nil
+    /// Your own state for the title, whoever's log this is; nil when it isn't in your library or an older server
+    /// didn't send it.
+    var userState: UserMediaState? = nil
 
     var displayPosterURL: String? {
         customPosterUrl ?? posterUrl ?? imageUrl
@@ -130,6 +133,19 @@ struct DiaryMedia: Codable {
 
     var displayTitle: String {
         ref.displayTitle(title)
+    }
+
+    /// The title as a summary, for its poster's hold menu.
+    var summary: MediaSummary {
+        MediaSummary(
+            ref: ref,
+            title: title,
+            imageUrl: imageUrl,
+            posterUrl: posterUrl,
+            customPosterUrl: customPosterUrl,
+            posterOrientation: posterOrientation,
+            userState: userState
+        )
     }
 
     enum CodingKeys: String, CodingKey {
@@ -141,6 +157,7 @@ struct DiaryMedia: Codable {
         case posterOrientation
         case showTitle
         case episodeTitle
+        case userState
     }
 
     init(from decoder: Decoder) throws {
@@ -154,6 +171,7 @@ struct DiaryMedia: Codable {
         posterOrientation = try container.decodeIfPresent(PosterOrientation.self, forKey: .posterOrientation)
         showTitle = try container.decodeIfPresent(String.self, forKey: .showTitle)
         episodeTitle = try container.decodeIfPresent(String.self, forKey: .episodeTitle)
+        userState = try? container.decodeIfPresent(UserMediaState.self, forKey: .userState)
     }
 }
 

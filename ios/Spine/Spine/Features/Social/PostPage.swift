@@ -252,6 +252,8 @@ struct PostHero: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 14) {
             PostHeroPoster(url: posterURL, title: posterTitle, mediaType: mediaType, orientation: orientation)
+                // Once the title has loaded: your own state for it, whoever's post this is.
+                .posterHoldMenu(ifAny: detail?.listSummary)
 
             VStack(alignment: .leading, spacing: 6) {
                 PostHeroAuthorLine(user: user)

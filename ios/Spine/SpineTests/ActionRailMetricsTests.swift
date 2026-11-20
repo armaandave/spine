@@ -38,7 +38,7 @@ final class ActionRailMetricsTests: XCTestCase {
     }
 }
 
-/// A tap Home's rail leaves for the page: each value runs exactly one of the page's four functions.
+/// A tap Home's rail or a poster's hold menu leaves for the page: each value runs exactly one of the page's functions.
 @MainActor
 final class RailHandoffTests: XCTestCase {
     private func run(_ handoff: RailHandoff) -> [String] {

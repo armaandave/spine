@@ -28,7 +28,12 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework.exceptions import ValidationError
 
-from api.serializers.common import media_summary_from_item, prime_collection_items
+from api.serializers.common import (
+    media_summary_from_item,
+    prime_collection_items,
+    prime_viewer_tracking,
+    user_state_for_item,
+)
 from api.services import completion as completion_service
 from api.services import filters as filter_service
 from app import config, exposure, single_weight, user_calendar
@@ -192,7 +197,7 @@ def most_logged_rows(entries, media_type=None):
 
 def serialize_most_logged_rows(rows, request, owner):
     """Serialize one page of most-logged rows with the owner's custom posters."""
-    items = _items_with_owner_artwork((row["item_id"] for row in rows), owner)
+    items = _items_with_owner_artwork((row["item_id"] for row in rows), owner, request.user)
     return _serialize_ranked_rows(rows, request, items, owner=owner, value_key="log_count")
 
 
@@ -586,7 +591,7 @@ def _top_rated_payloads(entries, request, *, owner):
         row["rating"] = wire_rating(row["rating"], row["stats_media_type"])
     overall_rows = rows[:TOP_LEVEL_MEDIA_LIMIT]
     type_rows = _limited_rows_by_type(rows, MEDIA_TYPE_MEDIA_LIMIT)
-    items = _ranked_items(overall_rows, type_rows, owner)
+    items = _ranked_items(overall_rows, type_rows, owner, request.user)
     return _serialize_ranked_rows(overall_rows, request, items, owner=owner, value_key="rating"), {
         media_type: _serialize_ranked_rows(
             type_rows[media_type],
@@ -605,7 +610,7 @@ def _most_logged_payloads(entries, request, *, owner):
     totals = Counter(row["stats_media_type"] for row in rows)
     overall_rows = rows[:TOP_LEVEL_MEDIA_LIMIT]
     type_rows = _limited_rows_by_type(rows, MOST_LOGGED_TYPE_PREVIEW_LIMIT)
-    items = _ranked_items(overall_rows, type_rows, owner)
+    items = _ranked_items(overall_rows, type_rows, owner, request.user)
     by_type = {
         media_type: _serialize_ranked_rows(
             type_rows[media_type],
@@ -635,17 +640,18 @@ def _limited_rows_by_type(rows, limit):
     return result
 
 
-def _ranked_items(overall_rows, type_rows, owner):
+def _ranked_items(overall_rows, type_rows, owner, viewer):
     item_ids = {row["item_id"] for row in overall_rows}
     for rows in type_rows.values():
         item_ids.update(row["item_id"] for row in rows)
-    return _items_with_owner_artwork(item_ids, owner)
+    return _items_with_owner_artwork(item_ids, owner, viewer)
 
 
-def _items_with_owner_artwork(item_ids, owner):
-    """Load ranked items with the owner's custom artwork choices prefetched."""
+def _items_with_owner_artwork(item_ids, owner, viewer):
+    """Load ranked items with the owner's artwork choices and the viewer's state."""
     items = Item.objects.in_bulk(item_ids)
     prime_collection_items(items.values(), owner)
+    prime_viewer_tracking(items.values(), viewer)
     return items
 
 
@@ -656,13 +662,16 @@ def _serialize_ranked_rows(rows, request, items, *, owner, value_key):
         if item is None:
             continue
         payload = {
-            # Like Hall of Fame: the owner's custom artwork, never their tracking state.
-            "media": media_summary_from_item(
-                item,
-                request=request,
-                user=owner,
-                include_user_state=False,
-            ),
+            # Like Hall of Fame: the owner's custom artwork, and the viewer's own state.
+            "media": {
+                **media_summary_from_item(
+                    item,
+                    request=request,
+                    user=owner,
+                    include_user_state=False,
+                ),
+                "user_state": user_state_for_item(request.user, item),
+            },
         }
         if value_key == "rating":
             payload["rating"] = _decimal_string(row[value_key])

@@ -12,6 +12,7 @@ from api.serializers.common import (
     find_item,
     get_or_create_item_from_metadata,
     media_summary_from_item,
+    user_state_for_item,
     user_summary,
 )
 from api.services import tracking as tracking_service
@@ -92,6 +93,8 @@ def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
         user=viewer,
         include_user_state=False,
     )
+    # The viewer's own state, whoever's log this is.
+    media["user_state"] = user_state_for_item(viewer, entry.item)
     if not hasattr(entry, "tv_show_title"):
         prime_show_titles([entry])
     # TV-702: "Show · Season 1" and "Show · S1 E4 · Title" need the show's and the

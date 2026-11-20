@@ -229,7 +229,8 @@ private struct HomeTile: View {
                     state: state,
                     glow: glow,
                     contentWidth: contentWidth,
-                    onOpenTitle: openTitle
+                    onOpenTitle: openTitle,
+                    holdState: holdState(in: tile)
                 )
                 TileEmptySlots(tile: tile, count: posters.count, contentWidth: contentWidth, isOpen: isOpen)
             case .loading:
@@ -312,6 +313,21 @@ private struct HomeTile: View {
             actions.onOpenTitle(poster.media.ref)
         case .trending:
             if let title = model.trendingTitle(id: poster.id) { actions.onOpenTrending(title) }
+        }
+    }
+
+    /// Your state for a poster's title, for its hold menu. In progress posters are your Library rows; a Trending
+    /// title's is the one its rail loaded, and nil (no menu yet) until it has.
+    private func holdState(in tile: HomeTileID) -> (TilePoster) -> UserMediaState?? {
+        switch tile {
+        case .inProgress:
+            return { [model] poster in model.item(id: poster.id)?.holdViewer ?? poster.media.userState }
+        case .trending:
+            let store = model.railStore
+            return { poster in
+                guard let entry = store?.entry(for: poster.id), entry.isReady else { return nil }
+                return .some(entry.viewModel.viewer)
+            }
         }
     }
 

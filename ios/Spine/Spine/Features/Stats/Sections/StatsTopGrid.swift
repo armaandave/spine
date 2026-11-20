@@ -81,6 +81,7 @@ struct StatsTopGridCell: View {
                 mediaType: item.media.ref.mediaType,
                 orientation: item.media.posterOrientation
             )
+            .posterHoldMenu(item.media)
             .overlay(alignment: .topLeading) {
                 StatsTopGridBadge(text: "\(item.rank)")
             }

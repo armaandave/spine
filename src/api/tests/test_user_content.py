@@ -194,6 +194,16 @@ class UserDiaryTests(UserContentTestCase):
         self.assertEqual((row["review"], row["tags"]), ("Great", ["cozy"]))
         self.assertEqual((row["like_count"], row["viewer_has_liked"]), (1, True))
 
+    def test_each_entrys_media_carries_the_viewers_own_state_not_the_owners(self):
+        movie = self.item(MediaTypes.MOVIE.value)
+        self.log(movie)
+        Movie.objects.create(item=movie, user=self.owner, status=Status.PLANNING.value)
+        Movie.objects.create(item=movie, user=self.viewer, status=Status.COMPLETED.value)
+
+        row = self.ok(self.theirs("diary/"))["results"][0]
+
+        self.assertEqual(row["media"]["user_state"]["status"], Status.COMPLETED.value)
+
     def test_reviews_tags_and_pages_filter_only_what_the_viewer_may_see(self):
         anime = self.item()
         reviewed = self.log(anime, day=1, review="Loved it", tags=["cozy"])
@@ -331,8 +341,8 @@ class UserTrackingTests(UserContentTestCase):
             (row["tracking"]["status"], row["tracking"]["progress"]["value"], row["tracking"]["rating"]),
             (Status.IN_PROGRESS.value, 5, "8.0"),
         )
-        # user_state would be the owner's too, hidden logs and private lists included.
-        self.assertIsNone(row["media"]["user_state"])
+        # media.user_state is the viewer's own (Planning), never the owner's.
+        self.assertEqual(row["media"]["user_state"]["status"], Status.PLANNING.value)
         # Notes stay the owner's.
         self.assertEqual(row["tracking"]["notes"], "")
         own = self.ok(self.theirs("tracking/", self.owner, media_type="anime", status="In progress"))

@@ -419,6 +419,8 @@ struct DiaryEntryRow: View {
         // Laid out at its real size: a larger poster shrunk with scaleEffect overflowed the
         // row's layout, and the lazy list kept loading and unloading the last row forever.
         .frame(width: 42, height: 63)
+        // A tap opens the log; holding the poster is about the title.
+        .posterHoldMenu(entry.media.summary)
         .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
     }
 

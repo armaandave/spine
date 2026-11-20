@@ -15,6 +15,7 @@ from django.urls import reverse
 
 from api.tests.test_activity_calc_books import BOOK, NEW_YORK, BookCalcBase, d
 from api.tests.test_stats_v2_activity import YEAR_2025, YEAR_2026
+from api.tests.test_stats_v2_contract import without_user_state
 from app import book_tracking
 from app.models import Book, BookSession, DiaryEntry, Item, Sources, Status
 from integrations import exports
@@ -535,7 +536,9 @@ class AMarkAndALogInYourOwnExportTests(BookImportBase):
         self.overwrite()
         self.assert_numbers(400, 0, 400)
         self.assertFalse(Book.objects.get(item=item).completed_manually)
-        self.assertEqual(self.summary(YEAR_2025, tab=BOOK), before_2025)
+        # The numbers hold. The posters' user_state is the viewer's own library
+        # row, which the overwrite rewrote.
+        self.assertEqual(without_user_state(self.summary(YEAR_2025, tab=BOOK)), without_user_state(before_2025))
 
     def test_a_reread_stopped_then_the_eye_invents_no_mark(self):
         """A Completed row in the file holds no place, so the reread's 50 goes."""

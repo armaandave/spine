@@ -12,6 +12,8 @@ struct AppShellView: View {
     @State private var profileTabImage = ProfileTabImage.fallback
     @State private var appNavigationState = AppNavigationState()
     @State private var openedPushRoute: PushRoute?
+    /// What every poster's hold menu runs through.
+    @State private var posterHold: PosterHoldController
 
     let session: AppSession
 
@@ -19,6 +21,14 @@ struct AppShellView: View {
     init(session: AppSession) {
         self.session = session
         _selectedTab = State(initialValue: session.signedInEntryPoint == .search ? .search : .home)
+        _posterHold = State(initialValue: PosterHoldController(
+            mediaRepository: session.repositories.media,
+            trackingRepository: session.repositories.tracking,
+            diaryRepository: session.repositories.diary,
+            listRepository: session.repositories.lists,
+            peopleRepository: session.repositories.people,
+            onUnauthorized: { Task { await session.logout() } }
+        ))
     }
 
     private var currentUserId: Int? {
@@ -204,9 +214,15 @@ struct AppShellView: View {
         .tabBarMinimizeBehavior(.never)
         .environment(\.appNavigationState, appNavigationState)
         .environment(\.userProfileBuilder, profileBuilder)
+        .environment(posterHold)
+        .environment(\.titlePageBuilder, titlePageBuilder)
+        .posterHoldHost(posterHold, isActive: openedPushRoute == nil)
         .fullScreenCover(item: $openedPushRoute) { route in
             pushRouteDestination(route)
                 .environment(\.userProfileBuilder, profileBuilder)
+                .environment(posterHold)
+                .environment(\.titlePageBuilder, titlePageBuilder)
+                .posterHoldHost(posterHold)
         }
         .onChange(of: push?.pendingRoute, initial: true) {
             openPendingPushRoute()
@@ -310,6 +326,27 @@ struct AppShellView: View {
                 username: username == currentUsername ? nil : username,
                 isPushedProfile: true,
                 onUnauthorized: unauthorized
+            ))
+        }
+    }
+
+    /// A title's page, pushed from any page by a poster's hold menu, with what the page should open on it.
+    private var titlePageBuilder: TitlePageBuilder {
+        TitlePageBuilder { ref, handoff in
+            AnyView(MediaDetailView(
+                ref: ref,
+                mediaRepository: session.repositories.media,
+                musicRepository: session.repositories.music,
+                trackingRepository: session.repositories.tracking,
+                diaryRepository: session.repositories.diary,
+                listRepository: session.repositories.lists,
+                peopleRepository: session.repositories.people,
+                companyRepository: session.repositories.companies,
+                currentUserId: currentUserId,
+                selectedTab: selectedTab,
+                onSelectTab: { selectedTab = $0 },
+                onUnauthorized: unauthorized,
+                railHandoff: handoff
             ))
         }
     }

@@ -247,6 +247,7 @@ struct TaggedDiaryView: View {
                         mediaType: item.media.ref.mediaType,
                         orientation: item.media.posterOrientation
                     )
+                    .posterHoldMenu(item.media.summary)
                     .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
                 }
                 .buttonStyle(.plain)

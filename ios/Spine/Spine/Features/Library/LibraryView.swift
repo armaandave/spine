@@ -932,6 +932,7 @@ struct LibraryView: View {
                             mediaType: item.media.ref.mediaType,
                             orientation: item.media.posterOrientation
                         )
+                        .posterHoldMenu(item.media, viewer: item.holdViewer)
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
 
                         if let progressText = LibraryPosterBadge.gridText(for: item) {
@@ -1209,6 +1210,7 @@ private struct LibraryListRow: View {
                 mediaType: item.media.ref.mediaType,
                 orientation: item.media.posterOrientation
             )
+            .posterHoldMenu(item.media, viewer: item.holdViewer)
             .shadow(color: .black.opacity(0.24), radius: 8, y: 4)
 
             VStack(alignment: .leading, spacing: 6) {

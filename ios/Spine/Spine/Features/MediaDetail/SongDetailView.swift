@@ -357,6 +357,7 @@ struct SongDetailView: View {
                                     mediaType: "music",
                                     orientation: .square
                                 )
+                                .posterHoldMenu(album)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(album.title)
                                         .font(.subheadline.weight(.bold))

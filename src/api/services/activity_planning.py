@@ -27,7 +27,9 @@ from api.permissions import can_view_user_profile
 from api.serializers.common import (
     artwork_from_item,
     media_summary_from_item,
-    prime_collection_items,
+    prime_viewer_state,
+    prime_viewer_tracking,
+    user_state_for_item,
     user_summary,
 )
 from api.services import activity_list
@@ -184,7 +186,10 @@ def payload(row, actor, request):
         "created_at": row.last_at,
         "consumed_at": row.day.isoformat(),
         "actor": user_summary(actor, request=request),
-        "media": media_summary_from_item(row.face, request=request),
+        "media": {
+            **media_summary_from_item(row.face, request=request),
+            "user_state": user_state_for_item(request.user, row.face),
+        },
         "person": None,
         "object": {
             "type": "planning",
@@ -211,6 +216,7 @@ def payloads(rows, request):
     """Return the items of these Planning rows, with their people loaded once."""
     actors = get_user_model().objects.in_bulk({row.actor_id for row in rows})
     prime_curated_artwork([item for row in rows for item in row.titles[:FAN_POSTERS]])
+    prime_viewer_tracking([row.face for row in rows], request.user)
     return [payload(row, actors[row.actor_id], request) for row in rows]
 
 
@@ -232,7 +238,7 @@ def day_response(request, planning_id):
         raise Http404
     row = shown[0]
     items = row.titles
-    prime_collection_items(items, request.user)
+    prime_viewer_state(items, request.user)
     return Response(
         {
             "actor": user_summary(owner, request=request),
@@ -240,7 +246,7 @@ def day_response(request, planning_id):
             "summary": words(row),
             "count": row.count,
             "results": [
-                media_summary_from_item(item, request=request, user=request.user, include_user_state=False)
+                media_summary_from_item(item, request=request, user=request.user)
                 for item in items
             ],
         },

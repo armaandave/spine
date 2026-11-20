@@ -24,8 +24,8 @@ struct RailCenterButton {
     let action: () -> Void
 }
 
-/// What a tap on Home's rail leaves for the title's page to finish with its own screens (a log composer, a sheet): the
-/// page runs it once, after its first load has settled.
+/// What a tap on Home's rail, or a poster's hold menu, leaves for the title's page to finish with its own screens (a log
+/// composer, a sheet): the page runs it once, after its first load has settled.
 enum RailHandoff: Equatable {
     case track
     case eye

@@ -32,9 +32,10 @@ from rest_framework.utils.urls import replace_query_param
 from api.permissions import can_view_user_profile
 from api.serializers.common import (
     media_summary_from_item,
-    prime_collection_items,
+    prime_viewer_state,
     progress_for_media,
     tv_season_started,
+    user_state_for_item,
     user_summary,
 )
 from api.services import activity_list, activity_planning, activity_rows, progress_rows
@@ -405,11 +406,9 @@ def _page_items(page, request, *, list_view):
     actors = get_user_model().objects.in_bulk({row.actor_id for row in page})
     titles = Item.objects.in_bulk({row.title_id for row in progress})
     items = [*(entry.item for entry in entries.values()), *titles.values()]
+    prime_viewer_state(items, request.user)
     if list_view:
-        prime_collection_items(items, request.user)
         diary_service.prime_show_titles(entries.values())
-    else:
-        prime_curated_artwork(items)
     diary_service.prime_diary_likes(entries.values(), request.user)
     engagement = _day_engagement([_post_key(row) for row in progress], request.user)
     results = []
@@ -691,8 +690,11 @@ def _log_payload(entry, request, row=None, *, list_view=False):
 def _media(item, request, *, list_view, entry=None):
     """Return a title's summary; a list's reads as the Diary does."""
     if not list_view:
-        return media_summary_from_item(item, request=request)
-    media = media_summary_from_item(item, request=request, user=request.user, include_user_state=False)
+        return {
+            **media_summary_from_item(item, request=request),
+            "user_state": user_state_for_item(request.user, item),
+        }
+    media = media_summary_from_item(item, request=request, user=request.user)
     if entry is not None:
         media["show_title"] = entry.tv_show_title
         media["episode_title"] = entry.tv_episode_title

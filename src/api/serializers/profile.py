@@ -6,7 +6,12 @@ from django.db.models import Q
 from rest_framework import serializers
 
 from api.permissions import user_blocks
-from api.serializers.common import image_url, media_summary_from_item
+from api.serializers.common import (
+    image_url,
+    media_summary_from_item,
+    prime_viewer_tracking,
+    user_state_for_item,
+)
 from api.services.stats import visible_diary_entries
 from api.views.lists import _lists_visible_to
 from app import exposure
@@ -171,7 +176,16 @@ def hall_of_fame_payload(user, request=None):
     allowed = set(exposure.media_types())
     items = [item for item in hall_of_fame.picks(user) if item.media_type in allowed]
     prime_curated_artwork(items)
-    return [media_summary_from_item(item, request=request, user=user) for item in items]
+    # The picks are the owner's, with their artwork; user_state is the viewer's own.
+    viewer = getattr(request, "user", None)
+    prime_viewer_tracking(items, viewer)
+    return [
+        {
+            **media_summary_from_item(item, request=request, user=user, include_user_state=False),
+            "user_state": user_state_for_item(viewer, item),
+        }
+        for item in items
+    ]
 
 
 class ProfileUpdateSerializer(serializers.Serializer):

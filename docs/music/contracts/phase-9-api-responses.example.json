@@ -37,7 +37,24 @@
           "release_date": null,
           "subtitle": null,
           "title": "Year Zero",
-          "user_state": null
+          "user_state": {
+            "diary_consumed_at": "2026-07-16",
+            "diary_count": 1,
+            "diary_entry_id": 1,
+            "diary_rating": "4.5",
+            "direct_consumption": true,
+            "has_liked": true,
+            "in_lists": [
+              1
+            ],
+            "is_tracked": true,
+            "like_is_independent": false,
+            "like_source_diary_entry_id": 1,
+            "rating": "4.5",
+            "rating_source_diary_entry_id": 1,
+            "status": "Completed",
+            "tracking_id": 903
+          }
         },
         "object": {
           "amount": 2,
@@ -283,7 +300,22 @@
       "show_title": null,
       "subtitle": null,
       "title": "Year Zero",
-      "user_state": null
+      "user_state": {
+        "diary_consumed_at": "2026-07-16",
+        "diary_count": 1,
+        "diary_entry_id": 1,
+        "diary_rating": "4.5",
+        "direct_consumption": true,
+        "has_liked": true,
+        "in_lists": [],
+        "is_tracked": true,
+        "like_is_independent": false,
+        "like_source_diary_entry_id": 1,
+        "rating": "4.5",
+        "rating_source_diary_entry_id": 1,
+        "status": "Completed",
+        "tracking_id": 903
+      }
     },
     "rating": "4.5",
     "review": "Still sounds dangerous.",
@@ -338,7 +370,22 @@
       "show_title": null,
       "subtitle": null,
       "title": "Year Zero",
-      "user_state": null
+      "user_state": {
+        "diary_consumed_at": "2026-07-16",
+        "diary_count": 1,
+        "diary_entry_id": 1,
+        "diary_rating": "4.5",
+        "direct_consumption": true,
+        "has_liked": true,
+        "in_lists": [],
+        "is_tracked": true,
+        "like_is_independent": false,
+        "like_source_diary_entry_id": 1,
+        "rating": "4.5",
+        "rating_source_diary_entry_id": 1,
+        "status": "Completed",
+        "tracking_id": 903
+      }
     },
     "rating": "4.5",
     "review": "Still sounds dangerous.",
@@ -398,7 +445,22 @@
           "show_title": null,
           "subtitle": null,
           "title": "Year Zero",
-          "user_state": null
+          "user_state": {
+            "diary_consumed_at": "2026-07-16",
+            "diary_count": 1,
+            "diary_entry_id": 1,
+            "diary_rating": "4.5",
+            "direct_consumption": true,
+            "has_liked": true,
+            "in_lists": [],
+            "is_tracked": true,
+            "like_is_independent": false,
+            "like_source_diary_entry_id": 1,
+            "rating": "4.5",
+            "rating_source_diary_entry_id": 1,
+            "status": "Completed",
+            "tracking_id": 903
+          }
         },
         "rating": "4.5",
         "review": "Still sounds dangerous.",
@@ -580,7 +642,24 @@
         "release_date": null,
         "subtitle": null,
         "title": "Year Zero",
-        "user_state": null
+        "user_state": {
+          "diary_consumed_at": "2026-07-16",
+          "diary_count": 1,
+          "diary_entry_id": 1,
+          "diary_rating": "4.5",
+          "direct_consumption": true,
+          "has_liked": true,
+          "in_lists": [
+            1
+          ],
+          "is_tracked": true,
+          "like_is_independent": false,
+          "like_source_diary_entry_id": 1,
+          "rating": "4.5",
+          "rating_source_diary_entry_id": 1,
+          "status": "Completed",
+          "tracking_id": 903
+        }
       }
     ],
     "items_count": 1,
@@ -1292,7 +1371,24 @@
           "release_date": null,
           "subtitle": null,
           "title": "Year Zero",
-          "user_state": null
+          "user_state": {
+            "diary_consumed_at": "2026-07-16",
+            "diary_count": 1,
+            "diary_entry_id": 1,
+            "diary_rating": "4.5",
+            "direct_consumption": true,
+            "has_liked": true,
+            "in_lists": [
+              1
+            ],
+            "is_tracked": true,
+            "like_is_independent": false,
+            "like_source_diary_entry_id": 1,
+            "rating": "4.5",
+            "rating_source_diary_entry_id": 1,
+            "status": "Completed",
+            "tracking_id": 903
+          }
         },
         "rating": "4.5"
       }
@@ -2332,7 +2428,24 @@
               "release_date": null,
               "subtitle": null,
               "title": "Year Zero",
-              "user_state": null
+              "user_state": {
+                "diary_consumed_at": "2026-07-16",
+                "diary_count": 1,
+                "diary_entry_id": 1,
+                "diary_rating": "4.5",
+                "direct_consumption": true,
+                "has_liked": true,
+                "in_lists": [
+                  1
+                ],
+                "is_tracked": true,
+                "like_is_independent": false,
+                "like_source_diary_entry_id": 1,
+                "rating": "4.5",
+                "rating_source_diary_entry_id": 1,
+                "status": "Completed",
+                "tracking_id": 903
+              }
             },
             "rating": "4.5"
           }
@@ -2874,7 +2987,24 @@
           "release_date": null,
           "subtitle": null,
           "title": "Year Zero",
-          "user_state": null
+          "user_state": {
+            "diary_consumed_at": "2026-07-16",
+            "diary_count": 1,
+            "diary_entry_id": 1,
+            "diary_rating": "4.5",
+            "direct_consumption": true,
+            "has_liked": true,
+            "in_lists": [
+              1
+            ],
+            "is_tracked": true,
+            "like_is_independent": false,
+            "like_source_diary_entry_id": 1,
+            "rating": "4.5",
+            "rating_source_diary_entry_id": 1,
+            "status": "Completed",
+            "tracking_id": 903
+          }
         },
         "rating": "4.5"
       }

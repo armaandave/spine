@@ -86,4 +86,6 @@ struct FeedCardModel: Identifiable, Equatable {
     var height: CGFloat = HomeDesign.Metric.cardHeight
     /// Whether the meter is a log's: it ends in the log's check (the Check cap).
     var meterCheck: Bool = false
+    /// The card's title, for its poster's hold menu; nil on a Planning day's fan.
+    var holdMedia: MediaSummary? = nil
 }

@@ -283,7 +283,7 @@ class StatsAPITests(TestCase):
             },
         )
         self.assertEqual(response.data["top_rated"][0]["rating"], "4.5")
-        self.assertIsNone(response.data["top_rated"][0]["media"]["user_state"])
+        self.assertIsInstance(response.data["top_rated"][0]["media"]["user_state"], dict)
         self.assertEqual(response.data["most_logged"][0]["log_count"], 2)
         self.assertEqual(
             response.data["activity"]["most_active_weekday"],
@@ -453,7 +453,8 @@ class StatsAPITests(TestCase):
         self.assertEqual(public_response.status_code, status.HTTP_200_OK)
         self.assertEqual(public_response.data["overview"]["diary_entry_count"], 3)
         self.assertEqual(public_response.data["diary_top_rated"][0]["rating"], "5.0")
-        self.assertIsNone(public_response.data["diary_top_rated"][0]["media"]["user_state"])
+        # The viewer's own state, which has none of the target's logs.
+        self.assertEqual(public_response.data["diary_top_rated"][0]["media"]["user_state"]["diary_count"], 0)
         self.assertEqual(public_response.data["score_distribution"]["total_scored"], 3)
         self.assertEqual(public_response.data["score_distribution"]["average_score"], 4.17)
         self.assertEqual(public_response.data["top_rated"][0]["rating"], "5.0")
@@ -589,7 +590,7 @@ class StatsAPITests(TestCase):
             [entry["media"]["ref"]["item_id"] for entry in response.data["results"]],
             [public_anime.id],
         )
-        self.assertIsNone(response.data["results"][0]["media"]["user_state"])
+        self.assertEqual(response.data["results"][0]["media"]["user_state"]["diary_count"], 0)
         self.assertEqual(private_profile.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_stats_posters_use_the_stats_owners_custom_artwork(self):
@@ -637,7 +638,10 @@ class StatsAPITests(TestCase):
             public_page.data["results"][0]["media"],
         ):
             self.assertEqual(media["custom_poster_url"], owner_poster)
-            self.assertIsNone(media["user_state"])
+            self.assertIsInstance(media["user_state"], dict)
+        # The viewer's state is theirs, with none of the owner's logs.
+        for media in (public.data["most_logged"][0]["media"], public_page.data["results"][0]["media"]):
+            self.assertEqual(media["user_state"]["diary_count"], 0)
 
     @staticmethod
     def _items(media_type, count, *, prefix="item"):

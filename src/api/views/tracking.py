@@ -17,8 +17,10 @@ from api.serializers.common import (
     artwork_from_payload,
     media_summary_from_item,
     prime_collection_items,
+    prime_viewer_tracking,
     saved_poster_url,
     tv_season_started,
+    user_state_for_item,
 )
 from api.serializers.tracking import (
     AnimeActionSerializer,
@@ -146,26 +148,10 @@ class TrackingListView(MediaExposureMixin, APIView):
             # One query: up next's title and still, for the hold preview (TV-701).
             tv_tracking.prime_up_next_episodes(page)
             _prime_up_next_season_posters(page, request.user, request)
-        # The rows are the owner's, as the owner sees them. Another user's leave out
-        # media.user_state, which would be the owner's too: their lists and latest log,
-        # hidden ones included.
-        prime_collection_items(
-            [media.item for media in page],
-            owner,
-            media_by_item={media.item_id: media for media in page},
-        )
-        rows = [
-            {
-                "media": media_summary_from_item(
-                    media.item,
-                    request=request,
-                    user=owner,
-                    include_user_state=owner == request.user,
-                ),
-                "tracking": tracking_service.serialize_tracking(media),
-            }
-            for media in page
-        ]
+        # The rows are the owner's, as the owner sees them. media.user_state is the
+        # viewer's own, never the owner's: their lists and latest log, hidden ones
+        # included.
+        rows = _owner_rows(page, request, owner)
         # Each row's shown poster's colors, as on its media page, read in one query.
         shown_posters = [
             row["media"].get("custom_poster_url") or row["media"].get("poster_url") or row["media"].get("image_url")
@@ -179,6 +165,34 @@ class TrackingListView(MediaExposureMixin, APIView):
         if streaming is not None:
             response.data["streaming"] = streaming
         return response
+
+
+def _owner_rows(page, request, owner):
+    """Return a page of the owner's rows: their tracking, and the viewer's own state.
+
+    ``tracking`` reads the owner's state off the primed Items, so it is built before
+    the viewer's replaces it there; media.user_state is never the owner's.
+    """
+    items = [media.item for media in page]
+    prime_collection_items(items, owner, media_by_item={media.item_id: media for media in page})
+    trackings = [tracking_service.serialize_tracking(media) for media in page]
+    if owner != request.user:
+        prime_viewer_tracking(items, request.user)
+    return [
+        {
+            "media": {
+                **media_summary_from_item(
+                    media.item,
+                    request=request,
+                    user=owner,
+                    include_user_state=False,
+                ),
+                "user_state": user_state_for_item(request.user, media.item),
+            },
+            "tracking": tracking,
+        }
+        for media, tracking in zip(page, trackings, strict=True)
+    ]
 
 
 class UpNextView(APIView):

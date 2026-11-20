@@ -212,6 +212,8 @@ nonisolated enum FeedCardStack {
 struct FeedCardPoster: View {
     let art: FeedCardArtSpec
     let title: String
+    /// The title, for the poster's hold menu: a tap opens the post, holding the poster is about the title.
+    var holdMedia: MediaSummary?
 
     private static let radius = PosterSlot.feedCard.cornerRadius
     private typealias Depth = HomeDesign.FeedDepth
@@ -226,6 +228,7 @@ struct FeedCardPoster: View {
                 mediaType: nil,
                 orientation: FeedCardArt.orientation(isSquare: art.isSquare)
             )
+            .posterHoldMenu(ifAny: holdMedia)
             .overlay { gloss }
             .overlay {
                 RoundedRectangle(cornerRadius: Self.radius, style: .continuous)

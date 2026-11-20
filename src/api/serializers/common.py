@@ -3,12 +3,15 @@ import re
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from django.apps import apps
 from django.conf import settings
 from django.db.models import (
     Count,
+    Exists,
     F,
     Max,
     Min,
+    OuterRef,
     Prefetch,
     Q,
     Window,
@@ -364,7 +367,14 @@ def prime_collection_items(items, user, *, media_by_item=None):
     )
     if media_by_item is None:
         return
+    attach_viewer_state(items, user, media_by_item)
 
+
+def attach_viewer_state(items, user, media_by_item):
+    """Attach the viewer's tracking rows, lists, latest log and like to these Items.
+
+    This is what ``user_state_for_item`` reads instead of querying per item.
+    """
     item_ids = [item.pk for item in items]
     list_ids = {}
     for item_id, list_id in CustomListItem.objects.filter(
@@ -417,6 +427,46 @@ def prime_collection_items(items, user, *, media_by_item=None):
         item.viewer_latest_diary = latest_diary.get(item.pk)
         item.viewer_diary_count = getattr(item.viewer_latest_diary, "viewer_count", 0)
         item.viewer_has_liked = item.pk in liked
+
+
+def viewer_media_by_item(items, user):
+    """Return the viewer's own tracking rows by Item id, one query per type."""
+    item_ids_by_type = {}
+    for item in items:
+        item_ids_by_type.setdefault(item.media_type, set()).add(item.pk)
+    media_by_item = {}
+    for media_type, item_ids in item_ids_by_type.items():
+        model = apps.get_model("app", media_type)
+        owner_filter = {"related_season__user": user} if media_type == MediaTypes.EPISODE.value else {"user": user}
+        rows = model.objects.filter(item_id__in=item_ids, **owner_filter).select_related("item")
+        if media_type == MediaTypes.SEASON.value:
+            # tv_season_started reads the viewings: asked here, not once per season.
+            rows = rows.annotate(
+                viewer_has_viewings=Exists(Episode.objects.filter(related_season=OuterRef("pk"))),
+            )
+        for media in rows:
+            if media_type == MediaTypes.SEASON.value and media.is_started is None and media.status != Status.COMPLETED.value:
+                media.is_started = media.viewer_has_viewings
+            media_by_item.setdefault(media.item_id, media)
+    return media_by_item
+
+
+def prime_viewer_state(items, user):
+    """Prime Items with the viewer's artwork choices and own state.
+
+    ``prime_collection_items`` for lists whose rows aren't the viewer's tracking
+    rows: the viewer's rows are found from the Items themselves.
+    """
+    items = list(items)
+    authenticated = bool(user and user.is_authenticated)
+    prime_collection_items(items, user, media_by_item=viewer_media_by_item(items, user) if authenticated and items else None)
+
+
+def prime_viewer_tracking(items, user):
+    """Attach only the viewer's own state to Items primed with another's artwork."""
+    items = list(items)
+    if items and user and user.is_authenticated:
+        attach_viewer_state(items, user, viewer_media_by_item(items, user))
 
 
 def resolved_item_backdrop_urls(item, request=None, user=None):

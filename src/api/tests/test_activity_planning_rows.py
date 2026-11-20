@@ -75,6 +75,14 @@ class DayRowTests(PlanningRowBase):
         self.assertLess(row["id"], 0)
         self.assertEqual(-row["id"], row["object"]["id"])
 
+    def test_the_row_and_its_day_carry_the_viewers_own_state_not_the_adders(self):
+        movie = self.add(1)[0]
+        self.put(movie, Status.COMPLETED.value, user=self.friend)
+        row = self.planning(self.home())[0]
+        self.assertEqual(row["media"]["user_state"]["status"], Status.COMPLETED.value)
+        opened = self.get(f"/api/v1/planning/{row['object']['id']}/", user=self.friend)
+        self.assertEqual(opened["results"][0]["user_state"]["status"], Status.COMPLETED.value)
+
     def test_the_wire_shape(self):
         self.add(2)
         row = self.planning(self.home())[0]
@@ -450,6 +458,8 @@ class QueryCostTests(PlanningRowBase):
         self.add(5, "game")
         large = self.count(ASK) - self.count({})
         # One for the day's rows, one per type to check they're still tracked, and the
-        # row's own people and artwork: not one per title.
-        self.assertLessEqual(small, 6)
+        # row's own people and artwork, and the viewer's own state for each row's face
+        # (a flat five: tracking rows, lists, latest log, like, progress): not one per
+        # title.
+        self.assertLessEqual(small, 10)
         self.assertLessEqual(large - small, 3)

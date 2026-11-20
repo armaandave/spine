@@ -668,6 +668,8 @@ private struct SearchViewContent: View {
             }
             .background(Color.black)
         }
+        // A picker (it has Cancel) chooses a title; only Search itself has hold menus on its posters.
+        .environment(\.posterHoldMenusEnabled, onCancel == nil)
     }
 
     private var currentTheme: MediaTypeTheme {
@@ -1007,6 +1009,7 @@ struct SearchResultRow: View {
             )
             .scaleEffect(usesDiarySize ? 0.75 : 1)
             .frame(width: usesDiarySize ? 42 : nil, height: usesDiarySize ? 63 : nil)
+            .posterHoldMenu(result)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(result.title)

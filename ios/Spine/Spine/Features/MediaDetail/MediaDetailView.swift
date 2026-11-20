@@ -3290,8 +3290,8 @@ private struct MediaDetailPageView: View {
         viewModel.releaseDeferredTVFollowUp()
     }
 
-    /// Home's Trending rail left a tap for this page (a log composer, a sheet): run it once, after the page has loaded
-    /// and its writes have settled, with the page's own routing.
+    /// Home's Trending rail or a poster's hold menu left a tap for this page (a log composer, a sheet): run it once,
+    /// after the page has loaded and its writes have settled, with the page's own routing.
     private func runRailHandoff() async {
         guard let handoff = railHandoff, !didRunRailHandoff, viewModel.detail != nil else { return }
         didRunRailHandoff = true
@@ -4662,17 +4662,40 @@ private struct MediaDetailPageView: View {
                     tv: viewModel.tvSeasonState(card.tv),
                     listed: card.listed
                 ).label(pending: viewModel.viewer?.tvPending ?? TVPendingWatches())
-            }
+            },
+            hold: { card in seasonHold(card, show: detail) }
         ) { season in
-            presentedRef = MediaRef(
-                itemId: nil,
-                source: detail.ref.source,
-                mediaType: "season",
-                mediaId: detail.ref.mediaId,
-                seasonNumber: season.seasonNumber,
-                episodeNumber: nil
+            presentedRef = seasonRef(season.seasonNumber, show: detail)
+        }
+    }
+
+    private func seasonRef(_ seasonNumber: Int, show detail: MediaDetail) -> MediaRef {
+        MediaRef(
+            itemId: nil,
+            source: detail.ref.source,
+            mediaType: "season",
+            mediaId: detail.ref.mediaId,
+            seasonNumber: seasonNumber,
+            episodeNumber: nil
+        )
+    }
+
+    /// A season poster's hold menu: the season's own eye, + Log while it's in progress, as on the season's page.
+    private func seasonHold(_ card: TVSeasonCardModel, show detail: MediaDetail) -> (MediaSummary, UserMediaState?) {
+        let media = MediaSummary(
+            ref: seasonRef(card.seasonNumber, show: detail),
+            title: detail.title,
+            imageUrl: card.imageUrl,
+            posterUrl: card.imageUrl
+        )
+        let viewer = viewModel.tvSeasonState(card.tv).map { season in
+            UserMediaState(
+                isTracked: season.started,
+                status: season.status,
+                tv: TVShowState(inLibrary: season.started, status: season.status, eye: season.eye)
             )
         }
+        return (media, viewer)
     }
 
     private func genreChips(_ detail: MediaDetail, wrapsAfterThird: Bool) -> some View {
@@ -8728,6 +8751,8 @@ private struct SeasonsSection: View {
     let cards: [TVSeasonCardModel]
     /// The card's line from the viewer's state, counting pending marks (TV-200).
     let label: (TVSeasonCardModel) -> String?
+    /// The season as a title, with your state for it, for its poster's hold menu.
+    let hold: (TVSeasonCardModel) -> (MediaSummary, UserMediaState?)
     let onSelect: (TVSeasonCardModel) -> Void
 
     var body: some View {
@@ -8743,7 +8768,8 @@ private struct SeasonsSection: View {
                                 TVSeasonCard(
                                     card: card,
                                     label: label(card),
-                                    width: MediaDetailLayout.seasonPosterSize.width
+                                    width: MediaDetailLayout.seasonPosterSize.width,
+                                    hold: hold(card)
                                 )
                             }
                             .buttonStyle(.plain)
@@ -9254,6 +9280,7 @@ private struct RecommendationsSection: View {
                                         mediaType: item.ref.mediaType,
                                         orientation: item.posterOrientation
                                     )
+                                    .posterHoldMenu(item)
                                     .overlay(alignment: .bottomLeading) {
                                         if let badge = RelatedCardLayout.badge(item) {
                                             Text(badge)
@@ -9745,7 +9772,8 @@ private extension Array where Element == String {
     }
 }
 
-private extension MediaDetail {
+extension MediaDetail {
+    /// The title as a summary, with your state: for Add to List and a poster's hold menu.
     var listSummary: MediaSummary {
         MediaSummary(
             ref: ref,

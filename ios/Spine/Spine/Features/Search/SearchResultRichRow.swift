@@ -24,6 +24,7 @@ struct SearchResultRichRow: View {
                 mediaType: result.ref.mediaType,
                 orientation: result.posterOrientation
             )
+            .posterHoldMenu(result)
             .shadow(color: .black.opacity(0.4), radius: 7, y: 5)
             .frame(width: Self.artWidth)
 

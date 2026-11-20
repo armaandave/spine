@@ -160,6 +160,15 @@ def _is_month(value):
     return isinstance(value, str) and len(value) == 7 and _is_day(f"{value}-01")
 
 
+def without_user_state(value):
+    """Return a payload with every poster's viewer-specific user_state left out."""
+    if isinstance(value, dict):
+        return {key: without_user_state(item) for key, item in value.items() if key != "user_state"}
+    if isinstance(value, list):
+        return [without_user_state(item) for item in value]
+    return value
+
+
 def _is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -407,12 +416,20 @@ class StatsV2ContractConformanceTests(StatsV2Base):
                     with self.subTest(range=params["start_date"], tab=tab, audience=audience):
                         other = self.payload(viewer, params, tab)
                         for key in set(owner) - skipped:
-                            self.assertEqual(other[key], owner[key], key)
+                            # Posters' user_state is the viewer's own.
+                            self.assertEqual(
+                                without_user_state(other[key]),
+                                without_user_state(owner[key]),
+                                key,
+                            )
                         self.assertIsNone(other["top"]["tag_hint"])
                         self.assert_false(other["top"]["hint_private"])
                         if owner["top"]["source"] == "list" and not owner["top"]["hint_private"]:
                             self.assertEqual(other["top"]["list"], owner["top"]["list"])
-                            self.assertEqual(other["top"]["items"], owner["top"]["items"])
+                            self.assertEqual(
+                                without_user_state(other["top"]["items"]),
+                                without_user_state(owner["top"]["items"]),
+                            )
 
     def test_top_follows_list_visibility_and_owner_only_hints(self):
         # S-12 and S-13.
@@ -494,7 +511,7 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         self.check_keys(media, MEDIA_KEYS, where)
         self.check_keys(media["ref"], REF_KEYS, f"{where}.ref")
         self.assertTrue(_is_int(media["ref"]["item_id"]), where)
-        self.assertIsNone(media["user_state"], where)
+        self.assertTrue(media["user_state"] is None or isinstance(media["user_state"], dict), where)
 
     def check_stars(self, value, where, *, nullable=True):
         if value is None and nullable:

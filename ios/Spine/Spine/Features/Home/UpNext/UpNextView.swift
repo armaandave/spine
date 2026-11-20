@@ -154,6 +154,7 @@ struct UpNextRow: View {
                 orientation: item.media.posterOrientation
             )
             .frame(width: 42, height: 63)
+            .posterHoldMenu(item.media)
             .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
 
             VStack(alignment: .leading, spacing: 5) {
