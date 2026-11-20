@@ -17,7 +17,13 @@ from api.serializers.common import (
     user_state_for_item,
 )
 from api.services import stats as stats_service
-from api.services import stats_cache, stats_v2_lists, stats_v2_people, stats_v2_ratings
+from api.services import (
+    stats_cache,
+    stats_v2_lists,
+    stats_v2_people,
+    stats_v2_ratings,
+    stats_year,
+)
 from api.services.stats_scope import COLLECTION_TABS, build_scope
 from api.services.stats_v2 import build_stats_v2
 from app import statistics as legacy_stats
@@ -148,6 +154,30 @@ class UserStatsSummaryView(APIView):
         if not can_view_user_profile(request.user, user):
             return Response(status=status.HTTP_404_NOT_FOUND)
         return summary_response(user, request)
+
+
+def year_response(user, request):
+    """Answer the profile's This Year section: this year's Global numbers and wall."""
+    scope = stats_year.year_scope(user, request.user, request=request)
+    return Response(stats_cache.cached(scope, "year", lambda: stats_year.build_year(scope)))
+
+
+class MyStatsYearView(APIView):
+    """Current user's year so far, for the profile."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return year_response(request.user, request)
+
+
+class UserStatsYearView(APIView):
+    """A visible user's year so far, for their profile (STAT-002)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, username):
+        return year_response(visible_profile_owner(request, username), request)
 
 
 def most_logged_response(user, request):
