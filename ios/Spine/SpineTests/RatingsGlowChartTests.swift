@@ -37,12 +37,6 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(G.x(step: 9, chartWidth: width), width - G.inset, accuracy: 0.001)
     }
 
-    func testTheEndFacesStayInsideTheChart() {
-        let half = G.faceSize / 2 + G.faceRingReach
-        XCTAssertGreaterThanOrEqual(G.x(step: 0, chartWidth: width) - half, 8)
-        XCTAssertLessThanOrEqual(G.x(step: 9, chartWidth: width) + half, width - 8)
-    }
-
     func testTheAverageSitsBetweenItsSteps() {
         XCTAssertEqual(G.averageX(stars: 0.5, chartWidth: width), G.inset)
         XCTAssertEqual(G.averageX(stars: 5, chartWidth: width), width - G.inset, accuracy: 0.001)
@@ -88,6 +82,41 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(single[0].x, G.inset, "a lone face at the end is already inside")
     }
 
+    func testALoneFaceAtEitherEndStaysInsideTheChart() {
+        let reach = G.faceSize / 2 + G.faceRingReach
+        for step in [0, 9] {
+            let x = G.faceSlots(steps: [step], chartWidth: width)[0].x
+            XCTAssertGreaterThanOrEqual(x - reach, 0)
+            XCTAssertLessThanOrEqual(x + reach, width)
+        }
+    }
+
+    func testAGroupOfThreeAtTheFirstStepJustFitsWithoutAShift() {
+        let slots = G.faceSlots(steps: [0, 0, 0], chartWidth: width)
+        XCTAssertEqual(slots[1].x, G.inset, accuracy: 0.001)
+    }
+
+    func testAVeryNarrowChartCentersTheGroup() {
+        let slots = G.faceSlots(steps: [0, 0, 0], chartWidth: 20)
+        XCTAssertEqual(slots[1].x, 10, accuracy: 0.001)
+    }
+
+    func testABigGroupNeverSpansMoreThanOneStep() {
+        let slots = G.faceSlots(steps: [Int](repeating: 4, count: 12), chartWidth: width)
+        let xs = slots.map(\.x)
+        XCTAssertLessThanOrEqual(xs.max()! - xs.min()!, G.stepWidth(chartWidth: width) + 0.001)
+        XCTAssertEqual((xs.max()! + xs.min()!) / 2, G.x(step: 4, chartWidth: width), accuracy: 0.001)
+    }
+
+    func testYouAreInFrontThenTheFirstOfAGroupInFrontOfTheNext() {
+        let slots = G.faceSlots(steps: [5, 5, 5, 5], chartWidth: width, front: [2])
+        XCTAssertEqual(slots[2].depth, Int.max, "you are in front of everyone")
+        XCTAssertGreaterThan(slots[0].depth, slots[1].depth)
+        XCTAssertGreaterThan(slots[1].depth, slots[3].depth)
+        let apart = G.faceSlots(steps: [2, 3], chartWidth: width)
+        XCTAssertNotEqual(apart[0].depth, apart[1].depth, "neighbouring groups never tie")
+    }
+
     func testNobodyRatedMeansNoFaces() {
         XCTAssertTrue(G.faceSlots(steps: [], chartWidth: width).isEmpty)
     }
@@ -98,7 +127,7 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(G.average(payload: nil, counts: [Int](repeating: 0, count: 10)), 0)
     }
 
-    // MARK: People on the curve
+    // MARK: People in the faces row
 
     func testAnEpisodePageChartsTheEpisodeStarsAndEveryOtherPageTheTitles() {
         XCTAssertEqual(RatingChartPerson.viewerRating(mediaType: "episode", titleRating: "4", episodeRating: nil), nil)
@@ -113,6 +142,8 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(people.map(\.halfSteps), [9, 9, 4])
         XCTAssertEqual(people.map(\.isYou), [true, false, false])
         XCTAssertEqual(RatingChartPerson.people(viewerRating: nil, viewerAvatarURL: nil, friends: friends).map(\.id), ["friend-1", "friend-3"])
+        let noStars = [friend(id: 1, rating: "0"), friend(id: 2, rating: ""), friend(id: 3, rating: nil)]
+        XCTAssertTrue(RatingChartPerson.people(viewerRating: "0", viewerAvatarURL: nil, friends: noStars).isEmpty)
     }
 
     // MARK: Friend cards

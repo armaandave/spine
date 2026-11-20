@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The numbers behind the ratings chart: where each of the ten half-star steps sits, the smooth curve through them
 /// (monotone cubic, so it never overshoots between steps and runs flat along the floor where nobody rated), and where
-/// the row of faces under it. Pure, so each rule is tested on its own.
+/// each face in the row under the box sits. Pure, so each rule is tested on its own.
 enum RatingsChartGeometry {
     static let stepCount = 10
     /// Just the curve and room for the glow under the floor: no axis.
@@ -140,24 +140,33 @@ enum RatingsChartGeometry {
     struct FaceSlot: Equatable {
         let x: CGFloat
         let rankInGroup: Int
+        /// Stacking order: higher is in front. You are in front of everyone; then the first of a group is in front of
+        /// the next in it, and across groups the lower rating's faces win a tie.
+        let depth: Int
     }
 
     /// The center x of each face, in order. A face is centered at its rating's step; faces at one rating make a group,
-    /// spread `faceStep` apart around that step in the order given (first on the left). A group that would spill
-    /// past the chart's edges, outline included, is shifted inward as a whole.
-    static func faceSlots(steps: [Int], chartWidth: CGFloat) -> [FaceSlot] {
+    /// spread `faceStep` apart around that step in the order given (first on the left), closer together when the group
+    /// would be wider than one step. A group that would spill past the chart's edges, outline included, is shifted
+    /// inward as a whole. `front` holds the indices of the faces drawn in front of every other (you).
+    static func faceSlots(steps: [Int], chartWidth: CGFloat, front: Set<Int> = []) -> [FaceSlot] {
         var members: [Int: [Int]] = [:]
         for (index, step) in steps.enumerated() { members[step, default: []].append(index) }
-        var slots = [FaceSlot](repeating: FaceSlot(x: 0, rankInGroup: 0), count: steps.count)
+        var slots = [FaceSlot](repeating: FaceSlot(x: 0, rankInGroup: 0, depth: 0), count: steps.count)
         let reach = faceSize / 2 + faceRingReach
         for (step, indices) in members {
-            let span = CGFloat(indices.count - 1) * faceStep
+            let gap = indices.count > 1 ? max(0, min(faceStep, stepWidth(chartWidth: chartWidth) / CGFloat(indices.count - 1))) : faceStep
+            let span = CGFloat(indices.count - 1) * gap
             let center = x(step: step, chartWidth: chartWidth)
             let lowest = reach + span / 2
             let highest = chartWidth - reach - span / 2
             let shifted = lowest <= highest ? min(max(center, lowest), highest) : chartWidth / 2
             for (rank, index) in indices.enumerated() {
-                slots[index] = FaceSlot(x: shifted - span / 2 + CGFloat(rank) * faceStep, rankInGroup: rank)
+                slots[index] = FaceSlot(
+                    x: shifted - span / 2 + CGFloat(rank) * gap,
+                    rankInGroup: rank,
+                    depth: front.contains(index) ? Int.max : (indices.count - rank) * 10 + (stepCount - step)
+                )
             }
         }
         return slots
@@ -249,8 +258,8 @@ struct RatingsGlowChart: View {
     /// The Inner light box: from 6 pt down to the floor, 1 pt in from each side. It has no bottom edge.
     private static let boxTop: CGFloat = 6
     private static let boxRadius: CGFloat = 20
-    /// Where the number sits from the chart's left edge (22 pt in from the box's).
-    private static let sideInset: CGFloat = 23
+    /// Where the number sits from the chart's left edge (the board's 22 pt; the box is 1 pt in).
+    private static let sideInset: CGFloat = 22
 
     /// Inter Tight Black: the bundled variable font (`Resources/Fonts`, registered under `UIAppFonts`) with its
     /// weight axis set to 900 through the font descriptor. A fixed 44 pt, like the board's fixed 48 pt header,
@@ -277,12 +286,15 @@ struct RatingsGlowChart: View {
                 VStack(alignment: .leading, spacing: 0) {
                     header
                     chart(width: width)
-                    if !people.isEmpty { faces(width: width) }
+                    if !people.isEmpty { faces(width: width).transition(.opacity) }
                 }
                 .padding(.top, Self.topInset)
+                .accessibilityElement(children: .contain)
             }
         }
         .frame(height: Self.topInset + Self.headerHeight + G.height + (people.isEmpty ? 0 : G.facesRowHeight))
+        // Friends load after the chart: the row's room opens smoothly instead of shoving the page.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: people.isEmpty)
         .onAppear {
             // Reduce Motion: it is simply there.
             if reduceMotion { appeared = true }
@@ -345,7 +357,6 @@ struct RatingsGlowChart: View {
             .font(.system(size: 13, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(.white.opacity(0.62))
-            .accessibilityLabel("\(totalCount.formatted()) \(totalCount == 1 ? "rating" : "ratings")")
         }
         .lineLimit(1)
         .accessibilityHidden(true)
@@ -366,10 +377,10 @@ struct RatingsGlowChart: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(height: 38)
-                // The text sits 14 pt below the header's top, 21 pt in from the chart's right edge (22 from the box's).
-                .padding(.top, 4)
-                .padding(.trailing, 11)
+                .frame(height: 44)
+                // The text sits 14 pt below the header's top, 22 pt in from the chart's right edge.
+                .padding(.top, 1)
+                .padding(.trailing, 12)
                 .accessibilityHint("Opens every written review")
             }
         }
@@ -390,6 +401,7 @@ struct RatingsGlowChart: View {
         }
         .frame(width: width, height: G.height, alignment: .topLeading)
         .accessibilityElement(children: .ignore)
+        .accessibilitySortPriority(1)
         .accessibilityLabel(
             "Ratings, average \(String(format: "%.1f", average)) out of 5, \(totalCount.formatted()) \(totalCount == 1 ? "rating" : "ratings")"
         )
@@ -423,24 +435,22 @@ struct RatingsGlowChart: View {
     /// One row of faces just under the box, each centered at its rating's x, overlapping where ratings match.
     private func faces(width: CGFloat) -> some View {
         let animate = !reduceMotion
-        let slots = G.faceSlots(steps: people.map(\.step), chartWidth: width)
+        let slots = G.faceSlots(
+            steps: people.map(\.step),
+            chartWidth: width,
+            front: Set(people.indices.filter { people[$0].isYou })
+        )
         var ranks = [Int](repeating: 0, count: people.count)
         for (rank, index) in people.indices.sorted(by: { (people[$0].step, $0) < (people[$1].step, $1) }).enumerated() {
             ranks[index] = rank
         }
         return ZStack(alignment: .topLeading) {
             ForEach(Array(people.enumerated()), id: \.element.id) { index, person in
-                photo(person)
-                    .scaleEffect(appeared ? 1 : 0.55)
-                    .offset(y: appeared ? 0 : -28)
-                    .opacity(appeared ? 1 : 0)
-                    .animation(
-                        animate ? .spring(response: 0.55, dampingFraction: 0.62).delay(0.85 + Double(ranks[index]) * 0.11) : nil,
-                        value: appeared
-                    )
-                    .position(x: slots[index].x, y: G.faceCenterY)
-                    // You in front; then the first of a group in front of the next.
-                    .zIndex(person.isYou ? 30 : Double(20 - slots[index].rankInGroup))
+                DroppingFace(appeared: appeared, animate: animate, delay: 0.85 + Double(ranks[index]) * 0.11) {
+                    photo(person)
+                }
+                .position(x: slots[index].x, y: G.faceCenterY)
+                .zIndex(Double(slots[index].depth))
             }
         }
         .frame(width: width, height: G.facesRowHeight, alignment: .topLeading)
@@ -457,6 +467,25 @@ struct RatingsGlowChart: View {
                 }
             }
             .modifier(YourGlow(isYou: person.isYou))
+    }
+}
+
+/// A face that drops in once the chart is on screen, or as soon as it arrives when the chart already is.
+private struct DroppingFace<Content: View>: View {
+    let appeared: Bool
+    let animate: Bool
+    let delay: Double
+    @ViewBuilder let content: Content
+    @State private var landed = false
+
+    var body: some View {
+        content
+            .scaleEffect(landed ? 1 : 0.55)
+            .offset(y: landed ? 0 : -28)
+            .opacity(landed ? 1 : 0)
+            .animation(animate ? .spring(response: 0.55, dampingFraction: 0.62).delay(delay) : nil, value: landed)
+            .onAppear { landed = appeared }
+            .onChange(of: appeared) { _, now in landed = now }
     }
 }
 

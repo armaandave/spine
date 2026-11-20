@@ -4433,7 +4433,7 @@ private struct MediaDetailPageView: View {
         Task { await viewModel.loadFriends() }
     }
 
-    /// You (when you have stars) and the friends who rated, as photos on the ratings curve.
+    /// You (when you have stars) and the friends who rated, as a row of faces under the ratings box.
     private var chartPeople: [RatingChartPerson] {
         RatingChartPerson.people(
             viewerRating: RatingChartPerson.viewerRating(
@@ -8361,7 +8361,7 @@ struct SpineRatingDistributionSection: View {
     let reviewCount: Int
     /// The poster the page shows: the number and the curve take the title's color from it, as Home's title does.
     var posterURL: String?
-    /// You and the friends who rated, drawn as photos on the curve.
+    /// You and the friends who rated, drawn as a row of faces under the box.
     var people: [RatingChartPerson] = []
     let onSeeReviews: () -> Void
 
