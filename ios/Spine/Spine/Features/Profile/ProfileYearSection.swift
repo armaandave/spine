@@ -37,7 +37,8 @@ struct ProfileYearSection<Destination: View>: View {
         numbers(rows)
             .padding(EdgeInsets(top: 16, leading: 16, bottom: 6, trailing: 16))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular.tint(.black.opacity(0.32)), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            // The same glass as the menu above: plain regular glass, no dark tint.
+            .modifier(ProfileMenuGroupSurface(shape: RoundedRectangle(cornerRadius: 15, style: .continuous)))
             .padding(.horizontal, 8)
             // Posters show above the plate and run on below it.
             .padding(.top, ProfileYearWall.tuck + ProfileYearWall.above)
