@@ -139,6 +139,11 @@ Run from the feature worktree unless a step says otherwise.
      then
      `node ~/.appstoreconnect/asc.mjs post '/v1/betaGroups/<Me group id>/relationships/builds' '{"data":[{"type":"builds","id":"<build-id>"}]}'`.
      It prints `{"status": 204}`. The user's ship request covers this write.
+   - Give build N to the external group "Friends" (`b7cb78d9-e8dc-48b5-860c-4116fb7e6bd1`,
+     testers who joined by its public link) the same way, then submit it for beta review:
+     `node ~/.appstoreconnect/asc.mjs post '/v1/betaAppReviewSubmissions' '{"data":{"type":"betaAppReviewSubmissions","relationships":{"build":{"data":{"type":"builds","id":"<build-id>"}}}}}'`.
+     It prints `"betaReviewState": "WAITING_FOR_REVIEW"`; Friends get the build when Apple
+     approves it (minutes to hours). The ship request covers both writes.
    - Confirm with `asc.mjs status` that "Me" lists the build.
    - Tag the commit `ios-<version>-build<N>` and push the tag. Tags don't trigger
      builds.
@@ -150,7 +155,7 @@ Run from the feature worktree unless a step says otherwise.
     each run's simulator when the run ends; this catches any it didn't, at a few GB each on
     this Mac's nearly full disk. Report any it skips.
 11. **Report** the deploy (or why it was skipped), the CI result, migrations, the build
-    number and whether it's in "Me", and anything left to do.
+    number and whether it's in "Me" and submitted for "Friends", and anything left to do.
 
 ## One-time data steps
 
