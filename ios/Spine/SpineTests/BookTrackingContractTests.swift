@@ -196,10 +196,10 @@ final class BookTrackingContractTests: XCTestCase {
             seasonNumber: nil,
             episodeNumber: nil
         )
-        XCTAssertEqual(ref.trackingStatusLabel("Planning"), "To Read")
-        XCTAssertEqual(ref.trackingStatusLabel("In progress"), "Currently Reading")
-        XCTAssertEqual(ref.trackingStatusLabel("Dropped"), "Did Not Finish")
-        XCTAssertEqual(ref.trackingStatusLabel("Completed"), "Read")
+        XCTAssertEqual(ref.trackingStatusLabel("Planning"), "Planning")
+        XCTAssertEqual(ref.trackingStatusLabel("In progress"), "Reading")
+        XCTAssertEqual(ref.trackingStatusLabel("Dropped"), "Dropped")
+        XCTAssertEqual(ref.trackingStatusLabel("Completed"), "Completed")
         XCTAssertTrue(ref.usesCalendarConsumptionDate)
 
         XCTAssertEqual(

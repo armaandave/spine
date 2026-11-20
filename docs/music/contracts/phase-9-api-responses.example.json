@@ -41,6 +41,7 @@
         },
         "object": {
           "amount": 2,
+          "bar": null,
           "id": 1,
           "is_rewatch": false,
           "label": null,
@@ -227,6 +228,8 @@
     "related": {},
     "related_sections": [],
     "release_date": "2007-04-13",
+    "made_by": [],
+    "year": 2007,
     "roles": [],
     "seasons": [],
     "subtitle": "Nine Inch Nails",
@@ -876,6 +879,8 @@
           "source": "musicbrainz"
         },
         "release_date": "2007-04-13",
+        "made_by": [],
+        "year": 2007,
         "roles": [],
         "subtitle": "Nine Inch Nails",
         "title": "Year Zero",
@@ -889,7 +894,8 @@
           "is_tracked": false,
           "rating": null,
           "status": null
-        }
+        },
+        "friends": null
       }
     ]
   },
@@ -1089,6 +1095,8 @@
           "source": "musicbrainz"
         },
         "release_date": "2007-04-13",
+        "made_by": [],
+        "year": 2007,
         "roles": [],
         "subtitle": "Nine Inch Nails",
         "title": "Year Zero",
@@ -1196,6 +1204,8 @@
         "source": "musicbrainz"
       },
       "release_date": "2007-04-13",
+      "made_by": [],
+      "year": 2007,
       "roles": [],
       "subtitle": "Nine Inch Nails",
       "title": "Year Zero",

@@ -126,6 +126,9 @@ class Row:
     approximate: bool = False
     # Where a progress day ended, by unit (Note.place; a show's furthest tick).
     place: dict | None = None
+    # A log's bar: {"unit", "to", "total"}, and "from" when the log's told number
+    # doesn't say where it began. None when the log has no length to draw (AC-10).
+    bar: dict | None = None
 
     @property
     def counts_title(self):
@@ -634,7 +637,20 @@ def _walk_session(title, reading, session, saves, total, zone, *, continues):
         target, known = _book_target(snapshot, total)
         title.add_log(entry, day, known=known)
         reading.finish(entry.pk, day, entry.created_at, target)
+        title.logs[entry.pk].bar = _book_bar(reading, target, known=known)
     return bool(entry)
+
+
+def _book_bar(reading, target, *, known):
+    """Return a finishing book log's bar: the book's length, or percent if told in it.
+
+    A last typed page standing in for an unknown length draws none.
+    """
+    if not (known and target):
+        return None
+    if reading.in_percent:
+        return {"unit": PERCENT, "to": Decimal(100), "total": Decimal(100)}
+    return {"unit": PAGE, "to": target, "total": target}
 
 
 def _walk_journeys(title, sessions, saves, total, zone, marked_at):
@@ -718,6 +734,7 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone, marked_at)
             title.add_log(entry, day, known=known)
             alone = Reading()
             alone.finish(entry.pk, day, entry.created_at, target)
+            title.logs[entry.pk].bar = _book_bar(alone, target, known=known)
             title.take(alone)
     own = [session for session in sessions if not session.from_file]
     if book and book.completed_manually:
@@ -873,10 +890,14 @@ def _walk_playthrough(title, session, saves, zone):  # noqa: C901, PLR0912
     logged = entry is None
     # The units this playthrough has a number in; a day's place reads each as it stands.
     held = []
+    # The percent the playthrough stood at when its log came, where its bar begins.
+    before_log = None
     for change in saves:
         if not logged and change.created_at > entry.created_at:
             reading.finish(entry.pk, day_of_log, entry.created_at, None)
             logged = True
+            if before_log is None:
+                before_log = reading.percents.value
         saved = change.current_progress
         kind = saved.get("kind")
         day = saved_day(change, zone)
@@ -892,6 +913,8 @@ def _walk_playthrough(title, session, saves, zone):  # noqa: C901, PLR0912
             if unit not in held:
                 held.append(unit)
             if entry and saved.get("log_id") == entry.pk:
+                if before_log is None:
+                    before_log = reading.percents.value
                 before = len(position.amounts)
                 position.move_to(Decimal(str(saved["value"])), day_of_log, change.created_at)
                 for amount in position.amounts[before:]:
@@ -903,9 +926,26 @@ def _walk_playthrough(title, session, saves, zone):  # noqa: C901, PLR0912
                 reading.stood_at(day, {unit: values[unit] for unit in held})
     if not logged:
         reading.finish(entry.pk, day_of_log, entry.created_at, None)
+        if before_log is None:
+            before_log = reading.percents.value
     if session.total_minutes is not None and Decimal(session.total_minutes) != reading.counted.value:
         _settle_gap(reading, session, entry, day_of_log)
+    if entry:
+        title.logs[entry.pk].bar = _game_bar(entry, before_log)
     title.take(reading)
+
+
+def _game_bar(entry, before_log):
+    """Return a game log's bar, in the percent the log recorded; none without one.
+
+    Hours have no length to draw (GM-100), and a game can finish short of 100 (GM-200).
+    The lit part runs from where the playthrough stood when the log came.
+    """
+    percent = saved_number((entry.progress_snapshot or {}).get("percentage"))
+    if not percent or percent <= 0:
+        return None
+    start = min(before_log or ZERO, percent)
+    return {"unit": PERCENT, "from": start, "to": percent, "total": Decimal(100)}
 
 
 def _settle_gap(reading, session, entry, day_of_log):
@@ -1050,6 +1090,9 @@ def _log_on_read(title, reading, entry, total, zone, sees):
     if target is not None and target < reading.counted.value:
         reading.counted.move_to(target, None, None)
     reading.finish(entry.pk, day, entry.created_at, target)
+    if target is not None and total:
+        # A comic's total grows, so a log can stop short of it.
+        title.logs[entry.pk].bar = {"unit": title.unit, "to": target, "total": max(Decimal(total), target)}
 
 
 def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, sees, marked_at):  # noqa: C901, PLR0912, PLR0915
@@ -1461,6 +1504,7 @@ def _watch_rows(result, key, placed, changes, zone, *, piles, logs_known=True): 
         row.known = logs_known
         for watch in placed.on_logs.get(log.id, ()):
             _tell(row, watch)
+        row.bar = _watch_bar(log)
         log_rows.append(row)
     for change in changes:
         saved = change.current_progress
@@ -1491,6 +1535,18 @@ def _watch_rows(result, key, placed, changes, zone, *, piles, logs_known=True): 
         if not pile.unknown_told:
             pile.known = {title_id}
         result.piles.append(pile)
+
+
+def _watch_bar(log):
+    """Return a season, show or anime log's bar: every episode it covers (TV-400).
+
+    What it told lights from the end back. An episode log, and an old log with nothing
+    stamped, have none.
+    """
+    if log.level == EPISODE_LEVEL:
+        return None
+    count = Decimal(len(log.covers))
+    return {"unit": EPISODE, "to": count, "total": count} if count else None
 
 
 def _positive(path):

@@ -173,6 +173,52 @@ def media_friends(viewer, item, request=None):
     return [payload for _, _, payload in friends]
 
 
+def friends_on_results(viewer, results, request=None, shown=3):
+    """Add `friends` to search results: how many you follow, the newest few, or None.
+
+    They are the people the title's page lists (media_friends, AC-6), so a result and
+    its page agree. Only titles one of them touched do the page's own lookup.
+    """
+    results = [{**result, "friends": None} for result in results]
+    by_item = {}
+    for result in results:
+        item_id = (result.get("ref") or {}).get("item_id")
+        if item_id:
+            by_item.setdefault(item_id, []).append(result)
+    if not by_item or not viewer.is_authenticated:
+        return results
+    following = list(
+        Follow.objects.filter(from_user=viewer, status=FollowStatus.ACCEPTED).values_list("to_user", flat=True),
+    )
+    if not following:
+        return results
+    items = Item.objects.in_bulk(list(by_item))
+    for item_id in _touched_titles(following, items):
+        friends = media_friends(viewer, items[item_id], request=request)
+        if not friends:
+            continue
+        summary = {"count": len(friends), "people": [friend["user"] for friend in friends[:shown]]}
+        for result in by_item[item_id]:
+            result["friends"] = summary
+    return results
+
+
+def _touched_titles(user_ids, items):
+    """Return the ids of the titles these people logged, liked or track."""
+    touched = set(DiaryEntry.objects.filter(user__in=user_ids, item_id__in=items).values_list("item_id", flat=True))
+    touched |= set(MediaLike.objects.filter(user__in=user_ids, item_id__in=items).values_list("item_id", flat=True))
+    by_type = {}
+    for item in items.values():
+        by_type.setdefault(item.media_type, []).append(item.id)
+    for media_type, item_ids in by_type.items():
+        if media_type == MediaTypes.EPISODE.value:
+            rows = Episode.objects.filter(related_season__user__in=user_ids, item_id__in=item_ids)
+        else:
+            rows = apps.get_model("app", media_type).objects.filter(user__in=user_ids, item_id__in=item_ids)
+        touched |= set(rows.values_list("item_id", flat=True))
+    return touched
+
+
 def _tracking_rows(user_ids, item):
     """Return each person's tracking row for a title, by user id."""
     if item.media_type == MediaTypes.EPISODE.value:

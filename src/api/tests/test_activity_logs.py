@@ -117,6 +117,7 @@ class ActivityIsLogsTests(TestCase):
                 "unit": "minutes",
                 "time_label": None,
                 "label": None,
+                "bar": None,
             },
         )
         self.assertEqual(activity["viewer"], {"can_view": True, "has_liked": True})

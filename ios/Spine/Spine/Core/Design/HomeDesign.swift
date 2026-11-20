@@ -14,6 +14,12 @@ nonisolated enum HomeDesign {
 
         /// 30% shorter than the mock's 164.
         static let cardHeight: CGFloat = 115
+        /// A log that draws its bar and has a review line (or the spoilers chip) to keep: one line taller, so the line
+        /// sits between the headline and the bar.
+        static let logCardHeight: CGFloat = 136
+        /// The log's check at the end of its bar, and the gap before it.
+        static let checkSize: CGFloat = 14
+        static let checkGap: CGFloat = 8
         static let cardCorner: CGFloat = 20
         static let cardPoster = CGSize(width: 60, height: 90)
         static let cardSquare = CGSize(width: 90, height: 90)
@@ -91,6 +97,8 @@ nonisolated enum HomeDesign {
         /// The rewatch glyph on dark-ink cards, and the deeper green that still reads on light-ink cards.
         static let rewatchGreen = Color(red: 0x4A / 255, green: 0xDE / 255, blue: 0x80 / 255)
         static let rewatchGreenDeep = Color(red: 0x0F / 255, green: 0x7A / 255, blue: 0x3B / 255)
+        /// The spoiler eye: a muted brick red, softer than a warning red, on dark and light art alike.
+        static let spoilerRed = Color(red: 0xC9 / 255, green: 0x52 / 255, blue: 0x4A / 255)
         /// Text on light art.
         static let lightInk = Color(red: 0x0D / 255, green: 0x1A / 255, blue: 0x1F / 255)
         /// Initials on an avatar disc.

@@ -197,7 +197,9 @@ struct TaggedListsView: View {
 
     var body: some View {
         ZStack {
-            SpinePageBackground()
+            // Black like the Lists page, whose glass rails this page shares.
+            HomeDesign.Palette.pageBackground
+                .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -284,37 +286,35 @@ struct TaggedListsView: View {
         .padding(.bottom, 2)
 
         ForEach(viewModel.lists) { list in
-            ProfileListRowContainer {
-                NavigationLink {
-                    ProfileListDetailView(
-                        listId: list.id,
-                        profileRepository: profileRepository,
-                        listRepository: listRepository,
-                        peopleRepository: peopleRepository,
-                        mediaRepository: mediaRepository,
-                        trackingRepository: trackingRepository,
-                        diaryRepository: diaryRepository,
-                        activityRepository: activityRepository,
-                        importCoordinator: importCoordinator,
-                        storygraphImportCoordinator: storygraphImportCoordinator,
-                        goodreadsImportCoordinator: goodreadsImportCoordinator,
-                        marginsImportCoordinator: marginsImportCoordinator,
-                        myAnimeListImportCoordinator: myAnimeListImportCoordinator,
-                        currentUserId: currentUserId,
-                        onLogout: onLogout,
-                        onOpenDiary: onOpenDiary,
-                        onOpenLibrary: onOpenLibrary,
-                        selectedTab: selectedTab,
-                        onSelectTab: onSelectTab,
-                        onUnauthorized: onUnauthorized
-                    )
-                } label: {
-                    ProfileListRow(list: list)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(list.accessibilityLabel)
-                .accessibilityHint("Opens list")
+            NavigationLink {
+                ProfileListDetailView(
+                    listId: list.id,
+                    profileRepository: profileRepository,
+                    listRepository: listRepository,
+                    peopleRepository: peopleRepository,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    diaryRepository: diaryRepository,
+                    activityRepository: activityRepository,
+                    importCoordinator: importCoordinator,
+                    storygraphImportCoordinator: storygraphImportCoordinator,
+                    goodreadsImportCoordinator: goodreadsImportCoordinator,
+                    marginsImportCoordinator: marginsImportCoordinator,
+                    myAnimeListImportCoordinator: myAnimeListImportCoordinator,
+                    currentUserId: currentUserId,
+                    onLogout: onLogout,
+                    onOpenDiary: onOpenDiary,
+                    onOpenLibrary: onOpenLibrary,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            } label: {
+                CustomListRail(list: list)
             }
+            .buttonStyle(CustomListRailButtonStyle())
+            .accessibilityLabel(list.railAccessibilityLabel)
+            .accessibilityHint("Opens list")
             .task {
                 await viewModel.loadNextPageIfNeeded(currentList: list)
             }

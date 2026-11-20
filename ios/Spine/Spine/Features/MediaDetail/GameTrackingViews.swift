@@ -233,36 +233,39 @@ struct GameActionSheet: View {
     private var shown: Snapshot { committed ?? Snapshot(status: status, game: game) }
 
     var body: some View {
-        let status = shown.status
-        let game = shown.game
+        let menu = GameMenu(status: shown.status, game: shown.game)
         NavigationStack {
             List {
                 Section {
-                    statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress", disabled: game?.hasPlayingPlaythrough == true)
-                    statusButton("Planning", symbol: "bookmark", action: .planning, selected: status == "Planning", disabled: status == "Planning" || game?.hasLivePlaythrough == true)
-                    statusButton("Paused", symbol: "pause.fill", action: .paused, selected: status == "Paused")
-                    Button { if game?.hasLivePlaythrough == true { confirmDrop = true } else { commit { onAction(.stopped) } } } label: {
-                        Label(status == "Dropped" ? "Dropped ✓" : "Dropped", systemImage: "stop.fill")
-                    }.disabled(status == "Dropped")
-                    if status == "Paused" { Button("Resume") { commit { onAction(.currently) } } }
-                    Button("Log Completion", systemImage: "square.and.pencil") { commit(onLog) }
-                }
-                if game?.hasLivePlaythrough == true {
-                    Text("Pause, drop, or delete the unfinished playthrough before choosing Planning.").font(.caption).foregroundStyle(.secondary)
-                }
-                if game?.canUpdateProgress == true { Button("Update Progress", systemImage: "slider.horizontal.3") { commit(onProgress) } }
-                if status != nil {
-                    Section {
-                        Button("Remove from Library", role: .destructive) { confirmRemove = true }
-                            .disabled(game?.canRemoveTracking == false)
-                        if game?.canRemoveTracking == false {
-                            Text("Delete playthroughs and completion logs first. Custom lists stay unchanged.").font(.caption).foregroundStyle(.secondary)
+                    ForEach(menu.rows) { row in
+                        Button { perform(row.command) } label: {
+                            HStack {
+                                Label(row.title, systemImage: row.systemImage)
+                                if row.isSelected {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .fontWeight(.semibold)
+                                        .accessibilityLabel("Current")
+                                }
+                            }
                         }
+                        .disabled(row.isSelected)
+                    }
+                } footer: {
+                    if !menu.offersRemoval { notesFooter(menu.notes) }
+                }
+                if menu.offersRemoval {
+                    Section {
+                        Button("Remove from Library", systemImage: "trash", role: .destructive) { confirmRemove = true }
+                    } footer: {
+                        notesFooter(menu.notes)
                     }
                 }
             }
             .fitsSheetToContent()
-            .navigationTitle("Track this game").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Track this game")
+            .navigationSubtitle(menu.shelf)
+            .navigationBarTitleDisplayMode(.inline)
             .confirmationDialog("Drop this playthrough?", isPresented: $confirmDrop, titleVisibility: .visible) {
                 Button("Drop", role: .destructive) { commit { onAction(.stopped) } }
             } message: { Text("Your progress will be kept in history.") }
@@ -272,15 +275,31 @@ struct GameActionSheet: View {
         }.preferredColorScheme(.dark)
     }
 
+    @ViewBuilder
+    private func notesFooter(_ notes: [String]) -> some View {
+        if !notes.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(notes, id: \.self) { Text($0) }
+            }
+        }
+    }
+
+    private func perform(_ command: GameMenu.Row.Command) {
+        switch command {
+        case .planning: commit { onAction(.planning) }
+        case .playing, .resume: commit { onAction(.currently) }
+        case .paused: commit { onAction(.paused) }
+        case .dropped(asks: true): confirmDrop = true
+        case .dropped(asks: false): commit { onAction(.stopped) }
+        case .log: commit(onLog)
+        case .updateProgress: commit(onProgress)
+        }
+    }
+
     private func commit(_ choice: () -> Void) {
         guard committed == nil else { return }
         committed = Snapshot(status: status, game: game)
         choice()
-    }
-
-    private func statusButton(_ title: String, symbol: String, action: MediaDetailQuickAction, selected: Bool, disabled: Bool? = nil) -> some View {
-        Button { commit { onAction(action) } } label: { Label(selected ? "\(title) ✓" : title, systemImage: symbol) }
-            .disabled(disabled ?? selected)
     }
 }
 
@@ -443,14 +462,14 @@ struct GameProgressSheet: View {
         } moreActions: {
             if playthrough.isUnfinished {
                 if playthrough.status == "Paused" {
-                    Button("Resume Playing", systemImage: "play.fill") { choose { onAction("resume") } }
+                    Button("Resume", systemImage: "play.fill") { choose { onAction("resume") } }
                 } else {
                     Button("Pause", systemImage: "pause.fill") { choose { onAction("pause") } }
                 }
             }
             Button("Edit Dates", systemImage: "calendar", action: onEditDates)
             if playthrough.isUnfinished {
-                Button("Mark as Dropped", systemImage: "xmark") { pending = .drop }
+                Button("Drop", systemImage: "xmark") { pending = .drop }
                 Divider()
                 Button("Restart from Beginning", systemImage: "arrow.counterclockwise") { pending = .restart }
                 Button("Delete Playthrough", systemImage: "trash", role: .destructive) { pending = .delete }

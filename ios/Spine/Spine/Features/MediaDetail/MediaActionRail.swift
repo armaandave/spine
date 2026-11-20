@@ -103,6 +103,9 @@ struct ActionRail: View {
     var leadIdentifier: String?
     /// A button between the eye and the stars.
     var center: RailCenterButton?
+    /// The media page's Planning bookmark. It lives in the stars' slot while the stars don't show, so watching,
+    /// unwatching or liking a title swaps the icon in place instead of sliding a button in or out.
+    var planning: RailCenterButton?
     /// The viewer's state has not arrived: the four state slots pulse and take no taps. The center button stays live.
     var isLoadingState = false
     /// The state could not load: the same dim, held still.
@@ -138,7 +141,7 @@ struct ActionRail: View {
     private var isDimmed: Bool { isLoadingState || stateFailed }
 
     private var buttonCount: Int {
-        2 + (showsEye ? 1 : 0) + (showsRating ? 1 : 0) + (center != nil ? 1 : 0)
+        2 + (showsEye ? 1 : 0) + (showsRating || planning != nil ? 1 : 0) + (center != nil ? 1 : 0)
     }
 
     private var surfaceWidth: CGFloat {
@@ -191,14 +194,19 @@ struct ActionRail: View {
                 .allowsHitTesting(!center.isIconHidden)
                 .accessibilityHidden(center.isIconHidden)
             }
-            if showsRating {
+            // One slot for the stars and the bookmark: the same button, so only its icon changes. Both always have an
+            // identifier, since gaining or losing one would make it a new button that slides in.
+            if showsRating || planning != nil {
                 let isFilled = isRatingFilled ?? (ratingPicker.confirmedHalfSteps > 0)
+                let bookmark = showsRating ? nil : planning
                 railButton(
-                    content: .symbol(name: isFilled ? "star.fill" : "star", size: 16),
-                    label: isFilled ? "Edit rating" : "Rate",
-                    identifier: identifierPrefix.map { "\($0).rate" },
+                    content: .symbol(name: bookmark?.systemName ?? (isFilled ? "star.fill" : "star"), size: 16),
+                    label: bookmark?.label ?? (isFilled ? "Edit rating" : "Rate"),
+                    identifier: bookmark?.identifier ?? "\(prefix).rate",
                     dimmed: isDimmed,
-                    action: handleRating
+                    action: {
+                        if let bookmark { handleCenter(bookmark) } else { handleRating() }
+                    }
                 )
             }
             railButton(
@@ -362,6 +370,9 @@ struct ActionRail: View {
                 .spineContentTransition(value: isLoading)
             }
             .frame(width: slotWidth, height: Self.buttonSize)
+            // An icon that swaps in while the stars open or close (the spinner, or the icon back after it) takes its
+            // place in the button at once instead of sliding in from where the rail was.
+            .geometryGroup()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

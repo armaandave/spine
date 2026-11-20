@@ -642,11 +642,9 @@ struct ProgressUpdateSheet: View {
         ).map { ProgressSheetTodayLine(text: $0, accent: accent) }
     }
 
-    /// What ⋯ and its dialogs call the title and this read: "book" and "journey", or the type's noun and "attempt".
+    /// What ⋯ and its dialogs call the title: "book", or the type's noun. Every type calls one go a read.
     private var words: BookJourneyMenuAction.Words {
-        title.ref.isSeries
-            ? BookJourneyMenuAction.Words(noun: title.ref.mediaType, attempt: "attempt")
-            : BookJourneyMenuAction.Words(noun: "book", attempt: "journey")
+        BookJourneyMenuAction.Words(noun: title.ref.isSeries ? title.ref.mediaType : "book")
     }
 
     var body: some View {
@@ -678,7 +676,7 @@ struct ProgressUpdateSheet: View {
             }
         } moreActions: {
             menuButton(journeyStatus == "Paused" ? .resume : .pause)
-            menuButton(.didNotFinish)
+            menuButton(.drop)
             Divider()
             menuButton(.restart)
             menuButton(.delete)
@@ -751,7 +749,7 @@ struct ProgressUpdateSheet: View {
         switch action {
         case .pause: onAction("pause")
         case .resume: onAction("resume")
-        case .didNotFinish: onAction("drop")
+        case .drop: onAction("drop")
         case .restart: onAction("restart")
         case .delete: onDelete()
         case .finish:
@@ -1028,53 +1026,52 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
 private enum BookJourneyMenuAction: String, CaseIterable, Identifiable {
     case pause
     case resume
-    case didNotFinish
+    case drop
     case finish
     case restart
     case delete
 
-    /// A book has journeys; a manga or a comic has attempts (MC-000).
+    /// The title's noun: "book", "manga" or "comic".
     struct Words {
         let noun: String
-        let attempt: String
     }
 
     var id: String { rawValue }
     func title(_ words: Words) -> String {
         switch self {
         case .pause: "Pause"
-        case .resume: "Resume Reading"
-        case .didNotFinish: "Mark as DNF"
+        case .resume: "Resume"
+        case .drop: "Drop"
         case .finish: "Finish & Log"
         case .restart: "Restart from Beginning"
-        case .delete: "Delete \(words.attempt.capitalized)"
+        case .delete: "Delete Read"
         }
     }
     var systemImage: String {
         switch self {
         case .pause: "pause.fill"
         case .resume: "play.fill"
-        case .didNotFinish: "xmark"
+        case .drop: "xmark"
         case .finish: "checkmark"
         case .restart: "arrow.counterclockwise"
         case .delete: "trash"
         }
     }
-    var requiresConfirmation: Bool { self == .didNotFinish || self == .restart || self == .delete }
+    var requiresConfirmation: Bool { self == .drop || self == .restart || self == .delete }
     var isDestructive: Bool { self == .delete || self == .restart }
     func confirmationTitle(_ words: Words) -> String {
         switch self {
-        case .didNotFinish: "Mark this \(words.noun) as Did Not Finish?"
+        case .drop: "Drop this \(words.noun)?"
         case .restart: "Restart from Beginning?"
-        case .delete: "Delete this reading \(words.attempt)?"
+        case .delete: "Delete this read?"
         default: title(words)
         }
     }
     func confirmationMessage(_ words: Words) -> String {
         switch self {
-        case .didNotFinish: "Your current progress will remain in reading history."
-        case .restart: "The current \(words.attempt) will end and a new \(words.attempt) will begin today."
-        case .delete: "This \(words.attempt) and its progress will be removed. Completion diary logs are managed separately."
+        case .drop: "Your progress stays in your reading history."
+        case .restart: "This read will end and a new one will begin today."
+        case .delete: "This read and its progress will be removed. Its log, if it has one, stays."
         default: ""
         }
     }

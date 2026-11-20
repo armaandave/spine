@@ -51,7 +51,7 @@ nonisolated enum AnimeTrackingPresentation {
         case "Paused":
             return placeLine("Paused at", anime) ?? "Paused"
         case "Dropped":
-            return placeLine("Stopped at", anime) ?? "Dropped"
+            return placeLine("Dropped at", anime) ?? "Dropped"
         default:
             return nil
         }

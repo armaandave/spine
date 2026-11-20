@@ -1,4 +1,6 @@
 import logging
+import re
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from django.conf import settings
@@ -503,7 +505,7 @@ SUMMARY_TEXT_FIELDS = (
     "release_date",
     "default_source",
 )
-SUMMARY_TEXT_LIST_FIELDS = ("genres", "languages", "roles", "credit_roles")
+SUMMARY_TEXT_LIST_FIELDS = ("genres", "languages", "roles", "credit_roles", "made_by")
 POSTER_ORIENTATIONS = (None, "portrait", "landscape", "square", "unknown")
 
 
@@ -570,6 +572,8 @@ def media_summary_from_provider(
             or payload.get("end_date")
             or (payload.get("details") or {}).get("release_date")
         ),
+        "year": year_from_payload(payload),
+        "made_by": made_by_from_payload(payload),
         "genres": payload.get("genres") or [],
         "languages": payload.get("languages") or [],
         "roles": payload.get("roles") or [],
@@ -584,6 +588,63 @@ def media_summary_from_provider(
         ) if user and item else None,
         "user_state": user_state_for_item(user, item) if user and item else None,
     }
+
+
+def year_from_payload(payload):
+    """Return the year a provider row says a title came out, or None.
+
+    Rows say it as a date ("2021-09-15"), a bare year (2024 or "1986") or, from
+    IGDB, a Unix time.
+    """
+    for key in (
+        "release_date",
+        "first_air_date",
+        "publish_date",
+        "start_year",
+        "release_year",
+        "first_publish_year",
+        "first_release_date",
+        "year",
+    ):
+        if year := _year(payload.get(key)):
+            return year
+    return _year((payload.get("details") or {}).get("release_date"))
+
+
+def _year(value):
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int | float):
+        if value > 9999:
+            return datetime.fromtimestamp(value, tz=UTC).year
+        return int(value) if value >= 1000 else None
+    match = re.search(r"(?<!\d)(\d{4})(?!\d)", str(value))
+    return int(match.group(1)) if match else None
+
+
+def made_by_from_payload(payload):
+    """Return who made a title, as a provider's search row names them, in its order.
+
+    Providers name them as ``made_by``; music rows credit their artist, as one name
+    ("Kendrick Lamar & SZA"). Movies and shows have none here: search looks theirs
+    up after (``media.with_made_by``).
+    """
+    names = payload.get("made_by")
+    if names is None:
+        credited = "".join(
+            f"{credit.get('name') or ''}{credit.get('join_phrase') or ''}"
+            for credit in payload.get("artist_credits") or []
+            if isinstance(credit, dict)
+        ).strip()
+        names = credited or payload.get("author_name") or payload.get("artist_name")
+    if isinstance(names, str):
+        names = [names]
+    shown = []
+    for value in names or []:
+        name = value.strip() if isinstance(value, str) else ""
+        if name and name not in shown:
+            shown.append(name)
+    return shown
 
 
 def details_for_api(metadata):
@@ -1102,7 +1163,7 @@ def _decodable_summary(summary):
             isinstance(summary.get(key) or [], list) and all(isinstance(value, str) for value in summary.get(key) or [])
             for key in SUMMARY_TEXT_LIST_FIELDS
         )
-        and all(whole(summary.get(key)) for key in ("poster_width", "poster_height", "position"))
+        and all(whole(summary.get(key)) for key in ("poster_width", "poster_height", "position", "year"))
         and (
             summary.get("poster_aspect_ratio") is None
             or (

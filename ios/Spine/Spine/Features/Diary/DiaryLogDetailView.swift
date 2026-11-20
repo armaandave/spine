@@ -186,6 +186,8 @@ struct DiaryLogDetailView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
+    /// The feed card the log was opened from, so the page draws the card's bar and check. Nil from anywhere else.
+    private let feedCard: FeedCardModel?
     private let songPreview = SongPreviewPlayer.shared
 
     init(
@@ -195,9 +197,11 @@ struct DiaryLogDetailView: View {
         trackingRepository: TrackingRepository,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .diary,
+        feedCard: FeedCardModel? = nil,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
     ) {
+        self.feedCard = feedCard
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
@@ -337,11 +341,15 @@ struct DiaryLogDetailView: View {
         return progress.isEmpty ? nil : "At completion: \(progress)"
     }
 
-    /// The log's own part of the page: its stars, heart and rewatch, favorite, review and tags.
+    /// The log's own part of the page: its stars, heart and rewatch, its bar, favorite, review and tags.
     @ViewBuilder
     private func logSection(_ entry: DiaryEntry) -> some View {
         if hasRatingOrLike(entry) {
             ratingLikeLine(entry)
+        }
+
+        if let card = feedCard, card.meterCheck, let meter = card.meter {
+            logBar(card, meter: meter)
         }
 
         if entry.containsSpoilers, clean(entry.review) != nil {
@@ -388,6 +396,20 @@ struct DiaryLogDetailView: View {
     /// true reread, so no card's arrow goes missing here.
     private func isRepeat(_ entry: DiaryEntry) -> Bool {
         entry.isRewatch || entry.isTrueReread == true
+    }
+
+    /// What the card says the log added ("+258 pages"), then its bar ending in the check, as on the card.
+    private func logBar(_ card: FeedCardModel, meter: ProgressMeterModel) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if case let .marks(_, _, _, _, amount?, _)? = card.headline {
+                Text(amount)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.66))
+            }
+            PostProgressMeterView(meter: meter, art: card.art, check: true)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(meter.accessibilityLabel)
+        }
     }
 
     private func ratingLikeLine(_ entry: DiaryEntry) -> some View {
@@ -745,9 +767,11 @@ struct PostReviewBody: View {
     }
 }
 
-/// A tag under a review: 30 pt tall, fully rounded, a light fill with a hairline edge.
+/// A tag under a review: 30 pt tall, fully rounded, a light fill with a hairline edge. The compact one (a list's
+/// tags) is the same chip at 25 pt.
 struct PostTagChip: View {
     let text: String
+    var isCompact = false
 
     var body: some View {
         Label {
@@ -755,12 +779,12 @@ struct PostTagChip: View {
                 .lineLimit(1)
         } icon: {
             Image(systemName: "tag")
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: isCompact ? 10 : 11, weight: .bold))
         }
-        .font(.system(size: 13, weight: .semibold))
+        .font(.system(size: isCompact ? 12 : 13, weight: .semibold))
         .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .frame(height: PostPageStyle.chipHeight)
+        .padding(.horizontal, isCompact ? 10 : 12)
+        .frame(height: isCompact ? 25 : PostPageStyle.chipHeight)
         .background(.white.opacity(0.14), in: Capsule())
         .overlay { Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.5) }
     }
@@ -1183,29 +1207,6 @@ private struct DiaryLogTagsFullHeightKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
-    }
-}
-
-/// A log's tag; list pages show their tags with it too.
-struct DiaryLogChip: View {
-    let text: String
-    let systemImage: String?
-
-    var body: some View {
-        Label {
-            Text(text)
-                .lineLimit(1)
-        } icon: {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: 10, weight: .black))
-            }
-        }
-        .font(.system(size: 12, weight: .heavy))
-        .foregroundStyle(.white.opacity(0.82))
-        .padding(.horizontal, 10)
-        .frame(height: 30)
-        .background(.white.opacity(0.11), in: Capsule())
     }
 }
 

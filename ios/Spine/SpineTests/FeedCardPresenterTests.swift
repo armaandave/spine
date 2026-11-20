@@ -222,7 +222,8 @@ final class FeedCardPresenterTests: XCTestCase {
         XCTAssertNil(card.tag)
         XCTAssertEqual(
             card.headline,
-            .marks(starSymbols: fullStars + ["star.leadinghalf.filled"], liked: true, rewatch: true, repeatLabel: "Rewatch")
+            .marks(starSymbols: fullStars + ["star.leadinghalf.filled"], liked: true, rewatch: true, repeatLabel: "Rewatch"),
+            "A film has no progress to be mistaken for, so no check"
         )
         // Under a headline the 115 pt card has room for one line.
         XCTAssertEqual(card.details, [.review(text: "the hills chase alone is worth the ticket", lines: 1)])
@@ -240,6 +241,48 @@ final class FeedCardPresenterTests: XCTestCase {
         XCTAssertLessThanOrEqual(FeedDetailPlanner.bottom(of: card.details, hasHeadline: false), 103)
     }
 
+    // MARK: Log bars (the Check cap)
+
+    func testALogWithABarDrawsItAndEndsItInTheCheck() throws {
+        let item = try FeedTestItems.item(
+            objectFields: "\"rating\": \"3.5\", \"label\": \"258 pages\", \"bar\": {\"unit\": \"pages\", \"from\": 110, \"to\": 368, \"total\": 368}",
+            source: "hardcover", mediaType: "book", title: "Little Secrets"
+        )
+        let card = model(item)
+        XCTAssertEqual(card.meter, ProgressMeterModel.make(unit: .pages, from: 110, to: 368, total: 368))
+        XCTAssertTrue(card.meterCheck)
+        guard case let .marks(_, _, _, _, amount, check)? = card.headline else { return XCTFail("no marks") }
+        XCTAssertEqual(amount, "+258 pages")
+        XCTAssertFalse(check, "The bar's check ends the card, so the marks don't repeat it")
+        XCTAssertEqual(card.height, HomeDesign.Metric.cardHeight, "No line to keep, so the card stays 115")
+    }
+
+    func testALogWithABarAndAReviewGrowsOneLineToKeepIt() throws {
+        let item = try FeedTestItems.item(
+            objectFields: "\"rating\": \"4.5\", \"label\": \"3 episodes\", \"bar\": {\"unit\": \"episodes\", \"from\": 7, \"to\": 10, \"total\": 10}",
+            source: "tmdb", mediaType: "season", season: 2, title: "Severance",
+            topFields: "\"review\": \"That finale.\""
+        )
+        let card = model(item)
+        XCTAssertEqual(card.meter?.kind, .ticks(count: 10))
+        XCTAssertEqual(card.details, [.review(text: "That finale.", lines: 1)])
+        XCTAssertEqual(card.height, HomeDesign.Metric.logCardHeight)
+        XCTAssertLessThanOrEqual(
+            FeedDetailPlanner.bottom(of: card.details, hasHeadline: true),
+            FeedCardView.meterTop(for: .ticks(count: 10), cardHeight: card.height) - 2
+        )
+    }
+
+    func testAProgressDayNeverEndsInTheCheck() throws {
+        let card = model(
+            try FeedTestItems.day(label: "56 pages", mediaType: "book"),
+            standing: FeedStanding(unit: .pages, from: 54, to: 110, total: 368, whereText: "p. 110")
+        )
+        XCTAssertNotNil(card.meter)
+        XCTAssertFalse(card.meterCheck)
+        XCTAssertEqual(card.height, HomeDesign.Metric.cardHeight)
+    }
+
     func testALogThatAddedPagesSaysSoAfterItsMarks() throws {
         let item = try FeedTestItems.item(
             objectFields: "\"rating\": \"4\", \"liked\": true, \"is_rewatch\": false, \"label\": \"99 pages\", \"amount\": 99, \"unit\": \"pages\"",
@@ -247,28 +290,28 @@ final class FeedCardPresenterTests: XCTestCase {
         )
         XCTAssertEqual(
             model(item).headline,
-            .marks(starSymbols: fullStars, liked: true, rewatch: false, repeatLabel: "Reread", amount: "+99 pages")
+            .marks(starSymbols: fullStars, liked: true, rewatch: false, repeatLabel: "Reread", amount: "+99 pages", check: true)
         )
         let pagesOnly = try FeedTestItems.item(
             objectFields: "\"label\": \"200 pages\"", source: "hardcover", mediaType: "book"
         )
         XCTAssertEqual(
             model(pagesOnly).headline,
-            .marks(starSymbols: [], liked: false, rewatch: false, repeatLabel: "Reread", amount: "+200 pages")
+            .marks(starSymbols: [], liked: false, rewatch: false, repeatLabel: "Reread", amount: "+200 pages", check: true)
         )
         let episode = try FeedTestItems.item(
             objectFields: "\"rating\": \"4\", \"label\": \"1 episode\"", mediaType: "episode", season: 1, episode: 3
         )
         XCTAssertEqual(
             model(episode).headline,
-            .marks(starSymbols: fullStars, liked: false, rewatch: false, repeatLabel: "Rewatch", amount: nil),
+            .marks(starSymbols: fullStars, liked: false, rewatch: false, repeatLabel: "Rewatch", amount: nil, check: true),
             "An episode's tag already says which one"
         )
     }
 
     func testARewatchAloneIsAHeadline() throws {
         let card = model(try FeedTestItems.log(rewatch: true, mediaType: "book", source: "hardcover"))
-        XCTAssertEqual(card.headline, .marks(starSymbols: [], liked: false, rewatch: true, repeatLabel: "Reread"))
+        XCTAssertEqual(card.headline, .marks(starSymbols: [], liked: false, rewatch: true, repeatLabel: "Reread", check: true))
     }
 
     func testASpoilerLogShowsOnlyTheChip() throws {
@@ -388,16 +431,16 @@ final class FeedCardPresenterTests: XCTestCase {
         let card = model(try FeedTestItems.day(label: "24 episodes", moves: ["paused"], mediaType: "tv"))
         XCTAssertEqual(card.headline, .progress(amount: "+24 episodes", tail: nil, pills: ["Paused"]))
         let several = model(try FeedTestItems.day(label: "86 pages", moves: ["paused", "stopped", "paused"]))
-        XCTAssertEqual(several.headline, .progress(amount: "+86 pages", tail: nil, pills: ["Paused", "Stopped"]))
+        XCTAssertEqual(several.headline, .progress(amount: "+86 pages", tail: nil, pills: ["Paused", "Dropped"]))
     }
 
     func testAStatusOnlyDayHasNoAmountAndNothingLit() throws {
         let card = model(try FeedTestItems.day(moves: ["picked_back_up"], mediaType: "tv"))
         XCTAssertEqual(card.kind, .status)
-        XCTAssertEqual(card.headline, .moves(pills: ["Picked back up"], tail: nil), "The status is its pill")
+        XCTAssertEqual(card.headline, .moves(pills: ["Resumed"], tail: nil), "The status is its pill")
         XCTAssertNil(card.meter)
         let stopped = model(try FeedTestItems.day(moves: ["stopped"]))
-        XCTAssertEqual(stopped.headline, .moves(pills: ["Stopped"], tail: nil))
+        XCTAssertEqual(stopped.headline, .moves(pills: ["Dropped"], tail: nil))
     }
 
     func testAStartSaysStartedAndANoteOnPickingBackUpIsDropped() throws {
@@ -567,7 +610,7 @@ final class FeedCardPresenterTests: XCTestCase {
                     XCTAssertFalse(string.lowercased().contains(word), "'\(string)' contains \(word) (log \(item.id))")
                 }
             }
-            if case let .marks(symbols, _, _, repeatLabel, _)? = card.headline {
+            if case let .marks(symbols, _, _, repeatLabel, _, _)? = card.headline {
                 XCTAssertFalse(symbols.contains { $0.lowercased().contains("watched") })
                 XCTAssertFalse(repeatLabel.lowercased().contains("watched"))
             }

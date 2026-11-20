@@ -1,80 +1,83 @@
 import Foundation
 
 /// The + menu of a book, a manga or a comic (BK-100, MC-200), worked out from its state as `TVTrackingPresentation`
-/// does a show's.
+/// does a show's: Planning, Reading (Resume when Paused; Keep Reading or Reread once Completed), Paused, Dropped, Log,
+/// Update Progress during a read, then Remove from Library. Any shelf can be picked directly, so a book read before
+/// Spine can go straight to Dropped. Only rows you can use are listed, and the current status, ticked; a line under
+/// the menu says why Planning or Remove can't be used.
 nonisolated struct ReadingMenu: Equatable {
     nonisolated struct Row: Equatable, Identifiable {
         enum Command: Equatable {
-            case toRead
-            case currentlyReading
+            case planning
+            case reading
             case keepReading
             case reread
             case paused
             /// A read under way asks first (BK-301); with nothing under way it's a status.
-            case didNotFinish(asks: Bool)
+            case dropped(asks: Bool)
             case resume
             case log
+            case updateProgress
         }
 
         let title: String
-        let systemImage: String?
+        let systemImage: String
         let command: Command
-        var isDisabled = false
+        /// The current status: ticked, and a tap does nothing.
+        var isSelected = false
 
         var id: String { title }
     }
 
-    nonisolated struct Removal: Equatable {
-        let title: String
-        let isDisabled: Bool
-        let reason: String?
-    }
-
     let rows: [Row]
-    /// A read under way: why it can't go to To Read, and its Update Progress.
-    let liveReason: String?
-    /// Nil for a title that isn't in the library: it has nothing to remove (TV-005's rule).
-    let removal: Removal?
+    /// Remove from Library is listed for a title in the library when nothing blocks it.
+    let offersRemoval: Bool
+    /// Lines under the menu for a row people look for that can't be used now: Planning during a read, Remove from
+    /// Library while reads or logs hold the title.
+    let notes: [String]
+    /// The shelf it sits on: "Reading", "Completed", "Not in your library".
+    let shelf: String
 
     init(mediaType: String, status: String?, book: BookTrackingState?) {
         let isSeries = ["manga", "comic"].contains(mediaType)
+        // A read in progress or paused: Planning waits until it's finished or dropped (BK-100).
         let isLive = book?.hasLiveJourney == true
+        var rows: [Row] = []
+        var notes: [String] = []
 
-        func statusRow(_ title: String, _ image: String, _ command: Row.Command, for value: String, disabledAlso: Bool = false) -> Row {
-            let selected = status == value
-            return Row(title: selected ? "\(title) ✓" : title, systemImage: image, command: command, isDisabled: selected || disabledAlso)
+        if isLive {
+            notes.append("Finish or drop this read to move it to Planning.")
+        } else {
+            rows.append(Row(title: "Planning", systemImage: "bookmark", command: .planning, isSelected: status == "Planning"))
         }
-
-        var rows = [statusRow("To Read", "bookmark", .toRead, for: "Planning", disabledAlso: isLive)]
-        if isSeries, status == "Completed" {
-            // Picking it back up says how: the old place or from the top (MC-200).
-            if book?.offersKeepReading == true {
+        if status == "Completed" {
+            // Picking it back up says how: from the old place when a series has more out, or from the top (MC-200).
+            if isSeries, book?.offersKeepReading == true {
                 rows.append(Row(title: "Keep Reading", systemImage: "book.pages", command: .keepReading))
             }
-            rows.append(Row(title: "Reread", systemImage: "arrow.counterclockwise", command: .reread))
+            rows.append(Row(title: "Reread", systemImage: "arrow.counterclockwise", command: isSeries ? .reread : .reading))
+        } else if status == "Paused" {
+            // Resume takes Reading's place, as it takes Watching's on a show.
+            rows.append(Row(title: "Resume", systemImage: "play.fill", command: .resume))
         } else {
-            rows.append(statusRow("Currently Reading", "book.pages", .currentlyReading, for: "In progress"))
+            rows.append(Row(title: "Reading", systemImage: "book.pages", command: .reading, isSelected: status == "In progress"))
         }
-        rows.append(statusRow("Paused", "pause.fill", .paused, for: "Paused"))
-        rows.append(statusRow("Did Not Finish", "xmark", .didNotFinish(asks: isLive), for: "Dropped"))
-        if status == "Paused" {
-            rows.append(Row(title: "Resume Reading", systemImage: nil, command: .resume))
+        rows.append(Row(title: "Paused", systemImage: "pause.fill", command: .paused, isSelected: status == "Paused"))
+        rows.append(Row(title: "Dropped", systemImage: "xmark", command: .dropped(asks: isLive), isSelected: status == "Dropped"))
+        rows.append(Row(title: "Log", systemImage: "square.and.pencil", command: .log))
+        if isLive {
+            rows.append(Row(title: "Update Progress", systemImage: "slider.horizontal.3", command: .updateProgress))
         }
-        rows.append(Row(title: "Log Read", systemImage: "square.and.pencil", command: .log))
         self.rows = rows
 
-        liveReason = isLive
-            ? book?.actionReasons["planning"] ?? (
-                isSeries
-                    ? "Pause or mark this attempt Did Not Finish first."
-                    : "Pause or finish the active journey before moving this book to To Read."
-            )
-            : nil
-        removal = status == nil ? nil : Removal(
-            title: isSeries ? "Remove from Library" : "Remove Tracking",
-            isDisabled: book?.canRemoveTracking == false,
-            reason: book?.canRemoveTracking == false ? book?.removeTrackingReason : nil
-        )
+        let canRemove = book?.canRemoveTracking != false
+        offersRemoval = status != nil && canRemove
+        if status != nil, !canRemove {
+            notes.append("To remove this \(isSeries ? "series" : "book"), delete its reads and logs first.")
+        }
+        self.notes = notes
+        shelf = status.map { $0 == "In progress" ? MediaRef.inProgressWord(mediaType: mediaType) : $0 }
+            ?? "Not in your library"
     }
 }
 
