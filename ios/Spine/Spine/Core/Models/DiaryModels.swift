@@ -499,6 +499,9 @@ struct ActivityObject: Codable {
     /// a log that finished the read later took the rest, so this can be short of where the person stands now.
     /// Older servers don't send it.
     var place: [String: Double]? = nil
+    /// A log's bar (AC-10): the unit, where the read stood before the log, where the log ended, and the length. Nil for
+    /// a log with no length to draw (a film, an album, an episode, a game's hours alone) and from older servers.
+    var bar: LogBar? = nil
     /// A day of Planning adds (AC-8): how many titles, and the one type they share. Only a request that asks with
     /// `include=planning` gets such a row.
     var count: Int? = nil
@@ -507,6 +510,15 @@ struct ActivityObject: Codable {
     var titles: [String]? = nil
     /// Its first titles' posters (three at most), fanned out on the row as a series card's are.
     var posters: [String]? = nil
+}
+
+/// A log's bar on the wire: `unit` is "pages", "percent", "chapters", "issues" or "episodes"; the log lit `from` to `to`
+/// of `total`.
+struct LogBar: Codable, Equatable {
+    let unit: String
+    let from: Double
+    let to: Double
+    let total: Double
 }
 
 struct ActivityCursorResponse: Codable {

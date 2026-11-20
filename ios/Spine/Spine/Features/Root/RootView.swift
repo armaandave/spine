@@ -42,6 +42,8 @@ struct RootView: View {
         }
         .onChange(of: launchSession, initial: true) { _, stage in
             launch.sessionChanged(stage)
+            // The colors of someone's Home picture don't belong on the next launch once they've signed out.
+            if stage == .signedOut { LaunchPalette.remember(nil) }
         }
         .task {
             await session.start()

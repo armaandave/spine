@@ -935,6 +935,7 @@ struct HomeView: View {
                         trackingRepository: trackingRepository,
                         currentUserId: currentUserId,
                         selectedTab: selectedTab,
+                        feedCard: selection.card,
                         onSelectTab: onSelectTab,
                         onUnauthorized: onUnauthorized
                     )
@@ -1011,7 +1012,9 @@ struct HomeView: View {
     private func open(_ activity: ActivityItem) {
         switch ActivityDestination.resolve(activity) {
         case let .diary(id):
-            selectedPost = ActivityPostSelection(post: .log(id))
+            selectedPost = ActivityPostSelection(
+                post: .log(id), card: viewModel.feedModel.entries.first { $0.id == activity.id }
+            )
         case let .progress(id):
             selectedPost = ActivityPostSelection(
                 post: .progress(id), card: viewModel.feedModel.entries.first { $0.id == activity.id }
@@ -1136,7 +1139,7 @@ private struct HomeQuickActionWarmup: ViewModifier {
 
 private struct ActivityPostSelection: Identifiable {
     let post: ActivityPostRef
-    /// The card it was opened from, so a progress post can draw the card's bar.
+    /// The card it was opened from, so a progress post or a log can draw the card's bar.
     var card: FeedCardModel? = nil
 
     var id: String { post.id }

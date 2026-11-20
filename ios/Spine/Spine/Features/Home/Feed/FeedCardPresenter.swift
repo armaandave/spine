@@ -28,7 +28,8 @@ enum FeedCardPresenter {
         switch item.object.type {
         case "diary":
             kind = .log
-            headline = logHeadline(for: item)
+            meter = logMeter(for: item)
+            headline = logHeadline(for: item, check: meter == nil && hasProgress(item))
         case "progress_day":
             let day = progressDay(for: item, standing: standing)
             kind = day.kind
@@ -39,14 +40,17 @@ enum FeedCardPresenter {
             headline = FeedHeadline.status(words: capitalized(ActivityFeedPresentation.actionText(for: item)), tail: nil)
         }
 
+        // A log's bar never pushes its review line out: the card grows one line to keep it (the Check cap).
+        let isLogBar = kind == .log && meter != nil
         let details = FeedDetailPlanner.rows(
-            hasMeter: meter != nil,
+            hasMeter: meter != nil && !isLogBar,
             hasHeadline: headline != nil,
             spoilers: item.containsSpoilers == true,
             review: review,
             favorite: nil,
             quiet: nil
         )
+        let height = isLogBar && !details.isEmpty ? HomeDesign.Metric.logCardHeight : HomeDesign.Metric.cardHeight
         let engagement = item.engagement
         let hint = ActivityFeedPresentation.destinationHint(for: item)
 
@@ -73,8 +77,31 @@ enum FeedCardPresenter {
                 engagement: engagement
             ),
             accessibilityHint: hint,
-            destination: ActivityDestination.resolve(item)
+            destination: ActivityDestination.resolve(item),
+            height: height,
+            meterCheck: isLogBar
         )
+    }
+
+    /// A log's bar (AC-10): what the read held before the log, then the log's own part lit, to where the log ended.
+    /// Nil when the server sends none (a film, an album, an episode, a game's hours alone, an older server).
+    static func logMeter(for item: ActivityItem) -> ProgressMeterModel? {
+        guard let bar = item.object.bar, let unit = MeterUnit(rawValue: bar.unit),
+              bar.from.isFinite, bar.to.isFinite, bar.total.isFinite
+        else { return nil }
+        return ProgressMeterModel.make(
+            unit: unit,
+            from: Int(bar.from.rounded()),
+            to: Int(bar.to.rounded()),
+            total: Int(bar.total.rounded())
+        )
+    }
+
+    /// Whether the title's type has progress days a log could be mistaken for. Films and albums don't, so their logs
+    /// need no check.
+    private static func hasProgress(_ item: ActivityItem) -> Bool {
+        guard let type = item.media?.ref.mediaType else { return false }
+        return type != "movie" && type != "music"
     }
 
     // MARK: Title and tag
@@ -116,7 +143,9 @@ enum FeedCardPresenter {
 
     // MARK: Headlines
 
-    private static func logHeadline(for item: ActivityItem) -> FeedHeadline? {
+    /// - Parameter check: the log has no bar, so its check ends this line instead. A log with nothing else on the line
+    /// keeps no line for the check alone: its review keeps the room.
+    private static func logHeadline(for item: ActivityItem, check: Bool) -> FeedHeadline? {
         let summary = ActivityFeedPresentation.ratingSummary(for: item)
         let symbols = summary.starSymbols
         let rewatch = ActivityFeedPresentation.isRewatch(item)
@@ -129,7 +158,8 @@ enum FeedCardPresenter {
             liked: summary.liked,
             rewatch: rewatch,
             repeatLabel: item.media?.ref.repeatLabel ?? "Rewatch",
-            amount: amount
+            amount: amount,
+            check: check
         )
     }
 
@@ -319,7 +349,7 @@ enum FeedCardPresenter {
 
     private static func headlineWords(_ headline: FeedHeadline?, item: ActivityItem) -> String? {
         switch headline {
-        case .marks(_, _, let rewatch, let repeatLabel, let amount):
+        case .marks(_, _, let rewatch, let repeatLabel, let amount, _):
             let summary = ActivityFeedPresentation.ratingSummary(for: item)
             return [summary.isEmpty ? nil : summary.accessibilityLabel, rewatch ? repeatLabel : nil, amount]
                 .compactMap { $0 }

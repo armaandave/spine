@@ -8,7 +8,7 @@
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
-        <!--Launch: the glowing logo on the plaster. LaunchOverlay starts as an exact copy of this.-->
+        <!--Launch: the empty logo outline on the plaster. LaunchOverlay starts as an exact copy of this.-->
         <scene sceneID="EHf-IW-A2E">
             <objects>
                 <viewController id="01J-lp-oVM" sceneMemberID="viewController">
@@ -19,8 +19,8 @@
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" image="LaunchPlaster" translatesAutoresizingMaskIntoConstraints="NO" id="Pl4-st-3r0">
                                 <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                             </imageView>
-                            <imageView userInteractionEnabled="NO" contentMode="center" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="LaunchLogo" translatesAutoresizingMaskIntoConstraints="NO" id="Lg0-Mk-1aa">
-                                <rect key="frame" x="31.666666666666657" y="251" width="330" height="350"/>
+                            <imageView userInteractionEnabled="NO" contentMode="center" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="LaunchOutline" translatesAutoresizingMaskIntoConstraints="NO" id="Lg0-Mk-1aa">
+                                <rect key="frame" x="117.66666666666667" y="337" width="158" height="178"/>
                             </imageView>
                         </subviews>
                         <color key="backgroundColor" name="LaunchBackground"/>
@@ -40,7 +40,7 @@
         </scene>
     </scenes>
     <resources>
-        <image name="LaunchLogo" width="330" height="350"/>
+        <image name="LaunchOutline" width="158" height="178"/>
         <image name="LaunchPlaster" width="4" height="1024"/>
         <namedColor name="LaunchBackground">
             <color red="0.87450980392156863" green="0.73333333333333328" blue="0.69411764705882351" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
