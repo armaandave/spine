@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The seam: a thin glowing T with soft corners. Its crossbar runs just under the header to both screen edges and
+/// The seam: a thin glowing T. Its crossbar runs just under the header, fading out towards both screen edges, and
 /// curves down into its line, which runs down the middle of the closed row, between In progress and Trending. Idle it breathes. While a tile is open the line glides
 /// to the edge that tile's posters came from, runs longer and softer, and the crossbar fades; both come back when the
 /// tile closes.
@@ -60,15 +60,28 @@ struct HomeSeam: View {
     }
 }
 
-/// The crossbar of the T: the line's white and glow, as wide as the screen, curving down into the line's top on
-/// both sides of the middle. Drawn once into a texture, like the line.
+/// The crossbar of the T: as wide as the screen, brightest in the middle and fading out towards both edges, curving
+/// down into the line's top on both sides of the middle. Its glow is the line's, so where the two meet nothing
+/// changes but the direction. Drawn once into a texture, like the line.
 private struct SeamBar: View {
     let width: CGFloat
+
+    private static let gradient: [Gradient.Stop] = {
+        let half = TileGeometry.seamBarStops
+        let left = half.map { Gradient.Stop(color: .white.opacity($0.opacity), location: $0.location) }
+        let right = half.dropLast().reversed().map {
+            Gradient.Stop(color: .white.opacity($0.opacity), location: 1 - $0.location)
+        }
+        return left + right
+    }()
 
     var body: some View {
         let radius = TileGeometry.seamCornerRadius
         SeamBarShape(radius: radius)
-            .stroke(.white.opacity(0.95), lineWidth: TileGeometry.seamWidth)
+            .stroke(
+                LinearGradient(stops: Self.gradient, startPoint: .leading, endPoint: .trailing),
+                lineWidth: TileGeometry.seamWidth
+            )
             .frame(width: width, height: radius + TileGeometry.seamWidth)
             .shadow(color: .white.opacity(0.5), radius: 3)
             .shadow(color: .white.opacity(0.28), radius: 8)
@@ -98,8 +111,9 @@ private struct SeamBarShape: Shape {
     }
 }
 
-/// The line: white, solid where it meets the crossbar at the top and fading out at the bottom, with two white glows
-/// round it. Drawn once, with room round it for the glow, into a texture.
+/// The line: white, starting at the crossbar's own brightness where the two meet, brightening over its first stretch,
+/// and fading out at the bottom, with two white glows round it. Drawn once, with room round it for the glow, into a
+/// texture.
 private struct SeamTexture: View {
     /// What the texture adds on every side of the line, for the glow.
     static let padding: CGFloat = 14
@@ -111,7 +125,8 @@ private struct SeamTexture: View {
         Rectangle()
             .fill(LinearGradient(
                 stops: [
-                    .init(color: .white.opacity(0.95), location: 0),
+                    .init(color: .white.opacity(TileGeometry.seamBarStops.last?.opacity ?? 0.95), location: 0),
+                    .init(color: .white.opacity(0.95), location: 0.12),
                     .init(color: .white.opacity(0.95), location: 0.84),
                     .init(color: .white.opacity(0), location: 1),
                 ],
