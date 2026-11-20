@@ -539,11 +539,12 @@ enum TileMotion {
         return appearing ? .easeOut(duration: 0.06).delay(0.06) : .easeOut(duration: 0.06)
     }
 
-    /// The label of the tile that is not open: it is gone before the open tile's label sets out across the row, and it
-    /// returns once that label has gone past, so the two are never on top of each other.
-    static func labelYield(yielding: Bool, reduceMotion: Bool) -> Animation {
-        guard !reduceMotion else { return HomeDesign.Motion.reduced }
-        return yielding ? .easeOut(duration: 0.12) : .easeOut(duration: 0.2).delay(0.3)
+    /// The label of the tile that is not open: it is gone before the open tile's label sets out across the row. It
+    /// comes back at once, unanimated, as the tile closes: its tile is still invisible then, so the tile's own fade
+    /// brings it in with its posters, already in its place, as Trending's label comes back.
+    static func labelYield(yielding: Bool, reduceMotion: Bool) -> Animation? {
+        guard yielding else { return nil }
+        return reduceMotion ? HomeDesign.Motion.reduced : .easeOut(duration: 0.12)
     }
 
     /// How a poster moves as its tile closes, by the place it ends in.
