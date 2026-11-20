@@ -301,6 +301,8 @@ enum ProfileYearWallRenderer {
         )
         let image = await Task.detached(priority: .userInitiated) { plan.draw(posters) }.value
         guard !Task.isCancelled else { return nil }
+        // A wall with a poster that didn't load shows, but isn't kept: the next showing draws it again.
+        guard posters.allSatisfy({ $0 != nil }) else { return image }
         drawn[key] = image
         order.removeAll { $0 == key }
         order.append(key)
@@ -359,7 +361,7 @@ private nonisolated struct WallPlan: Sendable {
                 cg.restoreGState()
             }
             // The fades: the picture keeps only as much of itself as the fade allows at each height.
-            let colors = fade.map { UIColor(white: 0, alpha: $0.alpha).cgColor } as CFArray
+            let colors = fade.map { UIColor(red: 0, green: 0, blue: 0, alpha: $0.alpha).cgColor } as CFArray
             let locations = fade.map(\.location)
             if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: locations) {
                 cg.setBlendMode(.destinationIn)

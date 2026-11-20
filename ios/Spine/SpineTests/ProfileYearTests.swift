@@ -50,6 +50,9 @@ final class ProfileYearTests: XCTestCase {
         XCTAssertEqual(Set(session.posters(for: "theo/2026", from: later, dealNew: false).map(\.id)), Set(later.map(\.id)))
         // Pull to refresh deals from the new pick.
         XCTAssertEqual(Set(session.posters(for: "maya/2026", from: later, dealNew: true).map(\.id)), Set(later.map(\.id)))
+        // A year that gained a poster deals again, so the wall follows it.
+        let grown = try later + [Self.poster("later-13")]
+        XCTAssertEqual(Set(session.posters(for: "maya/2026", from: grown, dealNew: false).map(\.id)), Set(grown.map(\.id)))
     }
 
     private static func poster(_ mediaID: String) throws -> MediaSummary {

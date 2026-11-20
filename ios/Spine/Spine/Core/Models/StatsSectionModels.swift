@@ -358,14 +358,15 @@ struct ProfileYear: Decodable, Hashable {
 }
 
 /// The This Year wall for this app session: a profile's first pick, shuffled once and kept while the app runs, so the
-/// wall is the same each time the profile shows. Pull to refresh deals a new one; so does the next launch.
+/// wall is the same each time the profile shows. Pull to refresh deals a new one; so does the next launch, and so
+/// does a year whose number of posters changed (a title logged or removed), so the wall follows the year.
 final class ProfileYearWallSession {
     static let shared = ProfileYearWallSession()
 
     private var walls: [String: [MediaSummary]] = [:]
 
     func posters(for key: String, from pick: [MediaSummary], dealNew: Bool) -> [MediaSummary] {
-        if !dealNew, let kept = walls[key] {
+        if !dealNew, let kept = walls[key], kept.count == pick.count {
             return kept
         }
         let dealt = pick.shuffled()

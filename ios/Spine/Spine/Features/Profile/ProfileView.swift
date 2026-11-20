@@ -173,6 +173,8 @@ final class ProfileViewModel {
     /// Pull to refresh: everything reloads, and the This Year wall is dealt again.
     func pullToRefresh() async {
         dealsNewWall = true
+        // A load that stops before the wall (a failed fetch, a newer load) leaves no new deal for a later one.
+        defer { dealsNewWall = false }
         await load()
     }
 
