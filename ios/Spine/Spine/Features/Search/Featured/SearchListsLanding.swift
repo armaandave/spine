@@ -25,7 +25,7 @@ struct SearchListsLanding: View {
                     Task { await store.load(mediaType: nil, force: true) }
                 }
             } else {
-                SearchListsSkeleton()
+                SearchListsSkeleton(kinds: enabledMediaTypes)
             }
         }
         .featuredLayerLifecycle(store: store, mediaType: nil)
@@ -250,14 +250,21 @@ private struct SearchListsSourceIcon: View {
     }
 }
 
+/// A row per kind you have on, each about as wide as its word, so the lists land without the rows changing.
 private struct SearchListsSkeleton: View {
+    let kinds: [String]
+
+    private static let wordWidths: [String: CGFloat] = [
+        "movie": 150, "tv": 70, "anime": 120, "manga": 120, "game": 120, "book": 120, "comic": 140, "music": 110,
+    ]
+
     var body: some View {
         SearchListsRows(everyKind: 8) { rowHeight in
-            ForEach(0 ..< 8, id: \.self) { index in
+            ForEach(kinds, id: \.self) { kind in
                 HStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(.white.opacity(0.08))
-                        .frame(width: [150, 70, 120, 120, 120, 120, 140, 110][index], height: 26)
+                        .frame(width: Self.wordWidths[kind] ?? 120, height: 26)
                     Spacer()
                     HStack(spacing: 11) {
                         ForEach(0 ..< 2, id: \.self) { _ in

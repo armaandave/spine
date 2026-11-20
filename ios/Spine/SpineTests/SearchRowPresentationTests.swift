@@ -6,6 +6,22 @@ import XCTest
 
 @MainActor
 final class SearchRowPresentationTests: XCTestCase {
+    func testSearchOpensOnTheKindsYouHaveOnNotEveryKind() throws {
+        let meta = try JSONDecoder.api.decode(MetaResponse.self, from: Data("""
+        {"version": "1", "media_types": ["movie", "tv", "book", "music"], "sources": {}, "status_choices": [],
+         "source_choices": []}
+        """.utf8))
+        let remembered = SearchViewModel(
+            mediaRepository: MetaOnlyMediaRepository(meta: meta),
+            rememberedMediaTypes: ["movie", "tv", "season", "book", "music"],
+            onUnauthorized: {}
+        )
+        let unknown = SearchViewModel(mediaRepository: MetaOnlyMediaRepository(meta: meta), onUnauthorized: {})
+
+        XCTAssertEqual(remembered.mediaTypes, ["movie", "tv", "book", "music"])
+        XCTAssertEqual(unknown.mediaTypes, APIConstants.fallbackMediaTypes)
+    }
+
     func testWhoMadeItIsNamedInFullAndTheRestAreCounted() {
         typealias Credit = SearchRowText.Credit
 
