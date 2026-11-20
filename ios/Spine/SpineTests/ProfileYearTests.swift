@@ -4,9 +4,9 @@ import XCTest
 /// The profile's This Year section: the wall's grid rule and the rows built from the server's numbers (STAT-312).
 final class ProfileYearTests: XCTestCase {
     func testWallTakesTheMostPostersThatFillItAtAPostersShape() {
-        // The menu-width wall on a 430 pt phone: 398 wide, 568 tall with the part tucked under the Stats row.
+        // A menu-width wall on a 430 pt phone: 398 wide by 568 tall.
         let steps = [8, 9, 15, 16, 19, 20, 24, 25, 29, 30, 35, 36, 50].map { posters in
-            ProfileYearWall.grid(posters: posters, width: 398).map { [$0.across, $0.down] }
+            ProfileYearWall.grid(posters: posters, width: 398, height: 568).map { [$0.across, $0.down] }
         }
         XCTAssertEqual(steps, [
             nil,
@@ -19,7 +19,7 @@ final class ProfileYearTests: XCTestCase {
         ])
         // Every wall is full: no gaps, and never more than 6 across.
         for posters in 9...60 {
-            guard let grid = ProfileYearWall.grid(posters: posters, width: 398) else {
+            guard let grid = ProfileYearWall.grid(posters: posters, width: 398, height: 568) else {
                 XCTFail("No wall for \(posters) posters")
                 continue
             }

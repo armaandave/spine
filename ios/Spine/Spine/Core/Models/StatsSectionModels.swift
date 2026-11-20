@@ -349,8 +349,13 @@ struct ProfileYear: Decodable, Hashable {
     /// The owner's turned-on types in the app's order, with their titles this year; zero included.
     let mediaTypes: [StatsMediaTypeCount]
     let time: StatsTime
-    /// This year's titles with artwork, at most 36: each type newest first, dealt one per type in turn.
+    /// A random pick of this year's titles with artwork, every type dealt its share; the wall's pool.
     let posters: [MediaSummary]
+
+    /// The same year with the wall's pool in a new random order, so each load shows a different wall.
+    func shufflingPosters() -> ProfileYear {
+        ProfileYear(year: year, titles: titles, mediaTypes: mediaTypes, time: time, posters: posters.shuffled())
+    }
 }
 
 // MARK: - Top and Highest rated (STAT-205 to STAT-208)

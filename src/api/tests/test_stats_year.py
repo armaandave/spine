@@ -5,6 +5,7 @@ STAT-105, STAT-201, STAT-301), its year is the owner's (STAT-005), and its wall 
 this year's titles one per type in turn, newest first.
 """
 
+import random
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -84,32 +85,34 @@ class StatsYearTests(ActivityBase):
         self.assertEqual(year["year"], 2027)
         self.assertEqual((year["range"]["start_date"], year["range"]["end_date"]), ("2027-01-01", "2027-12-31"))
 
-    def test_the_wall_deals_each_types_newest_title_in_turn(self):
-        movies = [self.item(MediaTypes.MOVIE.value, f"m{index}") for index in range(3)]
-        for movie, month in zip(movies, (3, 5, 7), strict=True):
-            self.log(movie, utc_day(2026, month, 1))
+    def test_the_wall_is_a_random_pick_with_every_type_dealt_in_turn(self):
+        for index in range(6):
+            self.log(self.item(MediaTypes.MOVIE.value, f"m{index}"), utc_day(2026, 3, index + 1))
         self.log(self.item(MediaTypes.MOVIE.value, "last-year"), utc_day(2025, 9, 1))
-        read = self.item(MediaTypes.BOOK.value, "read")
-        self.read_pages(read, 25, datetime(2026, 2, 1, 18, tzinfo=UTC))
-        logged = self.item(MediaTypes.BOOK.value, "logged")
-        self.log(logged, utc_day(2026, 6, 1))
-        album = self.item(MediaTypes.MUSIC.value, "album")
-        self.log(album, utc_day(2026, 1, 5))
-        # Newest of its type, but no artwork: the wall has no blank tiles.
+        # Pages read count the book as one of this year's titles.
+        self.read_pages(self.item(MediaTypes.BOOK.value, "read"), 25, datetime(2026, 2, 1, 18, tzinfo=UTC))
+        self.log(self.item(MediaTypes.MUSIC.value, "album"), utc_day(2026, 1, 5))
+        # No artwork: the wall has no blank tiles.
         blank = self.item(MediaTypes.MUSIC.value, "blank")
         self.set_item(blank, image=settings.IMG_NONE)
         self.log(blank, utc_day(2026, 8, 1))
 
         posters = self.year()["posters"]
-        self.assertEqual(
-            [poster["ref"]["media_id"] for poster in posters],
-            ["m2", "logged", "m1", "read", "album", "m0"],
-        )
+        ids = [poster["ref"]["media_id"] for poster in posters]
+        self.assertCountEqual(ids, ["m0", "m1", "m2", "m3", "m4", "m5", "read", "album"])
         self.assertTrue(all(poster["user_state"] is None for poster in posters))
 
         scope = stats_year.year_scope(self.owner, self.owner)
-        wall = stats_year.wall_posters(scope, ["movie", "book", "music"], limit=2)
-        self.assertEqual([poster["ref"]["media_id"] for poster in wall], ["m2", "logged"])
+        types = ["movie", "book", "music"]
+        picks = set()
+        for seed in range(8):
+            rng = random.Random(seed)  # noqa: S311 - a seeded shuffle, not a secret
+            wall = stats_year.wall_posters(scope, types, limit=3, rng=rng)
+            # Six films never crowd out the book and the album: one of each a round.
+            self.assertEqual([poster["ref"]["media_type"] for poster in wall], types)
+            picks.add(wall[0]["ref"]["media_id"])
+        # Which film it is changes from pick to pick.
+        self.assertGreater(len(picks), 1)
 
     def test_a_profile_the_viewer_cant_see_has_no_year(self):
         self.owner.profile_private = True

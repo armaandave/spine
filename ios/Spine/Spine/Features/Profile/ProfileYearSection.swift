@@ -1,21 +1,23 @@
 import SwiftUI
 
 /// The profile's This Year section, under the menu: this year's numbers per turned-on type, the Stats page's own
-/// (STAT-312), on a glass plate over a wall of the year's posters. The wall is as wide as the menu and its top tucks
-/// under the Stats row, fading in from under the menu's glass. Under 9 posters there's no wall: the numbers sit on
-/// glass like the menu's. Each type with something this year opens the Stats page on that type and year.
+/// (STAT-312), on a glass plate over a wall of the year's posters. The wall is as wide as the menu. Its top tucks
+/// under the Stats row, fading in from under the menu's glass, and it runs on below the plate, fading off the bottom
+/// of the screen. Under 9 posters there's no wall: the numbers sit on glass like the menu's. Each type with something
+/// this year opens the Stats page on that type and year.
 struct ProfileYearSection<Destination: View>: View {
     let year: ProfileYear
     @ViewBuilder let destination: (String) -> Destination
 
-    /// The section's width; the design's until it's measured.
+    /// The section's size; the design's until it's measured.
     @State private var width: CGFloat = 398
+    @State private var height: CGFloat = 600
 
     var body: some View {
         let rows = ProfileYearPresentation.rows(for: year)
         Group {
-            if let grid = ProfileYearWall.grid(posters: year.posters.count, width: width) {
-                wall(grid, rows: rows)
+            if year.posters.count >= ProfileYearWall.minimumPosters {
+                wall(rows)
             } else {
                 numbers(rows)
                     .padding(EdgeInsets(top: 16, leading: 16, bottom: 6, trailing: 16))
@@ -30,31 +32,42 @@ struct ProfileYearSection<Destination: View>: View {
 
     // MARK: The wall
 
-    private func wall(_ grid: ProfileYearWall.Grid, rows: [ProfileYearRow]) -> some View {
-        let shape = RoundedRectangle(cornerRadius: ProfileMenuRow.groupCornerRadius, style: .continuous)
-        return ZStack(alignment: .bottom) {
-            posterGrid(grid)
-                .background(ProfileYearWall.tileColor)
-                .overlay { shape.strokeBorder(.white.opacity(0.1), lineWidth: 0.5) }
-                .clipShape(shape)
-                .mask { ProfileYearWall.fade }
-                .accessibilityHidden(true)
-
-            numbers(rows)
-                .padding(EdgeInsets(top: 16, leading: 16, bottom: 6, trailing: 16))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular.tint(.black.opacity(0.32)), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                .padding(8)
-        }
-        .frame(height: ProfileYearWall.height)
-        .environment(\.colorScheme, .dark)
-        // The top tucks under the Stats row; the menu draws over it.
-        .padding(.top, -ProfileYearWall.tuck)
+    private func wall(_ rows: [ProfileYearRow]) -> some View {
+        numbers(rows)
+            .padding(EdgeInsets(top: 16, leading: 16, bottom: 6, trailing: 16))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular.tint(.black.opacity(0.32)), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .padding(.horizontal, 8)
+            // Posters show above the plate and run on below it.
+            .padding(.top, ProfileYearWall.tuck + ProfileYearWall.above)
+            .padding(.bottom, ProfileYearWall.below)
+            .frame(maxWidth: .infinity)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            .background(alignment: .top) {
+                // Drawn past the section's bottom, under the tab bar, so the fade reaches the screen's edge.
+                let drawn = height + ProfileYearWall.bleed
+                if let grid = ProfileYearWall.grid(posters: year.posters.count, width: width, height: drawn) {
+                    posterGrid(grid, height: drawn)
+                        .clipShape(UnevenRoundedRectangle(
+                            topLeadingRadius: ProfileMenuRow.groupCornerRadius,
+                            topTrailingRadius: ProfileMenuRow.groupCornerRadius,
+                            style: .continuous
+                        ))
+                        .mask { ProfileYearWall.fade(height: drawn) }
+                        .frame(height: drawn, alignment: .top)
+                        .accessibilityHidden(true)
+                }
+            }
+            .environment(\.colorScheme, .dark)
+            // The top tucks under the Stats row; the menu draws over it.
+            .padding(.top, -ProfileYearWall.tuck)
+            // It runs on into the page's bottom space (ProfileView's 100 pt), so the wall ends at the page's end.
+            .padding(.bottom, -ProfileYearWall.pageBottom)
     }
 
-    private func posterGrid(_ grid: ProfileYearWall.Grid) -> some View {
+    private func posterGrid(_ grid: ProfileYearWall.Grid, height: CGFloat) -> some View {
         let posters = Array(year.posters.prefix(grid.count))
-        let cell = ProfileYearWall.cellSize(grid, width: width)
+        let cell = ProfileYearWall.cellSize(grid, width: width, height: height)
         return VStack(spacing: ProfileYearWall.gap) {
             ForEach(0..<grid.down, id: \.self) { row in
                 HStack(spacing: ProfileYearWall.gap) {
@@ -64,7 +77,7 @@ struct ProfileYearSection<Destination: View>: View {
                 }
             }
         }
-        .frame(height: ProfileYearWall.height)
+        .frame(height: height)
     }
 
     private func tile(_ media: MediaSummary, size: CGSize) -> some View {
@@ -162,21 +175,27 @@ struct ProfileYearSection<Destination: View>: View {
 
 /// The wall's grid, worked out from the posters and the space, never from fixed steps: the most posters that fill
 /// the wall with no gaps, at most 6 across, each cell within 20% of a poster's 2:3 shape. Under 9 posters there's
-/// no wall. In the 398-wide wall that gives 9 (3 x 3), 16, 20, 25, 30 and 36 (6 x 6); a count in between drops to
-/// the step below it.
+/// no wall. A taller wall (more types on the plate) takes more rows; a count in between drops to the step below it.
 enum ProfileYearWall {
     static let minimumPosters = 9
     static let maximumAcross = 6
     static let posterShape: CGFloat = 2.0 / 3.0
     static let shapeSlack: CGFloat = 0.2
     static let gap: CGFloat = 2
-    /// What shows under the menu.
-    static let visibleHeight: CGFloat = 520
     /// How far the top runs up under the Stats row.
     static let tuck: CGFloat = 48
     /// Full strength this far below the menu's bottom edge.
     static let fadeBelow: CGFloat = 56
-    static var height: CGFloat { visibleHeight + tuck }
+    /// The wall between the menu and the plate.
+    static let above: CGFloat = 120
+    /// The wall under the plate, inside the section.
+    static let below: CGFloat = 200
+    /// ProfileView's space under its last section, which the wall runs on into.
+    static let pageBottom: CGFloat = 100
+    /// Drawn past the page's end, under the tab bar, down to the screen's bottom edge.
+    static let bleed: CGFloat = 140
+    /// The fade out starts this far above the plate's bottom edge.
+    static let fadeOutLead: CGFloat = 60
     static let tileColor = Color(red: 0.102, green: 0.102, blue: 0.098)
 
     struct Grid: Equatable {
@@ -186,7 +205,7 @@ enum ProfileYearWall {
         var count: Int { across * down }
     }
 
-    static func grid(posters: Int, width: CGFloat, height: CGFloat = height) -> Grid? {
+    static func grid(posters: Int, width: CGFloat, height: CGFloat) -> Grid? {
         guard posters >= minimumPosters, width > 0, height > 0 else { return nil }
         var best: Grid?
         var bestOff = CGFloat.infinity
@@ -209,21 +228,26 @@ enum ProfileYearWall {
         return best
     }
 
-    static func cellSize(_ grid: Grid, width: CGFloat, height: CGFloat = height) -> CGSize {
+    static func cellSize(_ grid: Grid, width: CGFloat, height: CGFloat) -> CGSize {
         CGSize(
             width: (width - CGFloat(grid.across - 1) * gap) / CGFloat(grid.across),
             height: (height - CGFloat(grid.down - 1) * gap) / CGFloat(grid.down)
         )
     }
 
-    /// Nothing at the top, under the menu; a third at the menu's bottom edge; full strength below.
-    static var fade: some View {
-        LinearGradient(
+    /// Over the wall as drawn: nothing at the top, under the menu; a third at the menu's bottom edge; full strength
+    /// down to just above the plate's bottom; then a long fade to nothing at the screen's bottom edge.
+    static func fade(height: CGFloat) -> some View {
+        let full = tuck + fadeBelow
+        let fadeOut = max(full, height - bleed - below - fadeOutLead)
+        return LinearGradient(
             stops: [
                 .init(color: .clear, location: 0),
                 .init(color: .black.opacity(0.35), location: tuck / height),
-                .init(color: .black, location: (tuck + fadeBelow) / height),
-                .init(color: .black, location: 1),
+                .init(color: .black, location: full / height),
+                .init(color: .black, location: fadeOut / height),
+                .init(color: .black.opacity(0.4), location: (fadeOut + (height - fadeOut) * 0.45) / height),
+                .init(color: .clear, location: 1),
             ],
             startPoint: .top,
             endPoint: .bottom

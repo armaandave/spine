@@ -248,7 +248,8 @@ final class ProfileViewModel {
         do {
             let loaded = try await profileRepository.statsYear(username: username)
             guard generation == requestGeneration else { return }
-            year = loaded
+            // A new wall on every load, not the same posters as Recent Activity each time.
+            year = loaded.shufflingPosters()
         } catch is CancellationError {
             return
         } catch {

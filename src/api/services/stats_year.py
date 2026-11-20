@@ -14,17 +14,21 @@ type's numbers are the ones the Stats page shows for this year:
 
 Only what the section shows is worked out, not the whole Stats page.
 
-``posters`` is the wall behind the numbers: this year's titles of the turned-on types
-that have artwork, each type newest activity first (its latest event, STAT-106), dealt
-one per type in turn in the app's type order, at most WALL_LIMIT. They are a backdrop
-with no tap, so they carry no viewer state, which keeps the cached answer the same for
-everyone in an audience.
+``posters`` is the pool the wall is drawn from: a random pick of this year's titles of
+the turned-on types that have artwork, at most WALL_LIMIT. Each type's titles are
+shuffled, then dealt one per type in turn, so every type gets its share however many
+titles another type has. The pick changes whenever the answer is worked out again (the
+cache keeps one for up to an hour, STAT-006), and the app shuffles it again on every
+load. The posters are a backdrop with no tap, so they carry no viewer state, which keeps
+the cached answer the same for everyone in an audience.
 """
 
 from __future__ import annotations
 
+import random
 from collections import defaultdict, deque
 from datetime import date
+from itertools import islice
 
 from django.conf import settings
 
@@ -32,12 +36,13 @@ from api.services import stats_v2_activity
 from api.services.stats_scope import TV_ITEM_TYPES, StatsScope
 from api.services.stats_v2 import media_type_rows
 from app import user_calendar
-from app.models import Item, MediaTypes
+from app.models import MediaTypes
 
-# The app's largest wall: 6 across by 6 down.
-WALL_LIMIT = 36
-# Summaries are loaded this many titles at a time, until the wall is full.
-_SUMMARY_BATCH = 48
+# More than the app's largest wall (6 across by 8 down on a tall one), so it has spares
+# to shuffle from.
+WALL_LIMIT = 60
+# Each round loads this many titles of every type ahead, in one batch.
+_LOOKAHEAD = 3
 
 
 def year_scope(owner, viewer, *, request=None):
@@ -67,55 +72,41 @@ def build_year(scope):
     }
 
 
-def wall_order(scope, media_types):
-    """Return this year's title IDs of ``media_types`` in wall order.
-
-    Each type's titles are ordered by their latest event, newest first (a tie goes to
-    the higher ID); a title with no event goes after its type's dated ones. The types
-    are then dealt one title each in turn, in ``media_types``' order, until all run out.
-    """
-    title_ids = set(scope.titles.values_list("id", flat=True))
-    latest = {}
-    for day, title_id, bucket in scope.events:
-        if title_id in title_ids and (title_id not in latest or day > latest[title_id][0]):
-            latest[title_id] = (day, bucket)
+def shuffled_titles(scope, media_types, rng=random):
+    """Return a shuffled queue of this year's titles for each of ``media_types``."""
     by_type = defaultdict(list)
-    for title_id, (day, bucket) in latest.items():
-        by_type[bucket].append((day, title_id))
-    undated = defaultdict(list)
-    for title_id, media_type in Item.objects.filter(id__in=title_ids - latest.keys()).values_list("id", "media_type"):
-        undated[MediaTypes.TV.value if media_type in TV_ITEM_TYPES else media_type].append(title_id)
-
+    for title_id, media_type in scope.titles.values_list("id", "media_type"):
+        by_type[MediaTypes.TV.value if media_type in TV_ITEM_TYPES else media_type].append(title_id)
     queues = []
     for media_type in media_types:
-        dated = [title_id for _day, title_id in sorted(by_type.get(media_type, []), reverse=True)]
-        queue = deque(dated + sorted(undated.get(media_type, []), reverse=True))
-        if queue:
-            queues.append(queue)
-    order = []
-    while queues:
-        order.extend(queue.popleft() for queue in queues)
-        queues = [queue for queue in queues if queue]
-    return order
+        titles = sorted(by_type.get(media_type, []))
+        rng.shuffle(titles)
+        if titles:
+            queues.append(deque(titles))
+    return queues
 
 
-def wall_posters(scope, media_types, limit=WALL_LIMIT):
-    """Return up to ``limit`` media summaries of ``media_types`` for the wall, in order.
+def wall_posters(scope, media_types, limit=WALL_LIMIT, rng=random):
+    """Return up to ``limit`` media summaries of ``media_types`` for the wall.
 
-    A title with no artwork is skipped, so the wall has no blank tiles.
+    Each round takes one title of each type, in ``media_types``' order, from its
+    shuffled queue. A title with no artwork is passed over for the type's next one, so
+    the wall has no blank tiles and a type keeps its turn.
     """
-    order = wall_order(scope, media_types)
+    queues = shuffled_titles(scope, media_types, rng)
     posters = []
-    for start in range(0, len(order), _SUMMARY_BATCH):
-        batch = order[start : start + _SUMMARY_BATCH]
-        summaries = scope.media_summaries(batch)
-        for title_id in batch:
-            summary = summaries.get(title_id)
-            if summary is None or not has_poster(summary):
-                continue
-            posters.append({**summary, "user_state": None})
+    while queues:
+        # Load the next few of every type in one batch.
+        scope.media_summaries([title_id for queue in queues for title_id in islice(queue, _LOOKAHEAD)])
+        for queue in queues:
+            while queue:
+                summary = scope.media_summary(queue.popleft())
+                if summary is not None and has_poster(summary):
+                    posters.append({**summary, "user_state": None})
+                    break
             if len(posters) == limit:
                 return posters
+        queues = [queue for queue in queues if queue]
     return posters
 
 
