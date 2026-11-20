@@ -32,6 +32,17 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(ys[2], G.floorY - G.amplitude, accuracy: 0.001)
     }
 
+    func testTheHighestPeakStopsJustUnderTheHeader() {
+        let ys = G.ys(counts: [1, 3, 2, 9, 4, 0, 7, 12, 5, 1])
+        let slopes = G.slopes(ys)
+        var x = G.inset
+        while x <= width - G.inset {
+            XCTAssertGreaterThanOrEqual(G.curveY(at: x, ys: ys, slopes: slopes, chartWidth: width), G.peakTop - 0.001)
+            x += 2
+        }
+        XCTAssertGreaterThan(G.peakTop, 0, "the line never touches the line above it")
+    }
+
     func testStepsSpanTheWidthWithAnInsetEitherSide() {
         XCTAssertEqual(G.x(step: 0, chartWidth: width), G.inset)
         XCTAssertEqual(G.x(step: 9, chartWidth: width), width - G.inset, accuracy: 0.001)

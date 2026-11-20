@@ -6,10 +6,13 @@ import SwiftUI
 enum RatingsChartGeometry {
     static let stepCount = 10
     /// Just the curve and room for the glow under the floor: no axis.
-    static let height: CGFloat = 152
+    static let height: CGFloat = floorY + 12
     /// Room left of the first step and right of the last, so the curve ends inside the box with a little air.
     static let inset: CGFloat = 24
-    static let floorY: CGFloat = 140
+    /// The busiest step's peak sits `peakTop` below the chart's top, just under the header's last line (the
+    /// number, or "N reviews"), so the line comes as close to the number as it can without ever touching it.
+    static let peakTop: CGFloat = 10
+    static let floorY: CGFloat = peakTop + amplitude
     /// How far above the floor the busiest step reaches.
     static let amplitude: CGFloat = 92
     static let hairlineTop: CGFloat = 4
