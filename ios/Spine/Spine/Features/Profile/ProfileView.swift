@@ -28,6 +28,8 @@ final class ProfileViewModel {
     private let onUnauthorized: () -> Void
     private let username: String?
     private var requestGeneration = 0
+    /// Pull to refresh asks for a new wall; every other load keeps this session's.
+    private var dealsNewWall = false
     /// A save or a log elsewhere changed what the rail says. It reloads when the cover that made the change closes,
     /// not for every write, so nothing walks the history while a title's page is still open.
     private var isStale = false
@@ -168,6 +170,12 @@ final class ProfileViewModel {
         await load()
     }
 
+    /// Pull to refresh: everything reloads, and the This Year wall is dealt again.
+    func pullToRefresh() async {
+        dealsNewWall = true
+        await load()
+    }
+
     func markStale() {
         isStale = true
     }
@@ -245,11 +253,14 @@ final class ProfileViewModel {
     /// This year's numbers, the Stats page's own (STAT-312). The section sits last and is extra: a failed load keeps
     /// what's on screen, and on a first load the section stays hidden.
     private func loadYear(generation: Int) async {
+        let dealsNew = dealsNewWall
+        dealsNewWall = false
         do {
             let loaded = try await profileRepository.statsYear(username: username)
             guard generation == requestGeneration else { return }
-            // A new wall on every load, not the same posters as Recent Activity each time.
-            year = loaded.shufflingPosters()
+            // The session's wall: the same one each time the profile shows, until pull to refresh or the next launch.
+            let key = "\(profile?.username ?? username ?? "")/\(loaded.year)"
+            year = loaded.withPosters(ProfileYearWallSession.shared.posters(for: key, from: loaded.posters, dealNew: dealsNew))
         } catch is CancellationError {
             return
         } catch {
@@ -612,7 +623,8 @@ struct ProfileView: View {
     @State private var selectedPerson: PersonRef?
     @State private var isSettingsPresented = false
     @State private var isHallOfFameEditorPresented = false
-    @State private var heroScrollOffset: CGFloat = 0
+    /// Only the hero reads it, so scrolling redraws the header, not the whole page.
+    @State private var heroScroll = ProfileHeroScroll()
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var isProfileBackdropSearchPresented = false
     @State private var pendingSocialAction: ProfileSocialAction?
@@ -881,11 +893,9 @@ struct ProfileView: View {
                             .padding(.top, 120)
                     } else if let profile = viewModel.profile {
                         VStack(alignment: .leading, spacing: 0) {
-                            hero(
-                                profile,
-                                collapseProgress: reduceMotion ? 0 : ProfileHeroCollapse.progress(for: heroScrollOffset),
-                                layoutProgress: reduceMotion ? 0 : ProfileHeroCollapse.layoutProgress(for: heroScrollOffset)
-                            )
+                            ProfileHeroScrollReader(scroll: heroScroll, reduceMotion: reduceMotion) { collapse, layout in
+                                hero(profile, collapseProgress: collapse, layoutProgress: layout)
+                            }
                             if profile.isRestricted {
                                 restrictedCard(profile)
                                     .padding(.horizontal, 16)
@@ -918,12 +928,12 @@ struct ProfileView: View {
             .scrollContentBackground(.hidden)
             .ignoresSafeArea(edges: .top)
             .refreshable {
-                await viewModel.reload()
+                await viewModel.pullToRefresh()
             }
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
                 max(0, geometry.contentOffset.y)
             } action: { _, offset in
-                heroScrollOffset = offset
+                heroScroll.offset = offset
             }
 
             if isPushedProfile {
@@ -1682,6 +1692,27 @@ struct FavoriteSlot: Identifiable {
     let id: String
     let title: String
     let item: MediaSummary?
+}
+
+/// How far the profile has scrolled, for the hero's collapse. Only `ProfileHeroScrollReader` reads it.
+@Observable
+final class ProfileHeroScroll {
+    var offset: CGFloat = 0
+}
+
+/// The hero, redrawn as the page scrolls; the rest of the page isn't, so the This Year wall below doesn't redraw on
+/// every frame.
+private struct ProfileHeroScrollReader<Content: View>: View {
+    let scroll: ProfileHeroScroll
+    let reduceMotion: Bool
+    @ViewBuilder let content: (_ collapseProgress: CGFloat, _ layoutProgress: CGFloat) -> Content
+
+    var body: some View {
+        content(
+            reduceMotion ? 0 : ProfileHeroCollapse.progress(for: scroll.offset),
+            reduceMotion ? 0 : ProfileHeroCollapse.layoutProgress(for: scroll.offset)
+        )
+    }
 }
 
 enum ProfileHeroCollapse {

@@ -352,9 +352,25 @@ struct ProfileYear: Decodable, Hashable {
     /// A random pick of this year's titles with artwork, every type dealt its share; the wall's pool.
     let posters: [MediaSummary]
 
-    /// The same year with the wall's pool in a new random order, so each load shows a different wall.
-    func shufflingPosters() -> ProfileYear {
-        ProfileYear(year: year, titles: titles, mediaTypes: mediaTypes, time: time, posters: posters.shuffled())
+    func withPosters(_ posters: [MediaSummary]) -> ProfileYear {
+        ProfileYear(year: year, titles: titles, mediaTypes: mediaTypes, time: time, posters: posters)
+    }
+}
+
+/// The This Year wall for this app session: a profile's first pick, shuffled once and kept while the app runs, so the
+/// wall is the same each time the profile shows. Pull to refresh deals a new one; so does the next launch.
+final class ProfileYearWallSession {
+    static let shared = ProfileYearWallSession()
+
+    private var walls: [String: [MediaSummary]] = [:]
+
+    func posters(for key: String, from pick: [MediaSummary], dealNew: Bool) -> [MediaSummary] {
+        if !dealNew, let kept = walls[key] {
+            return kept
+        }
+        let dealt = pick.shuffled()
+        walls[key] = dealt
+        return dealt
     }
 }
 

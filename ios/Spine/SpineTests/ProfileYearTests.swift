@@ -43,6 +43,29 @@ final class ProfileYearTests: XCTestCase {
         XCTAssertEqual(rows[0].measure, StatsTimeSection.value(for: year.time.rows[0]))
     }
 
+    func testTheWallStaysTheSameForTheSessionUntilANewDeal() throws {
+        let session = ProfileYearWallSession()
+        let first = try (1...12).map { try Self.poster("first-\($0)") }
+        let later = try (1...12).map { try Self.poster("later-\($0)") }
+
+        let shown = session.posters(for: "maya/2026", from: first, dealNew: false)
+        XCTAssertEqual(Set(shown.map(\.id)), Set(first.map(\.id)))
+        // Coming back to the profile, with a new pick from the server: the same wall, in the same order.
+        XCTAssertEqual(session.posters(for: "maya/2026", from: later, dealNew: false).map(\.id), shown.map(\.id))
+        // Another profile has its own wall.
+        XCTAssertEqual(Set(session.posters(for: "theo/2026", from: later, dealNew: false).map(\.id)), Set(later.map(\.id)))
+        // Pull to refresh deals from the new pick.
+        XCTAssertEqual(Set(session.posters(for: "maya/2026", from: later, dealNew: true).map(\.id)), Set(later.map(\.id)))
+    }
+
+    private static func poster(_ mediaID: String) throws -> MediaSummary {
+        let json = """
+        {"ref": {"item_id": 1, "source": "tmdb", "media_type": "movie", "media_id": "\(mediaID)", "season_number": null, "episode_number": null},
+         "title": "\(mediaID)", "poster_url": "https://image.tmdb.org/t/p/w500/\(mediaID).jpg"}
+        """
+        return try JSONDecoder.api.decode(MediaSummary.self, from: Data(json.utf8))
+    }
+
     private static let payload = """
     {
       "year": 2026,
