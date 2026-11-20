@@ -31,7 +31,9 @@ MANGA_MATCH_FAILURE_TTL = 60 * 5
 PERSON_TTL = 60 * 60 * 24
 ANIME_CACHE_VERSION = "v7"
 # A search's, a related row's or a recommendation's English title comes with the read that lists it (AN-705).
-ANIME_SEARCH_CACHE_VERSION = "v2"
+# v3: a search row names its studios (an anime) or its authors (a manga).
+ANIME_SEARCH_CACHE_VERSION = "v3"
+MANGA_SEARCH_CACHE_VERSION = "v1"
 ANIME_NODE_FIELDS = "{node{alternative_titles}}"
 ANIME_POSTER_CACHE_VERSION = "v1"
 ANIME_POSTER_TTL = 60 * 60 * 24 * 30
@@ -112,7 +114,7 @@ def search(media_type, query, page, *, preserve_ranking_fields=False, timeout=No
     """Search for media on MyAnimeList."""
     rank_suffix = "_rank" if preserve_ranking_fields else ""
     is_anime = media_type == MediaTypes.ANIME.value
-    version = f"_{ANIME_SEARCH_CACHE_VERSION}" if is_anime else ""
+    version = f"_{ANIME_SEARCH_CACHE_VERSION}" if is_anime else f"_{MANGA_SEARCH_CACHE_VERSION}"
     cache_key = f"search_{Sources.MAL.value}_{media_type}_{query}_{page}{rank_suffix}{version}"
     data = cache.get(cache_key)
 
@@ -120,7 +122,8 @@ def search(media_type, query, page, *, preserve_ranking_fields=False, timeout=No
         url = f"{base_url}/{media_type}"
         params = {
             "q": query,
-            "fields": "media_type,mean,num_scoring_users,start_date" + (",alternative_titles" if is_anime else ""),
+            "fields": "media_type,mean,num_scoring_users,start_date"
+            + (",alternative_titles,studios" if is_anime else ",authors{first_name,last_name}"),
             "limit": settings.PER_PAGE,
         }
         if settings.MAL_NSFW:
@@ -149,6 +152,7 @@ def search(media_type, query, page, *, preserve_ranking_fields=False, timeout=No
                 "rating": media["node"].get("mean"),
                 "num_scoring_users": media["node"].get("num_scoring_users"),
                 "release_date": media["node"].get("start_date"),
+                "made_by": _made_by(media["node"], media_type),
                 **_anime_english_title(media["node"], media_type),
             }
             for media in response
@@ -3509,6 +3513,23 @@ def get_related(related_medias, media_type):
                 _cache_manga_poster(result["media_id"], result["image"])
         return results
     return []
+
+
+def _made_by(node, media_type):
+    """Who made it, as a search row names them: an anime's studios, a manga's authors ("Kanehito Yamada")."""
+    if media_type == MediaTypes.ANIME.value:
+        names = [(studio.get("name") or "").strip() for studio in node.get("studios") or [] if isinstance(studio, dict)]
+    else:
+        names = [
+            " ".join(
+                part.strip()
+                for part in ((author.get("node") or {}).get("first_name"), (author.get("node") or {}).get("last_name"))
+                if part and part.strip()
+            )
+            for author in node.get("authors") or []
+            if isinstance(author, dict)
+        ]
+    return list(dict.fromkeys(name for name in names if name))
 
 
 def _anime_english_title(node, media_type):

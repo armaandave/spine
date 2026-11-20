@@ -189,7 +189,7 @@ class SteamAdapterTests(FeaturedTestCase):
 ## Checklist
 
 1. Adapter with `validate()`; every failure is an `AdapterError`.
-2. Definitions in your position range, each with `source_name` and `source_url`.
+2. Definitions in your position range, each with `source_name` and `source_url`. A new `source_name` can get the name Search shows and an icon (a square PNG in `src/static/img/sources/`) in `lists/featured/sources.py`; without them Search shows its full name and no icon.
 3. Fixtures trimmed to a few entries, no keys in them.
 4. Tests for parsing, ids, editions and failures.
 5. `sync_featured_list <key> --dry-run` against the live source: note the resolve rate; add overrides or ids for misses.

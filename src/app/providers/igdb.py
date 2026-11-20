@@ -19,7 +19,10 @@ COMPANY_CACHE_TTL = 60 * 60 * 24
 COMPANY_CATALOG_CACHE_TTL = 60 * 60 * 24
 IGDB_BATCH_SIZE = 500
 COLLECTION_CACHE_VERSION = "v1"
-SEARCH_FIELDS = "fields name,cover.image_id,total_rating_count,total_rating,first_release_date,game_type;"
+SEARCH_FIELDS = (
+    "fields name,cover.image_id,total_rating_count,total_rating,first_release_date,game_type,"
+    "involved_companies.company.name,involved_companies.developer;"
+)
 
 
 class ExternalGameSource(IntEnum):
@@ -211,7 +214,7 @@ def steam_app_id(media_id):
 def search(query, page, *, preserve_ranking_fields=False, timeout=None):
     """Search for games on IGDB."""
     rank_suffix = "_rank" if preserve_ranking_fields else ""
-    cache_key = f"search_{Sources.IGDB.value}_{MediaTypes.GAME.value}_v2_{query}_{page}{rank_suffix}"
+    cache_key = f"search_{Sources.IGDB.value}_{MediaTypes.GAME.value}_v3_{query}_{page}{rank_suffix}"
     data = cache.get(cache_key)
 
     if data is None:
@@ -312,8 +315,12 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
                 "image": get_image_url(media),
                 "total_rating_count": media.get("total_rating_count"),
                 "total_rating": media.get("total_rating"),
+                # Ranking drops first_release_date. The year stays under a key ranking
+                # doesn't read (a release_date would count as a quality signal).
+                "release_year": _release_year(media),
                 "first_release_date": media.get("first_release_date"),
                 "game_type": media.get("game_type"),
+                "made_by": _developers(media),
             }
             for media in search_results
         ]
@@ -334,6 +341,23 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
         cache.set(cache_key, data)
 
     return data
+
+
+def _developers(game):
+    """The studios IGDB credits with developing a game, in its order; publishers and porters left out."""
+    names = []
+    for credit in game.get("involved_companies") or []:
+        if not isinstance(credit, dict) or not credit.get("developer"):
+            continue
+        name = ((credit.get("company") or {}).get("name") or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _release_year(game):
+    start = get_start_date(game)
+    return int(start[:4]) if start else None
 
 
 def _search_names(query, base_conditions, offset, headers, *, count, timeout):

@@ -12,6 +12,8 @@ struct MediaSearchBar: View {
     let onLensSelect: (String) -> Void
     let onSearch: (String) -> Void
     let onClear: () -> Void
+    /// The ✕ tapped with nothing typed: the keyboard goes away, and the page may leave searching too.
+    var onDismiss: () -> Void = {}
     var onFocusChange: (Bool) -> Void = { _ in }
     var focusRequest: Int = 0
 
@@ -77,6 +79,7 @@ struct MediaSearchBar: View {
     private func clearOrDismiss() {
         if text.isEmpty {
             isFocused = false
+            onDismiss()
         } else {
             text = ""
             onClear()

@@ -14,7 +14,7 @@ struct ProgressPageContent: Equatable {
     let isStart: Bool
     /// An old server's own words for the day, drawn in plain white.
     let words: String?
-    /// "Paused", "Picked back up", "Stopped", in the order sent.
+    /// "Paused", "Resumed", "Dropped", in the order sent.
     let pills: [String]
     /// "p. 212", "total 71%", "63/70", "S2 · 7/10", "14h": the muted where.
     let standing: String?

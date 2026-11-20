@@ -131,7 +131,8 @@ extension FeaturedShelvesResponse {
                 liveCount: shelf.liveCount,
                 kindCounts: shelf.kindCounts,
                 lists: lists,
-                seeAll: shelf.seeAll
+                seeAll: shelf.seeAll,
+                sources: shelf.sources
             )
         }
     }

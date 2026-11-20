@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 import time
 from collections import Counter
 from concurrent.futures import wait
@@ -101,13 +102,31 @@ from app.models import (
     PosterPalette,
     Sources,
 )
-from app.providers import anilist, apple_music, hardcover, mal, musicbrainz
+from app.providers import anilist, apple_music, hardcover, mal, musicbrainz, tmdb
 from app.providers import services as provider_services
 from app.providers.search_rank import normalize_search_text, rank_mixed_results
 from app.utils.color import build_accent_palette, get_poster_accent_from_url
 
 SEARCH_TTL = 60 * 60 * 6
-SEARCH_CACHE_VERSION = "v3"
+# v4: rows carry `year` and `made_by` (games, anime, manga and comics name theirs
+# in their search).
+SEARCH_CACHE_VERSION = "v4"
+# Who made a movie or show, which TMDB's search doesn't say, is looked up a title
+# at a time.
+MADE_BY_SEARCH_TYPES = {(Sources.TMDB.value, MediaTypes.MOVIE.value), (Sources.TMDB.value, MediaTypes.TV.value)}
+MADE_BY_CACHE_VERSION = "v1"
+MADE_BY_TTL = 60 * 60 * 24 * 30
+# A title not out yet may name its director later.
+MADE_BY_EMPTY_TTL = 60 * 60 * 24
+# A lookup that failed (TMDB down or limiting) is remembered this long, so search
+# doesn't wait on the same titles again meanwhile.
+MADE_BY_FAILED_TTL = 60 * 5
+# How many of a search's titles, top first, are looked up (a whole page, so
+# every row reads alike), how many at once, and how long the search waits.
+MADE_BY_LOOKUPS = 24
+MADE_BY_WORKERS = 12
+MADE_BY_WAIT_SECONDS = 1.5
+MADE_BY_LOOKUP_TIMEOUT = 4
 MUSIC_SEARCH_CACHE_VERSION = "v6"
 MUSIC_CACHE_STALE_TTL = 60 * 60 * 24 * 7
 MUSIC_CACHE_LOCK_TIMEOUT = 120
@@ -808,6 +827,84 @@ def search_all_media(*, media_types, query, request=None, user=None):
         "completed_media_types": completed,
         "unavailable_media_types": unavailable,
     }
+
+
+_made_by_pool = DatabaseThreadPoolExecutor(max_workers=MADE_BY_WORKERS, thread_name_prefix="made-by")
+_made_by_lookups = {}
+# Re-entrant: a lookup that's already done runs its callback inside the lock.
+_made_by_lookups_lock = threading.RLock()
+
+
+def with_made_by(results):
+    """Name who made each movie and show in search results: directors, or networks.
+
+    Each title's names are cached for a month. A search looks up its top titles not
+    cached yet, all at once, and waits up to MADE_BY_WAIT_SECONDS; a lookup that
+    takes longer still fills the cache for the next search. A row whose lookup fails
+    or isn't back in time says only its year, and a failed one isn't tried again for
+    MADE_BY_FAILED_TTL.
+    """
+    rows = {}
+    for result in results:
+        ref = result.get("ref") or {}
+        if (ref.get("source"), ref.get("media_type")) in MADE_BY_SEARCH_TYPES and ref.get("media_id"):
+            key = f"made_by:{MADE_BY_CACHE_VERSION}:{ref['source']}:{ref['media_type']}:{ref['media_id']}"
+            rows.setdefault(key, []).append(result)
+    if not rows:
+        return results
+    try:
+        found = cache.get_many(list(rows))
+    except (ConnectionInterrupted, RedisError, ConnectionError, OSError):
+        found = {}
+    lookups = {
+        key: _look_up_made_by(key, rows[key][0]["ref"])
+        for key in [key for key in rows if key not in found][:MADE_BY_LOOKUPS]
+    }
+    if lookups:
+        wait(lookups.values(), timeout=MADE_BY_WAIT_SECONDS)
+    for key, lookup in lookups.items():
+        if lookup.done() and not lookup.cancelled() and lookup.exception() is None:
+            found[key] = lookup.result()
+    for key, names in found.items():
+        for result in rows[key]:
+            result["made_by"] = list(names)
+    return results
+
+
+def _look_up_made_by(key, ref):
+    """Start a title's lookup, or join the one already running for it."""
+    with _made_by_lookups_lock:
+        lookup = _made_by_lookups.get(key)
+        # A lookup that failed is tried again.
+        if lookup is None or (lookup.done() and lookup.exception() is not None):
+            lookup = _made_by_pool.submit(_made_by, key, ref["media_type"], ref["media_id"])
+            _made_by_lookups[key] = lookup
+            lookup.add_done_callback(partial(_forget_made_by_lookup, key))
+    return lookup
+
+
+def _forget_made_by_lookup(key, lookup):
+    with _made_by_lookups_lock:
+        if _made_by_lookups.get(key) is lookup:
+            del _made_by_lookups[key]
+
+
+def _made_by(key, media_type, media_id):
+    try:
+        names = tmdb.made_by(media_type, media_id, timeout=MADE_BY_LOOKUP_TIMEOUT)
+    except Exception as error:
+        logger.info(
+            "made_by lookup failed media_type=%s media_id=%s error=%s",
+            media_type,
+            media_id,
+            type(error).__name__,
+        )
+        with suppress(ConnectionInterrupted, RedisError, ConnectionError, OSError):
+            cache.set(key, [], MADE_BY_FAILED_TTL)
+        raise
+    with suppress(ConnectionInterrupted, RedisError, ConnectionError, OSError):
+        cache.set(key, names, MADE_BY_TTL if names else MADE_BY_EMPTY_TTL)
+    return names
 
 
 def search_people(*, query):

@@ -496,6 +496,33 @@ def get_creators(creators):
     return details
 
 
+def made_by(media_type, media_id, *, timeout=None):
+    """Who made a movie or a show, as a search row names them: a movie's directors, a show's networks.
+
+    TMDB's search doesn't say, so this is one small read a title, without retries; callers cache it.
+    """
+    if media_type == MediaTypes.MOVIE.value:
+        credits = services.api_request(
+            Sources.TMDB.value,
+            "GET",
+            f"{base_url}/movie/{media_id}/credits",
+            params=base_params,
+            timeout=timeout,
+            retry_rate_limits=False,
+        )
+        return [person["name"] for person in get_directors(credits)]
+    show = services.api_request(
+        Sources.TMDB.value,
+        "GET",
+        f"{base_url}/tv/{media_id}",
+        params=base_params,
+        timeout=timeout,
+        retry_rate_limits=False,
+    )
+    names = [(network.get("name") or "").strip() for network in show.get("networks") or [] if isinstance(network, dict)]
+    return list(dict.fromkeys(name for name in names if name))
+
+
 def get_creator_id(created_by):
     """Return the creator's person ID from created_by."""
     if not created_by:

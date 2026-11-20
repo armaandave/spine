@@ -40,14 +40,20 @@ final class SearchViewModel {
     private let onUnauthorized: () -> Void
     private var searchID = 0
 
+    /// `rememberedMediaTypes`: the kinds you have on, as last remembered, so the picker and the lists open on them
+    /// instead of on every kind until the server answers.
     init(
         mediaRepository: MediaRepository,
         socialRepository: SocialRepository? = nil,
+        rememberedMediaTypes: [String]? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.mediaRepository = mediaRepository
         self.socialRepository = socialRepository
         self.onUnauthorized = onUnauthorized
+        if let remembered = rememberedMediaTypes.map(Self.enabledMediaTypes(from:)), !remembered.isEmpty {
+            mediaTypes = remembered
+        }
     }
 
     static func lensMediaTypes(from mediaTypes: [String]) -> [String] {
@@ -148,6 +154,7 @@ struct SearchView: View {
     private let socialRepository: SocialRepository
     private let mediaLensStore: MediaLensStore
     private let currentUserId: Int?
+    private let enabledMediaTypes: [String]?
     private let selectedTab: AppTab
     private let focusRequest: Int
     private let findPeopleRequest: Int
@@ -164,6 +171,7 @@ struct SearchView: View {
         socialRepository: SocialRepository? = nil,
         mediaLensStore: MediaLensStore? = nil,
         currentUserId: Int? = nil,
+        enabledMediaTypes: [String]? = nil,
         selectedTab: AppTab = .search,
         focusRequest: Int = 0,
         findPeopleRequest: Int = 0,
@@ -178,6 +186,7 @@ struct SearchView: View {
         self.socialRepository = socialRepository ?? AppRepositories.current().social
         self.mediaLensStore = mediaLensStore ?? MediaLensStore()
         self.currentUserId = currentUserId
+        self.enabledMediaTypes = enabledMediaTypes
         self.selectedTab = selectedTab
         self.focusRequest = focusRequest
         self.findPeopleRequest = findPeopleRequest
@@ -195,6 +204,7 @@ struct SearchView: View {
             socialRepository: socialRepository,
             mediaLensStore: mediaLensStore,
             currentUserId: currentUserId,
+            enabledMediaTypes: enabledMediaTypes,
             selectedTab: selectedTab,
             focusRequest: focusRequest,
             findPeopleRequest: findPeopleRequest,
@@ -221,6 +231,7 @@ private struct SearchViewContainer: View {
     let socialRepository: SocialRepository
     let mediaLensStore: MediaLensStore
     let currentUserId: Int?
+    let enabledMediaTypes: [String]?
     let selectedTab: AppTab
     let focusRequest: Int
     let findPeopleRequest: Int
@@ -233,6 +244,7 @@ private struct SearchViewContainer: View {
             listRepository: listRepository,
             socialRepository: socialRepository,
             mediaLensStore: mediaLensStore,
+            enabledMediaTypes: enabledMediaTypes,
             focusRequest: focusRequest + returnFocusRequest,
             findPeopleRequest: findPeopleRequest,
             onUnauthorized: onUnauthorized,
@@ -485,6 +497,7 @@ private struct SearchViewContent: View {
         listRepository: ListRepository? = nil,
         socialRepository: SocialRepository? = nil,
         mediaLensStore: MediaLensStore,
+        enabledMediaTypes: [String]? = nil,
         focusRequest: Int = 0,
         findPeopleRequest: Int = 0,
         supportedMediaTypes: [String]? = nil,
@@ -500,6 +513,7 @@ private struct SearchViewContent: View {
         _viewModel = State(initialValue: SearchViewModel(
             mediaRepository: mediaRepository,
             socialRepository: socialRepository,
+            rememberedMediaTypes: enabledMediaTypes,
             onUnauthorized: onUnauthorized
         ))
         _selectedSearchType = State(initialValue: supportedMediaTypes == nil ? APIConstants.allMedia : mediaLensStore.selectedMediaType)
@@ -524,20 +538,34 @@ private struct SearchViewContent: View {
         ZStack {
             NavigationStack {
                 VStack(spacing: 0) {
+                    if showsLargeTitle {
+                        Text(title)
+                            .font(.system(size: 30, weight: .heavy))
+                            .tracking(-0.5)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                            .padding(.bottom, 8)
+                            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                            .accessibilityAddTraits(.isHeader)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     MediaSearchBar(
                         text: $draftText,
                         selectedMediaType: selectedMediaTypeBinding,
                         availableTypes: availableSearchTypes,
-                        onLensSelect: { selectedType in
-                            Task {
-                                await searchCurrentQuery(mediaType: selectedType)
-                            }
-                        },
+                        onLensSelect: pickKind,
                         onSearch: { text in
                             search(text)
                         },
                         onClear: {
                             viewModel.clear()
+                        },
+                        // Out of searching: Recently opened gives way to the lists again.
+                        onDismiss: {
+                            isSearchActive = false
                         },
                         onFocusChange: { focused in
                             if focused {
@@ -565,6 +593,7 @@ private struct SearchViewContent: View {
                                 featuredStore: featuredStore,
                                 enabledMediaTypes: viewModel.mediaTypes,
                                 onFeaturedList: onFeaturedList,
+                                onPickKind: pickKind,
                                 onRecentMedia: { media in
                                     saveRecentMedia(media)
                                     onSelect(media)
@@ -578,10 +607,13 @@ private struct SearchViewContent: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .animation(.smooth(duration: 0.35), value: showsLargeTitle)
                 .background(Color.black)
                 .mediaLensAtmosphere(theme: currentTheme)
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
+                // The Search tab names itself in big type above the box instead (a picker keeps its bar and Cancel).
+                .toolbar(isSearchTab ? .hidden : .automatic, for: .navigationBar)
                 .toolbarBackground(.hidden, for: .navigationBar)
                 .toolbarColorScheme(.dark, for: .navigationBar)
                 .toolbar {
@@ -642,6 +674,17 @@ private struct SearchViewContent: View {
         mediaLensStore.theme(for: selectedSearchType)
     }
 
+    /// The Search tab itself, not a picker built on this screen: only it has the lists to show.
+    private var isSearchTab: Bool {
+        featuredStore != nil
+    }
+
+    /// "Search" in big type over the box while the page shows every kind's lists; it tucks away once you search.
+    private var showsLargeTitle: Bool {
+        isSearchTab && !isSearchActive && selectedSearchType == APIConstants.allMedia
+            && draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var allowsAllMediaSearch: Bool {
         supportedMediaTypes == nil
     }
@@ -675,6 +718,16 @@ private struct SearchViewContent: View {
     private func searchCurrentQuery(mediaType: String) async {
         let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
         await viewModel.search(trimmed, mediaType: mediaType)
+    }
+
+    /// Picks a media type, from the picker or a big word on the opening page: the picker's lens slides to it, the
+    /// page shows that type, and any typed text searches it.
+    private func pickKind(_ mediaType: String) {
+        // The picker has set it already; a big word on the lists hasn't.
+        if selectedMediaTypeBinding.wrappedValue != mediaType {
+            selectedMediaTypeBinding.wrappedValue = mediaType
+        }
+        Task { await searchCurrentQuery(mediaType: mediaType) }
     }
 
     private func validateSelectedMediaType() {
@@ -749,6 +802,7 @@ private struct SearchResultsSection: View {
     let featuredStore: FeaturedListsStore?
     let enabledMediaTypes: [String]
     let onFeaturedList: (FeaturedListSelection) -> Void
+    let onPickKind: (String) -> Void
     let onRecentMedia: (MediaSummary) -> Void
     let onSelect: (MediaSummary) -> Void
 
@@ -774,7 +828,7 @@ private struct SearchResultsSection: View {
         if let error = errorMessage {
             ContentUnavailableView("Search failed", systemImage: "exclamationmark.triangle", description: Text(error))
         } else if !results.isEmpty {
-            SearchResultsList(results: results, showsMediaTypes: showsMediaTypes, onSelect: onSelect)
+            SearchResultsList(results: results, query: query, showsMediaTypes: showsMediaTypes, onSelect: onSelect)
         } else {
             SearchEmptyState(
                 query: query,
@@ -786,6 +840,7 @@ private struct SearchResultsSection: View {
                 featuredStore: featuredStore,
                 enabledMediaTypes: enabledMediaTypes,
                 onFeaturedList: onFeaturedList,
+                onPickKind: onPickKind,
                 onRecentMedia: onRecentMedia
             )
         }
@@ -811,6 +866,7 @@ private struct SearchEmptyState: View {
     let featuredStore: FeaturedListsStore?
     let enabledMediaTypes: [String]
     let onFeaturedList: (FeaturedListSelection) -> Void
+    let onPickKind: (String) -> Void
     let onRecentMedia: (MediaSummary) -> Void
 
     var body: some View {
@@ -821,32 +877,14 @@ private struct SearchEmptyState: View {
                 store: featuredStore,
                 selectedMediaType: selectedMediaType,
                 enabledMediaTypes: enabledMediaTypes,
-                onSelect: onFeaturedList
+                onSelect: onFeaturedList,
+                onPickKind: onPickKind
             )
         } else if recentMedia.isEmpty {
             ContentUnavailableView("Search Spine", systemImage: "magnifyingglass", description: Text("Enter a title to find media."))
         } else {
-            List {
-                Section("Recently Opened") {
-                    ForEach(recentMedia) { media in
-                        Button {
-                            onRecentMedia(media)
-                        } label: {
-                            SearchResultRow(
-                                result: media,
-                                usesDiarySize: true,
-                                showsMediaType: showsMediaTypes
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 12))
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(Color.black)
-            .scrollDismissesKeyboard(.interactively)
+            // The titles you opened last, laid out exactly as results are: no heading, starting under the picker.
+            SearchResultsList(results: recentMedia, query: "", showsMediaTypes: showsMediaTypes, onSelect: onRecentMedia)
         }
     }
 }
@@ -922,6 +960,7 @@ private struct SearchNoResultsState: View {
 
 private struct SearchResultsList: View {
     let results: [MediaSummary]
+    let query: String
     let showsMediaTypes: Bool
     let onSelect: (MediaSummary) -> Void
 
@@ -931,10 +970,12 @@ private struct SearchResultsList: View {
                 Button {
                     onSelect(result)
                 } label: {
-                    SearchResultRow(result: result, showsMediaType: showsMediaTypes)
+                    SearchResultRichRow(result: result, query: query, showsKind: showsMediaTypes)
                 }
                 .buttonStyle(.plain)
-                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 12))
+                .alignmentGuide(.listRowSeparatorLeading) { _ in SearchResultRichRow.artWidth + 14 }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 14))
+                .listRowBackground(Color.clear)
             }
         }
         .listStyle(.plain)

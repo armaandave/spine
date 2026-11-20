@@ -252,7 +252,8 @@ All of it is additive.
      "kind_counts": {}, "lists": ["…≤10 cards"], "see_all": null},
     {"key": "movie", "title": "Movies", "media_type": "movie", "count": 42, "live_count": 0,
      "kind_counts": {"chart": 6, "award": 9, "canon": 14, "community": 10, "curator": 3},
-     "lists": ["…≤12 cards"], "see_all": "/api/v1/lists/featured/shelves/?media_type=movie"},
+     "lists": ["…≤12 cards"], "see_all": "/api/v1/lists/featured/shelves/?media_type=movie",
+     "sources": [{"name": "Oscars", "icon_url": "https://…/static/img/sources/oscars.png", "lists": 2}, "…"]},
     {"key": "mixed", "title": "Across Media", "media_type": "mixed", "…": "…"}
   ]
 }
@@ -263,6 +264,7 @@ All of it is additive.
 - **Lists below their bar:** a list is omitted, here and on the legacy endpoint, while both its sync's `resolved_count / entry_count` and its stored rows / `entry_count` are below its own `min_resolve_rate`. List detail still serves it.
 - **"Now":** lists inside or within 24 h of a live window come first (inside before near, then by `position`). Then the charts in `order.NOW_PRIORITY` whose content changed in the last 7 days, in that order, at most 2 per media type (a chart with two media types counts against both; live lists don't count). At most 10 cards in all. A chart not in `NOW_PRIORITY` never appears in "Now".
 - **Within a shelf:** live lists (inside a window) first; then the keys in `order.SHELF_ORDER[<media type>]`, in that order; then every other list by `position`, then name. A list with two media types follows each shelf's own order. "Across Media" has no curated order.
+- **Sources** (every shelf, added for Search's landing): where the shelf's lists come from, one entry per name Search shows, with `lists` = how many of the shelf's lists it made. A definition's `source_name` shows as the name people know ("The Academy" as "Oscars") with its icon from `static/img/sources/`, both from `lists/featured/sources.py`; a source not listed there keeps its own name and has `icon_url: null`. Source names shown alike count once ("Recording Academy" and "The Recording Academy" are both "Grammys"). Order: the names in `sources.LEAD`, in that order, then the rest by `lists`, then name. Manually featured lists and lists without a `source_name` aren't counted. The registry tests fail on a name in `SOURCES` no list uses, a missing icon file, or a `LEAD` name nothing shows as.
 
 ### How to change the order
 
