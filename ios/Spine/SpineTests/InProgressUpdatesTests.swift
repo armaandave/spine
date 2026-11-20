@@ -621,7 +621,8 @@ final class InProgressUpdatesTests: XCTestCase {
                 .appendingPathComponent("Spine/Features/Profile/ProfileView.swift"),
             encoding: .utf8
         )
-        XCTAssertTrue(source.contains("InProgressPoster(item: item)"))
+        // The poster also takes your own state for the title, for its hold menu.
+        XCTAssertTrue(source.contains("InProgressPoster(item: item, viewer:"))
         for code in ["InProgressCard(", "InProgressUpdates", "progressUpdates", "inProgressUpdatePresentations",
                      "ContinueWatchingTicks", "continueWatchingPresentations", "InProgressCardPresentation.line",
                      "InProgressBar", "progressFraction", "LibraryPosterBadge", "PosterBadgeLabel"] {
