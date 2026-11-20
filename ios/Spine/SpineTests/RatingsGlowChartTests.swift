@@ -37,8 +37,8 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(G.x(step: 9, chartWidth: width), width - G.inset, accuracy: 0.001)
     }
 
-    func testTheEndPhotosStayInsideTheChart() {
-        let half = G.photoSize / 2 + 2
+    func testTheEndFacesStayInsideTheChart() {
+        let half = G.faceSize / 2 + G.faceRingReach
         XCTAssertGreaterThanOrEqual(G.x(step: 0, chartWidth: width) - half, 8)
         XCTAssertLessThanOrEqual(G.x(step: 9, chartWidth: width) + half, width - 8)
     }
@@ -65,17 +65,31 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(G.curveY(at: G.x(step: 8, chartWidth: width), ys: ys, slopes: slopes, chartWidth: width), ys[8], accuracy: 0.001)
     }
 
-    func testPhotosAtOneStepStackUpwardInOrder() {
-        XCTAssertEqual(G.stackSlots(steps: [8, 3, 8, 8, 3]), [0, 0, 1, 2, 1])
+    func testAFaceSitsAtItsStepAndAGroupSpreadsAroundIt() {
+        let alone = G.faceSlots(steps: [4], chartWidth: width)
+        XCTAssertEqual(alone[0].x, G.x(step: 4, chartWidth: width), accuracy: 0.001)
+        let slots = G.faceSlots(steps: [8, 3, 8, 8], chartWidth: width)
+        let center = G.x(step: 8, chartWidth: width)
+        XCTAssertEqual(slots[0].x, center - G.faceStep, accuracy: 0.001, "the first in the order is leftmost")
+        XCTAssertEqual(slots[2].x, center, accuracy: 0.001)
+        XCTAssertEqual(slots[3].x, center + G.faceStep, accuracy: 0.001)
+        XCTAssertEqual(slots.map(\.rankInGroup), [0, 0, 1, 2])
+        XCTAssertEqual(slots[1].x, G.x(step: 3, chartWidth: width), accuracy: 0.001)
     }
 
-    func testABusyStepCompressesItsStackSoTheTopPhotoStaysInTheChart() {
-        let ys = G.ys(counts: [0, 0, 0, 0, 0, 0, 0, 0, 10, 0])
-        let few = G.photoYs(steps: [8, 8], ys: ys)
-        XCTAssertEqual(few[0] - few[1], G.stackStep, accuracy: 0.001)
-        let many = G.photoYs(steps: [Int](repeating: 8, count: 9), ys: ys)
-        XCTAssertEqual(many[0], ys[8], accuracy: 0.001)
-        XCTAssertGreaterThanOrEqual(many.min()!, G.photoTopLimit - 0.001)
+    func testAGroupAtTheEdgesIsShiftedInsideTheChartWhole() {
+        let reach = G.faceSize / 2 + G.faceRingReach
+        let low = G.faceSlots(steps: [Int](repeating: 0, count: 4), chartWidth: width)
+        XCTAssertEqual(low.map(\.x).min()!, reach, accuracy: 0.001)
+        XCTAssertEqual(low[1].x - low[0].x, G.faceStep, accuracy: 0.001, "the spacing survives the shift")
+        let high = G.faceSlots(steps: [Int](repeating: 9, count: 4), chartWidth: width)
+        XCTAssertEqual(high.map(\.x).max()!, width - reach, accuracy: 0.001)
+        let single = G.faceSlots(steps: [0, 9], chartWidth: width)
+        XCTAssertEqual(single[0].x, G.inset, "a lone face at the end is already inside")
+    }
+
+    func testNobodyRatedMeansNoFaces() {
+        XCTAssertTrue(G.faceSlots(steps: [], chartWidth: width).isEmpty)
     }
 
     func testTheAverageIsCountedFromTheStepsWhenThePayloadHasNone() {

@@ -2,21 +2,17 @@ import SwiftUI
 
 /// The numbers behind the ratings chart: where each of the ten half-star steps sits, the smooth curve through them
 /// (monotone cubic, so it never overshoots between steps and runs flat along the floor where nobody rated), and where
-/// the photos on it stack. Pure, so each rule is tested on its own.
+/// the row of faces under it. Pure, so each rule is tested on its own.
 enum RatingsChartGeometry {
     static let stepCount = 10
-    /// Just the curve, the photos and room for the glow under the floor: no axis.
+    /// Just the curve and room for the glow under the floor: no axis.
     static let height: CGFloat = 152
-    /// Room left of the first step and right of the last: enough that a photo at half a star or five stars (24 pt,
-    /// plus your 2 pt outline) sits inside the box with a little air, instead of touching its edge.
+    /// Room left of the first step and right of the last, so the curve ends inside the box with a little air.
     static let inset: CGFloat = 24
     static let floorY: CGFloat = 140
     /// How far above the floor the busiest step reaches.
     static let amplitude: CGFloat = 92
     static let hairlineTop: CGFloat = 4
-    /// How far up each further photo at one step sits.
-    static let stackStep: CGFloat = 14
-    static let photoSize: CGFloat = 24
 
     /// The distance between two neighbouring steps.
     static func stepWidth(chartWidth: CGFloat) -> CGFloat {
@@ -127,36 +123,48 @@ enum RatingsChartGeometry {
         return path
     }
 
-    /// The lowest a photo's center may sit: its top edge stays inside the chart, under the header.
-    static let photoTopLimit: CGFloat = photoSize / 2
+    // MARK: Faces row
 
-    /// The height of each photo, in order: the first at a step sits on the curve, the rest above it, 14 pt apart, or
-    /// closer together when the step is busy so the top one never rises into the header.
-    static func photoYs(steps: [Int], ys: [CGFloat]) -> [CGFloat] {
-        let slots = stackSlots(steps: steps)
-        var perStep: [Int: Int] = [:]
-        for step in steps { perStep[step, default: 0] += 1 }
-        return steps.indices.map { index in
-            let base = ys[steps[index]]
-            let others = (perStep[steps[index]] ?? 1) - 1
-            let room = max(base - photoTopLimit, 0)
-            let gap = others > 0 ? min(stackStep, room / CGFloat(others)) : stackStep
-            return base - CGFloat(slots[index]) * gap
-        }
+    /// A face in the row under the box.
+    static let faceSize: CGFloat = 20
+    /// How far apart the centers of faces at one rating sit (they overlap by 8 pt).
+    static let faceStep: CGFloat = 12
+    /// Your 2 pt white outline reaches this far past the photo's edge.
+    static let faceRingReach: CGFloat = 2
+    /// Space the row adds below the chart, before FRIENDS (none when nobody rated).
+    static let facesRowHeight: CGFloat = 22
+    /// The row's face centers sit this far below the chart's bottom edge (the faces overlap it by 4 pt).
+    static let faceCenterY: CGFloat = 6
+
+    /// A person's place in the row: the center x, and how many faces at the same rating come before them.
+    struct FaceSlot: Equatable {
+        let x: CGFloat
+        let rankInGroup: Int
     }
 
-    /// For each photo, in order, how many photos sit below it at the same step (0 is on the curve).
-    static func stackSlots(steps: [Int]) -> [Int] {
-        var used: [Int: Int] = [:]
-        return steps.map { step in
-            let slot = used[step, default: 0]
-            used[step] = slot + 1
-            return slot
+    /// The center x of each face, in order. A face is centered at its rating's step; faces at one rating make a group,
+    /// spread `faceStep` apart around that step in the order given (first on the left). A group that would spill
+    /// past the chart's edges, outline included, is shifted inward as a whole.
+    static func faceSlots(steps: [Int], chartWidth: CGFloat) -> [FaceSlot] {
+        var members: [Int: [Int]] = [:]
+        for (index, step) in steps.enumerated() { members[step, default: []].append(index) }
+        var slots = [FaceSlot](repeating: FaceSlot(x: 0, rankInGroup: 0), count: steps.count)
+        let reach = faceSize / 2 + faceRingReach
+        for (step, indices) in members {
+            let span = CGFloat(indices.count - 1) * faceStep
+            let center = x(step: step, chartWidth: chartWidth)
+            let lowest = reach + span / 2
+            let highest = chartWidth - reach - span / 2
+            let shifted = lowest <= highest ? min(max(center, lowest), highest) : chartWidth / 2
+            for (rank, index) in indices.enumerated() {
+                slots[index] = FaceSlot(x: shifted - span / 2 + CGFloat(rank) * faceStep, rankInGroup: rank)
+            }
         }
+        return slots
     }
 }
 
-/// Someone drawn on the curve: their photo at the step of their rating.
+/// Someone drawn in the faces row: their photo at the step of their rating.
 struct RatingChartPerson: Identifiable, Equatable {
     let id: String
     let avatarURL: String?
@@ -215,7 +223,7 @@ enum MediaPageTint {
 }
 
 /// The header (the average, big, in the title's color) and the glowing curve under it, with the average as a hairline
-/// and the people who rated as photos on the curve.
+/// and the people who rated as a row of faces under the box.
 struct RatingsGlowChart: View {
     typealias G = RatingsChartGeometry
 
@@ -233,14 +241,16 @@ struct RatingsGlowChart: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
-    private static let headerHeight: CGFloat = 48
+    private static let headerHeight: CGFloat = 58
+    /// The number's own line box, at the header's bottom: its top sits 10 pt down (20 pt from the box's top).
+    private static let numberHeight: CGFloat = 48
     /// Air above the header, so the box's top edge sits 2 pt above the number's line.
     private static let topInset: CGFloat = 8
-    /// The Inner light box: from 6 pt down to the floor, 1 pt in from each side.
+    /// The Inner light box: from 6 pt down to the floor, 1 pt in from each side. It has no bottom edge.
     private static let boxTop: CGFloat = 6
     private static let boxRadius: CGFloat = 20
-    /// Where the header's content sits from the box's left edge, and the reviews link from the right.
-    private static let sideInset: CGFloat = 14
+    /// Where the number sits from the chart's left edge (22 pt in from the box's).
+    private static let sideInset: CGFloat = 23
 
     /// Inter Tight Black: the bundled variable font (`Resources/Fonts`, registered under `UIAppFonts`) with its
     /// weight axis set to 900 through the font descriptor. A fixed 44 pt, like the board's fixed 48 pt header,
@@ -267,11 +277,12 @@ struct RatingsGlowChart: View {
                 VStack(alignment: .leading, spacing: 0) {
                     header
                     chart(width: width)
+                    if !people.isEmpty { faces(width: width) }
                 }
                 .padding(.top, Self.topInset)
             }
         }
-        .frame(height: Self.topInset + Self.headerHeight + G.height)
+        .frame(height: Self.topInset + Self.headerHeight + G.height + (people.isEmpty ? 0 : G.facesRowHeight))
         .onAppear {
             // Reduce Motion: it is simply there.
             if reduceMotion { appeared = true }
@@ -284,18 +295,30 @@ struct RatingsGlowChart: View {
 
     // MARK: Box
 
-    /// No stroke and no fill: only a soft white glow just inside the edges, so the box is felt rather than drawn.
+    /// No stroke and no fill: only a soft white glow just inside the top and sides, fading out toward the bottom so
+    /// the curve itself reads as the box's floor.
     private var innerLightBox: some View {
-        // CSS `inset 0 0 18px rgba(255,255,255,.06)`: the area outside the box, blurred, clipped to the box.
+        // CSS `inset 0 0 18px rgba(255,255,255,.08)`: the area outside the box, blurred, clipped to the box.
         GeometryReader { geometry in
             let box = CGRect(origin: .zero, size: geometry.size)
             Path { path in
                 path.addRect(box.insetBy(dx: -40, dy: -40))
                 path.addRoundedRect(in: box, cornerSize: CGSize(width: Self.boxRadius, height: Self.boxRadius), style: .circular)
             }
-            .fill(Color.white.opacity(0.06), style: FillStyle(eoFill: true))
+            .fill(Color.white.opacity(0.08), style: FillStyle(eoFill: true))
             .blur(radius: 9)
             .clipShape(RoundedRectangle(cornerRadius: Self.boxRadius, style: .circular))
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: 0.35),
+                        .init(color: .clear, location: 0.92),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
         }
         .drawingGroup()
         .allowsHitTesting(false)
@@ -310,7 +333,7 @@ struct RatingsGlowChart: View {
                 .font(Self.numberFont)
                 .tracking(-2)
                 // The board's 48 pt line box, so the baseline lands where it does there.
-                .frame(height: Self.headerHeight)
+                .frame(height: Self.numberHeight)
                 .foregroundStyle(color)
                 // Softer than Home's title glow.
                 .shadow(color: color.opacity(0.24), radius: 6)
@@ -344,9 +367,9 @@ struct RatingsGlowChart: View {
                 }
                 .buttonStyle(.plain)
                 .frame(height: 38)
-                // The text sits 12 pt below the header's top, 20 pt in from the right: inside the box's corner.
-                .padding(.top, 2)
-                .padding(.trailing, 10)
+                // The text sits 14 pt below the header's top, 21 pt in from the chart's right edge (22 from the box's).
+                .padding(.top, 4)
+                .padding(.trailing, 11)
                 .accessibilityHint("Opens every written review")
             }
         }
@@ -364,7 +387,6 @@ struct RatingsGlowChart: View {
             RatingsCurveLayer(ys: ys, slopes: slopes, width: width, tint: color, appeared: appeared, animate: animate)
                 .equatable()
             hairline(x: averageX, crossing: hairY, animate: animate)
-            photos(ys: ys, width: width, animate: animate)
         }
         .frame(width: width, height: G.height, alignment: .topLeading)
         .accessibilityElement(children: .ignore)
@@ -398,37 +420,36 @@ struct RatingsGlowChart: View {
             .allowsHitTesting(false)
     }
 
-    private func photos(ys: [CGFloat], width: CGFloat, animate: Bool) -> some View {
-        let photoYs = G.photoYs(steps: people.map(\.step), ys: ys)
-        let slots = G.stackSlots(steps: people.map(\.step))
+    /// One row of faces just under the box, each centered at its rating's x, overlapping where ratings match.
+    private func faces(width: CGFloat) -> some View {
+        let animate = !reduceMotion
+        let slots = G.faceSlots(steps: people.map(\.step), chartWidth: width)
         var ranks = [Int](repeating: 0, count: people.count)
         for (rank, index) in people.indices.sorted(by: { (people[$0].step, $0) < (people[$1].step, $1) }).enumerated() {
             ranks[index] = rank
         }
         return ZStack(alignment: .topLeading) {
             ForEach(Array(people.enumerated()), id: \.element.id) { index, person in
-                let rank = ranks[index]
                 photo(person)
                     .scaleEffect(appeared ? 1 : 0.55)
                     .offset(y: appeared ? 0 : -28)
                     .opacity(appeared ? 1 : 0)
                     .animation(
-                        animate ? .spring(response: 0.55, dampingFraction: 0.62).delay(0.85 + Double(rank) * 0.11) : nil,
+                        animate ? .spring(response: 0.55, dampingFraction: 0.62).delay(0.85 + Double(ranks[index]) * 0.11) : nil,
                         value: appeared
                     )
-                    .position(
-                        x: G.x(step: person.step, chartWidth: width),
-                        y: photoYs[index]
-                    )
-                    .zIndex(Double(20 - slots[index]))
+                    .position(x: slots[index].x, y: G.faceCenterY)
+                    // You in front; then the first of a group in front of the next.
+                    .zIndex(person.isYou ? 30 : Double(20 - slots[index].rankInGroup))
             }
         }
+        .frame(width: width, height: G.facesRowHeight, alignment: .topLeading)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
     private func photo(_ person: RatingChartPerson) -> some View {
-        UserAvatar(urlString: person.avatarURL, size: G.photoSize)
+        UserAvatar(urlString: person.avatarURL, size: G.faceSize)
             .overlay {
                 // Friends' photos have no ring; yours has a white outline.
                 if person.isYou {
