@@ -630,14 +630,13 @@ def made_by_from_payload(payload):
     up after (``media.with_made_by``).
     """
     names = payload.get("made_by")
-    if names is None and payload.get("artist_credits"):
-        names = "".join(
-            f"{credit.get('name') or ''}{credit.get('join_phrase') or ''}"
-            for credit in payload["artist_credits"]
-            if isinstance(credit, dict)
-        )
     if names is None:
-        names = payload.get("author_name") or payload.get("artist_name")
+        credited = "".join(
+            f"{credit.get('name') or ''}{credit.get('join_phrase') or ''}"
+            for credit in payload.get("artist_credits") or []
+            if isinstance(credit, dict)
+        ).strip()
+        names = credited or payload.get("author_name") or payload.get("artist_name")
     if isinstance(names, str):
         names = [names]
     shown = []

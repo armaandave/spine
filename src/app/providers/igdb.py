@@ -315,8 +315,9 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
                 "image": get_image_url(media),
                 "total_rating_count": media.get("total_rating_count"),
                 "total_rating": media.get("total_rating"),
-                # Ranking drops first_release_date; release_date stays, as on discover rows.
-                "release_date": get_start_date(media),
+                # Ranking drops first_release_date. The year stays under a key ranking
+                # doesn't read (a release_date would count as a quality signal).
+                "release_year": _release_year(media),
                 "first_release_date": media.get("first_release_date"),
                 "game_type": media.get("game_type"),
                 "made_by": _developers(media),
@@ -346,10 +347,17 @@ def _developers(game):
     """The studios IGDB credits with developing a game, in its order; publishers and porters left out."""
     names = []
     for credit in game.get("involved_companies") or []:
-        name = ((credit.get("company") or {}).get("name") or "").strip() if isinstance(credit, dict) else ""
-        if credit.get("developer") and name and name not in names:
+        if not isinstance(credit, dict) or not credit.get("developer"):
+            continue
+        name = ((credit.get("company") or {}).get("name") or "").strip()
+        if name and name not in names:
             names.append(name)
     return names
+
+
+def _release_year(game):
+    start = get_start_date(game)
+    return int(start[:4]) if start else None
 
 
 def _search_names(query, base_conditions, offset, headers, *, count, timeout):

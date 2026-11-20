@@ -723,7 +723,10 @@ private struct SearchViewContent: View {
     /// Picks a media type, from the picker or a big word on the opening page: the picker's lens slides to it, the
     /// page shows that type, and any typed text searches it.
     private func pickKind(_ mediaType: String) {
-        selectedMediaTypeBinding.wrappedValue = mediaType
+        // The picker has set it already; a big word on the lists hasn't.
+        if selectedMediaTypeBinding.wrappedValue != mediaType {
+            selectedMediaTypeBinding.wrappedValue = mediaType
+        }
         Task { await searchCurrentQuery(mediaType: mediaType) }
     }
 

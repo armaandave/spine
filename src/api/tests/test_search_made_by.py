@@ -43,6 +43,9 @@ class SearchRowMadeByTests(TestCase):
         }
 
         self.assertEqual(made_by_from_payload(payload), ["Kendrick Lamar & SZA"])
+        # Credits with no names fall back to the row's artist.
+        blank = {"artist_credits": [{"name": "", "join_phrase": ""}], "artist_name": "Toto"}
+        self.assertEqual(made_by_from_payload(blank), ["Toto"])
 
     def test_names_are_trimmed_and_said_once(self):
         payload = {"made_by": [" Alan Moore ", "Dave Gibbons", "Alan Moore", "", None]}
@@ -77,12 +80,15 @@ class SearchMadeByLookupTests(TestCase):
         self.assertEqual(made_by.call_count, 2)
 
     @patch("api.services.media.tmdb.made_by", side_effect=RuntimeError("TMDB is down"))
-    def test_a_failed_lookup_leaves_the_year_alone_and_is_tried_again(self, made_by):
+    def test_a_failed_lookup_leaves_the_year_alone_and_waits_a_while_to_try_again(self, made_by):
         first = media_service.with_made_by([row(MediaTypes.MOVIE.value, "1")])
         second = media_service.with_made_by([row(MediaTypes.MOVIE.value, "1")])
+        cache.clear()
+        later = media_service.with_made_by([row(MediaTypes.MOVIE.value, "1")])
 
-        self.assertEqual(first[0]["made_by"], [])
-        self.assertEqual(second[0]["made_by"], [])
+        self.assertEqual([first[0]["made_by"], second[0]["made_by"], later[0]["made_by"]], [[], [], []])
+        # The second search doesn't ask TMDB again; once the failure is
+        # forgotten (the cache cleared, as MADE_BY_FAILED_TTL would), it does.
         self.assertEqual(made_by.call_count, 2)
 
     @patch("api.services.media.MADE_BY_WAIT_SECONDS", 0.05)

@@ -15,7 +15,7 @@ class SearchMadeByTests(TestCase):
 
     @patch("app.providers.igdb.get_access_token", return_value="token")
     @patch("app.providers.igdb.services.api_request")
-    def test_games_name_their_developers_and_keep_their_release_date(self, api_request, _token):
+    def test_games_name_their_developers_and_keep_their_year(self, api_request, _token):
         api_request.side_effect = [
             [
                 {
@@ -25,6 +25,7 @@ class SearchMadeByTests(TestCase):
                     "involved_companies": [
                         {"company": {"name": "Team Cherry"}, "developer": True},
                         {"company": {"name": "Porting House"}, "developer": False},
+                        12345,
                     ],
                 },
             ],
@@ -34,7 +35,9 @@ class SearchMadeByTests(TestCase):
         game = igdb.search("silksong", 1)["results"][0]
 
         self.assertEqual(game["made_by"], ["Team Cherry"])
-        self.assertEqual(game["release_date"], "2025-09-04")
+        self.assertEqual(game["release_year"], 2025)
+        # A release_date would count for ranking; the year rides on its own key.
+        self.assertNotIn("release_date", game)
         self.assertIn("involved_companies.developer", api_request.call_args_list[0].kwargs["data"])
 
     @patch("app.providers.mal.services.api_request")

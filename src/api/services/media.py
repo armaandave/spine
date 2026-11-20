@@ -118,6 +118,9 @@ MADE_BY_CACHE_VERSION = "v1"
 MADE_BY_TTL = 60 * 60 * 24 * 30
 # A title not out yet may name its director later.
 MADE_BY_EMPTY_TTL = 60 * 60 * 24
+# A lookup that failed (TMDB down or limiting) is remembered this long, so search
+# doesn't wait on the same titles again meanwhile.
+MADE_BY_FAILED_TTL = 60 * 5
 # How many of a search's titles, top first, are looked up (a whole page, so
 # every row reads alike), how many at once, and how long the search waits.
 MADE_BY_LOOKUPS = 24
@@ -838,7 +841,8 @@ def with_made_by(results):
     Each title's names are cached for a month. A search looks up its top titles not
     cached yet, all at once, and waits up to MADE_BY_WAIT_SECONDS; a lookup that
     takes longer still fills the cache for the next search. A row whose lookup fails
-    or isn't back in time says only its year.
+    or isn't back in time says only its year, and a failed one isn't tried again for
+    MADE_BY_FAILED_TTL.
     """
     rows = {}
     for result in results:
@@ -895,6 +899,8 @@ def _made_by(key, media_type, media_id):
             media_id,
             type(error).__name__,
         )
+        with suppress(ConnectionInterrupted, RedisError, ConnectionError, OSError):
+            cache.set(key, [], MADE_BY_FAILED_TTL)
         raise
     with suppress(ConnectionInterrupted, RedisError, ConnectionError, OSError):
         cache.set(key, names, MADE_BY_TTL if names else MADE_BY_EMPTY_TTL)
