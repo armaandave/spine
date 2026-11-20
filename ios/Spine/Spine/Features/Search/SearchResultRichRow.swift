@@ -124,7 +124,6 @@ struct SearchResultRichRow: View {
 
     private var accessibilityText: String {
         var parts = [result.displayTitle]
-        if MusicContentRating.isExplicit(result.contentRating) { parts.append("Explicit") }
         if let line = SearchRowText.spokenLine(
             mediaType: result.ref.mediaType,
             makers: result.madeBy,
@@ -148,9 +147,9 @@ struct SearchResultRichRow: View {
     }
 }
 
-/// The line under a result's title: the kind's icon when the search covers every kind, an explicit album's "E", then
-/// who made it and the year ("Denis Villeneuve · 2021"). The year is never cut: a name too long for the line ends in
-/// "…". With no maker known it says the year, with no year the maker, and with neither the kind ("Game").
+/// The line under a result's title: the kind's icon when the search covers every kind, then who made it and the year
+/// ("Denis Villeneuve · 2021"). The year is never cut: a name too long for the line ends in "…". With no maker known
+/// it says the year, with no year the maker, and with neither the kind ("Game").
 private struct SearchRowMadeByLine: View {
     let result: MediaSummary
     let showsKind: Bool
@@ -165,9 +164,6 @@ private struct SearchRowMadeByLine: View {
                     .saturation(0)
                     .opacity(0.6)
                     .frame(width: 16)
-            }
-            if MusicContentRating.isExplicit(result.contentRating) {
-                Text.explicitBadge
             }
             if credits.count > 1 {
                 ViewThatFits(in: .horizontal) {
