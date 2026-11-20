@@ -23,25 +23,31 @@ struct HomeTilesSection: View {
     var body: some View {
         let _ = PerfCounters.bump(.tilesBody)
         let height = TileGeometry.containerHeight(isOpen: state.open != nil)
-        ZStack(alignment: .topLeading) {
-            // Under the tiles: a poster in flight covers the line and never has it drawn across its face.
-            HomeSeam(state: state, contentWidth: contentWidth)
-                .zIndex(0)
-            ForEach(HomeTileID.allCases, id: \.self) { tile in
-                HomeTile(
-                    tile: tile,
-                    contentWidth: contentWidth,
-                    model: model,
-                    state: state,
-                    glow: glow,
-                    actions: actions,
-                    onOpen: { openTile(tile) },
-                    onClose: closeTile
-                )
+        // The section takes the width the page offers and measures that; the tiles draw in an overlay that never
+        // sizes it. Each tile is as wide as the measured width, so if they sized the section, a phone narrower than
+        // the stand-in width would keep the stand-in for good.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: height, alignment: .top)
+            .overlay(alignment: .topLeading) {
+                ZStack(alignment: .topLeading) {
+                    // Under the tiles: a poster in flight covers the line and never has it drawn across its face.
+                    HomeSeam(state: state, contentWidth: contentWidth)
+                        .zIndex(0)
+                    ForEach(HomeTileID.allCases, id: \.self) { tile in
+                        HomeTile(
+                            tile: tile,
+                            contentWidth: contentWidth,
+                            model: model,
+                            state: state,
+                            glow: glow,
+                            actions: actions,
+                            onOpen: { openTile(tile) },
+                            onClose: closeTile
+                        )
+                    }
+                }
             }
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .frame(height: height, alignment: .top)
         .animation(TileMotion.frame(closing: state.open == nil, reduceMotion: reduceMotion), value: height)
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
