@@ -224,7 +224,8 @@ cap), so a log and a day's progress on the same title read apart.
   episode it covers (TV-400), the episodes it told lit from the end back.
 - **No bar:** a film or album log, an episode log, a game with hours alone, a book or series
   with no length, a length under two, and an old TV or anime log with nothing stamped. The
-  card ends the log's marks in the check instead.
+  card ends the log's marks in the check instead, except on a film or album, which has no
+  progress day to be told apart from.
 - **The card:** the bar sits where a progress day's does. A log with a review line or the
   spoilers chip grows one line (136 pt) to keep it; every other card stays 115 pt. A
   progress day never ends in a check. The log's page shows the card's amount and bar when

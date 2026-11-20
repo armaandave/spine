@@ -29,7 +29,7 @@ enum FeedCardPresenter {
         case "diary":
             kind = .log
             meter = logMeter(for: item)
-            headline = logHeadline(for: item, check: meter == nil)
+            headline = logHeadline(for: item, check: meter == nil && hasProgress(item))
         case "progress_day":
             let day = progressDay(for: item, standing: standing)
             kind = day.kind
@@ -95,6 +95,13 @@ enum FeedCardPresenter {
             to: Int(bar.to.rounded()),
             total: Int(bar.total.rounded())
         )
+    }
+
+    /// Whether the title's type has progress days a log could be mistaken for. Films and albums don't, so their logs
+    /// need no check.
+    private static func hasProgress(_ item: ActivityItem) -> Bool {
+        guard let type = item.media?.ref.mediaType else { return false }
+        return type != "movie" && type != "music"
     }
 
     // MARK: Title and tag

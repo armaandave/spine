@@ -222,11 +222,8 @@ final class FeedCardPresenterTests: XCTestCase {
         XCTAssertNil(card.tag)
         XCTAssertEqual(
             card.headline,
-            .marks(
-                starSymbols: fullStars + ["star.leadinghalf.filled"], liked: true, rewatch: true, repeatLabel: "Rewatch",
-                check: true
-            ),
-            "A film has no bar, so its check ends the marks"
+            .marks(starSymbols: fullStars + ["star.leadinghalf.filled"], liked: true, rewatch: true, repeatLabel: "Rewatch"),
+            "A film has no progress to be mistaken for, so no check"
         )
         // Under a headline the 115 pt card has room for one line.
         XCTAssertEqual(card.details, [.review(text: "the hills chase alone is worth the ticket", lines: 1)])
