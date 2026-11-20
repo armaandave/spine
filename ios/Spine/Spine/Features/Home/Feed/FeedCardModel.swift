@@ -22,8 +22,11 @@ nonisolated enum FeedHeadline: Equatable, Sendable {
     /// A log's stars, heart and rewatch glyph. `repeatLabel` names the glyph for VoiceOver ("Rewatch", "Reread").
     /// `amount` is what the log added, muted after the marks as the Activity list says it ("+99 pages": the pages a
     /// finish took after the last save); nil when it added nothing, tells no amount (a film, an album) or is an
-    /// episode's own log, whose tag already names it.
-    case marks(starSymbols: [String], liked: Bool, rewatch: Bool, repeatLabel: String, amount: String? = nil)
+    /// episode's own log, whose tag already names it. `check` ends the line with the log's check when the log has no
+    /// bar to end it on.
+    case marks(
+        starSymbols: [String], liked: Bool, rewatch: Bool, repeatLabel: String, amount: String? = nil, check: Bool = false
+    )
     /// A day's amount ("+3 episodes") in the card accent, then the muted real "where" when the friend's standing
     /// knows it, and the status pills. A card draws the pills when it has them, else the tail.
     case progress(amount: String, tail: String?, pills: [String])
@@ -79,4 +82,8 @@ struct FeedCardModel: Identifiable, Equatable {
     let accessibilityLabel: String
     let accessibilityHint: String
     let destination: ActivityDestination
+    /// The card's height: 115, or one review line taller for a log that draws its bar and has a line to show.
+    var height: CGFloat = HomeDesign.Metric.cardHeight
+    /// Whether the meter is a log's: it ends in the log's check (the Check cap).
+    var meterCheck: Bool = false
 }

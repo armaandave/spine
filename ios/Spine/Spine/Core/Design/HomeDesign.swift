@@ -16,6 +16,12 @@ nonisolated enum HomeDesign {
 
         /// 30% shorter than the mock's 164.
         static let cardHeight: CGFloat = 115
+        /// A log that draws its bar and has a review line (or the spoilers chip) to keep: one line taller, so the line
+        /// sits between the headline and the bar.
+        static let logCardHeight: CGFloat = 136
+        /// The log's check at the end of its bar, and the gap before it.
+        static let checkSize: CGFloat = 14
+        static let checkGap: CGFloat = 8
         static let cardCorner: CGFloat = 20
         static let cardPoster = CGSize(width: 60, height: 90)
         static let cardSquare = CGSize(width: 90, height: 90)

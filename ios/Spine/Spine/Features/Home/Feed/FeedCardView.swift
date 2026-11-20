@@ -56,7 +56,7 @@ struct FeedCardView: View, Equatable {
                 .padding(.trailing, HomeDesign.Metric.cardTrailing)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: HomeDesign.Metric.cardHeight)
+        .frame(height: model.height)
         // The ink settles over 0.18 s when the art is measured, instead of jumping.
         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: ink)
         .dynamicTypeSize(...HomeDesign.Text.maxCategory)
@@ -117,9 +117,14 @@ struct FeedCardView: View, Equatable {
 
     /// The meter's top edge: its drawing ends `meterBottom` above the card's bottom, level with the counts, so a
     /// window (ticks and a series line) starts higher than plain ticks or a bar.
-    static func meterTop(for kind: ProgressMeterModel.Kind) -> CGFloat {
-        HomeDesign.Metric.cardHeight - HomeDesign.Metric.meterBottom - ProgressMeterMetrics.height(for: kind)
+    static func meterTop(
+        for kind: ProgressMeterModel.Kind, cardHeight: CGFloat = HomeDesign.Metric.cardHeight
+    ) -> CGFloat {
+        cardHeight - HomeDesign.Metric.meterBottom - ProgressMeterMetrics.height(for: kind)
     }
+
+    /// Room the log's check takes at the end of its bar.
+    static let checkReserve = HomeDesign.Metric.checkSize + HomeDesign.Metric.checkGap
 
     /// Room kept at the right of the detail rows and the meter for the counts pill, from its digits rather than
     /// measured (`FeedCountsPill.reserve`). A card without counts (a Planning day) keeps none.
@@ -136,7 +141,7 @@ struct FeedCardView: View, Equatable {
             textColumn(ink: ink)
             if let meter = model.meter {
                 meterView(meter, ink: ink)
-                    .padding(.top, Self.meterTop(for: meter.kind))
+                    .padding(.top, Self.meterTop(for: meter.kind, cardHeight: model.height))
                     .padding(.leading, textLeading)
                     .padding(.trailing, HomeDesign.Metric.cardTrailing + Self.countsReserve(for: model.engagement))
                     .transition(.opacity)
@@ -176,16 +181,24 @@ struct FeedCardView: View, Equatable {
     }
 
     /// The bar. The plain one is always there and the poster-colored one fades in over it in the card's 0.18 s, so
-    /// colors that arrive late never pop.
+    /// colors that arrive late never pop. A log's bar ends in its check, in the bar's lit color.
     private func meterView(_ meter: ProgressMeterModel, ink: ArtInk) -> some View {
         let accent = ink.accent(posterAccentHex: model.art.accentHex)
         let tint = meterTint(ink: ink)
-        return ZStack(alignment: .topLeading) {
-            ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: nil))
-                .opacity(tint == nil ? 1 : 0)
-            if let tint {
-                ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: tint))
-                    .transition(.opacity)
+        let palette = FeedMeterColors.palette(ink: ink, accent: accent, tint: tint)
+        return HStack(alignment: .top, spacing: HomeDesign.Metric.checkGap) {
+            ZStack(alignment: .topLeading) {
+                ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: nil))
+                    .opacity(tint == nil ? 1 : 0)
+                if let tint {
+                    ProgressMeterView(model: meter, palette: FeedMeterColors.palette(ink: ink, accent: accent, tint: tint))
+                        .transition(.opacity)
+                }
+            }
+            if model.meterCheck {
+                // Centered on the 8 pt ticks or bar, whatever the meter's kind.
+                LogCheckMark(color: palette.todayColor)
+                    .offset(y: (ProgressMeterMetrics.tickHeight - HomeDesign.Metric.checkSize) / 2)
             }
         }
         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: tint != nil)
@@ -242,7 +255,7 @@ struct FeedCardView: View, Equatable {
     private func headlineRow(_ headline: FeedHeadline, ink: ArtInk) -> some View {
         HStack(spacing: isMarks(headline) ? HomeDesign.FeedDepth.markGroupSpacing : 6) {
             switch headline {
-            case let .marks(starSymbols, liked, rewatch, _, amount):
+            case let .marks(starSymbols, liked, rewatch, _, amount, check):
                 if !starSymbols.isEmpty {
                     HStack(spacing: HomeDesign.FeedDepth.markStarSpacing) {
                         ForEach(Array(starSymbols.enumerated()), id: \.offset) { _, symbol in
@@ -268,6 +281,9 @@ struct FeedCardView: View, Equatable {
                         .lineLimit(1)
                         .feedTextLift(ink)
                         .foregroundStyle(ink.muted)
+                }
+                if check {
+                    LogCheckMark(color: ink.accent(posterAccentHex: model.art.accentHex))
                 }
             case let .progress(amount, tail, pills):
                 Text(amount)
