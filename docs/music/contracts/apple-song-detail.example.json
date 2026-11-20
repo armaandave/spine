@@ -106,6 +106,8 @@
     "poster_orientation": "square",
     "poster_accent_color": null,
     "release_date": "2022-12-09",
+    "year": 2022,
+    "made_by": [],
     "genres": [
       "R&B/Soul"
     ],
@@ -154,6 +156,8 @@
       "poster_orientation": "square",
       "poster_accent_color": null,
       "release_date": "2022-12-09",
+      "year": 2022,
+      "made_by": [],
       "genres": [
         "R&B/Soul"
       ],

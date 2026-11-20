@@ -336,6 +336,8 @@ nonisolated struct FeaturedShelf: Codable, Hashable, Identifiable {
     let lists: [FeaturedListCard]
     /// The server's see-all path; nil when the shelf has none ("Now", and every legacy shelf).
     let seeAll: String?
+    /// Where the shelf's lists come from, best known first (empty from servers that don't send them).
+    let sources: [FeaturedShelfSource]
 
     var id: String { key }
     var isNow: Bool { key == Self.nowKey }
@@ -351,7 +353,8 @@ nonisolated struct FeaturedShelf: Codable, Hashable, Identifiable {
         liveCount: Int = 0,
         kindCounts: [String: Int] = [:],
         lists: [FeaturedListCard],
-        seeAll: String? = nil
+        seeAll: String? = nil,
+        sources: [FeaturedShelfSource] = []
     ) {
         self.key = key
         self.title = title
@@ -361,6 +364,7 @@ nonisolated struct FeaturedShelf: Codable, Hashable, Identifiable {
         self.kindCounts = kindCounts
         self.lists = lists
         self.seeAll = seeAll
+        self.sources = sources
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -372,6 +376,7 @@ nonisolated struct FeaturedShelf: Codable, Hashable, Identifiable {
         case kindCounts
         case lists
         case seeAll
+        case sources
     }
 
     init(from decoder: Decoder) throws {
@@ -389,6 +394,39 @@ nonisolated struct FeaturedShelf: Codable, Hashable, Identifiable {
         liveCount = container.lenient(Int.self, forKey: .liveCount) ?? 0
         kindCounts = container.lenient([String: Int].self, forKey: .kindCounts) ?? [:]
         seeAll = container.lenient(String.self, forKey: .seeAll)?.nilIfBlank
+        sources = container.lenient(FeaturedLossyArray<FeaturedShelfSource>.self, forKey: .sources)?.elements ?? []
+    }
+}
+
+/// One place a shelf's lists come from, by the name people know ("Oscars"), with its icon and how many of the
+/// shelf's lists it made.
+nonisolated struct FeaturedShelfSource: Codable, Hashable, Identifiable {
+    let name: String
+    let iconUrl: String?
+    let lists: Int
+
+    var id: String { name }
+
+    init(name: String, iconUrl: String? = nil, lists: Int = 1) {
+        self.name = name
+        self.iconUrl = iconUrl
+        self.lists = lists
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case iconUrl
+        case lists
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard let name = container.lenient(String.self, forKey: .name)?.nilIfBlank else {
+            throw DecodingError.dataCorruptedError(forKey: .name, in: container, debugDescription: "A source needs a name")
+        }
+        self.name = name
+        iconUrl = container.lenient(String.self, forKey: .iconUrl)?.nilIfBlank
+        lists = container.lenient(Int.self, forKey: .lists) ?? 1
     }
 }
 

@@ -18,7 +18,8 @@ headers = {
     "User-Agent": "Mozilla/5.0",
 }
 
-COMIC_SEARCH_CACHE_VERSION = "v3"
+# v4: a search row names its publisher as who made it.
+COMIC_SEARCH_CACHE_VERSION = "v4"
 ISSUE_COUNT_TIMEOUT_SECONDS = 5
 # Comic Vine's search endpoint gives every volume this stand-in cover.
 PLACEHOLDER_IMAGE_SUFFIX = "-blank.png"
@@ -223,6 +224,11 @@ def build_search_results(items, query=None):
                 "subtitle": _search_subtitle(item, issue_count),
                 "image": get_image(item),
                 "first_publish_year": item.get("start_year"),
+                # Ranking drops first_publish_year; start_year stays.
+                "start_year": item.get("start_year"),
+                # A volume search doesn't say who wrote or drew it; Comic Vine's people come one
+                # lookup a volume, at 200 lookups an hour.
+                "made_by": [publisher] if (publisher := _publisher_name(item).strip()) else [],
                 "provider_rank_boost": rank_boost,
             },
         )
