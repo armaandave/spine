@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Builds a title's page from anywhere, with the app's repositories, for a poster's hold menu to open: Log opens it with
-/// the log up (`RailHandoff.log`). Set by `AppShellView`.
+/// Builds a title's page from anywhere, with the app's repositories, for a poster's hold menu to open: Go to Title, or
+/// an eye the page has to finish (`RailHandoff`). Set by `AppShellView`.
 struct TitlePageBuilder {
     let build: (MediaRef, RailHandoff?) -> AnyView
 }
@@ -121,7 +121,10 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
         if let shelf = menu.shelf {
             Text(shelf)
         }
-        quickRow(menu, controller.title(for: media.ref), controller)
+        // No row while the title is in progress: just its shelf line.
+        if !menu.quick.isEmpty {
+            quickRow(menu, controller.title(for: media.ref), controller)
+        }
         Section {
             Button("Add to List…", systemImage: "text.badge.plus") {
                 controller.addToList = media
@@ -144,9 +147,8 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
         }
     }
 
-    /// The icons along the top, as on the title page's rail: the eye (closed once watched), the bookmark, or +. The eye
-    /// and the bookmark flip where they're tapped and the menu stays open; + opens the title's log and closes it. A tap
-    /// still on its way shows its new state (`PosterHoldTitle`).
+    /// The icons along the top, as on the title page's rail: the eye (closed once watched) and the bookmark. Both flip
+    /// where they're tapped and the menu stays open. A tap still on its way shows its new state (`PosterHoldTitle`).
     private func quickRow(_ menu: PosterHoldMenu, _ title: PosterHoldTitle, _ controller: PosterHoldController) -> some View {
         ControlGroup {
             ForEach(Array(menu.quick.enumerated()), id: \.offset) { _, quick in
@@ -163,10 +165,6 @@ private struct PosterHoldMenuModifier<Place: View>: ViewModifier {
                         controller.run(.planning(wasFilled: shown), on: media.ref, flips: true, open: open)
                     }
                     .menuActionDismissBehavior(.disabled)
-                case .log:
-                    Button("Log", systemImage: "plus") {
-                        open(.log)
-                    }
                 }
             }
         }

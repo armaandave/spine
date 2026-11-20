@@ -51,17 +51,17 @@ final class PosterHoldMenuTests: XCTestCase {
         XCTAssertEqual(PosterHoldMenu(ref: ref("tv"), viewer: show).quick.last, .planning(isFilled: true), "A show's own state decides")
     }
 
-    func testInProgressPutsLogInWatchedsPlaceOnEveryType() {
+    func testInProgressHasNoRowJustItsShelfOnEveryType() {
         for (type, source) in types {
             let menu = PosterHoldMenu(ref: ref(type, source: source), viewer: UserMediaState(isTracked: true, status: "In progress"))
-            XCTAssertEqual(menu.quick, [.log], type)
+            XCTAssertEqual(menu.quick, [], type)
             XCTAssertEqual(menu.shelf, PosterHoldMenu.shelfName(status: "In progress", mediaType: type), type)
         }
         let watching = UserMediaState(isTracked: true, tv: TVShowState(inLibrary: true, status: "In progress"))
-        XCTAssertEqual(PosterHoldMenu(ref: ref("tv"), viewer: watching).quick, [.log])
+        XCTAssertEqual(PosterHoldMenu(ref: ref("tv"), viewer: watching).quick, [])
     }
 
-    func testOnlyInProgressGetsLogPausedAndDroppedKeepWatched() {
+    func testPausedAndDroppedKeepTheEye() {
         for status in ["Paused", "Dropped"] {
             let menu = PosterHoldMenu(ref: ref("book", source: "hardcover"), viewer: UserMediaState(isTracked: true, status: status))
             XCTAssertEqual(menu.quick, [.watched(word: watchedWord("book"), isFilled: false)], status)
@@ -107,7 +107,7 @@ final class PosterHoldMenuTests: XCTestCase {
         let season = ref("season", season: 2)
         XCTAssertEqual(PosterHoldMenu(ref: season, viewer: nil).quick, [.watched(word: watchedWord("tv"), isFilled: false)])
         let watching = UserMediaState(isTracked: true, status: "In progress", tv: TVShowState(inLibrary: true, status: "In progress"))
-        XCTAssertEqual(PosterHoldMenu(ref: season, viewer: watching).quick, [.log])
+        XCTAssertEqual(PosterHoldMenu(ref: season, viewer: watching).quick, [])
         XCTAssertFalse(PosterHoldMenu(ref: season, viewer: watching).offersRemoval)
     }
 

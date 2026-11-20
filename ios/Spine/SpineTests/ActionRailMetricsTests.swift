@@ -47,8 +47,7 @@ final class RailHandoffTests: XCTestCase {
             track: { calls.append("track") },
             eye: { calls.append("eye") },
             like: { calls.append("like") },
-            rate: { calls.append("rate \($0)") },
-            log: { calls.append("log") }
+            rate: { calls.append("rate \($0)") }
         )
         return calls
     }
@@ -59,6 +58,5 @@ final class RailHandoffTests: XCTestCase {
         XCTAssertEqual(run(.like), ["like"])
         XCTAssertEqual(run(.rate(halfSteps: 7)), ["rate 7"])
         XCTAssertEqual(run(.rate(halfSteps: 0)), ["rate 0"], "Taking a rating away is a rate too")
-        XCTAssertEqual(run(.log), ["log"])
     }
 }

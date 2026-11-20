@@ -3301,21 +3301,8 @@ private struct MediaDetailPageView: View {
             track: { trackAction(for: detail) },
             eye: { eyeAction(for: detail) },
             like: { likeAction(for: detail) },
-            rate: { ratingAction(for: detail, halfSteps: $0) },
-            log: { logAction(for: detail) }
+            rate: { ratingAction(for: detail, halfSteps: $0) }
         )
-    }
-
-    /// What the page's Log opens for this type: a show's or anime's log screen, a book's or game's finishing log, or
-    /// the + log for everything else.
-    private func logAction(for detail: MediaDetail) {
-        if detail.ref.isTVFamily || viewModel.tracksAnime {
-            openTVComposer()
-        } else if detail.ref.readsLikeBook || detail.ref.mediaType == "game" {
-            openBookCompletion(for: detail)
-        } else {
-            trackAction(for: detail)
-        }
     }
 
     private func tvTrackAction(for detail: MediaDetail) {

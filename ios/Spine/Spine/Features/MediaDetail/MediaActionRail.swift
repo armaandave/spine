@@ -31,23 +31,19 @@ enum RailHandoff: Equatable {
     case eye
     case like
     case rate(halfSteps: Int)
-    /// The log screen the page's Log opens, straight away (the poster hold menu's + Log).
-    case log
 
     /// Runs the page's function for this handoff.
     func run(
         track: () -> Void,
         eye: () -> Void,
         like: () -> Void,
-        rate: (Int) -> Void,
-        log: () -> Void
+        rate: (Int) -> Void
     ) {
         switch self {
         case .track: track()
         case .eye: eye()
         case .like: like()
         case let .rate(halfSteps): rate(halfSteps)
-        case .log: log()
         }
     }
 }

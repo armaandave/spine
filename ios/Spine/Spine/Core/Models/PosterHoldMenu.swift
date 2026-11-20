@@ -3,17 +3,15 @@ import Foundation
 /// What touching and holding a poster offers, worked out from your own state for the title with the rules the title's
 /// page and Home's Trending rail already use, so each choice does what the same button does there.
 ///
-/// The top follows where you are with the title: Watched and Planning while it isn't started, + Log in Watched's place
-/// while it's in progress. Planning shows only while the title can be planned, as on the Trending rail, and is filled
-/// while the title is in Planning. The shelf line shows only for a title in your library.
+/// The top follows where you are with the title: the eye and Planning, except while it's in progress, when there is no
+/// row at all, just the shelf line. Planning shows only while the title can be planned, as on the title page, and is
+/// filled while the title is in Planning. The shelf line shows only for a title in your library.
 struct PosterHoldMenu: Equatable {
     enum Quick: Equatable {
         /// The page's eye: marks the title watched (listened, read, played), or, filled, undoes that.
         case watched(word: String, isFilled: Bool)
         /// The bookmark: adds the title to Planning, or, filled, takes it back out.
         case planning(isFilled: Bool)
-        /// + Log: the title's log screen, opened on its page.
-        case log
     }
 
     /// The Library shelf the title is on; nil when it isn't in your library.
@@ -31,7 +29,8 @@ struct PosterHoldMenu: Equatable {
         shelf = inLibrary ? Self.shelfName(status: status, mediaType: ref.mediaType) : nil
 
         if Self.matches(status, "In progress") {
-            quick = [.log]
+            // Started, so no Planning, and the eye has no place mid-way: the shelf line says where you are.
+            quick = []
             eyeStaysOpen = false
         } else {
             let config = viewer.map { TrendingRailConfig.make(title: "", ref: ref, viewer: $0) }
