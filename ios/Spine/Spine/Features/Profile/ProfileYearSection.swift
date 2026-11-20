@@ -4,7 +4,7 @@ import SwiftUI
 /// The profile's This Year section, under the menu: this year's numbers per turned-on type, the Stats page's own
 /// (STAT-312), on a glass plate over a wall of the year's posters. The wall is as wide as the menu. Its top tucks
 /// under the Stats row, fading in from under the menu's glass, and it runs on below the plate, fading off the bottom
-/// of the screen. Under 9 posters there's no wall: the numbers sit on glass like the menu's. Each type with something
+/// of the screen. Under 12 posters there's no wall: the numbers sit on glass like the menu's. Each type with something
 /// this year opens the Stats page on that type and year.
 struct ProfileYearSection<Destination: View>: View {
     let year: ProfileYear
@@ -131,14 +131,14 @@ struct ProfileYearSection<Destination: View>: View {
     }
 }
 
-/// The wall's grid, worked out from the posters and the space, never from fixed steps: the most posters that fill
-/// the wall with no gaps, at most 6 across, each cell within 20% of a poster's 2:3 shape. Under 9 posters there's
-/// no wall. A taller wall (more types on the plate) takes more rows; a count in between drops to the step below it.
+/// The wall's grid, worked out from the posters and the space, never from fixed steps. Every cell is exactly a
+/// poster's 2:3 shape, so nothing is cropped, and the rows run from the top down past the wall's faded bottom. The
+/// grid takes the most columns, up to 6, whose rows the posters fill; under 12 posters there's no wall.
 enum ProfileYearWall {
-    static let minimumPosters = 9
+    static let minimumPosters = 12
     static let maximumAcross = 6
-    static let posterShape: CGFloat = 2.0 / 3.0
-    static let shapeSlack: CGFloat = 0.2
+    /// A poster is 2 wide by 3 tall.
+    static let posterHeightPerWidth: CGFloat = 1.5
     static let gap: CGFloat = 2
     /// How far the top runs up under the Stats row.
     static let tuck: CGFloat = 48
@@ -165,32 +165,20 @@ enum ProfileYearWall {
 
     static func grid(posters: Int, width: CGFloat, height: CGFloat) -> Grid? {
         guard posters >= minimumPosters, width > 0, height > 0 else { return nil }
-        var best: Grid?
-        var bestOff = CGFloat.infinity
-        for across in 1...maximumAcross {
-            var down = 1
-            while across * down <= posters {
-                let cell = cellSize(Grid(across: across, down: down), width: width, height: height)
-                let shape = cell.width / cell.height
-                if shape >= posterShape * (1 - shapeSlack), shape <= posterShape * (1 + shapeSlack) {
-                    let off = abs(shape - posterShape)
-                    let count = across * down
-                    if count > best?.count ?? 0 || (count == best?.count && off < bestOff) {
-                        best = Grid(across: across, down: down)
-                        bestOff = off
-                    }
-                }
-                down += 1
+        for across in stride(from: maximumAcross, through: 1, by: -1) {
+            let cell = cellSize(across: across, width: width)
+            // Enough rows to reach the wall's bottom edge; the last one may run past it, into the fade.
+            let down = Int(((height + gap) / (cell.height + gap)).rounded(.up))
+            if across * down <= posters {
+                return Grid(across: across, down: down)
             }
         }
-        return best
+        return nil
     }
 
-    static func cellSize(_ grid: Grid, width: CGFloat, height: CGFloat) -> CGSize {
-        CGSize(
-            width: (width - CGFloat(grid.across - 1) * gap) / CGFloat(grid.across),
-            height: (height - CGFloat(grid.down - 1) * gap) / CGFloat(grid.down)
-        )
+    static func cellSize(across: Int, width: CGFloat) -> CGSize {
+        let cellWidth = (width - CGFloat(across - 1) * gap) / CGFloat(across)
+        return CGSize(width: cellWidth, height: cellWidth * posterHeightPerWidth)
     }
 
     /// The wall's opacity down its drawn height, as (location 0...1, alpha): nothing at the top, under the menu; a
@@ -265,21 +253,21 @@ enum ProfileYearWallRenderer {
             urls = posters.prefix(grid.count).map { URL(string: $0.displayPosterURL ?? "") }
             self.width = width
             self.height = height
-            // A dimmed, faded backdrop: 2x is sharp enough and keeps the picture a third of the size at 3x.
-            scale = min(displayScale, 2)
+            // The screen's own sharpness: anything less is stretched up and looks soft.
+            scale = displayScale
         }
     }
 
     private static var drawn: [Key: UIImage] = [:]
     private static var order: [Key] = []
-    private static let keep = 3
+    private static let keep = 2
 
     static func cached(_ key: Key) -> UIImage? {
         drawn[key]
     }
 
     static func render(_ key: Key) async -> UIImage? {
-        let cell = ProfileYearWall.cellSize(key.grid, width: key.size.width, height: key.size.height)
+        let cell = ProfileYearWall.cellSize(across: key.grid.across, width: key.width)
         let requests = key.urls.map { SpineImagePipeline.request(url: $0, thumbnailSize: cell) }
         // Every poster at its cell's size, all at once, through the app's image caches.
         let posters = await withTaskGroup(of: (Int, UIImage?).self) { group in
@@ -330,8 +318,8 @@ private nonisolated struct WallPlan: Sendable {
     let cornerRadius: CGFloat
     let fade: [(location: CGFloat, alpha: CGFloat)]
 
-    /// Each poster as the live wall drew it: filling its cell over the tile color, 10% less saturated, darkened 22%,
-    /// at 62%. Then the top corners rounded and the fades applied as the picture's own transparency.
+    /// Each poster filling its poster-shaped cell over the tile color, 10% less saturated, darkened 22%, at 62%. Then
+    /// the top corners rounded and the fades applied as the picture's own transparency.
     func draw(_ posters: [UIImage?]) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale

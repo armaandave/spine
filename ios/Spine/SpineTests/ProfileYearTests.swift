@@ -3,28 +3,22 @@ import XCTest
 
 /// The profile's This Year section: the wall's grid rule and the rows built from the server's numbers (STAT-312).
 final class ProfileYearTests: XCTestCase {
-    func testWallTakesTheMostPostersThatFillItAtAPostersShape() {
-        // A menu-width wall on a 430 pt phone: 398 wide by 568 tall.
-        let steps = [8, 9, 15, 16, 19, 20, 24, 25, 29, 30, 35, 36, 50].map { posters in
-            ProfileYearWall.grid(posters: posters, width: 398, height: 568).map { [$0.across, $0.down] }
+    func testWallTakesTheMostColumnsItsPostersFillAtAPostersShape() {
+        // A menu-width wall on a 430 pt phone with four types: 398 wide by 769 tall.
+        let steps = [11, 12, 23, 24, 34, 35, 47, 48, 60].map { posters in
+            ProfileYearWall.grid(posters: posters, width: 398, height: 769).map { [$0.across, $0.down] }
         }
-        XCTAssertEqual(steps, [
-            nil,
-            [3, 3], [3, 3],
-            [4, 4], [4, 4],
-            [5, 4], [5, 4],
-            [5, 5], [5, 5],
-            [6, 5], [6, 5],
-            [6, 6], [6, 6],
-        ])
-        // Every wall is full: no gaps, and never more than 6 across.
-        for posters in 9...60 {
-            guard let grid = ProfileYearWall.grid(posters: posters, width: 398, height: 568) else {
+        XCTAssertEqual(steps, [nil, [3, 4], [3, 4], [4, 6], [4, 6], [5, 7], [5, 7], [6, 8], [6, 8]])
+        for posters in 12...60 {
+            guard let grid = ProfileYearWall.grid(posters: posters, width: 398, height: 769) else {
                 XCTFail("No wall for \(posters) posters")
                 continue
             }
+            let cell = ProfileYearWall.cellSize(across: grid.across, width: 398)
+            // Never more posters than there are, every cell exactly 2:3, and the rows reach the wall's bottom.
             XCTAssertLessThanOrEqual(grid.count, posters)
-            XCTAssertLessThanOrEqual(grid.across, ProfileYearWall.maximumAcross)
+            XCTAssertEqual(cell.height / cell.width, 1.5, accuracy: 0.0001)
+            XCTAssertGreaterThanOrEqual(CGFloat(grid.down) * (cell.height + ProfileYearWall.gap) - ProfileYearWall.gap, 769)
         }
     }
 
