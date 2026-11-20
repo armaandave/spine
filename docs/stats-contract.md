@@ -1088,6 +1088,32 @@ All three use the standard pagination: `page` (from 1) and `page_size` (default 
 
 Without `schema=2`, `most-logged/` keeps its legacy rows `{media, log_count}`, one per Item and not folded (STAT-901).
 
+### STAT-312: The profile's This Year section reads this year's Global numbers
+
+```
+GET /api/v1/stats/me/year/
+GET /api/v1/users/{username}/stats/year/
+```
+
+No parameters. The range is this calendar year on the owner's calendar (STAT-005), Global, as the Stats page asks for it (`start_date=YYYY-01-01&end_date=YYYY-12-31`), for the same viewer. The `users/{username}/` form applies STAT-002's gate. Responses are cached as the summary is (STAT-006).
+
+```json
+{
+  "year": 2026,
+  "range": { "start_date": "2026-01-01", "end_date": "2026-12-31", "timezone": "America/New_York", "is_all_time": false },
+  "audience": "owner",
+  "titles": 181,
+  "media_types": [ { "media_type": "movie", "titles": 92, "logs": 104 } ],
+  "time": { "rows": [ { "media_type": "movie", "unit": "minutes", "value": 10260, "known": 101, "total": 104, "approximate": false } ], "hours_total": { … } },
+  "posters": [ {…} ]
+}
+```
+
+- `media_types` and `time` are the summary's `media_types` and `time` for that range and viewer, worked out by the same code, so they always agree. The section shows only the types the owner has turned on: `media_types`' rows.
+- `titles` adds up those rows' `titles`, so it is what the rows add up to. It equals the summary's `header.titles` unless the owner turned a type off that has titles this year: Global's header still counts those (STAT-301).
+- `posters` is the pool the wall is drawn from: a random pick of this year's titles (STAT-105) of the turned-on types with artwork, at most 60. Each type's titles are shuffled and the types are dealt one title each in turn in `primary_media_types()` order, so every type gets its share; a title with no artwork is passed over for its type's next one. A new pick is made whenever the answer is worked out again (the cache can keep one for up to an hour), and the app shuffles it on every load. Each is a media summary (STAT-304) with `user_state` null: the wall has no tap.
+- The app shows the wall from 9 posters up, in the largest grid of at most 6 across that the posters fill with no gaps and whose cells stay within 20% of a 2:3 poster; fewer than 9 show the numbers alone.
+
 ### STAT-311: Errors
 
 | Status | When |

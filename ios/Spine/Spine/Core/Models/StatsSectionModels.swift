@@ -339,6 +339,25 @@ struct StatsHoursTotal: Decodable, Hashable {
     let approximate: Bool
 }
 
+// MARK: - The profile's This Year section (STAT-312)
+
+/// This calendar year's Global numbers for the profile: the same titles, types and time the Stats page shows for
+/// the year, worked out by the same server code, and the posters behind them, already in wall order.
+struct ProfileYear: Decodable, Hashable {
+    let year: Int
+    let titles: Int
+    /// The owner's turned-on types in the app's order, with their titles this year; zero included.
+    let mediaTypes: [StatsMediaTypeCount]
+    let time: StatsTime
+    /// A random pick of this year's titles with artwork, every type dealt its share; the wall's pool.
+    let posters: [MediaSummary]
+
+    /// The same year with the wall's pool in a new random order, so each load shows a different wall.
+    func shufflingPosters() -> ProfileYear {
+        ProfileYear(year: year, titles: titles, mediaTypes: mediaTypes, time: time, posters: posters.shuffled())
+    }
+}
+
 // MARK: - Top and Highest rated (STAT-205 to STAT-208)
 
 enum StatsTopSource: String, Hashable {

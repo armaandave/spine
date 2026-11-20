@@ -103,11 +103,15 @@ struct StatsView: View {
         username: String? = nil,
         activityUsername: String? = nil,
         enabledMediaTypes: [String]? = nil,
+        selectedPeriod: StatsPeriod = .allTime,
+        selectedMediaType: String? = nil,
         onUnauthorized: @escaping () -> Void = {}
     ) {
         _viewModel = State(initialValue: StatsViewModel(
             profileRepository: profileRepository,
             username: username,
+            selectedPeriod: selectedPeriod,
+            selectedMediaType: selectedMediaType,
             enabledMediaTypes: enabledMediaTypes,
             onUnauthorized: onUnauthorized
         ))
