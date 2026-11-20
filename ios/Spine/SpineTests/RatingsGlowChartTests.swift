@@ -138,6 +138,14 @@ final class RatingsGlowChartTests: XCTestCase {
         XCTAssertEqual(G.average(payload: nil, counts: [Int](repeating: 0, count: 10)), 0)
     }
 
+    func testThereIsAChartOnlyWhenTheCommunityHasRatings() {
+        let none = [Int](repeating: 0, count: 10)
+        XCTAssertFalse(G.hasRatings(counts: none, ratingCount: nil))
+        XCTAssertFalse(G.hasRatings(counts: none, ratingCount: 0))
+        XCTAssertTrue(G.hasRatings(counts: none, ratingCount: 2))
+        XCTAssertTrue(G.hasRatings(counts: [0, 0, 0, 0, 0, 0, 0, 1, 0, 0], ratingCount: nil))
+    }
+
     // MARK: Stars beside the number
 
     func testStarsFillWholeThenToTheFractionAndDrawNothingForTheRest() {

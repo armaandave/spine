@@ -8384,7 +8384,7 @@ struct SpineRatingDistributionSection: View {
 
     var body: some View {
         Group {
-            if counts.allSatisfy({ $0 == 0 }), (community?.ratingCount ?? 0) == 0, people.isEmpty {
+            if !RatingsChartGeometry.hasRatings(counts: counts, ratingCount: community?.ratingCount) {
                 HStack {
                     Text("No ratings yet.")
                         .font(.system(size: 13, weight: .semibold))

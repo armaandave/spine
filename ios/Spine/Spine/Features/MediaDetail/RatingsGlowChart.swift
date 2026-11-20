@@ -45,6 +45,12 @@ enum RatingsChartGeometry {
         return counts
     }
 
+    /// Whether there is a chart to draw: the community has ratings. You and friends alone don't make one, since a private
+    /// account's ratings aren't counted in the community's (the chart would read 0.0); the page says "No ratings yet."
+    static func hasRatings(counts: [Int], ratingCount: Int?) -> Bool {
+        counts.contains { $0 > 0 } || (ratingCount ?? 0) > 0
+    }
+
     /// The average in stars: the payload's own when it has one, else counted from the steps (0 when empty).
     static func average(payload: Double?, counts: [Int]) -> Double {
         if let payload { return payload }
