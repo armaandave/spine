@@ -570,7 +570,7 @@ final class MusicContractTests: XCTestCase {
         XCTAssertEqual(theme.accentColor, teal)
         XCTAssertEqual(theme.statsColor, teal)
         XCTAssertEqual(ref.trackingStatusLabel("In progress"), "Listening")
-        XCTAssertEqual(ref.trackingStatusLabel("Completed"), "Listened")
+        XCTAssertEqual(ref.trackingStatusLabel("Completed"), "Completed")
         XCTAssertEqual(ref.repeatLabel, "Relisten")
         XCTAssertEqual(ref.consumedDateLabel, "Date listened")
     }

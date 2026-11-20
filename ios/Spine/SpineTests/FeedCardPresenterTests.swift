@@ -431,16 +431,16 @@ final class FeedCardPresenterTests: XCTestCase {
         let card = model(try FeedTestItems.day(label: "24 episodes", moves: ["paused"], mediaType: "tv"))
         XCTAssertEqual(card.headline, .progress(amount: "+24 episodes", tail: nil, pills: ["Paused"]))
         let several = model(try FeedTestItems.day(label: "86 pages", moves: ["paused", "stopped", "paused"]))
-        XCTAssertEqual(several.headline, .progress(amount: "+86 pages", tail: nil, pills: ["Paused", "Stopped"]))
+        XCTAssertEqual(several.headline, .progress(amount: "+86 pages", tail: nil, pills: ["Paused", "Dropped"]))
     }
 
     func testAStatusOnlyDayHasNoAmountAndNothingLit() throws {
         let card = model(try FeedTestItems.day(moves: ["picked_back_up"], mediaType: "tv"))
         XCTAssertEqual(card.kind, .status)
-        XCTAssertEqual(card.headline, .moves(pills: ["Picked back up"], tail: nil), "The status is its pill")
+        XCTAssertEqual(card.headline, .moves(pills: ["Resumed"], tail: nil), "The status is its pill")
         XCTAssertNil(card.meter)
         let stopped = model(try FeedTestItems.day(moves: ["stopped"]))
-        XCTAssertEqual(stopped.headline, .moves(pills: ["Stopped"], tail: nil))
+        XCTAssertEqual(stopped.headline, .moves(pills: ["Dropped"], tail: nil))
     }
 
     func testAStartSaysStartedAndANoteOnPickingBackUpIsDropped() throws {

@@ -17,26 +17,16 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// The section's name, in the words every type shares: Planning, Paused, Dropped and Completed, with the type's
+    /// own word for In progress (TV-002, AN-000).
     func title(mediaType: String) -> String {
-        if mediaType == "tv" || mediaType == "anime" {
-            // TV-002, AN-000: Watching is the display name of the shared In progress status.
-            switch self {
-            case .currentlyReading: return "Watching"
-            case .didNotFinish: return "Dropped"
-            case .read: return "Completed"
-            default: return rawValue
-            }
+        switch self {
+        case .tracked, .read: "Completed"
+        case .planning: "Planning"
+        case .currentlyReading: MediaRef.inProgressWord(mediaType: mediaType)
+        case .paused: "Paused"
+        case .didNotFinish: "Dropped"
         }
-        if mediaType == "game" {
-            switch self {
-            case .currentlyReading: return "Playing"
-            case .didNotFinish: return "Dropped"
-            case .read: return "Completed"
-            default: return rawValue
-            }
-        }
-        if ["book", "manga", "comic"].contains(mediaType), self == .planning { return "To Read" }
-        return rawValue
     }
 
     static func available(for mediaType: String) -> [LibraryShelf] {
@@ -875,17 +865,17 @@ struct LibraryView: View {
         let mediaName = MediaTypeTheme.theme(for: viewModel.mediaType).displayName.lowercased()
         switch viewModel.shelf {
         case .tracked:
-            return "No tracked \(mediaName)"
+            return "No completed \(mediaName)"
         case .planning:
-            return readingNoun.map { "No \($0) to read" } ?? "No planned \(mediaName)"
+            return "No planned \(readingNoun ?? mediaName)"
         case .currentlyReading:
-            return viewModel.mediaType == "game" ? "No games currently playing" : "No \(readingNoun ?? "books") currently reading"
+            return viewModel.mediaType == "game" ? "No games you're playing" : "No \(readingNoun ?? "books") you're reading"
         case .paused:
             return "No paused \(mediaName)"
         case .didNotFinish:
-            return viewModel.mediaType == "game" ? "No dropped games" : "No \(readingNoun ?? "books") marked Did Not Finish"
+            return "No dropped \(readingNoun ?? mediaName)"
         case .read:
-            return viewModel.mediaType == "game" ? "No completed games" : "No read \(readingNoun ?? "books")"
+            return "No completed \(readingNoun ?? mediaName)"
         }
     }
 
@@ -897,11 +887,6 @@ struct LibraryView: View {
         case "comic": "comics"
         default: nil
         }
-    }
-
-    /// A manga's or a comic's reads aren't journeys, as a book's are (MC-000).
-    private var seriesNoun: String? {
-        viewModel.mediaType == "book" ? nil : readingNoun
     }
 
     private var emptyMessage: String {
@@ -920,16 +905,13 @@ struct LibraryView: View {
         case .planning:
             return readingNoun.map { "\($0.capitalized) saved for later will appear here." } ?? "Planning items stay separate from the rest of your library."
         case .currentlyReading:
-            return seriesNoun.map { "\($0.capitalized) you're reading will appear here." }
-                ?? "Start a reading journey to see its progress here."
+            return "\((readingNoun ?? "books").capitalized) you're reading will appear here."
         case .paused:
-            return seriesNoun.map { "\($0.capitalized) you pause will appear here." }
-                ?? "Paused reading journeys will appear here."
+            return "\((readingNoun ?? "books").capitalized) you pause will appear here."
         case .didNotFinish:
-            return "\((readingNoun ?? "books").capitalized) you stop reading will appear here."
+            return "\((readingNoun ?? "books").capitalized) you drop will appear here."
         case .read:
-            return seriesNoun.map { "\($0.capitalized) you finish will appear here." }
-                ?? "Completed reading journeys will appear here."
+            return "\((readingNoun ?? "books").capitalized) you finish will appear here."
         }
     }
 

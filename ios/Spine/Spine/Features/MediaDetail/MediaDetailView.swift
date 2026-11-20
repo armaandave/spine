@@ -1680,14 +1680,12 @@ private struct GameCompletionPresentation: Identifiable {
 }
 
 private enum MediaDetailSheet: Identifiable {
-    case posterMenu
     case bookGameActions
     case tvActions
     case addToList
 
     var id: String {
         switch self {
-        case .posterMenu: "posterMenu"
         case .bookGameActions: "bookGameActions"
         case .tvActions: "tvActions"
         case .addToList: "addToList"
@@ -2512,52 +2510,6 @@ private struct MediaDetailPageView: View {
         .onPreferenceChange(TopSafeAreaInsetKey.self) { topSafeAreaInset = $0 }
         .sheet(item: $presentedSheet, onDismiss: presentPendingSheet) { sheet in
             switch sheet {
-            case .posterMenu:
-                PosterMenuSheet(
-                    posterLabel: "Customize Poster",
-                    showsSeasonOption: parentSeasonRef(viewModel.detail) != nil,
-                    showsTVShowOption: parentTVRef(viewModel.detail) != nil,
-                    showsPosterOption: canCustomizePoster(viewModel.detail),
-                    showsBackdropOption: canCustomizeBackdrop(viewModel.detail),
-                    showsLogoOption: canCustomizeLogo(viewModel.detail),
-                    onViewSeason: {
-                        guard let ref = parentSeasonRef(viewModel.detail) else { return }
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            navigateToParent(ref)
-                        }
-                    },
-                    onViewTVShow: {
-                        guard let ref = parentTVRef(viewModel.detail) else { return }
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            presentedRef = ref
-                        }
-                    },
-                    onAddToList: {
-                        presentedSheet = .addToList
-                    },
-                    onCustomizePoster: {
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            isPosterPickerPresented = true
-                        }
-                    },
-                    onCustomizeBackdrop: {
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            isBackdropPickerPresented = true
-                        }
-                    },
-                    onCustomizeLogo: {
-                        presentedSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            isLogoPickerPresented = true
-                        }
-                    }
-                )
-                .presentationDetents([.height(posterMenuHeight(for: viewModel.detail))])
-                .presentationDragIndicator(.visible)
             case .bookGameActions:
                 if let detail = viewModel.detail {
                     if detail.ref.mediaType == "game" {
@@ -3086,11 +3038,8 @@ private struct MediaDetailPageView: View {
                     dismiss()
                 }
                 Spacer()
-                if viewModel.detail != nil {
-                    CircleIconButton(systemName: "ellipsis", label: "More") {
-                        dismissRatingPicker()
-                        presentedSheet = .posterMenu
-                    }
+                if let detail = viewModel.detail {
+                    moreMenu(detail)
                 }
             }
         }
@@ -3107,15 +3056,65 @@ private struct MediaDetailPageView: View {
         topSafeAreaInsetOverride ?? topSafeAreaInset
     }
 
-    private func posterMenuHeight(for detail: MediaDetail?) -> CGFloat {
-        let optionalRows = [
-            parentSeasonRef(detail) != nil,
-            parentTVRef(detail) != nil,
-            canCustomizePoster(detail),
-            canCustomizeBackdrop(detail),
-            canCustomizeLogo(detail),
-        ].filter { $0 }.count
-        return 80 + CGFloat(optionalRows * 68)
+    /// The page's ⋯: Apple's own menu, as on profiles and lists. Going to the show or season, Add to List, then the
+    /// artwork this title's source has choices for.
+    private func moreMenu(_ detail: MediaDetail) -> some View {
+        Menu {
+            let bookmark = PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer)
+            if bookmark != .hidden {
+                Section {
+                    Button(
+                        bookmark == .remove ? "Remove from Planning" : "Add to Planning",
+                        systemImage: bookmark == .remove ? "bookmark.fill" : "bookmark"
+                    ) {
+                        choose { planningAction(for: detail) }
+                    }
+                }
+            }
+            let season = parentSeasonRef(detail)
+            let show = parentTVRef(detail)
+            if season != nil || show != nil {
+                Section {
+                    if let season {
+                        Button("Open Season", systemImage: "rectangle.stack") { choose { navigateToParent(season) } }
+                    }
+                    if let show {
+                        Button("Open Show", systemImage: "tv") { choose { presentedRef = show } }
+                    }
+                }
+            }
+            Button("Add to List", systemImage: "list.bullet.rectangle") { choose { presentedSheet = .addToList } }
+            Section {
+                if canCustomizePoster(detail) {
+                    Button("Customize Poster", systemImage: "photo.on.rectangle.angled") {
+                        choose { isPosterPickerPresented = true }
+                    }
+                }
+                if canCustomizeBackdrop(detail) {
+                    Button("Customize Backdrop", systemImage: "photo.on.rectangle") {
+                        choose { isBackdropPickerPresented = true }
+                    }
+                }
+                if canCustomizeLogo(detail) {
+                    Button("Customize Logo", systemImage: "textformat") { choose { isLogoPickerPresented = true } }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .bold))
+                .frame(width: 44, height: 44)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel("More")
+    }
+
+    /// A choice from ⋯ first folds the rail's stars away.
+    private func choose(_ action: () -> Void) {
+        dismissRatingPicker()
+        action()
     }
 
     private func canCustomizePoster(_ detail: MediaDetail?) -> Bool {
@@ -3194,19 +3193,59 @@ private struct MediaDetailPageView: View {
         if detail.ref.isAnime, let anime = viewModel.viewer?.anime {
             TVActionSheet(
                 title: "Track this anime",
-                items: TVTrackingPresentation.animeMenu(for: anime),
+                subtitle: TVTrackingPresentation.shelfLine(
+                    inLibrary: anime.inLibrary, status: anime.status, rewatching: anime.rewatch != nil
+                ),
+                menu: TVTrackingPresentation.animeMenu(for: anime),
                 removePrompt: AnimeTrackingPresentation.removePrompt(for: anime),
                 dropPrompt: AnimeTrackingPresentation.dropPrompt,
                 onCommand: { command in performTVCommand(command, version: anime.version) }
             )
         } else if let tv = viewModel.viewer?.tv {
-            let season = detail.ref.mediaType == "season" ? tv.season : nil
-            TVActionSheet(
-                title: season.map { TVTrackingPresentation.seasonTitle($0.seasonNumber) } ?? "Track this show",
-                items: season.map { TVTrackingPresentation.seasonMenu(for: $0) } ?? TVTrackingPresentation.showMenu(for: tv),
-                removePrompt: TVTrackingPresentation.removePrompt(count: tv.removeCount),
-                onCommand: { command in performTVCommand(command, version: tv.version) }
-            )
+            if detail.ref.mediaType == "season", let season = tv.season {
+                TVActionSheet(
+                    title: TVTrackingPresentation.seasonTitle(season.seasonNumber),
+                    subtitle: TVTrackingPresentation.seasonLabel(for: season),
+                    menu: TVTrackingPresentation.seasonMenu(for: season),
+                    removePrompt: TVTrackingPresentation.removePrompt(count: tv.removeCount),
+                    onCommand: { command in performTVCommand(command, version: tv.version) }
+                )
+            } else {
+                TVActionSheet(
+                    title: "Track this show",
+                    subtitle: TVTrackingPresentation.shelfLine(
+                        inLibrary: tv.inLibrary, status: tv.status, rewatching: tv.rewatch != nil
+                    ),
+                    menu: TVTrackingPresentation.showMenu(for: tv),
+                    removePrompt: TVTrackingPresentation.removePrompt(count: tv.removeCount),
+                    onCommand: { command in performTVCommand(command, version: tv.version) }
+                )
+            }
+        }
+    }
+
+    /// The + menu this TV or anime page would open, to decide whether + opens it, opens Log, or says why it can't.
+    private func tvMenu(_ detail: MediaDetail) -> TVMenu? {
+        if detail.ref.isAnime, let anime = viewModel.viewer?.anime {
+            return TVTrackingPresentation.animeMenu(for: anime)
+        }
+        guard let tv = viewModel.viewer?.tv else { return nil }
+        if detail.ref.mediaType == "season" {
+            return tv.season.map { TVTrackingPresentation.seasonMenu(for: $0) }
+        }
+        return TVTrackingPresentation.showMenu(for: tv)
+    }
+
+    /// + on a show, a season or an anime title: a notice when there's nothing to do, Log when that's all, else the menu.
+    private func openTVMenu(for detail: MediaDetail) {
+        guard let menu = tvMenu(detail) else {
+            presentedSheet = .tvActions
+            return
+        }
+        switch menu.opening {
+        case let .notice(notice): viewModel.tvNotice = notice
+        case .log: openTVComposer()
+        case .menu: presentedSheet = .tvActions
         }
     }
 
@@ -3281,7 +3320,7 @@ private struct MediaDetailPageView: View {
             openTVComposer()
             return
         }
-        presentedSheet = .tvActions
+        openTVMenu(for: detail)
     }
 
     /// The episode page's stars show the newest rated log's stars and open Log Episode with them (TV-502).
@@ -3343,7 +3382,7 @@ private struct MediaDetailPageView: View {
         if detail.ref.isTVFamily {
             tvTrackAction(for: detail)
         } else if viewModel.tracksAnime {
-            presentedSheet = .tvActions
+            openTVMenu(for: detail)
         } else if usesBookGameActions(detail) {
             presentedSheet = .bookGameActions
         } else {
@@ -3625,11 +3664,17 @@ private struct MediaDetailPageView: View {
         let isEpisode = detail.ref.mediaType == "episode"
         let episodeSteps = isEpisode ? tvEpisodeRatingSteps() : nil
         let unavailableReason = isEpisode ? nil : tvRatingUnavailableReason()
+        let rated = isEpisode ? (episodeSteps ?? 0) > 0 : (viewModel.viewer?.rating?.ratingHalfSteps ?? 0) > 0
+        let slot = RailOpinionSlot.make(
+            finished: isEyeCompleted(detail),
+            rated: rated,
+            bookmark: PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer)
+        )
         return ActionRail(
             ratingPicker: $ratingPicker,
             isLiked: viewModel.viewer?.hasLiked ?? false,
             showsEye: true,
-            showsRating: true,
+            showsRating: slot == .stars,
             offersRatingAfterBaseAction: false,
             trackLabel: tvTrackLabel(detail),
             eyeLabel: tvEyeLabel(detail),
@@ -3640,6 +3685,7 @@ private struct MediaDetailPageView: View {
             onRatingTap: isEpisode
                 ? { openTVComposer(ratingSteps: episodeSteps) }
                 : unavailableReason.map { reason in { viewModel.tvNotice = reason } },
+            planning: slot == .bookmark ? planningButton(detail) : nil,
             onTrack: { trackAction(for: detail) },
             onLike: { likeAction(for: detail) },
             onEye: { eyeAction(for: detail) },
@@ -3647,23 +3693,63 @@ private struct MediaDetailPageView: View {
         )
     }
 
+    /// The rail's bookmark: Planning on every type, until the title is started.
+    private func planningButton(_ detail: MediaDetail) -> RailCenterButton? {
+        let state = PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer)
+        guard state != .hidden else { return nil }
+        let planned = state == .remove
+        return RailCenterButton(
+            systemName: planned ? "bookmark.fill" : "bookmark",
+            label: planned ? "Remove from Planning" : "Add to Planning",
+            identifier: "media-detail.planning",
+            action: { planningAction(for: detail) }
+        )
+    }
+
+    /// The bookmark adds the title to Planning, or takes a planned one back out of the library.
+    private func planningAction(for detail: MediaDetail) {
+        switch PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer) {
+        case .add:
+            if detail.ref.isTVFamily || viewModel.tracksAnime {
+                viewModel.performTVAction(.planning)
+            } else {
+                viewModel.performQuickAction(.planning, for: detail)
+            }
+        case .remove:
+            if viewModel.tracksAnime, let anime = viewModel.viewer?.anime {
+                viewModel.removeTVShow(expectedVersion: anime.version)
+            } else if detail.ref.isTVFamily, let tv = viewModel.viewer?.tv {
+                viewModel.removeTVShow(expectedVersion: tv.version)
+            } else {
+                viewModel.removeTracking(for: detail)
+            }
+        case .hidden:
+            break
+        }
+    }
+
     private func tvTrackLabel(_ detail: MediaDetail) -> String {
         switch detail.ref.mediaType {
         case "anime": "Track anime"
         case "episode": "Log episode"
-        case "season": "Season actions"
+        case "season": tvMenu(detail)?.opening == .log ? "Log season" : "Season actions"
         default: "Track show"
         }
     }
 
     private func standardActionRail(_ detail: MediaDetail) -> some View {
         let usesQuickActions = usesBookGameActions(detail)
+        let slot = RailOpinionSlot.make(
+            finished: isEyeCompleted(detail),
+            rated: (viewModel.viewer?.rating?.ratingHalfSteps ?? 0) > 0,
+            bookmark: PlanningBookmark.state(for: detail.ref, viewer: viewModel.viewer)
+        )
 
         return ActionRail(
             ratingPicker: $ratingPicker,
             isLiked: viewModel.viewer?.hasLiked ?? false,
             showsEye: true,
-            showsRating: (detail.ref.isSingleWeight && isEyeCompleted(detail)) || usesQuickActions,
+            showsRating: slot == .stars,
             offersRatingAfterBaseAction: detail.ref.isSingleWeight
                 || (detail.ref.readsLikeBook && bookState(detail)?.hasLiveJourney != true)
                 || (detail.ref.mediaType == "game" && gameState(detail)?.hasLivePlaythrough != true),
@@ -3675,6 +3761,7 @@ private struct MediaDetailPageView: View {
                 : (usesQuickActions ? bookGameCopy(for: detail.ref.mediaType).finished : nil),
             isEyeSelected: isEyeCompleted(detail),
             isEyeLoading: viewModel.confirmingEyeWrite,
+            planning: slot == .bookmark ? planningButton(detail) : nil,
             onTrack: { trackAction(for: detail) },
             onLike: { likeAction(for: detail) },
             onEye: { eyeAction(for: detail) },
@@ -4262,7 +4349,6 @@ private struct MediaDetailPageView: View {
                 if detail.ref.readsLikeBook, let book = bookState(detail) {
                     BookReadingHistorySection(
                         book: book,
-                        attempt: detail.ref.isSeries ? "attempt" : "journey",
                         isSaving: viewModel.hasPendingWrites,
                         onEdit: { viewModel.formErrorMessage = nil; editingBookJourney = $0 },
                         onDelete: { journey in
@@ -5403,102 +5489,6 @@ func bookGameCopy(for mediaType: String) -> (currently: String, finished: String
     }
 }
 
-private struct PosterMenuSheet: View {
-    let posterLabel: String
-    let showsSeasonOption: Bool
-    let showsTVShowOption: Bool
-    let showsPosterOption: Bool
-    let showsBackdropOption: Bool
-    let showsLogoOption: Bool
-    let onViewSeason: () -> Void
-    let onViewTVShow: () -> Void
-    let onAddToList: () -> Void
-    let onCustomizePoster: () -> Void
-    let onCustomizeBackdrop: () -> Void
-    let onCustomizeLogo: () -> Void
-
-    var body: some View {
-        VStack(spacing: 10) {
-            if showsSeasonOption {
-                Button(action: onViewSeason) {
-                    Label("View Season", systemImage: "rectangle.stack")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-
-            if showsTVShowOption {
-                Button(action: onViewTVShow) {
-                    Label("View TV Show", systemImage: "tv")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-
-            Button(action: onAddToList) {
-                Label("Add to List", systemImage: "list.bullet.rectangle")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18)
-                    .frame(height: 54)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16)
-
-            if showsPosterOption {
-                Button(action: onCustomizePoster) {
-                    Label(posterLabel, systemImage: "photo.on.rectangle.angled")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-
-            if showsBackdropOption {
-                Button(action: onCustomizeBackdrop) {
-                    Label("Customize Backdrop", systemImage: "photo.on.rectangle")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-
-            if showsLogoOption {
-                Button(action: onCustomizeLogo) {
-                    Label("Customize Logo", systemImage: "textformat")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 18)
-                        .frame(height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-        }
-        .presentationBackground(.regularMaterial)
-    }
-}
-
 /// Only books open this sheet: games use GameActionSheet, so the non-book branch is unreachable today.
 private struct BookGameActionSheet: View {
     /// What the book list showed when a choice was made, kept while the sheet slides away (see GameActionSheet).
@@ -5508,7 +5498,7 @@ private struct BookGameActionSheet: View {
     }
 
     @State private var isRemoveConfirmationPresented = false
-    @State private var isDNFConfirmationPresented = false
+    @State private var isDropConfirmationPresented = false
     @State private var committed: Snapshot?
 
     let mediaType: String
@@ -5597,7 +5587,8 @@ private struct BookGameActionSheet: View {
         }
     }
 
-    /// The same list as the game sheet, sized to its rows.
+    /// The same list as the game sheet, sized to its rows: what you can do, the current status ticked, the shelf under
+    /// the title, and a line under the list when Planning or Remove from Library can't be used.
     private var bookActions: some View {
         let menu = ReadingMenu(mediaType: mediaType, status: shown.status, book: shown.bookState)
         return NavigationStack {
@@ -5605,52 +5596,61 @@ private struct BookGameActionSheet: View {
                 Section {
                     ForEach(menu.rows) { row in
                         Button { perform(row.command) } label: {
-                            if let image = row.systemImage {
-                                Label(row.title, systemImage: image)
-                            } else {
-                                Text(row.title)
+                            HStack {
+                                Label(row.title, systemImage: row.systemImage)
+                                if row.isSelected {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .fontWeight(.semibold)
+                                        .accessibilityLabel("Current")
+                                }
                             }
                         }
-                        .disabled(row.isDisabled)
+                        .disabled(row.isSelected)
                     }
+                } footer: {
+                    if !menu.offersRemoval { notesFooter(menu.notes) }
                 }
-                if let reason = menu.liveReason {
-                    Text(reason)
-                        .font(.caption).foregroundStyle(.secondary)
-                    Button("Update Progress", systemImage: "slider.horizontal.3") { commit(onUpdateProgress) }
-                }
-                if let removal = menu.removal {
+                if menu.offersRemoval {
                     Section {
-                        Button(removal.title, role: .destructive) {
-                            if !removal.isDisabled { isRemoveConfirmationPresented = true }
+                        Button("Remove from Library", systemImage: "trash", role: .destructive) {
+                            isRemoveConfirmationPresented = true
                         }
-                        .disabled(removal.isDisabled)
-                        if let reason = removal.reason {
-                            Text(reason)
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                    } footer: {
+                        notesFooter(menu.notes)
                     }
                 }
             }
             .fitsSheetToContent()
-            .navigationTitle("Track this \(noun)").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Track this \(noun)")
+            .navigationSubtitle(menu.shelf)
+            .navigationBarTitleDisplayMode(.inline)
         }
         .preferredColorScheme(.dark)
-        .confirmationDialog("Mark this \(noun) as Did Not Finish?", isPresented: $isDNFConfirmationPresented, titleVisibility: .visible) {
-            Button("Mark as DNF", role: .destructive) {
+        .confirmationDialog("Drop this \(noun)?", isPresented: $isDropConfirmationPresented, titleVisibility: .visible) {
+            Button("Drop", role: .destructive) {
                 commit { onAction(.stopped) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your current progress will remain in reading history.")
+            Text("Your progress stays in your reading history.")
         }
-        .confirmationDialog(isSeries ? "Remove from Library?" : "Remove book tracking?", isPresented: $isRemoveConfirmationPresented, titleVisibility: .visible) {
-            Button(isSeries ? "Remove from Library" : "Remove Tracking", role: .destructive) {
+        .confirmationDialog("Remove from Library?", isPresented: $isRemoveConfirmationPresented, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
                 commit(onRemove)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(isSeries ? "Custom lists are kept." : "Diary logs are kept. Reading journeys must be deleted first.")
+            Text("Custom lists are kept.")
+        }
+    }
+
+    @ViewBuilder
+    private func notesFooter(_ notes: [String]) -> some View {
+        if !notes.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(notes, id: \.self) { Text($0) }
+            }
         }
     }
 
@@ -5662,14 +5662,15 @@ private struct BookGameActionSheet: View {
 
     private func perform(_ command: ReadingMenu.Row.Command) {
         switch command {
-        case .toRead: commit { onAction(.planning) }
-        case .currentlyReading, .resume: commit { onAction(.currently) }
+        case .planning: commit { onAction(.planning) }
+        case .reading, .resume: commit { onAction(.currently) }
         case .keepReading: commit { onReadingAction("keep_reading") }
         case .reread: commit { onReadingAction("reread") }
         case .paused: commit { onAction(.paused) }
-        case .didNotFinish(asks: true): isDNFConfirmationPresented = true
-        case .didNotFinish(asks: false): commit { onAction(.stopped) }
+        case .dropped(asks: true): isDropConfirmationPresented = true
+        case .dropped(asks: false): commit { onAction(.stopped) }
         case .log: commit(onLog)
+        case .updateProgress: commit(onUpdateProgress)
         }
     }
 
@@ -6338,8 +6339,6 @@ private struct BookReadingHistorySection: View {
     @State private var isUndatedDeletePresented = false
 
     let book: BookTrackingState
-    /// What this read is called: a book's journey, a manga's or a comic's attempt (MC-000).
-    let attempt: String
     let isSaving: Bool
     let onEdit: (BookJourneyState) -> Void
     let onDelete: (BookJourneyState) -> Void
@@ -6368,7 +6367,7 @@ private struct BookReadingHistorySection: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Read")
+                            Text("Completed")
                                 .font(.subheadline.weight(.bold))
                             Text("Date unknown")
                                 .font(.caption.weight(.medium))
@@ -6387,11 +6386,11 @@ private struct BookReadingHistorySection: View {
                     .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 14))
                 }
             }
-            .confirmationDialog("Delete this reading \(attempt)?", isPresented: Binding(
+            .confirmationDialog("Delete this read?", isPresented: Binding(
                 get: { pendingDeleteJourney != nil },
                 set: { if !$0 { pendingDeleteJourney = nil } }
             ), titleVisibility: .visible) {
-                Button("Delete \(attempt.capitalized)", role: .destructive) {
+                Button("Delete Read", role: .destructive) {
                     if let journey = pendingDeleteJourney { onDelete(journey) }
                     pendingDeleteJourney = nil
                 }
@@ -6399,13 +6398,13 @@ private struct BookReadingHistorySection: View {
             } message: {
                 Text(pendingDeleteJourney?.status == "Completed"
                     ? "This read will be removed."
-                    : "The Did Not Finish \(attempt) and its progress will be removed.")
+                    : "This dropped read and its progress will be removed.")
             }
-            .confirmationDialog("Delete undated Read?", isPresented: $isUndatedDeletePresented, titleVisibility: .visible) {
+            .confirmationDialog("Delete the undated read?", isPresented: $isUndatedDeletePresented, titleVisibility: .visible) {
                 Button("Delete Undated Read", role: .destructive, action: onDeleteUndated)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This removes only the date-unknown Read state.")
+                Text("This removes only the read with no date.")
             }
         }
     }
@@ -6421,7 +6420,7 @@ private struct BookReadingHistorySection: View {
                 .foregroundStyle(journey.status == "Completed" ? .green : .orange)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(journey.status == "Completed" ? "Read" : "Did Not Finish")
+                Text(journey.status == "Completed" ? "Completed" : "Dropped")
                     .font(.subheadline.weight(.bold))
                 Text(journeyDateLine(journey))
                     .font(.caption.weight(.medium))
@@ -6451,7 +6450,7 @@ private struct BookReadingHistorySection: View {
                     Button(role: .destructive) {
                         pendingDeleteJourney = journey
                     } label: {
-                        Label("Delete \(attempt.capitalized)", systemImage: "trash")
+                        Label("Delete Read", systemImage: "trash")
                     }
                 }
             } label: {

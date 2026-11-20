@@ -117,7 +117,7 @@ extension View {
     }
 }
 
-/// "Paused", "Picked back up", "Stopped": a hairline capsule with a glowing dot. At rest it is plain: no tilt, no pop,
+/// "Paused", "Resumed", "Dropped": a hairline capsule with a glowing dot. At rest it is plain: no tilt, no pop,
 /// no scale.
 struct FeedStatusPill: View {
     let word: String
@@ -133,8 +133,8 @@ struct FeedStatusPill: View {
         init(word: String) {
             switch word {
             case "Paused": self = .paused
-            case "Picked back up": self = .pickedBackUp
-            case "Stopped": self = .stopped
+            case "Resumed": self = .pickedBackUp
+            case "Dropped": self = .stopped
             default: self = .other
             }
         }
