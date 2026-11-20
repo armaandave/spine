@@ -32,18 +32,24 @@ struct PosterHoldMenu: Equatable {
         } else {
             let config = viewer.map { TrendingRailConfig.make(title: "", ref: ref, viewer: $0) }
             var quick: [Quick] = [.watched(word: Self.watchedWord(for: ref), isFilled: config?.isEyeSelected ?? false)]
-            // Seasons and episodes leave Planning to their show.
-            if ref.mediaType != "season", !ref.isEpisode {
-                switch config?.lead ?? .plan {
-                case .plan: quick.append(.planning(isFilled: false))
-                case .planned: quick.append(.planning(isFilled: true))
-                case .ring, .track: break
-                }
+            switch Self.planning(ref: ref, viewer: viewer) {
+            case .add: quick.append(.planning(isFilled: false))
+            case .remove: quick.append(.planning(isFilled: true))
+            case .hidden: break
             }
             self.quick = quick
         }
 
         offersRemoval = inLibrary && !Self.matches(status, "Planning") && Self.pageOffersRemoval(ref: ref, viewer: viewer)
+    }
+
+    /// The page's Planning bookmark (`PlanningBookmark`): seasons and episodes leave it to their show. A list's copy of
+    /// a show sends no actions, and a show that isn't in your library can always be planned (TV-006).
+    static func planning(ref: MediaRef, viewer: UserMediaState?) -> PlanningBookmark {
+        let bookmark = PlanningBookmark.state(for: ref, viewer: viewer)
+        let inLibrary = viewer.map(TrendingRailConfig.isInLibrary) ?? false
+        if bookmark == .hidden, !inLibrary, ref.mediaType != "season", !ref.isEpisode { return .add }
+        return bookmark
     }
 
     /// The eye's word, short enough for the row of buttons at the top of the menu.

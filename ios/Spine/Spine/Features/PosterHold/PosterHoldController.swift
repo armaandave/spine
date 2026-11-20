@@ -103,9 +103,8 @@ final class PosterHoldController {
             guard (config?.isEyeSelected ?? false) == wasFilled else { return }
             watch(isFilled: wasFilled, model: model, detail: detail, open: open)
         case let .planning(wasFilled):
-            let lead = config?.lead ?? .plan
-            guard lead == (wasFilled ? .planned : .plan) else { return }
-            plan(isPlanned: wasFilled, model: model, detail: detail, open: open)
+            guard PosterHoldMenu.planning(ref: detail.ref, viewer: model.viewer) == (wasFilled ? .remove : .add) else { return }
+            plan(isPlanned: wasFilled, model: model, detail: detail)
         case .removeFromLibrary:
             remove(model: model, detail: detail)
         }
@@ -148,18 +147,18 @@ final class PosterHoldController {
         open(.eye)
     }
 
-    /// The bookmark (`TrendingRailRouter.lead`).
-    private func plan(isPlanned: Bool, model: MediaDetailViewModel, detail: MediaDetail, open: (RailHandoff) -> Void) {
-        let isTVFamily = detail.ref.isTVFamily || model.tracksAnime
+    /// The page's bookmark (`planningAction`): adds the title to Planning, or takes a planned one back out.
+    private func plan(isPlanned: Bool, model: MediaDetailViewModel, detail: MediaDetail) {
         if !isPlanned {
-            if isTVFamily {
+            if detail.ref.isTVFamily || model.tracksAnime {
                 _ = model.performTVAction(.planning)
             } else {
                 _ = model.performQuickAction(.planning, for: detail)
             }
-        } else if isTVFamily {
-            // A show's or anime's Remove asks first, on the page: a Planning-only show goes there for it.
-            open(.track)
+        } else if model.tracksAnime, let anime = model.viewer?.anime {
+            model.removeTVShow(expectedVersion: anime.version)
+        } else if detail.ref.isTVFamily, let tv = model.viewer?.tv {
+            model.removeTVShow(expectedVersion: tv.version)
         } else {
             _ = model.removeTracking(for: detail)
         }
