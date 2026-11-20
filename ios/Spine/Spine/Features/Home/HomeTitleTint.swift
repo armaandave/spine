@@ -120,12 +120,18 @@ nonisolated enum HomeTitleTint {
 
     /// The picture's real colors, most common first, each made readable: black, near-black greys and specks left out.
     static func colors(from swatches: [PosterSwatch]) -> [MeterTint.RGB] {
+        realColors(from: swatches).map(readable)
+    }
+
+    /// The picture's real colors as they are, most common first: black, near-black greys and specks left out. The
+    /// launch takes its colors from these (`LaunchPalette`).
+    static func realColors(from swatches: [PosterSwatch]) -> [MeterTint.RGB] {
         swatches.sorted(by: { $0.share > $1.share }).compactMap { swatch in
             guard swatch.share >= MeterTint.minimumShare, let rgb = MeterTint.RGB(hex: swatch.hex) else { return nil }
             let tone = lab(of: rgb)
             if tone.lightness < blackLightness { return nil }
             if tone.lightness < darkGreyLightness, chroma(tone) < greyChroma { return nil }
-            return readable(rgb)
+            return rgb
         }
     }
 

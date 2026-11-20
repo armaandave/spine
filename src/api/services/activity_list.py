@@ -191,7 +191,29 @@ def progress_fields(row):
 def log_fields(row):
     """Return a log row's added fields; its label is what it added, with no plus."""
     label = told_label(row)
-    return {**row_fields(row), "label": label}
+    return {**row_fields(row), "label": label, "bar": log_bar(row)}
+
+
+def log_bar(row):
+    """Return a log's bar (AC-10): its unit, where it began and ended, and the length.
+
+    Where it began is its end less what it told in the bar's unit, unless the walk said.
+    A length under two draws nothing: one tick says no more than the log does.
+    """
+    bar = row.bar
+    if not bar or bar["total"] < 2:
+        return None
+    end = bar["to"]
+    start = bar.get("from")
+    if start is None:
+        start = end - (row.told if row.told_unit == bar["unit"] else 0)
+    start = min(max(start, 0), end)
+    return {
+        "unit": PLACE_UNITS[bar["unit"]],
+        "from": plain_number(start),
+        "to": plain_number(end),
+        "total": plain_number(bar["total"]),
+    }
 
 
 # What was asked.
