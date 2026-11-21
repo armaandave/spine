@@ -625,8 +625,16 @@ final class InProgressUpdatesTests: XCTestCase {
         XCTAssertTrue(source.contains("InProgressPoster(item: item, viewer:"))
         for code in ["InProgressCard(", "InProgressUpdates", "progressUpdates", "inProgressUpdatePresentations",
                      "ContinueWatchingTicks", "continueWatchingPresentations", "InProgressCardPresentation.line",
-                     "InProgressBar", "progressFraction", "LibraryPosterBadge", "PosterBadgeLabel"] {
+                     "InProgressBar", "progressFraction"] {
             XCTAssertFalse(source.contains(code), "Profile still has \(code)")
+        }
+        // The In progress rail's posters carry no badge. Recent Activity's posters do (what a day of progress added),
+        // so this looks only at the In progress rail's own code.
+        let railStart = try XCTUnwrap(source.range(of: "private struct InProgressRail"))
+        let railEnd = try XCTUnwrap(source.range(of: "private struct ProfileRailLoadingView"))
+        let rail = source[railStart.lowerBound..<railEnd.lowerBound]
+        for code in ["LibraryPosterBadge", "PosterBadgeLabel"] {
+            XCTAssertFalse(rail.contains(code), "Profile's In progress rail has \(code)")
         }
     }
 
