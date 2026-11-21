@@ -505,6 +505,8 @@ protocol ProfileRepository {
     func statsSummary(username: String?, period: StatsPeriod, mediaType: String?) async throws -> StatsPage
     /// The profile's This Year section (STAT-312): this year's Global numbers and the wall's posters.
     func statsYear(username: String?) async throws -> ProfileYear
+    /// The profile's signature (STAT-313): every rating of all time on Global, in the Stats page's ten buckets.
+    func statsRatings(username: String?) async throws -> ProfileRatings
     func statsMostLogged(
         username: String?,
         period: StatsPeriod,
@@ -578,6 +580,11 @@ extension ProfileRepository {
 
     /// Fakes that don't stub it show no This Year section: the profile treats a cancelled load as nothing new.
     func statsYear(username: String?) async throws -> ProfileYear {
+        throw CancellationError()
+    }
+
+    /// Fakes that don't stub it show no signature, as with This Year.
+    func statsRatings(username: String?) async throws -> ProfileRatings {
         throw CancellationError()
     }
 
@@ -1787,6 +1794,10 @@ struct APIProfileRepository: ProfileRepository {
 
     func statsYear(username: String?) async throws -> ProfileYear {
         try await client.get(Self.statsPath("year", username: username), authenticated: true)
+    }
+
+    func statsRatings(username: String?) async throws -> ProfileRatings {
+        try await client.get(Self.statsPath("ratings", username: username), authenticated: true)
     }
 
     func statsMostLoggedTitles(

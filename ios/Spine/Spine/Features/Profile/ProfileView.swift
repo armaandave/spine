@@ -10,6 +10,8 @@ final class ProfileViewModel {
     var inProgressItems: [LibraryItem] = []
     /// The This Year section under the menu; nil until it loads, and on a restricted profile.
     var year: ProfileYear?
+    /// The signature beside the @handle (STAT-313); nil until it loads, and on a restricted profile.
+    var ratings: ProfileRatings?
     var isLoading = true
     var isLoadingInProgress = false
     var isLoadingActivity = false
@@ -107,8 +109,11 @@ final class ProfileViewModel {
             inProgressItems = []
             recentActivityItems = []
             year = nil
+            ratings = nil
             return
         }
+        // First: it sits in the hero, the first thing on screen.
+        await loadRatings(generation: generation)
         await loadInProgressItems(generation: generation)
         await loadRecentActivity(generation: generation)
         await loadYear(generation: generation)
@@ -263,6 +268,20 @@ final class ProfileViewModel {
             // The session's wall: the same one each time the profile shows, until pull to refresh or the next launch.
             let key = "\(profile?.username ?? username ?? "")/\(loaded.year)"
             year = loaded.withPosters(ProfileYearWallSession.shared.posters(for: key, from: loaded.posters, dealNew: dealsNew))
+        } catch is CancellationError {
+            return
+        } catch {
+            handleUnauthorized(error)
+        }
+    }
+
+    /// The signature's ratings, the Stats page's own (STAT-313). It is extra: a failed load keeps what's on screen, and
+    /// on a first load the signature stays hidden.
+    private func loadRatings(generation: Int) async {
+        do {
+            let loaded = try await profileRepository.statsRatings(username: username)
+            guard generation == requestGeneration else { return }
+            ratings = loaded
         } catch is CancellationError {
             return
         } catch {
@@ -1133,7 +1152,18 @@ struct ProfileView: View {
                     .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.32), radius: 12, y: 6)
 
                 HStack(spacing: 8) {
-                    Text("@\(profile.username)")
+                    // The signature sits right after the @handle, where a badge would go (STAT-313).
+                    HStack(spacing: ProfileSignatureGeometry.gap) {
+                        Text("@\(profile.username)")
+                        if let ratings = viewModel.ratings?.ratings, ProfileSignatureGeometry.shows(ratings) {
+                            NavigationLink {
+                                statsView(profile)
+                            } label: {
+                                ProfileRatingsSignature(ratings: ratings, pictureURL: backdropURL)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                     if profile.isPrivate {
                         Label("Private", systemImage: "lock.fill")
                             .labelStyle(.titleAndIcon)
