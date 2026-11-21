@@ -10,6 +10,8 @@ struct ProgressPageContent: Equatable {
     let tag: String?
     /// "+20 pages", "+3 episodes", "+1h 30m", "+25%": drawn in the poster's accent.
     let amount: String?
+    /// A book's day typed in percent: the pages it covered, said after the amount ("(37 p.)").
+    let pages: Int?
     /// "Started": drawn in the accent too.
     let isStart: Bool
     /// An old server's own words for the day, drawn in plain white.
@@ -48,6 +50,7 @@ struct ProgressPageContent: Equatable {
             break
         }
         self.amount = amount
+        pages = amount == nil ? nil : model.amountPages
         self.isStart = isStart
         self.words = words
         self.pills = pills
@@ -63,6 +66,7 @@ struct ProgressPageContent: Equatable {
     var spokenHeadline: String {
         var parts: [String] = []
         if let amount { parts.append(amount) }
+        if let pages { parts.append(PercentPages.spoken(pages)) }
         if isStart { parts.append("Started") }
         if let words { parts.append(words) }
         parts += pills

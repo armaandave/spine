@@ -11,7 +11,7 @@ enum FeedStandingMath {
     ///     the position's unit) keeps where the friend stands now.
     /// - Returns: nil when there is neither an end for a meter nor words to say.
     static func standing(position: TilePosition, told: TodayPart?, place: [String: Double]? = nil) -> FeedStanding? {
-        var position = position
+        var position = inTypedUnit(position, place: place)
         if let end = dayEnd(place, in: position) { position.current = end }
         let to = whole(position.current)
         let total = position.total.map(whole)
@@ -53,6 +53,24 @@ enum FeedStandingMath {
             total: counted.total,
             whereText: FeedStandingText.seasonText(season: season, current: done, total: total)
         )
+    }
+
+    /// A book's position in the unit its day was typed in, which the server's place holds alone: a day typed in
+    /// percent says "total 71%" and one typed in pages "p. 261", on every phone. The position comes from the list the
+    /// In progress tile reads, in the unit this phone shows the title in, which is about the viewer, not the day.
+    /// Unchanged without a place in the other unit or a page count to turn one into the other.
+    static func inTypedUnit(_ position: TilePosition, place: [String: Double]?) -> TilePosition {
+        guard let place, let pages = position.pagesTotal, pages > 0 else { return position }
+        switch position.unit {
+        case .pages where place["pages"] == nil && place["percent"] != nil:
+            return TilePosition(unit: .percent, current: position.current / pages * 100, total: 100, pagesTotal: pages)
+        case .percent where place["percent"] == nil && place["pages"] != nil:
+            return TilePosition(
+                unit: .pages, current: (position.current / 100 * pages).rounded(), total: pages, pagesTotal: pages
+            )
+        default:
+            return position
+        }
     }
 
     /// The day's end in the position's unit: the server's number in that unit, else pages and percent turned into

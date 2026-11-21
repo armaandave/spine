@@ -345,13 +345,21 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertEqual(standing, FeedStanding(unit: .pages, from: 645, to: 893, total: 992, whereText: "p. 893"))
     }
 
-    func testADaysPlaceInPercentGoesOnAPageBarThroughThePageCount() throws {
-        let position = TilePosition(unit: .pages, current: 400, total: 400, pagesTotal: 400)
-        let standing = try XCTUnwrap(FeedStandingMath.standing(
-            position: position, told: TodayPart(unit: .pages, amount: 40), place: ["percent": 75]
+    func testABookDaySaysWhereItEndedTheWayItWasTypedWhateverThisPhoneShows() throws {
+        // This phone shows the book in pages, but the friend typed 75%: the day ends at 75%, on a percent bar.
+        let inPages = TilePosition(unit: .pages, current: 400, total: 400, pagesTotal: 400)
+        let typedPercent = try XCTUnwrap(FeedStandingMath.standing(
+            position: inPages, told: TodayPart(unit: .percent, amount: 10), place: ["percent": 75]
         ))
-        XCTAssertEqual(standing.to, 300)
-        XCTAssertEqual(standing.from, 260)
+        XCTAssertEqual(typedPercent, FeedStanding(unit: .percent, from: 65, to: 75, total: 100, whereText: "total 75%"))
+
+        // This phone shows it in percent, but the friend typed page 300: the day ends at p. 300, on a page bar.
+        let inPercent = TilePosition(unit: .percent, current: 100, total: 100, pagesTotal: 400)
+        let typedPages = try XCTUnwrap(FeedStandingMath.standing(
+            position: inPercent, told: TodayPart(unit: .pages, amount: 40), place: ["pages": 300]
+        ))
+        XCTAssertEqual(typedPages, FeedStanding(unit: .pages, from: 260, to: 300, total: 400, whereText: "p. 300"))
+
         XCTAssertNil(FeedStandingMath.dayEnd(["percent": 75], in: TilePosition(unit: .pages, current: 1, total: nil, pagesTotal: nil)))
     }
 

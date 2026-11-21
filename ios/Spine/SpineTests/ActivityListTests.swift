@@ -270,6 +270,24 @@ final class ActivityListTests: XCTestCase {
         XCTAssertEqual(ActivityListPresentation.caption(for: paused), "Read 40 pages, paused")
     }
 
+    func testABookTypedInPercentSaysItsPagesRightAfterThePercent() throws {
+        let paused = try item(row(
+            id: -11, summary: "read 8.5%, paused", label: "8.5%",
+            extra: #", "amount": 40, "unit": "pages", "moves": ["paused"]"#
+        ))
+        XCTAssertEqual(ActivityListPresentation.caption(for: paused), "Read 8.5% (40 p.), paused")
+        XCTAssertEqual(ActivityListPresentation.spokenCaption(for: paused), "Read 8.5% 40 pages, paused")
+
+        let log = try item(row(
+            id: 15, type: "diary_created", objectType: "diary", summary: nil, label: "19.5%",
+            extra: #", "amount": 93, "unit": "pages""#
+        ))
+        XCTAssertEqual(ActivityListPresentation.caption(for: log), "+19.5% (93 p.)")
+
+        let underAPage = try item(row(id: -12, summary: "read 0.1%", label: "0.1%", extra: #", "amount": 0, "unit": "pages""#))
+        XCTAssertEqual(ActivityListPresentation.caption(for: underAPage), "Read 0.1%")
+    }
+
     func testAStatusOnlyDayIsTheMovesWordsAndIsSkippedByTheRail() throws {
         let stopped = try item(row(id: -7, summary: "picked back up", label: nil, extra: #", "moves": ["picked_back_up"]"#))
         XCTAssertTrue(ActivityListPresentation.isStatusOnly(stopped))

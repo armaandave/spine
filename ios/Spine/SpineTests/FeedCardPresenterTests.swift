@@ -427,6 +427,33 @@ final class FeedCardPresenterTests: XCTestCase {
         }
     }
 
+    func testABookTypedInPercentSaysThePagesItCovered() throws {
+        func bookRow(_ fields: String, log: Bool = false, mediaType: String = "book") throws -> FeedCardModel {
+            model(try FeedTestItems.item(
+                type: log ? "diary_created" : "progress_updated",
+                objectType: log ? "diary" : "progress_day",
+                objectFields: fields,
+                source: "hardcover",
+                mediaType: mediaType
+            ))
+        }
+        let day = try bookRow("\"label\": \"10%\", \"amount\": 37, \"unit\": \"pages\"")
+        XCTAssertEqual(day.headline, .progress(amount: "+10%", tail: nil, pills: []))
+        XCTAssertEqual(day.amountPages, 37)
+        XCTAssertTrue(day.accessibilityLabel.contains("+10%, 37 pages"))
+
+        let log = try bookRow("\"rating\": \"4.5\", \"label\": \"19.5%\", \"amount\": 93, \"unit\": \"pages\"", log: true)
+        XCTAssertEqual(log.amountPages, 93, "A log that finished a read typed in percent")
+
+        XCTAssertNil(try bookRow("\"label\": \"0.1%\", \"amount\": 0, \"unit\": \"pages\"").amountPages, "Under a page says nothing")
+        XCTAssertNil(try bookRow("\"label\": \"56 pages\", \"amount\": 56, \"unit\": \"pages\"").amountPages, "Typed in pages")
+        XCTAssertNil(try bookRow("\"label\": \"10%\"").amountPages, "No page count, so no amount")
+        XCTAssertNil(
+            try bookRow("\"label\": \"12%\", \"amount\": 90, \"unit\": \"minutes\"", mediaType: "game").amountPages,
+            "A game has no pages"
+        )
+    }
+
     func testPausedWithAnAmountKeepsTheAmountAndAddsAPill() throws {
         let card = model(try FeedTestItems.day(label: "24 episodes", moves: ["paused"], mediaType: "tv"))
         XCTAssertEqual(card.headline, .progress(amount: "+24 episodes", tail: nil, pills: ["Paused"]))

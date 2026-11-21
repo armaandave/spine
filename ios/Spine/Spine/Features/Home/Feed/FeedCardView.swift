@@ -281,6 +281,9 @@ struct FeedCardView: View, Equatable {
                         .lineLimit(1)
                         .feedTextLift(ink)
                         .foregroundStyle(ink.muted)
+                    if let pages = model.amountPages {
+                        pagesText(pages, ink: ink)
+                    }
                 }
                 if check {
                     LogCheckMark(color: ink.accent(posterAccentHex: model.art.accentHex))
@@ -292,6 +295,9 @@ struct FeedCardView: View, Equatable {
                     .feedTextLift(ink)
                     .foregroundStyle(ink.accent(posterAccentHex: model.art.accentHex))
                     .layoutPriority(2)
+                if let pages = model.amountPages {
+                    pagesText(pages, ink: ink)
+                }
                 if !pills.isEmpty {
                     ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
                 } else if let tail {
@@ -336,6 +342,18 @@ struct FeedCardView: View, Equatable {
         .fontWeight(isMarks(headline) ? .bold : nil)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: Self.headlineHeight)
+    }
+
+    /// "(37 p.)" after a book's percent, in the muted words' look. When the line is full it gives way first: the
+    /// percent and where they are keep their room.
+    private func pagesText(_ pages: Int, ink: ArtInk) -> some View {
+        Text(PercentPages.text(pages))
+            .fontWeight(.medium)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .feedTextLift(ink)
+            .foregroundStyle(ink.muted)
+            .layoutPriority(-1)
     }
 
     private func isMarks(_ headline: FeedHeadline) -> Bool {

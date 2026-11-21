@@ -402,9 +402,16 @@ struct DiaryLogDetailView: View {
     private func logBar(_ card: FeedCardModel, meter: ProgressMeterModel) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if case let .marks(_, _, _, _, amount?, _)? = card.headline {
-                Text(amount)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.66))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(amount)
+                    if let pages = card.amountPages {
+                        Text(PercentPages.text(pages))
+                    }
+                }
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.66))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel([amount, card.amountPages.map(PercentPages.spoken)].compactMap { $0 }.joined(separator: ", "))
             }
             PostProgressMeterView(meter: meter, art: card.art, check: true)
                 .accessibilityElement(children: .ignore)

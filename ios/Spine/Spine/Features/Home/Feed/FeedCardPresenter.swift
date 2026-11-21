@@ -39,6 +39,7 @@ enum FeedCardPresenter {
             kind = .other
             headline = FeedHeadline.status(words: capitalized(ActivityFeedPresentation.actionText(for: item)), tail: nil)
         }
+        let amountPages = hasAmount(headline) ? PercentPages.count(for: item) : nil
 
         // A log's bar never pushes its review line out: the card grows one line to keep it (the Check cap).
         let isLogBar = kind == .log && meter != nil
@@ -72,7 +73,7 @@ enum FeedCardPresenter {
                 dayLabel: dayLabel,
                 title: title,
                 tag: tag,
-                headlineWords: headlineWords(headline, item: item),
+                headlineWords: headlineWords(headline, item: item, pages: amountPages),
                 details: details,
                 engagement: engagement
             ),
@@ -80,8 +81,18 @@ enum FeedCardPresenter {
             destination: ActivityDestination.resolve(item),
             height: height,
             meterCheck: isLogBar,
-            holdMedia: item.media
+            holdMedia: item.media,
+            amountPages: amountPages
         )
+    }
+
+    /// Whether the headline says an amount the pages can follow: a progress day's, or what a log added.
+    private static func hasAmount(_ headline: FeedHeadline?) -> Bool {
+        switch headline {
+        case .marks(_, _, _, _, let amount, _): amount != nil
+        case .progress: true
+        default: false
+        }
     }
 
     /// A log's bar (AC-10): what the read held before the log, then the log's own part lit, to where the log ended.
@@ -348,15 +359,17 @@ enum FeedCardPresenter {
 
     // MARK: VoiceOver
 
-    private static func headlineWords(_ headline: FeedHeadline?, item: ActivityItem) -> String? {
+    private static func headlineWords(_ headline: FeedHeadline?, item: ActivityItem, pages: Int?) -> String? {
+        let spokenPages = pages.map(PercentPages.spoken)
         switch headline {
         case .marks(_, _, let rewatch, let repeatLabel, let amount, _):
             let summary = ActivityFeedPresentation.ratingSummary(for: item)
-            return [summary.isEmpty ? nil : summary.accessibilityLabel, rewatch ? repeatLabel : nil, amount]
+            return [summary.isEmpty ? nil : summary.accessibilityLabel, rewatch ? repeatLabel : nil, amount, spokenPages]
                 .compactMap { $0 }
                 .joined(separator: ", ")
         case let .progress(amount, tail, pills):
-            return ([amount] + pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 }).joined(separator: ", ")
+            return ([amount, spokenPages].compactMap { $0 } + pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 })
+                .joined(separator: ", ")
         case let .moves(pills, tail):
             return (pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 }).joined(separator: ", ")
         case let .status(words, tail):

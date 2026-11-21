@@ -300,12 +300,20 @@ struct ProgressPostDetailView: View {
         let accent = ink.accent(posterAccentHex: page.art.accentHex)
         let lead = HStack(alignment: .center, spacing: 10) {
             if let amount = page.amount {
-                Text(amount)
-                    .font(.system(size: 21, weight: .heavy))
-                    .foregroundStyle(accent)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .layoutPriority(2)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(amount)
+                        .font(.system(size: 21, weight: .heavy))
+                        .foregroundStyle(accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .layoutPriority(2)
+                    if let pages = page.pages {
+                        Text(PercentPages.text(pages))
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.62))
+                            .lineLimit(1)
+                    }
+                }
             }
             if page.isStart {
                 Text("Started")

@@ -88,4 +88,7 @@ struct FeedCardModel: Identifiable, Equatable {
     var meterCheck: Bool = false
     /// The card's title, for its poster's hold menu; nil on a Planning day's fan.
     var holdMedia: MediaSummary? = nil
+    /// A book update typed in percent: the pages it covered, said after the headline's amount ("+10% (37 p.)"). Nil
+    /// for anything else, and when the headline has no amount.
+    var amountPages: Int? = nil
 }

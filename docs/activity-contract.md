@@ -51,6 +51,8 @@ hearts, follows, or adding to a list.
   typed in percent is told in percent ("read 5.25%"), even one that moved less than a
   page; so is a log that finishes a read whose last save was. Its pages stay its
   amount, so no number moves. Saves from before this kept no percent and stay in pages.
+  The app says those pages after the percent ("+5.25% (21 p.)") on the feed, the post
+  pages and the Activity list, and nothing under one page.
 - Progress that day replaces a start, as the same item. A log doesn't replace either:
   a log and that day's progress or start on the same title are separate items.
 - Starts are recorded in `social.ProgressChange` as a step of kind `start`; they
@@ -254,8 +256,10 @@ the shape installed apps read. `consumed_at` is the item's calendar day
   a game's `{"minutes": 840, "percent": 80}`. On TV it is the furthest episode the day's
   ticks reached, `{"season": 2, "episodes": 7}`, and on anime `{"episodes": 12}`. A log
   afterwards took what it added on its own row, so `place` can be short of where the
-  person stands now; the feed card's bar and "p. 893" or "S2 · 7/10" read it. It is null
-  on a day with no number saved (a start or a status move alone).
+  person stands now; the feed card's bar and "p. 893" or "S2 · 7/10" read it. A book's
+  place holds only the unit its last save was typed in, and the app says it that way on
+  every phone ("total 71%" or "p. 261"). It is null on a day with no number saved (a
+  start or a status move alone).
 - A log's `object` also has `amount`, `unit`, `time_label` and `label`, what the log
   added in the units it was told in with no plus sign ("200 pages", "3 episodes", "2h");
   movie and album logs send no `label`. It also has `bar` (AC-10):

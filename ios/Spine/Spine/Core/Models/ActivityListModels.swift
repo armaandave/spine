@@ -117,23 +117,45 @@ enum ActivityListPresentation {
 
     /// The line under a row's title, in pieces so the row can set marks beside them. A progress row reads the
     /// server's words ("Read 40 pages, paused"), a log what it added ("+200 pages"); either ends with its time
-    /// ("2h 15m"). No Swift time formatter: the server's `time_label` is the only spelling.
+    /// ("2h 15m"). No Swift time formatter: the server's `time_label` is the only spelling. A book typed in percent
+    /// says its pages after the percent: "Read 8.5% (40 p.), paused", "+19.5% (93 p.)".
     static func caption(for activity: ActivityItem) -> String? {
+        caption(for: activity, pages: PercentPages.text)
+    }
+
+    /// The caption as VoiceOver says it: the pages in words ("Read 8.5% 40 pages, paused").
+    static func spokenCaption(for activity: ActivityItem) -> String? {
+        caption(for: activity, pages: PercentPages.spoken)
+    }
+
+    private static func caption(for activity: ActivityItem, pages say: (Int) -> String) -> String? {
         if activity.planning != nil {
             // The count is the row's title; the names go under it.
             return PlanningWords.names(for: activity)
         }
+        let pages = PercentPages.count(for: activity).map(say)
+        let label = ActivityFeedPresentation.clean(activity.object.label)
         let words: String?
         switch activity.post {
         case .progress:
-            words = ActivityFeedPresentation.progressHeadline(for: activity)
+            let headline = ActivityFeedPresentation.progressHeadline(for: activity)
+            words = pages.map { inserting($0, after: label, in: headline) } ?? headline
         case .log:
-            words = ActivityFeedPresentation.clean(activity.object.label).map { "+\($0)" }
+            words = label.map { "+" + [$0, pages].compactMap { $0 }.joined(separator: " ") }
         case nil:
             words = nil
         }
         let parts = [words, ActivityFeedPresentation.clean(activity.object.timeLabel)].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The server's words with the pages right after the percent they belong to, before any status move. Unchanged
+    /// when the words don't say the percent.
+    private static func inserting(_ pages: String, after label: String?, in words: String) -> String {
+        guard let label, let range = words.range(of: label) else { return words }
+        var text = words
+        text.insert(contentsOf: " " + pages, at: range.upperBound)
+        return text
     }
 
     /// The months of a list, newest first, each with its rows in the order the server sent them.
