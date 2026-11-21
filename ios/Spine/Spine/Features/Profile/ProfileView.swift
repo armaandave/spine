@@ -2057,6 +2057,40 @@ enum ProfileRecentActivityRailModel {
     }
 }
 
+/// The pill on a Recent Activity poster: what that day of progress added, short enough for the rail's 70 pt poster.
+/// Only a day that moved forward has one; a start, a status move or a log has none.
+enum RecentActivityBadge {
+    static func text(for activity: ActivityItem) -> String? {
+        let object = activity.object
+        guard object.type == "progress_day",
+              let told = ToldAmount.parse(label: object.label, unit: object.unit, amount: object.amount, percent: object.percent)
+        else { return nil }
+        let amount = told.amount
+        switch told.unit {
+        case .pages: return "+\(number(amount)) p."
+        case .chapters: return "+\(number(amount)) ch."
+        case .issues: return "+\(number(amount)) iss."
+        case .episodes: return "+\(number(amount)) \(amount == 1 ? "ep" : "eps")"
+        case .percent: return "+\(ProgressPercent.text(Decimal(amount)))%"
+        case .minutes: return "+\(time(minutes: amount))"
+        }
+    }
+
+    /// "2h 30m", "2h" or "45m"; from 10 hours up, whole hours ("13h" for 12h 45m), so it stays on one line.
+    private static func time(minutes: Double) -> String {
+        if minutes >= 600 { return "\(Int((minutes / 60).rounded()))h" }
+        let total = Int(minutes.rounded())
+        let hours = total / 60
+        let rest = total % 60
+        if hours == 0 { return "\(rest)m" }
+        return rest == 0 ? "\(hours)h" : "\(hours)h \(rest)m"
+    }
+
+    private static func number(_ value: Double) -> String {
+        value == value.rounded() ? Int(value).formatted() : ProgressPercent.text(Decimal(value))
+    }
+}
+
 private struct RecentActivityRail: View {
     let items: [ActivityItem]
     let action: (ProfileRecentActivityRailItem) -> Void
@@ -2175,14 +2209,22 @@ private struct RecentActivityPoster: View {
     private var subjectContent: some View {
         switch item.subject {
         case let .media(media):
-            MediaArtwork(
-                url: media.displayPosterURL,
-                title: media.title,
-                slot: .profileRail,
-                mediaType: media.ref.mediaType,
-                orientation: media.posterOrientation
-            )
-            .posterHoldMenu(media)
+            ZStack(alignment: .bottom) {
+                MediaArtwork(
+                    url: media.displayPosterURL,
+                    title: media.title,
+                    slot: .profileRail,
+                    mediaType: media.ref.mediaType,
+                    orientation: media.posterOrientation
+                )
+                .posterHoldMenu(media)
+
+                if let badge = RecentActivityBadge.text(for: item.activity) {
+                    PosterBadgeLabel(text: badge)
+                        .lineLimit(1)
+                        .padding(5)
+                }
+            }
         case let .person(person):
             VStack(alignment: .center, spacing: 3) {
                 PersonArtwork(
@@ -2217,7 +2259,11 @@ private struct RecentActivityPoster: View {
     private var accessibilityLabel: String {
         switch item.subject {
         case let .media(media):
-            "View \(media.title)"
+            if RecentActivityBadge.text(for: item.activity) != nil, let told = item.activity.object.label {
+                "View \(media.title), \(told)"
+            } else {
+                "View \(media.title)"
+            }
         case let .person(person):
             "View \(person.name)"
         }
