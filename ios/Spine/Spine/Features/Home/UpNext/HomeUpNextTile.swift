@@ -49,8 +49,8 @@ struct HomeUpNextTile: View {
 
 /// The numbers of the tile, from the mock.
 private enum UpNextTileSpec {
-    /// Unchanged since the posters lost their date band, so Home doesn't shift; the posters sit centered in it.
-    static let height: CGFloat = 79
+    /// Snug round the posters and the two lines: 9 pt above and below a poster, which sits centered in it.
+    static let height: CGFloat = 64
     static let corner: CGFloat = 26
     static let leading: CGFloat = 16
     static let trailing: CGFloat = 12

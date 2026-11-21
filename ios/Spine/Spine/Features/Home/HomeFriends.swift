@@ -103,6 +103,8 @@ struct HomeFriendsStrip: View {
                 }
             }
         }
+        // Scrolls only when the faces run past the strip's edge; when they all fit it stays still.
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .onScrollGeometryChange(for: Overflow.self) { geometry in
             let maxOffset = geometry.contentSize.width - geometry.containerSize.width
             return Overflow(
