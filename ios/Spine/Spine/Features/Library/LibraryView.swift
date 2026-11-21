@@ -1032,18 +1032,18 @@ struct LibraryView: View {
     }
 }
 
-/// The capsule a poster's badge reads in, on Library's grid and Home's In progress cards.
+/// The Liquid Glass capsule a poster's badge reads in, on Library's grid. The text keeps the default style, so it
+/// turns dark when the glass sits on a light poster and stays white on a dark one.
 struct PosterBadgeLabel: View {
     let text: String
 
     var body: some View {
         Text(text)
             .font(.system(size: 9, weight: .black))
-            .foregroundStyle(.white)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
-            .background(.black.opacity(0.76), in: Capsule())
+            .glassEffect(.regular, in: .capsule)
     }
 }
 
