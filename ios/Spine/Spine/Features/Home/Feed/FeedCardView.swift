@@ -300,7 +300,7 @@ struct FeedCardView: View, Equatable {
                 }
                 if !pills.isEmpty {
                     ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
-                } else if let tail {
+                } else if let tail, !model.hidesWhere {
                     Text(tail)
                         .fontWeight(.medium)
                         .lineLimit(1)
@@ -309,7 +309,7 @@ struct FeedCardView: View, Equatable {
                 }
             case let .moves(pills, tail):
                 ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
-                if let tail {
+                if let tail, !model.hidesWhere {
                     Text(tail)
                         .fontWeight(.medium)
                         .lineLimit(1)

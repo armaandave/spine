@@ -4,8 +4,9 @@ import Foundation
 /// only draw the result. It never edits `ActivityFeedPresentation`, whose wording is pinned elsewhere.
 enum FeedCardPresenter {
     /// - Parameters:
-    ///   - standing: where the person stands on the title. Used only when `isNewestOfTitle`: an older card of the
-    ///     same title never gets a meter or a "where".
+    ///   - standing: where the person stood at the end of the card's day, which its provider works out: the newest
+    ///     card of a title from the person's list, an older one from where its own day ended (or none).
+    ///   - isNewestOfTitle: whether this is the person's newest card of the title. The provider has already used it.
     ///   - planning: the titles of a Planning day, once loaded. Until then a Planning card shows its one face.
     static func model(
         for item: ActivityItem,
@@ -19,7 +20,6 @@ enum FeedCardPresenter {
         }
 
         let (title, tag) = titleAndTag(for: item)
-        let standing = isNewestOfTitle ? standing : nil
         let review = ActivityFeedPresentation.reviewText(for: item)
         let kind: FeedCardKind
         let headline: FeedHeadline?
@@ -40,6 +40,7 @@ enum FeedCardPresenter {
             headline = FeedHeadline.status(words: capitalized(ActivityFeedPresentation.actionText(for: item)), tail: nil)
         }
         let amountPages = hasAmount(headline) ? PercentPages.count(for: item) : nil
+        let hidesWhere = cardHidesWhere(item)
 
         // A log's bar never pushes its review line out: the card grows one line to keep it (the Check cap).
         let isLogBar = kind == .log && meter != nil
@@ -73,7 +74,7 @@ enum FeedCardPresenter {
                 dayLabel: dayLabel,
                 title: title,
                 tag: tag,
-                headlineWords: headlineWords(headline, item: item, pages: amountPages),
+                headlineWords: headlineWords(headline, item: item, pages: amountPages, hidesWhere: hidesWhere),
                 details: details,
                 engagement: engagement
             ),
@@ -82,8 +83,16 @@ enum FeedCardPresenter {
             height: height,
             meterCheck: isLogBar,
             holdMedia: item.media,
-            amountPages: amountPages
+            amountPages: amountPages,
+            hidesWhere: hidesWhere
         )
+    }
+
+    /// A book's or a game's card says what the day added and draws its bar, but leaves where the person is to its
+    /// post page.
+    private static func cardHidesWhere(_ item: ActivityItem) -> Bool {
+        let type = item.media?.ref.mediaType
+        return type == "book" || type == "game"
     }
 
     /// Whether the headline says an amount the pages can follow: a progress day's, or what a log added.
@@ -359,8 +368,14 @@ enum FeedCardPresenter {
 
     // MARK: VoiceOver
 
-    private static func headlineWords(_ headline: FeedHeadline?, item: ActivityItem, pages: Int?) -> String? {
+    private static func headlineWords(
+        _ headline: FeedHeadline?, item: ActivityItem, pages: Int?, hidesWhere: Bool
+    ) -> String? {
         let spokenPages = pages.map(PercentPages.spoken)
+        // What the card shows: a book's or a game's where is left to its page.
+        func spokenWhere(_ tail: String?) -> [String] {
+            hidesWhere ? [] : [tail.map(FeedStandingText.spoken)].compactMap { $0 }
+        }
         switch headline {
         case .marks(_, _, let rewatch, let repeatLabel, let amount, _):
             let summary = ActivityFeedPresentation.ratingSummary(for: item)
@@ -368,10 +383,9 @@ enum FeedCardPresenter {
                 .compactMap { $0 }
                 .joined(separator: ", ")
         case let .progress(amount, tail, pills):
-            return ([amount, spokenPages].compactMap { $0 } + pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 })
-                .joined(separator: ", ")
+            return ([amount, spokenPages].compactMap { $0 } + pills + spokenWhere(tail)).joined(separator: ", ")
         case let .moves(pills, tail):
-            return (pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 }).joined(separator: ", ")
+            return (pills + spokenWhere(tail)).joined(separator: ", ")
         case let .status(words, tail):
             return [words, tail].compactMap { $0 }.joined(separator: ", ")
         case .started:

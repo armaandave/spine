@@ -80,17 +80,17 @@ struct ProgressPageContent: Equatable {
     /// - Parameters:
     ///   - card: the feed card the page was opened from, when it was opened from one. It already knows whether it was
     ///     the newest card of its title and what the person's standing was, so it is used as it is.
-    ///   - standing: where the person stands on the title now, loaded by the page itself.
-    ///   - isNewestOfTitle: whether this day is the person's newest on the title (nil until known). A standing is
-    ///     where the person is now, so an older day never gets one, as on the feed.
+    ///   - standing: where the person stood at the end of this day, loaded by the page itself: from their list for
+    ///     their newest day on the title, from the day's own end for an older one, as on the feed.
+    ///   - isNewestOfTitle: whether this day is the person's newest on the title (nil until known).
     static func model(
         for activity: ActivityItem,
         card: FeedCardModel?,
         standing: FeedStanding?,
         isNewestOfTitle: Bool?
     ) -> FeedCardModel {
-        if isNewestOfTitle == true, let standing {
-            return FeedCardPresenter.model(for: activity, standing: standing, isNewestOfTitle: true)
+        if let standing {
+            return FeedCardPresenter.model(for: activity, standing: standing, isNewestOfTitle: isNewestOfTitle == true)
         }
         if let card { return card }
         return FeedCardPresenter.model(for: activity, standing: nil, isNewestOfTitle: false)

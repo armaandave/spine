@@ -220,13 +220,13 @@ final class PostPageParityTests: XCTestCase {
         XCTAssertEqual(after, ProgressPageContent(model: card(item, standing: fed)))
     }
 
-    func testAnOlderDayNeverGetsTheStandingNow() throws {
+    func testAnOlderDayShowsTheStandingOfItsOwnDay() throws {
         let item = try FeedTestItems.day(label: "86 pages", unit: "pages")
-        let fed = try standing(.pages, current: 212, total: 448, pagesTotal: 448)
-        let older = page(item, standing: fed, newest: false)
+        let dayEnd = FeedStanding(unit: .pages, from: 40, to: 126, total: 448, whereText: "p. 126")
+        let older = page(item, standing: dayEnd, newest: false)
         XCTAssertNotNil(older.amount)
-        XCTAssertNil(older.standing)
-        XCTAssertNil(older.meter)
+        XCTAssertEqual(older.standing, "p. 126")
+        XCTAssertEqual(older.meter?.kind, .bar(total: 448))
     }
 
     func testTheNewestDayOfATitleIsFoundInTheirRecentActivity() throws {

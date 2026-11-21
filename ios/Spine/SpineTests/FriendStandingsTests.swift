@@ -282,7 +282,9 @@ final class FriendStandingsTests: XCTestCase {
         let startedThenMore = [try day(3, "Started", title: "9"), try day(4, "30 pages", title: "9")]
         XCTAssertNil(FriendStandings.want(for: movie))
         XCTAssertNil(FriendStandings.want(for: started))
-        XCTAssertTrue(FriendStandings.wants(in: startedThenMore).isEmpty, "An older card is not newest once a start is")
+        XCTAssertEqual(
+            FriendStandings.wants(in: startedThenMore).count, 1, "A start wants nothing, so the card after it reads the list"
+        )
         XCTAssertTrue(FriendStandings.wants(in: [try FeedTestItems.log(id: 5, rating: "4")]).isEmpty)
     }
 
@@ -492,15 +494,29 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertEqual(root.requests.map(\.status), ["In progress", "Completed"], "Only Completed is tried after In progress")
     }
 
-    func testOnlyTheNewestCardOfATitleGetsItsStanding() async throws {
-        root.set("a", "book", rows: [bookRow("7", page: 212)])
+    func testAnOlderCardKeepsTheStandingOfItsOwnDay() async throws {
+        root.set("a", "book", rows: [bookRow("7", page: 212, of: 400)])
         let newest = try day(1, "30 pages")
-        let older = try day(2, "20 pages")
+        let ended = try FeedTestItems.item(
+            id: 2, type: "progress_updated", objectType: "progress_day", objectID: 20,
+            objectFields: "\"label\": \"20 pages\", \"unit\": \"pages\", \"place\": {\"pages\": 150}",
+            username: "a", source: "manual", mediaType: "book", mediaID: "7"
+        )
+        let unsaid = try day(3, "10 pages")
         let provider = provider()
-        provider.prepare(for: [newest, older])
+        provider.prepare(for: [newest, ended, unsaid])
         await landed(provider)
-        XCTAssertNotNil(provider.standing(for: newest, isNewestOfTitle: true))
-        XCTAssertNil(provider.standing(for: older, isNewestOfTitle: false))
+        XCTAssertEqual(provider.standing(for: newest, isNewestOfTitle: true)?.whereText, "p. 212")
+        XCTAssertEqual(
+            provider.standing(for: ended, isNewestOfTitle: false),
+            FeedStanding(unit: .pages, from: 130, to: 150, total: 400, whereText: "p. 150"),
+            "Where its own day ended, on the length the newest card's list read"
+        )
+        XCTAssertNil(
+            provider.standing(for: unsaid, isNewestOfTitle: false),
+            "An older day that doesn't say where it ended gets nothing: where they are now would be wrong for it"
+        )
+        XCTAssertEqual(root.requests.count, 1, "Older cards ask for nothing of their own")
     }
 
     // MARK: 6b. A title finished that day

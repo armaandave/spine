@@ -454,6 +454,23 @@ final class FeedCardPresenterTests: XCTestCase {
         )
     }
 
+    func testBooksAndGamesLeaveWhereTheyAreToThePostPage() throws {
+        let standing = FeedStanding(unit: .pages, from: 126, to: 212, total: 448, whereText: "p. 212")
+        let book = model(try FeedTestItems.day(label: "86 pages", mediaType: "book"), standing: standing)
+        XCTAssertTrue(book.hidesWhere)
+        XCTAssertEqual(book.headline, .progress(amount: "+86 pages", tail: "p. 212", pills: []), "The page still reads it")
+        XCTAssertFalse(book.accessibilityLabel.contains("212"), "VoiceOver says what the card shows")
+        XCTAssertNotNil(book.meter)
+        XCTAssertTrue(model(try FeedTestItems.day(label: "2h 30m", mediaType: "game")).hidesWhere)
+
+        let show = model(
+            try FeedTestItems.day(label: "3 episodes", mediaType: "tv"),
+            standing: FeedStanding(unit: .episodes, from: 4, to: 7, total: 10, whereText: "7/10")
+        )
+        XCTAssertFalse(show.hidesWhere, "Shows, anime, manga and comics keep theirs")
+        XCTAssertTrue(show.accessibilityLabel.contains("7 of 10"))
+    }
+
     func testPausedWithAnAmountKeepsTheAmountAndAddsAPill() throws {
         let card = model(try FeedTestItems.day(label: "24 episodes", moves: ["paused"], mediaType: "tv"))
         XCTAssertEqual(card.headline, .progress(amount: "+24 episodes", tail: nil, pills: ["Paused"]))
@@ -519,13 +536,12 @@ final class FeedCardPresenterTests: XCTestCase {
         XCTAssertEqual(bar.headline, .progress(amount: "+86 pages", tail: "p. 212", pills: []))
     }
 
-    func testNoMeterWithoutAStandingATotalOrTheNewestCard() throws {
+    func testNoMeterWithoutAStandingOrATotal() throws {
         let book = try FeedTestItems.day(label: "86 pages")
         XCTAssertNil(model(book).meter)
         XCTAssertNil(model(book, standing: FeedStanding(unit: .pages, from: 1, to: 2, total: nil, whereText: "p. 2")).meter)
         let older = model(book, standing: FeedStanding(unit: .pages, from: 1, to: 2, total: 10, whereText: "p. 2"), newest: false)
-        XCTAssertNil(older.meter, "Only the newest card of a title gets a meter")
-        XCTAssertEqual(older.headline, .progress(amount: "+86 pages", tail: nil, pills: []), "Nor a where")
+        XCTAssertNotNil(older.meter, "An older card draws its own day's standing, which its provider decides")
         let game = try FeedTestItems.day(label: "2h 30m")
         XCTAssertNil(model(game, standing: FeedStanding(unit: .minutes, from: 60, to: 150, total: 600, whereText: nil)).meter)
     }

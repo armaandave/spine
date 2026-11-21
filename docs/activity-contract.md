@@ -258,8 +258,10 @@ the shape installed apps read. `consumed_at` is the item's calendar day
   afterwards took what it added on its own row, so `place` can be short of where the
   person stands now; the feed card's bar and "p. 893" or "S2 · 7/10" read it. A book's
   place holds only the unit its last save was typed in, and the app says it that way on
-  every phone ("total 71%" or "p. 261"). It is null on a day with no number saved (a
-  start or a status move alone).
+  every phone ("total 71%" or "p. 261"). Every day's card and post page draw that
+  day's own bar from it, not only the newest's; a book's or a game's card leaves the
+  words to its post page. It is null on a day with no number saved (a start or a
+  status move alone).
 - A log's `object` also has `amount`, `unit`, `time_label` and `label`, what the log
   added in the units it was told in with no plus sign ("200 pages", "3 episodes", "2h");
   movie and album logs send no `label`. It also has `bar` (AC-10):

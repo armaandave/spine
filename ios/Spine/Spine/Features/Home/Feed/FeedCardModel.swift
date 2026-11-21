@@ -91,4 +91,6 @@ struct FeedCardModel: Identifiable, Equatable {
     /// A book update typed in percent: the pages it covered, said after the headline's amount ("+10% (37 p.)"). Nil
     /// for anything else, and when the headline has no amount.
     var amountPages: Int? = nil
+    /// A book's or a game's card leaves out where the person is (the headline's tail); its post page still says it.
+    var hidesWhere: Bool = false
 }

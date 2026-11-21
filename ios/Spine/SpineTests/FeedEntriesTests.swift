@@ -176,7 +176,7 @@ final class FeedEntriesTests: XCTestCase {
 
         let cards = entries
         XCTAssertNotNil(cards.first { $0.id == 1 }?.meter)
-        XCTAssertNil(cards.first { $0.id == 3 }?.meter, "An older card of the same title has no meter")
+        XCTAssertNotNil(cards.first { $0.id == 3 }?.meter, "An older card draws the standing its provider gives it")
         XCTAssertNotNil(cards.first { $0.id == 4 }?.meter, "Another person's card is their own title")
         XCTAssertNotNil(cards.first { $0.id == 5 }?.meter)
         XCTAssertEqual(cards.first { $0.id == 5 }?.meter?.from, cards.first { $0.id == 5 }?.meter?.to)
