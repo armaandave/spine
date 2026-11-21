@@ -220,6 +220,7 @@ struct DiaryLogDetailView: View {
     var body: some View {
         PostPage(
             item: viewModel.entry,
+            author: viewModel.entry?.user,
             isLoading: viewModel.isLoading,
             errorTitle: "Could not load log",
             errorMessage: viewModel.errorMessage,
@@ -326,7 +327,6 @@ struct DiaryLogDetailView: View {
             posterTitle: entry.media.title,
             mediaType: entry.media.ref.mediaType,
             orientation: viewModel.mediaDetail?.posterOrientation ?? entry.media.posterOrientation,
-            user: entry.user,
             title: PostHero.titleParts(TVTrackingPresentation.diaryTitle(for: entry.media)).title,
             detail: viewModel.mediaDetail,
             subtitle: PostHero.metadata(displayTitle: entry.media.displayTitle, detail: viewModel.mediaDetail),
