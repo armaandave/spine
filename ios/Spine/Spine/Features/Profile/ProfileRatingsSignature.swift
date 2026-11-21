@@ -10,8 +10,8 @@ enum ProfileSignatureGeometry {
     /// The floor sits 2 above the box's bottom, and the busiest step 2 below its top.
     static let floorY: CGFloat = 12
     static let amplitude: CGFloat = 10
-    /// The tap area's height around the 14 pt line.
-    static let tapHeight: CGFloat = 44
+    /// How far the 44 pt tap area reaches above and below the 14 pt line.
+    static let tapInset: CGFloat = (44 - size.height) / 2
 
     /// Whether a profile shows one: only once the person has rated something.
     static func shows(_ ratings: StatsRatings) -> Bool {
@@ -67,10 +67,9 @@ struct ProfileRatingsSignature: View {
             .equatable()
             .opacity(tint == nil ? 0 : 1)
             .frame(width: G.size.width, height: G.size.height)
-            // A 44 pt tap area, taken back out so the line keeps the @handle's own height.
-            .padding(.vertical, (G.tapHeight - G.size.height) / 2)
+            // A 44 pt tap area; the link around it takes the room back out (`tapInset`).
+            .padding(.vertical, G.tapInset)
             .contentShape(Rectangle())
-            .padding(.vertical, -(G.tapHeight - G.size.height) / 2)
             .task(id: pictureURL) { await reveal() }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel)

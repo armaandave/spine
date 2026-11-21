@@ -24,10 +24,13 @@ from api.services import (
     stats_v2_ratings,
     stats_year,
 )
-from api.services.stats_scope import COLLECTION_TABS, StatsScope, build_scope
+from api.services.stats_scope import COLLECTION_TABS, build_scope
 from api.services.stats_v2 import build_stats_v2
 from app import statistics as legacy_stats
 from app.curation import prime_curated_artwork
+
+# The profile's signature reads All Time, as the Stats page asks for it (STAT-313).
+ALL_TIME_PARAMS = {"start_date": "all", "end_date": "all"}
 
 
 def stats_payload(user, request):
@@ -182,7 +185,8 @@ class UserStatsYearView(APIView):
 
 def ratings_response(user, request):
     """Answer the profile's signature: All Time Global ratings (STAT-313)."""
-    scope = StatsScope(owner=user, viewer=request.user, request=request)
+    # The range the Stats page asks for All Time, through the same parsing.
+    scope = build_scope(user, request.user, ALL_TIME_PARAMS, request=request)
     return Response(
         stats_cache.cached(
             scope,

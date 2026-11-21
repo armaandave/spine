@@ -112,11 +112,12 @@ final class ProfileViewModel {
             ratings = nil
             return
         }
-        // First: it sits in the hero, the first thing on screen.
-        await loadRatings(generation: generation)
+        // The signature sits in the hero: it loads alongside the sections below, never ahead of them.
+        async let ratingsLoaded: Void = loadRatings(generation: generation)
         await loadInProgressItems(generation: generation)
         await loadRecentActivity(generation: generation)
         await loadYear(generation: generation)
+        await ratingsLoaded
     }
 
     func block() async {
@@ -1155,6 +1156,8 @@ struct ProfileView: View {
                     // The signature sits right after the @handle, where a badge would go (STAT-313).
                     HStack(spacing: ProfileSignatureGeometry.gap) {
                         Text("@\(profile.username)")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         if let ratings = viewModel.ratings?.ratings, ProfileSignatureGeometry.shows(ratings) {
                             NavigationLink {
                                 statsView(profile)
@@ -1162,6 +1165,8 @@ struct ProfileView: View {
                                 ProfileRatingsSignature(ratings: ratings, pictureURL: backdropURL)
                             }
                             .buttonStyle(.plain)
+                            // Its 44 pt tap area, taken back out so the line keeps the @handle's own height.
+                            .padding(.vertical, -ProfileSignatureGeometry.tapInset)
                         }
                     }
                     if profile.isPrivate {
