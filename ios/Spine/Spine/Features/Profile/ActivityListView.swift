@@ -327,6 +327,7 @@ struct ActivityListRow: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white.opacity(0.62))
                         .lineLimit(2)
+                        .accessibilityLabel(ActivityListPresentation.spokenCaption(for: activity) ?? caption)
                 }
             }
         }

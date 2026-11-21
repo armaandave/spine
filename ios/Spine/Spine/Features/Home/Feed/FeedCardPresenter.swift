@@ -4,8 +4,9 @@ import Foundation
 /// only draw the result. It never edits `ActivityFeedPresentation`, whose wording is pinned elsewhere.
 enum FeedCardPresenter {
     /// - Parameters:
-    ///   - standing: where the person stands on the title. Used only when `isNewestOfTitle`: an older card of the
-    ///     same title never gets a meter or a "where".
+    ///   - standing: where the person stood at the end of the card's day, which its provider works out: the newest
+    ///     card of a title from the person's list, an older one from where its own day ended (or none).
+    ///   - isNewestOfTitle: whether this is the person's newest card of the title. The provider has already used it.
     ///   - planning: the titles of a Planning day, once loaded. Until then a Planning card shows its one face.
     static func model(
         for item: ActivityItem,
@@ -19,7 +20,6 @@ enum FeedCardPresenter {
         }
 
         let (title, tag) = titleAndTag(for: item)
-        let standing = isNewestOfTitle ? standing : nil
         let review = ActivityFeedPresentation.reviewText(for: item)
         let kind: FeedCardKind
         let headline: FeedHeadline?
@@ -39,6 +39,8 @@ enum FeedCardPresenter {
             kind = .other
             headline = FeedHeadline.status(words: capitalized(ActivityFeedPresentation.actionText(for: item)), tail: nil)
         }
+        let amountPages = hasAmount(headline) ? PercentPages.count(for: item) : nil
+        let seasonTag = tag == nil ? seasonTagText(for: item) : nil
 
         // A log's bar never pushes its review line out: the card grows one line to keep it (the Check cap).
         let isLogBar = kind == .log && meter != nil
@@ -71,8 +73,8 @@ enum FeedCardPresenter {
                 username: item.actor.username,
                 dayLabel: dayLabel,
                 title: title,
-                tag: tag,
-                headlineWords: headlineWords(headline, item: item),
+                tag: tag ?? seasonTag,
+                headlineWords: headlineWords(headline, item: item, pages: amountPages),
                 details: details,
                 engagement: engagement
             ),
@@ -80,8 +82,30 @@ enum FeedCardPresenter {
             destination: ActivityDestination.resolve(item),
             height: height,
             meterCheck: isLogBar,
-            holdMedia: item.media
+            holdMedia: item.media,
+            amountPages: amountPages,
+            seasonTag: seasonTag
         )
+    }
+
+    /// "S2" or "Specials": the season a show's day ended in, from the day's own place. Nil for anything else, and from
+    /// an older server.
+    private static func seasonTagText(for item: ActivityItem) -> String? {
+        guard item.object.type == "progress_day", let ref = item.media?.ref, ref.mediaType == "tv",
+              !ref.isAnime, ref.source != "mal",
+              let season = item.object.place?["season"], season.isFinite, season >= 0
+        else { return nil }
+        let number = Int(season)
+        return number == 0 ? "Specials" : "S\(number)"
+    }
+
+    /// Whether the headline says an amount the pages can follow: a progress day's, or what a log added.
+    private static func hasAmount(_ headline: FeedHeadline?) -> Bool {
+        switch headline {
+        case .marks(_, _, _, _, let amount, _): amount != nil
+        case .progress: true
+        default: false
+        }
     }
 
     /// A log's bar (AC-10): what the read held before the log, then the log's own part lit, to where the log ended.
@@ -348,17 +372,20 @@ enum FeedCardPresenter {
 
     // MARK: VoiceOver
 
-    private static func headlineWords(_ headline: FeedHeadline?, item: ActivityItem) -> String? {
+    /// What the card's headline shows, in words. Where the person is isn't on the card (its bar shows it, and the bar
+    /// says it to VoiceOver), so it isn't said here.
+    private static func headlineWords(_ headline: FeedHeadline?, item: ActivityItem, pages: Int?) -> String? {
+        let spokenPages = pages.map(PercentPages.spoken)
         switch headline {
         case .marks(_, _, let rewatch, let repeatLabel, let amount, _):
             let summary = ActivityFeedPresentation.ratingSummary(for: item)
-            return [summary.isEmpty ? nil : summary.accessibilityLabel, rewatch ? repeatLabel : nil, amount]
+            return [summary.isEmpty ? nil : summary.accessibilityLabel, rewatch ? repeatLabel : nil, amount, spokenPages]
                 .compactMap { $0 }
                 .joined(separator: ", ")
-        case let .progress(amount, tail, pills):
-            return ([amount] + pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 }).joined(separator: ", ")
-        case let .moves(pills, tail):
-            return (pills + [tail.map(FeedStandingText.spoken)].compactMap { $0 }).joined(separator: ", ")
+        case let .progress(amount, _, pills):
+            return ([amount, spokenPages].compactMap { $0 } + pills).joined(separator: ", ")
+        case let .moves(pills, _):
+            return pills.joined(separator: ", ")
         case let .status(words, tail):
             return [words, tail].compactMap { $0 }.joined(separator: ", ")
         case .started:

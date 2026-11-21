@@ -24,7 +24,8 @@ nonisolated struct FeedStanding: Equatable, Sendable {
 }
 
 /// Answers `FeedStanding` for a feed card. `isNewestOfTitle` is true only for the first progress or status card of a
-/// person's title in list order: older cards of the same title never get a standing (there is no walk-back).
+/// person's title in list order, which is drawn from where the person is; an older card gets one only from where its
+/// own day ended.
 @MainActor
 protocol FeedStandingProviding {
     func standing(for item: ActivityItem, isNewestOfTitle: Bool) -> FeedStanding?

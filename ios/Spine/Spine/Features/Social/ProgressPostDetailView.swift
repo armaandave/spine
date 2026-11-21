@@ -22,8 +22,8 @@ final class ProgressPostDetailViewModel {
     private let onUnauthorized: () -> Void
     /// The feed card this page was opened from; nil from anywhere else.
     private let feedCard: FeedCardModel?
-    /// Where the person stands on the title now, loaded here when the card did not bring it (or there is no card), and
-    /// whether this day is their newest on the title. A standing is where they are now, so only the newest day has one.
+    /// Where the person stood at the end of this day, loaded here when the card did not bring it (or there is no
+    /// card), and whether this day is their newest on the title.
     private var standing: FeedStanding?
     private var isNewestOfTitle: Bool?
     @ObservationIgnored private var standings: FriendStandings?
@@ -97,10 +97,10 @@ final class ProgressPostDetailViewModel {
         }
     }
 
-    /// Where the person stands on the title, from the lists the feed reads (`FriendStandings`), when the page was not
-    /// opened from a card that already had it. Only the person's newest day on the title gets one, as on the feed, so
-    /// their recent activity is read first to see whether this is it. Anything that fails leaves the page with just
-    /// the day's own amount.
+    /// Where the person stood at the end of this day, from the lists the feed reads (`FriendStandings`), when the page
+    /// was not opened from a card that already had it. Their recent activity is read first to see whether this is
+    /// their newest day on the title, as on the feed: the newest is drawn from their list, an older day from where it
+    /// ended. Anything that fails leaves the page with just the day's own amount.
     private func loadStanding(for loaded: ActivityItem) async {
         guard let trackingRepository,
               FriendStandings.want(for: loaded) != nil,
@@ -110,7 +110,6 @@ final class ProgressPostDetailViewModel {
         guard !Task.isCancelled else { return }
         let newest = ProgressPageContent.isNewestOfTitle(loaded, among: recent)
         isNewestOfTitle = newest
-        guard newest else { return }
         let provider = FriendStandings(
             trackingRepository: trackingRepository,
             seasonPages: mediaRepository,
@@ -118,7 +117,7 @@ final class ProgressPostDetailViewModel {
         )
         provider.setOnChange { [weak self] in
             guard let self else { return }
-            standing = standings?.standing(for: loaded, isNewestOfTitle: true)
+            standing = standings?.standing(for: loaded, isNewestOfTitle: newest)
         }
         standings = provider
         provider.prepare(for: [loaded])
@@ -301,12 +300,20 @@ struct ProgressPostDetailView: View {
         let accent = ink.accent(posterAccentHex: page.art.accentHex)
         let lead = HStack(alignment: .center, spacing: 10) {
             if let amount = page.amount {
-                Text(amount)
-                    .font(.system(size: 21, weight: .heavy))
-                    .foregroundStyle(accent)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .layoutPriority(2)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(amount)
+                        .font(.system(size: 21, weight: .heavy))
+                        .foregroundStyle(accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .layoutPriority(2)
+                    if let pages = page.pages {
+                        Text(PercentPages.text(pages))
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.62))
+                            .lineLimit(1)
+                    }
+                }
             }
             if page.isStart {
                 Text("Started")

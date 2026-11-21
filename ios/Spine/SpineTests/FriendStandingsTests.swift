@@ -282,7 +282,9 @@ final class FriendStandingsTests: XCTestCase {
         let startedThenMore = [try day(3, "Started", title: "9"), try day(4, "30 pages", title: "9")]
         XCTAssertNil(FriendStandings.want(for: movie))
         XCTAssertNil(FriendStandings.want(for: started))
-        XCTAssertTrue(FriendStandings.wants(in: startedThenMore).isEmpty, "An older card is not newest once a start is")
+        XCTAssertEqual(
+            FriendStandings.wants(in: startedThenMore).count, 1, "A start wants nothing, so the card after it reads the list"
+        )
         XCTAssertTrue(FriendStandings.wants(in: [try FeedTestItems.log(id: 5, rating: "4")]).isEmpty)
     }
 
@@ -345,13 +347,21 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertEqual(standing, FeedStanding(unit: .pages, from: 645, to: 893, total: 992, whereText: "p. 893"))
     }
 
-    func testADaysPlaceInPercentGoesOnAPageBarThroughThePageCount() throws {
-        let position = TilePosition(unit: .pages, current: 400, total: 400, pagesTotal: 400)
-        let standing = try XCTUnwrap(FeedStandingMath.standing(
-            position: position, told: TodayPart(unit: .pages, amount: 40), place: ["percent": 75]
+    func testABookDaySaysWhereItEndedTheWayItWasTypedWhateverThisPhoneShows() throws {
+        // This phone shows the book in pages, but the friend typed 75%: the day ends at 75%, on a percent bar.
+        let inPages = TilePosition(unit: .pages, current: 400, total: 400, pagesTotal: 400)
+        let typedPercent = try XCTUnwrap(FeedStandingMath.standing(
+            position: inPages, told: TodayPart(unit: .percent, amount: 10), place: ["percent": 75]
         ))
-        XCTAssertEqual(standing.to, 300)
-        XCTAssertEqual(standing.from, 260)
+        XCTAssertEqual(typedPercent, FeedStanding(unit: .percent, from: 65, to: 75, total: 100, whereText: "total 75%"))
+
+        // This phone shows it in percent, but the friend typed page 300: the day ends at p. 300, on a page bar.
+        let inPercent = TilePosition(unit: .percent, current: 100, total: 100, pagesTotal: 400)
+        let typedPages = try XCTUnwrap(FeedStandingMath.standing(
+            position: inPercent, told: TodayPart(unit: .pages, amount: 40), place: ["pages": 300]
+        ))
+        XCTAssertEqual(typedPages, FeedStanding(unit: .pages, from: 260, to: 300, total: 400, whereText: "p. 300"))
+
         XCTAssertNil(FeedStandingMath.dayEnd(["percent": 75], in: TilePosition(unit: .pages, current: 1, total: nil, pagesTotal: nil)))
     }
 
@@ -484,15 +494,29 @@ final class FriendStandingsTests: XCTestCase {
         XCTAssertEqual(root.requests.map(\.status), ["In progress", "Completed"], "Only Completed is tried after In progress")
     }
 
-    func testOnlyTheNewestCardOfATitleGetsItsStanding() async throws {
-        root.set("a", "book", rows: [bookRow("7", page: 212)])
+    func testAnOlderCardKeepsTheStandingOfItsOwnDay() async throws {
+        root.set("a", "book", rows: [bookRow("7", page: 212, of: 400)])
         let newest = try day(1, "30 pages")
-        let older = try day(2, "20 pages")
+        let ended = try FeedTestItems.item(
+            id: 2, type: "progress_updated", objectType: "progress_day", objectID: 20,
+            objectFields: "\"label\": \"20 pages\", \"unit\": \"pages\", \"place\": {\"pages\": 150}",
+            username: "a", source: "manual", mediaType: "book", mediaID: "7"
+        )
+        let unsaid = try day(3, "10 pages")
         let provider = provider()
-        provider.prepare(for: [newest, older])
+        provider.prepare(for: [newest, ended, unsaid])
         await landed(provider)
-        XCTAssertNotNil(provider.standing(for: newest, isNewestOfTitle: true))
-        XCTAssertNil(provider.standing(for: older, isNewestOfTitle: false))
+        XCTAssertEqual(provider.standing(for: newest, isNewestOfTitle: true)?.whereText, "p. 212")
+        XCTAssertEqual(
+            provider.standing(for: ended, isNewestOfTitle: false),
+            FeedStanding(unit: .pages, from: 130, to: 150, total: 400, whereText: "p. 150"),
+            "Where its own day ended, on the length the newest card's list read"
+        )
+        XCTAssertNil(
+            provider.standing(for: unsaid, isNewestOfTitle: false),
+            "An older day that doesn't say where it ended gets nothing: where they are now would be wrong for it"
+        )
+        XCTAssertEqual(root.requests.count, 1, "Older cards ask for nothing of their own")
     }
 
     // MARK: 6b. A title finished that day

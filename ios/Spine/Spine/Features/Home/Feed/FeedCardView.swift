@@ -237,7 +237,7 @@ struct FeedCardView: View, Equatable {
                 .lineLimit(1)
                 .feedTextLift(ink)
                 .foregroundStyle(ink.text)
-            if let tag = model.tag {
+            if let tag = model.tag ?? model.seasonTag {
                 Text(tag)
                     .font(HomeDesign.Text.tag)
                     .lineLimit(1)
@@ -281,35 +281,27 @@ struct FeedCardView: View, Equatable {
                         .lineLimit(1)
                         .feedTextLift(ink)
                         .foregroundStyle(ink.muted)
+                    if let pages = model.amountPages {
+                        pagesText(pages, ink: ink)
+                    }
                 }
                 if check {
                     LogCheckMark(color: ink.accent(posterAccentHex: model.art.accentHex))
                 }
-            case let .progress(amount, tail, pills):
+            case let .progress(amount, _, pills):
                 Text(amount)
                     .fontWeight(.heavy)
                     .lineLimit(1)
                     .feedTextLift(ink)
                     .foregroundStyle(ink.accent(posterAccentHex: model.art.accentHex))
                     .layoutPriority(2)
-                if !pills.isEmpty {
-                    ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
-                } else if let tail {
-                    Text(tail)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                        .feedTextLift(ink)
-                        .foregroundStyle(ink.muted)
+                if let pages = model.amountPages {
+                    pagesText(pages, ink: ink)
                 }
-            case let .moves(pills, tail):
+                // Where the person is: the bar shows it, the post page says it.
                 ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
-                if let tail {
-                    Text(tail)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                        .feedTextLift(ink)
-                        .foregroundStyle(ink.muted)
-                }
+            case let .moves(pills, _):
+                ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
             case let .status(words, tail):
                 Text(words)
                     .fontWeight(.bold)
@@ -336,6 +328,18 @@ struct FeedCardView: View, Equatable {
         .fontWeight(isMarks(headline) ? .bold : nil)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: Self.headlineHeight)
+    }
+
+    /// "(37 p.)" after a book's percent, in the muted words' look. When the line is full it gives way first: the
+    /// percent and where they are keep their room.
+    private func pagesText(_ pages: Int, ink: ArtInk) -> some View {
+        Text(PercentPages.text(pages))
+            .fontWeight(.medium)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .feedTextLift(ink)
+            .foregroundStyle(ink.muted)
+            .layoutPriority(-1)
     }
 
     private func isMarks(_ headline: FeedHeadline) -> Bool {

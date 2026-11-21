@@ -11,7 +11,7 @@ enum FeedStandingMath {
     ///     the position's unit) keeps where the friend stands now.
     /// - Returns: nil when there is neither an end for a meter nor words to say.
     static func standing(position: TilePosition, told: TodayPart?, place: [String: Double]? = nil) -> FeedStanding? {
-        var position = position
+        var position = inTypedUnit(position, place: place)
         if let end = dayEnd(place, in: position) { position.current = end }
         let to = whole(position.current)
         let total = position.total.map(whole)
@@ -53,6 +53,24 @@ enum FeedStandingMath {
             total: counted.total,
             whereText: FeedStandingText.seasonText(season: season, current: done, total: total)
         )
+    }
+
+    /// A book's position in the unit its day was typed in, which the server's place holds alone: a day typed in
+    /// percent says "total 71%" and one typed in pages "p. 261", on every phone. The position comes from the list the
+    /// In progress tile reads, in the unit this phone shows the title in, which is about the viewer, not the day.
+    /// Unchanged without a place in the other unit or a page count to turn one into the other.
+    static func inTypedUnit(_ position: TilePosition, place: [String: Double]?) -> TilePosition {
+        guard let place, let pages = position.pagesTotal, pages > 0 else { return position }
+        switch position.unit {
+        case .pages where place["pages"] == nil && place["percent"] != nil:
+            return TilePosition(unit: .percent, current: position.current / pages * 100, total: 100, pagesTotal: pages)
+        case .percent where place["percent"] == nil && place["pages"] != nil:
+            return TilePosition(
+                unit: .pages, current: (position.current / 100 * pages).rounded(), total: pages, pagesTotal: pages
+            )
+        default:
+            return position
+        }
     }
 
     /// The day's end in the position's unit: the server's number in that unit, else pages and percent turned into
@@ -294,23 +312,30 @@ final class FriendStandings: FeedStandingProviding {
         return SeasonPlace(show: row.media.ref, number: season, watched: episode - 1)
     }
 
-    /// The newest progress card of each person's title that can have a standing, in feed order (the same rule as
-    /// `FeedEntries.make`: the first card per person and title, even when it is a start).
+    /// The newest card of each person's title that can have a standing, in feed order: the one whose list is read. A
+    /// start can't have one, so the card after it reads the list, and the title's older cards draw from what it read.
     static func wants(in items: [ActivityItem]) -> [Want] {
         var seen = Set<String>()
         var wants: [Want] = []
         for item in items {
-            guard item.object.type == "progress_day", let ref = item.media?.ref else { continue }
+            guard item.object.type == "progress_day", let ref = item.media?.ref, let want = want(for: item) else {
+                continue
+            }
             guard seen.insert("\(item.actor.id)|\(FeedEntries.titleKey(for: ref))").inserted else { continue }
-            if let want = want(for: item) { wants.append(want) }
+            wants.append(want)
         }
         return wants
+    }
+
+    /// The seasons every show's card ended its day in, older cards' too: each needs only its season's page.
+    static func daySeasons(in items: [ActivityItem]) -> [SeasonPlace] {
+        items.compactMap { $0.object.type == "progress_day" ? want(for: $0)?.daySeason : nil }
     }
 
     // MARK: FeedStandingProviding
 
     func standing(for item: ActivityItem, isNewestOfTitle: Bool) -> FeedStanding? {
-        guard isNewestOfTitle, let want = Self.want(for: item) else { return nil }
+        guard let want = Self.want(for: item) else { return nil }
         if let day = want.daySeason {
             // The season and episode the day ended on, not where the friend is now: a season log after it took the
             // rest. Nothing is drawn until that season's episodes are known.
@@ -319,6 +344,7 @@ final class FriendStandings: FeedStandingProviding {
                 season: day.number, watched: day.watched, total: known.total, told: want.told
             )
         }
+        guard isNewestOfTitle else { return olderStanding(for: want) }
         guard let entry = entries[want.pair] else { return nil }
         if want.pair.mediaType == "tv" {
             // Counted by the season the friend is in; until that season's episodes are known, nothing is drawn.
@@ -331,12 +357,23 @@ final class FriendStandings: FeedStandingProviding {
         return FeedStandingMath.standing(position: position, told: want.told, place: want.place)
     }
 
+    /// An older card of a title keeps its own bar: where its own day ended, on the title's length as the person's
+    /// list read it for their newest card. A day that doesn't say where it ended (a status move alone, an older
+    /// server) gets nothing, since where the person is now would be wrong for it.
+    private func olderStanding(for want: Want) -> FeedStanding? {
+        let lists = entries.filter { $0.key.username == want.pair.username && $0.key.mediaType == want.pair.mediaType }
+        guard let position = lists.values.lazy.compactMap({ $0.positions[want.titleKey] }).first,
+              FeedStandingMath.dayEnd(want.place, in: FeedStandingMath.inTypedUnit(position, place: want.place)) != nil
+        else { return nil }
+        return FeedStandingMath.standing(position: position, told: want.told, place: want.place)
+    }
+
     func prepare(for items: [ActivityItem]) {
-        enqueue(wants: Self.wants(in: items), reloading: false)
+        enqueue(wants: Self.wants(in: items), seasons: Self.daySeasons(in: items), reloading: false)
     }
 
     func reload(for items: [ActivityItem]) {
-        enqueue(wants: Self.wants(in: items), reloading: true)
+        enqueue(wants: Self.wants(in: items), seasons: Self.daySeasons(in: items), reloading: true)
     }
 
     func setOnChange(_ onChange: (() -> Void)?) {
@@ -345,11 +382,9 @@ final class FriendStandings: FeedStandingProviding {
 
     // MARK: Queue
 
-    private func enqueue(wants: [Want], reloading: Bool) {
+    private func enqueue(wants: [Want], seasons: [SeasonPlace], reloading: Bool) {
         // A show's day that says its own season needs only that season's page, not the friend's list.
-        for want in wants {
-            if let day = want.daySeason { queueSeason(day) }
-        }
+        for day in seasons { queueSeason(day) }
         pumpSeasons()
         var keys: [Pair: Set<String>] = [:]
         var names: [Pair: [String: String]] = [:]

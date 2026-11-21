@@ -5,8 +5,8 @@ import Foundation
 /// Phase 5 dated save can land a row on an earlier day.
 enum FeedEntries {
     /// - Parameters:
-    ///   - standing: where each friend stands on a title; asked only for the newest progress or status card of a
-    ///     person's title.
+    ///   - standing: where each friend stood at the end of a progress or status card's day; told which card is the
+    ///     newest of a person's title.
     ///   - planning: loaded Planning days by the row's `object.id`.
     static func make(
         items: [ActivityItem],

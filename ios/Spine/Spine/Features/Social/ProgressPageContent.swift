@@ -10,6 +10,8 @@ struct ProgressPageContent: Equatable {
     let tag: String?
     /// "+20 pages", "+3 episodes", "+1h 30m", "+25%": drawn in the poster's accent.
     let amount: String?
+    /// A book's day typed in percent: the pages it covered, said after the amount ("(37 p.)").
+    let pages: Int?
     /// "Started": drawn in the accent too.
     let isStart: Bool
     /// An old server's own words for the day, drawn in plain white.
@@ -48,6 +50,7 @@ struct ProgressPageContent: Equatable {
             break
         }
         self.amount = amount
+        pages = amount == nil ? nil : model.amountPages
         self.isStart = isStart
         self.words = words
         self.pills = pills
@@ -63,6 +66,7 @@ struct ProgressPageContent: Equatable {
     var spokenHeadline: String {
         var parts: [String] = []
         if let amount { parts.append(amount) }
+        if let pages { parts.append(PercentPages.spoken(pages)) }
         if isStart { parts.append("Started") }
         if let words { parts.append(words) }
         parts += pills
@@ -76,17 +80,17 @@ struct ProgressPageContent: Equatable {
     /// - Parameters:
     ///   - card: the feed card the page was opened from, when it was opened from one. It already knows whether it was
     ///     the newest card of its title and what the person's standing was, so it is used as it is.
-    ///   - standing: where the person stands on the title now, loaded by the page itself.
-    ///   - isNewestOfTitle: whether this day is the person's newest on the title (nil until known). A standing is
-    ///     where the person is now, so an older day never gets one, as on the feed.
+    ///   - standing: where the person stood at the end of this day, loaded by the page itself: from their list for
+    ///     their newest day on the title, from the day's own end for an older one, as on the feed.
+    ///   - isNewestOfTitle: whether this day is the person's newest on the title (nil until known).
     static func model(
         for activity: ActivityItem,
         card: FeedCardModel?,
         standing: FeedStanding?,
         isNewestOfTitle: Bool?
     ) -> FeedCardModel {
-        if isNewestOfTitle == true, let standing {
-            return FeedCardPresenter.model(for: activity, standing: standing, isNewestOfTitle: true)
+        if let standing {
+            return FeedCardPresenter.model(for: activity, standing: standing, isNewestOfTitle: isNewestOfTitle == true)
         }
         if let card { return card }
         return FeedCardPresenter.model(for: activity, standing: nil, isNewestOfTitle: false)
