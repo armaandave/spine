@@ -237,7 +237,7 @@ struct FeedCardView: View, Equatable {
                 .lineLimit(1)
                 .feedTextLift(ink)
                 .foregroundStyle(ink.text)
-            if let tag = model.tag {
+            if let tag = model.tag ?? model.seasonTag {
                 Text(tag)
                     .font(HomeDesign.Text.tag)
                     .lineLimit(1)
@@ -288,7 +288,7 @@ struct FeedCardView: View, Equatable {
                 if check {
                     LogCheckMark(color: ink.accent(posterAccentHex: model.art.accentHex))
                 }
-            case let .progress(amount, tail, pills):
+            case let .progress(amount, _, pills):
                 Text(amount)
                     .fontWeight(.heavy)
                     .lineLimit(1)
@@ -298,24 +298,10 @@ struct FeedCardView: View, Equatable {
                 if let pages = model.amountPages {
                     pagesText(pages, ink: ink)
                 }
-                if !pills.isEmpty {
-                    ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
-                } else if let tail, !model.hidesWhere {
-                    Text(tail)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                        .feedTextLift(ink)
-                        .foregroundStyle(ink.muted)
-                }
-            case let .moves(pills, tail):
+                // Where the person is: the bar shows it, the post page says it.
                 ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
-                if let tail, !model.hidesWhere {
-                    Text(tail)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                        .feedTextLift(ink)
-                        .foregroundStyle(ink.muted)
-                }
+            case let .moves(pills, _):
+                ForEach(pills, id: \.self) { FeedStatusPill(word: $0, ink: ink) }
             case let .status(words, tail):
                 Text(words)
                     .fontWeight(.bold)

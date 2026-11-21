@@ -454,21 +454,26 @@ final class FeedCardPresenterTests: XCTestCase {
         )
     }
 
-    func testBooksAndGamesLeaveWhereTheyAreToThePostPage() throws {
+    func testACardLeavesWhereTheyAreToItsBarAndItsPostPage() throws {
         let standing = FeedStanding(unit: .pages, from: 126, to: 212, total: 448, whereText: "p. 212")
         let book = model(try FeedTestItems.day(label: "86 pages", mediaType: "book"), standing: standing)
-        XCTAssertTrue(book.hidesWhere)
-        XCTAssertEqual(book.headline, .progress(amount: "+86 pages", tail: "p. 212", pills: []), "The page still reads it")
+        XCTAssertEqual(book.headline, .progress(amount: "+86 pages", tail: "p. 212", pills: []), "The post page reads it")
         XCTAssertFalse(book.accessibilityLabel.contains("212"), "VoiceOver says what the card shows")
-        XCTAssertNotNil(book.meter)
-        XCTAssertTrue(model(try FeedTestItems.day(label: "2h 30m", mediaType: "game")).hidesWhere)
+        XCTAssertNotNil(book.meter, "The bar shows where they are")
 
         let show = model(
-            try FeedTestItems.day(label: "3 episodes", mediaType: "tv"),
-            standing: FeedStanding(unit: .episodes, from: 4, to: 7, total: 10, whereText: "7/10")
+            try FeedTestItems.item(
+                type: "progress_updated", objectType: "progress_day",
+                objectFields: "\"label\": \"3 episodes\", \"place\": {\"season\": 2, \"episodes\": 7}",
+                source: "tmdb", mediaType: "tv", title: "Severance"
+            ),
+            standing: FeedStanding(unit: .episodes, from: 4, to: 7, total: 10, whereText: "S2 \u{00B7} 7/10")
         )
-        XCTAssertFalse(show.hidesWhere, "Shows, anime, manga and comics keep theirs")
-        XCTAssertTrue(show.accessibilityLabel.contains("7 of 10"))
+        XCTAssertEqual(show.seasonTag, "S2", "A show keeps which season it was, by its title")
+        XCTAssertNil(show.tag)
+        XCTAssertTrue(show.accessibilityLabel.contains("Severance, S2"))
+        XCTAssertFalse(show.accessibilityLabel.contains("7 of 10"))
+        XCTAssertNil(model(try FeedTestItems.day(label: "3 episodes", mediaType: "tv")).seasonTag, "No place, no season")
     }
 
     func testPausedWithAnAmountKeepsTheAmountAndAddsAPill() throws {

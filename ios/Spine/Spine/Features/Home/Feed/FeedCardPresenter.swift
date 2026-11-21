@@ -40,7 +40,7 @@ enum FeedCardPresenter {
             headline = FeedHeadline.status(words: capitalized(ActivityFeedPresentation.actionText(for: item)), tail: nil)
         }
         let amountPages = hasAmount(headline) ? PercentPages.count(for: item) : nil
-        let hidesWhere = cardHidesWhere(item)
+        let seasonTag = tag == nil ? seasonTagText(for: item) : nil
 
         // A log's bar never pushes its review line out: the card grows one line to keep it (the Check cap).
         let isLogBar = kind == .log && meter != nil
@@ -73,8 +73,8 @@ enum FeedCardPresenter {
                 username: item.actor.username,
                 dayLabel: dayLabel,
                 title: title,
-                tag: tag,
-                headlineWords: headlineWords(headline, item: item, pages: amountPages, hidesWhere: hidesWhere),
+                tag: tag ?? seasonTag,
+                headlineWords: headlineWords(headline, item: item, pages: amountPages),
                 details: details,
                 engagement: engagement
             ),
@@ -84,15 +84,19 @@ enum FeedCardPresenter {
             meterCheck: isLogBar,
             holdMedia: item.media,
             amountPages: amountPages,
-            hidesWhere: hidesWhere
+            seasonTag: seasonTag
         )
     }
 
-    /// A book's or a game's card says what the day added and draws its bar, but leaves where the person is to its
-    /// post page.
-    private static func cardHidesWhere(_ item: ActivityItem) -> Bool {
-        let type = item.media?.ref.mediaType
-        return type == "book" || type == "game"
+    /// "S2" or "Specials": the season a show's day ended in, from the day's own place. Nil for anything else, and from
+    /// an older server.
+    private static func seasonTagText(for item: ActivityItem) -> String? {
+        guard item.object.type == "progress_day", let ref = item.media?.ref, ref.mediaType == "tv",
+              !ref.isAnime, ref.source != "mal",
+              let season = item.object.place?["season"], season.isFinite, season >= 0
+        else { return nil }
+        let number = Int(season)
+        return number == 0 ? "Specials" : "S\(number)"
     }
 
     /// Whether the headline says an amount the pages can follow: a progress day's, or what a log added.
@@ -368,24 +372,20 @@ enum FeedCardPresenter {
 
     // MARK: VoiceOver
 
-    private static func headlineWords(
-        _ headline: FeedHeadline?, item: ActivityItem, pages: Int?, hidesWhere: Bool
-    ) -> String? {
+    /// What the card's headline shows, in words. Where the person is isn't on the card (its bar shows it, and the bar
+    /// says it to VoiceOver), so it isn't said here.
+    private static func headlineWords(_ headline: FeedHeadline?, item: ActivityItem, pages: Int?) -> String? {
         let spokenPages = pages.map(PercentPages.spoken)
-        // What the card shows: a book's or a game's where is left to its page.
-        func spokenWhere(_ tail: String?) -> [String] {
-            hidesWhere ? [] : [tail.map(FeedStandingText.spoken)].compactMap { $0 }
-        }
         switch headline {
         case .marks(_, _, let rewatch, let repeatLabel, let amount, _):
             let summary = ActivityFeedPresentation.ratingSummary(for: item)
             return [summary.isEmpty ? nil : summary.accessibilityLabel, rewatch ? repeatLabel : nil, amount, spokenPages]
                 .compactMap { $0 }
                 .joined(separator: ", ")
-        case let .progress(amount, tail, pills):
-            return ([amount, spokenPages].compactMap { $0 } + pills + spokenWhere(tail)).joined(separator: ", ")
-        case let .moves(pills, tail):
-            return (pills + spokenWhere(tail)).joined(separator: ", ")
+        case let .progress(amount, _, pills):
+            return ([amount, spokenPages].compactMap { $0 } + pills).joined(separator: ", ")
+        case let .moves(pills, _):
+            return pills.joined(separator: ", ")
         case let .status(words, tail):
             return [words, tail].compactMap { $0 }.joined(separator: ", ")
         case .started:

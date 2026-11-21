@@ -27,11 +27,12 @@ nonisolated enum FeedHeadline: Equatable, Sendable {
     case marks(
         starSymbols: [String], liked: Bool, rewatch: Bool, repeatLabel: String, amount: String? = nil, check: Bool = false
     )
-    /// A day's amount ("+3 episodes") in the card accent, then the muted real "where" when the friend's standing
-    /// knows it, and the status pills. A card draws the pills when it has them, else the tail.
+    /// A day's amount ("+3 episodes") in the card accent and the status pills, with where the person stood when the
+    /// friend's standing knows it. The card draws the amount and the pills (its bar shows where they are); the post
+    /// page also says the where in words.
     case progress(amount: String, tail: String?, pills: [String])
-    /// A day that was only a status move ("Paused", "Resumed"), nothing lit: the same pills a progress day
-    /// draws, then the muted "where" when the friend's standing knows it.
+    /// A day that was only a status move ("Paused", "Resumed"), nothing lit: the same pills a progress day draws,
+    /// with the where for the post page.
     case moves(pills: [String], tail: String?)
     /// The old-server fallback: a day's own words, and an activity row's action.
     case status(words: String, tail: String?)
@@ -91,6 +92,7 @@ struct FeedCardModel: Identifiable, Equatable {
     /// A book update typed in percent: the pages it covered, said after the headline's amount ("+10% (37 p.)"). Nil
     /// for anything else, and when the headline has no amount.
     var amountPages: Int? = nil
-    /// A book's or a game's card leaves out where the person is (the headline's tail); its post page still says it.
-    var hidesWhere: Bool = false
+    /// A show's day names the season it ended in by the title ("S2", "Specials") when the row has no tag of its own:
+    /// the card leaves where they are to its bar and its post page, so this keeps which season it was.
+    var seasonTag: String? = nil
 }
