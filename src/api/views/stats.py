@@ -29,6 +29,9 @@ from api.services.stats_v2 import build_stats_v2
 from app import statistics as legacy_stats
 from app.curation import prime_curated_artwork
 
+# The profile's signature reads All Time, as the Stats page asks for it (STAT-313).
+ALL_TIME_PARAMS = {"start_date": "all", "end_date": "all"}
+
 
 def stats_payload(user, request):
     """Build legacy chart keys plus the native-client stats contract."""
@@ -178,6 +181,41 @@ class UserStatsYearView(APIView):
 
     def get(self, request, username):
         return year_response(visible_profile_owner(request, username), request)
+
+
+def ratings_response(user, request):
+    """Answer the profile's signature: All Time Global ratings (STAT-313)."""
+    # The range the Stats page asks for All Time, through the same parsing.
+    scope = build_scope(user, request.user, ALL_TIME_PARAMS, request=request)
+    return Response(
+        stats_cache.cached(
+            scope,
+            "ratings",
+            lambda: {
+                "range": scope.range_payload(),
+                "audience": scope.audience,
+                "ratings": stats_v2_ratings.build_ratings(scope),
+            },
+        )
+    )
+
+
+class MyStatsRatingsView(APIView):
+    """Current user's ratings of all time, for the profile's signature."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return ratings_response(request.user, request)
+
+
+class UserStatsRatingsView(APIView):
+    """A visible user's ratings of all time, for their signature (STAT-002)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, username):
+        return ratings_response(visible_profile_owner(request, username), request)
 
 
 def most_logged_response(user, request):

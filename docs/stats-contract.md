@@ -1114,6 +1114,26 @@ No parameters. The range is this calendar year on the owner's calendar (STAT-005
 - `posters` is the pool the wall is drawn from: a random pick of this year's titles (STAT-105) of the turned-on types with artwork, at most 60. Each type's titles are shuffled and the types are dealt one title each in turn in `primary_media_types()` order, so every type gets its share; a title with no artwork is passed over for its type's next one. A new pick is made whenever the answer is worked out again (the cache can keep one for up to an hour), and the app shuffles it on every load. Each is a media summary (STAT-304) with `user_state` null: the wall has no tap.
 - The app shows the wall from 12 posters up. Every cell is exactly a 2:3 poster, so nothing is cropped, and the rows run from the top past the wall's faded bottom: the grid takes the most columns, up to 6, whose rows the posters fill. Fewer than 12 show the numbers alone.
 
+### STAT-313: The profile's signature reads All Time Global ratings
+
+```
+GET /api/v1/stats/me/ratings/
+GET /api/v1/users/{username}/stats/ratings/
+```
+
+No parameters. The range is All Time, Global, as the Stats page asks for it (`start_date=all&end_date=all`), for the same viewer. The `users/{username}/` form applies STAT-002's gate. Responses are cached as the summary is (STAT-006).
+
+```json
+{
+  "range": { "start_date": null, "end_date": null, "timezone": "America/New_York", "is_all_time": true },
+  "audience": "owner",
+  "ratings": { "average_stars": "3.68", "rated": 1058, "distribution": [ … ] }
+}
+```
+
+- `ratings` is the summary's `ratings` (STAT-204) for that range and viewer, worked out by the same code, so the signature and the Stats page's Ratings chart always agree.
+- The app draws it as the profile's signature: a small line of the ten buckets beside the @handle, in the profile picture's color (Home's title rule), white without a picture. It shows nothing when `rated` is 0. A tap opens the Stats page.
+
 ### STAT-311: Errors
 
 | Status | When |

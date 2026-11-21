@@ -357,6 +357,14 @@ struct ProfileYear: Decodable, Hashable {
     }
 }
 
+// MARK: - The profile's signature (STAT-313)
+
+/// A person's ratings of all time on Global, the same numbers the Stats page's Ratings chart counts (STAT-204), for the
+/// small line beside their @handle.
+struct ProfileRatings: Decodable, Hashable {
+    let ratings: StatsRatings
+}
+
 /// The This Year wall for this app session: a profile's first pick, shuffled once and kept while the app runs, so the
 /// wall is the same each time the profile shows. Pull to refresh deals a new one; so does the next launch, and so
 /// does a year whose number of posters changed (a title logged or removed), so the wall follows the year.
