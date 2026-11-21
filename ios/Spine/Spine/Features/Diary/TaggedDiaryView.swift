@@ -103,7 +103,8 @@ struct TaggedDiaryView: View {
 
     var body: some View {
         ZStack {
-            SpinePageBackground()
+            // A faint wash of the newest log's artwork, like the Diary tab's.
+            LogBackdrop(url: URL(string: viewModel.entries.first?.media.displayPosterURL ?? ""))
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -123,7 +124,7 @@ struct TaggedDiaryView: View {
             }
         }
         .overlay(alignment: .top) {
-            DiaryTopSafeAreaScrim()
+            DiaryTopSoftScrim()
         }
         .navigationTitle(tag)
         .navigationBarTitleDisplayMode(.inline)
