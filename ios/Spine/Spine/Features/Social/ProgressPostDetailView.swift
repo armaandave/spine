@@ -175,6 +175,7 @@ struct ProgressPostDetailView: View {
         // Edit and Delete only for your own book, manga, comic or game row: the server says what the page offers (AC-9).
         PostPage(
             item: viewModel.activity,
+            author: viewModel.activity?.actor,
             isLoading: viewModel.isLoading,
             errorTitle: "Could not load this",
             errorMessage: viewModel.errorMessage,
@@ -190,7 +191,7 @@ struct ProgressPostDetailView: View {
             onDelete: { isDeleteConfirmationPresented = true }
         ) { activity in
             if let media = activity.media {
-                hero(activity, media: media)
+                hero(media)
             }
         } middle: { activity in
             daySection(activity)
@@ -356,14 +357,13 @@ struct ProgressPostDetailView: View {
         .accessibilityLabel(page.spokenHeadline)
     }
 
-    private func hero(_ activity: ActivityItem, media: MediaSummary) -> some View {
+    private func hero(_ media: MediaSummary) -> some View {
         let page = viewModel.pageContent
         return PostHero(
             posterURL: viewModel.mediaDetail?.displayPosterURL ?? media.displayPosterURL,
             posterTitle: media.title,
             mediaType: media.ref.mediaType,
             orientation: viewModel.mediaDetail?.posterOrientation ?? media.posterOrientation,
-            user: activity.actor,
             title: PostHero.titleParts(page?.title ?? media.displayTitle).title,
             detail: viewModel.mediaDetail,
             // "S2 E7", "E7", "Season 2": which part of the show the day was; otherwise the year, as on a log.

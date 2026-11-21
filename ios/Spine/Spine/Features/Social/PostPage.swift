@@ -2,15 +2,18 @@ import Nuke
 import SwiftUI
 
 /// The page a log and a day's progress share, so the two can only differ in their middle: the poster-tinted background,
-/// Back (with Edit and Delete for the owner), the hero, the date and how long ago under the middle, the comments under a
-/// hairline and the comment bar. Each page brings its own hero (`PostHero`) and middle, and its own sheets and dialogs,
-/// and sets itself up with `navigationPage(.post)` (the swipe back, the hidden bottom bar, the Home button's return).
+/// Back and who posted it (with Edit and Delete for the owner), the hero, the date and how long ago under the middle, the
+/// comments under a hairline and the comment bar. Each page brings its own hero (`PostHero`) and middle, and its own
+/// sheets and dialogs, and sets itself up with `navigationPage(.post)` (the swipe back, the hidden bottom bar, the Home
+/// button's return).
 struct PostPage<Item, Hero: View, Middle: View>: View {
     @Environment(\.dismiss) private var dismiss
     @State private var topSafeAreaInset: CGFloat = 0
     @FocusState private var isCommentFocused: Bool
 
     private let item: Item?
+    /// Who posted it, beside Back once the post has loaded.
+    private let author: UserSummary?
     private let isLoading: Bool
     private let errorTitle: String
     private let errorMessage: String?
@@ -30,6 +33,7 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
 
     init(
         item: Item?,
+        author: UserSummary?,
         isLoading: Bool,
         errorTitle: String,
         errorMessage: String?,
@@ -48,6 +52,7 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
         @ViewBuilder middle: @escaping (Item) -> Middle
     ) {
         self.item = item
+        self.author = author
         self.isLoading = isLoading
         self.errorTitle = errorTitle
         self.errorMessage = errorMessage
@@ -139,7 +144,7 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
         .padding(.top, topSafeAreaInset + 68)
     }
 
-    /// Back, and Edit and Delete when the page offers them: one row at one inset.
+    /// Back and who posted it, then Edit and Delete when the page offers them: one row at one inset.
     private var topButtons: some View {
         GlassEffectContainer(spacing: 8) {
             HStack(spacing: 8) {
@@ -154,6 +159,10 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
                 .contentShape(.circle)
                 .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel("Back")
+
+                if let author {
+                    PostAuthorButton(user: author)
+                }
 
                 Spacer()
 
@@ -189,8 +198,37 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
     }
 }
 
-/// The top of a post page: the poster, and beside it, down to the poster's bottom edge, who posted it, the title (its
-/// logo when the title has one) and one muted line under it. Tapping it opens the title.
+/// Who posted it, beside Back: their photo and name in the same glass as Edit. Opens their profile.
+struct PostAuthorButton: View {
+    let user: UserSummary
+
+    var body: some View {
+        NavigationLink {
+            UserProfileDestination(username: user.username)
+        } label: {
+            HStack(spacing: 8) {
+                UserAvatar(urlString: user.avatarUrl, size: 26)
+
+                Text(user.username)
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .padding(.leading, 6)
+            .padding(.trailing, 14)
+            .frame(height: 38)
+            // The whole capsule takes the tap, not only the photo and the name.
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.capsule)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityLabel(user.username)
+        .accessibilityHint("Opens \(user.username)'s profile")
+    }
+}
+
+/// The top of a post page: the poster, and beside it, down to the poster's bottom edge, the title (its logo when the
+/// title has one) and one muted line under it. Tapping it opens the title.
 ///
 /// The words beside the poster wait until the title is known to be a logo or text, then appear together, so a title
 /// never shows as text and then turns into its logo. A logo is downloaded before it shows (one already in the image
@@ -200,7 +238,6 @@ struct PostHero: View {
     let posterTitle: String
     let mediaType: String
     let orientation: PosterOrientation?
-    let user: UserSummary
     let title: String
     let detail: MediaDetail?
     /// The year and runtime under the title ("2025 - 2h 18m"), or the episode tag under a day's ("S2 E7").
@@ -225,7 +262,6 @@ struct PostHero: View {
         posterTitle: String,
         mediaType: String,
         orientation: PosterOrientation?,
-        user: UserSummary,
         title: String,
         detail: MediaDetail?,
         subtitle: String?,
@@ -236,7 +272,6 @@ struct PostHero: View {
         self.posterTitle = posterTitle
         self.mediaType = mediaType
         self.orientation = orientation
-        self.user = user
         self.title = title
         self.detail = detail
         self.subtitle = subtitle
@@ -256,9 +291,6 @@ struct PostHero: View {
                 .posterHoldMenu(ifAny: detail?.listSummary)
 
             VStack(alignment: .leading, spacing: 6) {
-                PostHeroAuthorLine(user: user)
-                    .padding(.bottom, 2)
-
                 if titleArt == .logo, let detail {
                     MediaTitleDisplay(
                         detail: detail,
