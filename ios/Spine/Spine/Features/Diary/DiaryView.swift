@@ -341,7 +341,8 @@ struct MediaDiaryView: View {
 
     var body: some View {
         ZStack {
-            SpinePageBackground()
+            // A faint wash of this title's artwork, like the Diary tab's.
+            LogBackdrop(url: URL(string: artworkOverride.url ?? viewModel.entries.first?.media.displayPosterURL ?? ""))
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -392,7 +393,7 @@ struct MediaDiaryView: View {
             }
         }
         .overlay(alignment: .top) {
-            DiaryTopSafeAreaScrim()
+            DiaryTopSoftScrim()
         }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar(.hidden, for: .navigationBar)
@@ -883,17 +884,5 @@ struct DiaryTopSoftScrim: View {
         .environment(\.colorScheme, .dark)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-    }
-}
-
-struct DiaryTopSafeAreaScrim: View {
-    var body: some View {
-        GeometryReader { proxy in
-            Color(red: 0.07, green: 0.07, blue: 0.065)
-                .frame(height: proxy.safeAreaInsets.top)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .ignoresSafeArea(edges: .top)
-        }
-        .allowsHitTesting(false)
     }
 }
