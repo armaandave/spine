@@ -341,9 +341,6 @@ struct MediaDiaryView: View {
 
     var body: some View {
         ZStack {
-            // A faint wash of this title's artwork, like the Diary tab's.
-            LogBackdrop(url: URL(string: artworkOverride.url ?? viewModel.entries.first?.media.displayPosterURL ?? ""))
-
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     header
@@ -391,6 +388,10 @@ struct MediaDiaryView: View {
             .refreshable {
                 await viewModel.load()
             }
+        }
+        .background {
+            // A faint wash of this title's artwork, like the Diary tab's.
+            LogBackdrop(url: URL(string: artworkOverride.url ?? viewModel.entries.first?.media.displayPosterURL ?? ""))
         }
         .overlay(alignment: .top) {
             DiaryTopSoftScrim()

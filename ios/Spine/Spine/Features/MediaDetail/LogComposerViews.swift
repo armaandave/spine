@@ -139,7 +139,8 @@ final class LogTagDraft {
 /// A faint, blurred wash of the media's artwork behind the whole log form, with a soft sheen,
 /// strongest at the top and staying faintly tinted to the bottom. The blur and color boost are
 /// baked into the cached image when it loads, so nothing is re-blurred while the form scrolls
-/// or the keyboard moves.
+/// or the keyboard moves. Put it in `.background`, never in a ZStack beside the page: the filled
+/// artwork is wider than the screen and would widen the whole page with it.
 struct LogBackdrop: View {
     let url: URL?
     var accentColor: Color?
