@@ -33,6 +33,17 @@ class SentinelDatetime:
     SECOND = 59
     MICROSECOND = 999999
 
+    @classmethod
+    def min_datetime(cls):
+        """Return the far-past placeholder for content with no known release date.
+
+        ``datetime.min`` sits exactly on the low bound of the datetime range, so
+        converting it to any timezone behind UTC (production runs on
+        America/New_York) raises OverflowError. Midday keeps it in range for
+        offsets down to UTC-11, and it still sorts before every real date.
+        """
+        return datetime(1, 1, 1, cls.HOUR, cls.MINUTE, cls.SECOND, cls.MICROSECOND, tzinfo=UTC)
+
 
 class EventManager(models.Manager):
     """Custom manager for the Event model."""
