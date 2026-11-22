@@ -115,8 +115,8 @@ struct LibraryPlate<Title: View, Trailing: View, Bar: View>: View {
 }
 
 /// The first poster of the status shown, blurred, from under the status bar down past the plate, fading into the
-/// black page. It moves up with the page, stretches when the page is pulled down, and cross-fades when the status
-/// changes.
+/// black page. It moves up with the page, stays still when the page is pulled down to refresh, and cross-fades when
+/// the status changes.
 struct LibraryBlurredTop: View {
     let url: URL?
     let scroll: LibraryScroll
@@ -124,7 +124,7 @@ struct LibraryBlurredTop: View {
     var body: some View {
         let offset = scroll.offset
         Color.clear
-            .frame(height: LibraryPlateLayout.artHeight + max(-offset, 0))
+            .frame(height: LibraryPlateLayout.artHeight)
             .frame(maxWidth: .infinity)
             .background(alignment: .bottom) {
                 ZStack {
