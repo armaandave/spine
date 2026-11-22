@@ -151,16 +151,13 @@ final class LibraryViewModel {
     private var requestGeneration = 0
     private var didBootstrap = false
     private var presentedScope: RequestScope?
-    /// How many titles each status lists, for the status menu, keyed by the list's `status` values.
-    private var statusCounts: [String: Int] = [:]
-    /// The type and filters `statusCounts` were counted for, whatever the status.
-    private var statusCountsScope: RequestScope?
 
     init(
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
         filterOptionsRepository: FilterOptionsRepository? = nil,
         enabledMediaTypes: [String]? = nil,
+        selectedMediaType: String? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.mediaRepository = mediaRepository
@@ -170,6 +167,11 @@ final class LibraryViewModel {
         mediaTypes = enabledMediaTypes.map(APIConstants.pickerMediaTypes(enabled:))
             ?? Self.libraryMediaTypes(from: APIConstants.fallbackMediaTypes)
         self.onUnauthorized = onUnauthorized
+        // The remembered type and its own first status, so the page doesn't open on Movies' and then switch.
+        if let selectedMediaType, mediaTypes.contains(selectedMediaType) {
+            mediaType = selectedMediaType
+        }
+        shelf = LibraryShelf.defaultShelf(for: mediaType)
     }
 
     var hasMorePages: Bool {
@@ -192,12 +194,6 @@ final class LibraryViewModel {
         StreamingFilterCopy.pendingNote(pendingCount: streamingPendingCount, service: filter.service)
     }
 
-    /// How many titles a status of the current type lists with the current filters, once the server has counted
-    /// them; nil while the counts are for another type or other filters.
-    func count(for shelf: LibraryShelf) -> Int? {
-        guard statusCountsScope == Self.countsScope(currentRequestScope) else { return nil }
-        return statusCounts[shelf.apiStatus]
-    }
 
     static func libraryMediaTypes(from mediaTypes: [String]) -> [String] {
         let filtered = mediaTypes.filter { !["episode", "season"].contains($0) }
@@ -314,10 +310,9 @@ final class LibraryViewModel {
         }
 
         do {
-            let response = try await fetch(scope, page: nil)
+            let response = try await trackingRepository.list(mediaType: scope.mediaType, page: nil, filter: scope.filter)
             guard generation == requestGeneration, scope == currentRequestScope else { return }
             apply(response, replacingItems: true)
-            applyStatusCounts(response, scope: scope)
         } catch is CancellationError {
             return
         } catch {
@@ -348,10 +343,9 @@ final class LibraryViewModel {
         do {
             let pages = try await PagedReload.pages(covering: items.count) { page in
                 guard isCurrent() else { throw CancellationError() }
-                return try await fetch(scope, page: page)
+                return try await trackingRepository.list(mediaType: scope.mediaType, page: page, filter: scope.filter)
             }
             guard isCurrent(), let first = pages.first, let last = pages.last else { return }
-            applyStatusCounts(first, scope: scope)
             var seen = Set<LibraryItem.ID>()
             items = pages.flatMap(\.results).filter { seen.insert($0.id).inserted }
             totalCount = first.count
@@ -390,7 +384,7 @@ final class LibraryViewModel {
         }
 
         do {
-            let response = try await fetch(scope, page: page)
+            let response = try await trackingRepository.list(mediaType: scope.mediaType, page: page, filter: scope.filter)
             guard generation == requestGeneration, scope == currentRequestScope else { return }
             apply(response, replacingItems: false)
         } catch is CancellationError {
@@ -400,26 +394,6 @@ final class LibraryViewModel {
             nextPageErrorMessage = error.localizedDescription
             handleUnauthorized(error)
         }
-    }
-
-    /// One page of `scope`. The first page also counts every status, for the status menu.
-    private func fetch(_ scope: RequestScope, page: String?) async throws -> PagedResponse<LibraryItem> {
-        var filter = scope.filter
-        filter.statusCounts = page == nil
-        return try await trackingRepository.list(mediaType: scope.mediaType, page: page, filter: filter)
-    }
-
-    private func applyStatusCounts(_ response: PagedResponse<LibraryItem>, scope: RequestScope) {
-        guard let counts = response.statusCounts else { return }
-        statusCounts = counts
-        statusCountsScope = Self.countsScope(scope)
-    }
-
-    /// The counts hold for every status of one type and set of filters.
-    private static func countsScope(_ scope: RequestScope) -> RequestScope {
-        var filter = scope.filter
-        filter.status = nil
-        return RequestScope(mediaType: scope.mediaType, filter: filter)
     }
 
     private func apply(_ response: PagedResponse<LibraryItem>, replacingItems: Bool) {
@@ -557,6 +531,7 @@ struct LibraryView: View {
             trackingRepository: trackingRepository,
             filterOptionsRepository: self.filterOptionsRepository,
             enabledMediaTypes: enabledMediaTypes,
+            selectedMediaType: self.mediaLensStore.selectedMediaType,
             onUnauthorized: onUnauthorized
         ))
     }
@@ -691,7 +666,7 @@ struct LibraryView: View {
 
     /// The glass plate: "Library", the status as the title (it opens the status menu), the filter, the type bar.
     private var plate: some View {
-        LibraryPlate(scroll: scroll, accentHex: headerAccentHex) {
+        LibraryPlate(scroll: scroll, kicker: plateKicker, accentHex: headerAccentHex) {
             statusMenu
         } trailing: {
             MediaFilterButton(
@@ -716,18 +691,20 @@ struct LibraryView: View {
         }
     }
 
-    /// The status shown, as the title; a tap opens the type's statuses, each with how many titles it holds.
+    /// "Library", then how many titles the status shown holds once they've loaded. An empty status says so below,
+    /// so it shows no count.
+    private var plateKicker: String {
+        guard viewModel.totalCount > 0 else { return "Library" }
+        let count = ListCountWords.text(count: viewModel.totalCount, mediaTypes: [viewModel.mediaType], isPeople: false)
+        return "Library · \(count)"
+    }
+
+    /// The status shown, as the title; a tap opens the type's statuses.
     private var statusMenu: some View {
         Menu {
             Picker("Status", selection: $viewModel.shelf) {
                 ForEach(viewModel.availableShelves) { shelf in
-                    LibraryStatusOption(
-                        title: shelf.title(mediaType: viewModel.mediaType),
-                        detail: viewModel.count(for: shelf).map {
-                            ListCountWords.text(count: $0, mediaTypes: [viewModel.mediaType], isPeople: false)
-                        }
-                    )
-                    .tag(shelf)
+                    Text(shelf.title(mediaType: viewModel.mediaType)).tag(shelf)
                 }
             }
         } label: {

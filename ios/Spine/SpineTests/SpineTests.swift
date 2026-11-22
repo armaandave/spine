@@ -510,6 +510,29 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testLibraryOpensOnTheRememberedTypesOwnStatus() {
+        let books = LibraryViewModel(
+            mediaRepository: FakeMediaRepository(),
+            trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
+            enabledMediaTypes: ["movie", "book"],
+            selectedMediaType: "book",
+            onUnauthorized: {}
+        )
+        let turnedOff = LibraryViewModel(
+            mediaRepository: FakeMediaRepository(),
+            trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
+            enabledMediaTypes: ["movie", "book"],
+            selectedMediaType: "tv",
+            onUnauthorized: {}
+        )
+
+        XCTAssertEqual(books.mediaType, "book")
+        XCTAssertEqual(books.shelf, .currentlyReading, "Books open on Reading, not Movies' Completed")
+        XCTAssertEqual(turnedOff.mediaType, "movie")
+        XCTAssertEqual(turnedOff.shelf, .tracked)
+    }
+
+    @MainActor
     func testPersonFilterOptionsIncludeGenresAndLanguages() throws {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase

@@ -36,9 +36,6 @@ struct PagedResponse<T: Decodable>: Decodable {
     let completion: CompletionProgress?
     /// Present on collection pages requested with a Service filter.
     let streaming: StreamingFilterPageInfo?
-    /// On a Library page asked for them (`status_counts=true`): how many titles each status lists, keyed by the
-    /// list's `status` values ("tracked", "Planning", "In progress", "Paused", "Dropped", "Completed").
-    let statusCounts: [String: Int]?
 
     init(
         count: Int,
@@ -46,8 +43,7 @@ struct PagedResponse<T: Decodable>: Decodable {
         previous: String?,
         results: [T],
         completion: CompletionProgress? = nil,
-        streaming: StreamingFilterPageInfo? = nil,
-        statusCounts: [String: Int]? = nil
+        streaming: StreamingFilterPageInfo? = nil
     ) {
         self.count = count
         self.next = next
@@ -55,7 +51,6 @@ struct PagedResponse<T: Decodable>: Decodable {
         self.results = results
         self.completion = completion
         self.streaming = streaming
-        self.statusCounts = statusCounts
     }
 }
 

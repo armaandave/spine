@@ -36,6 +36,8 @@ enum LibraryPlateLayout {
 /// the first poster's color.
 struct LibraryPlate<Title: View, Trailing: View, Bar: View>: View {
     let scroll: LibraryScroll
+    /// The line above the title.
+    let kicker: String
     let accentHex: String?
     private let title: Title
     private let trailing: Trailing
@@ -43,12 +45,14 @@ struct LibraryPlate<Title: View, Trailing: View, Bar: View>: View {
 
     init(
         scroll: LibraryScroll,
+        kicker: String,
         accentHex: String?,
         @ViewBuilder title: () -> Title,
         @ViewBuilder trailing: () -> Trailing,
         @ViewBuilder bar: () -> Bar
     ) {
         self.scroll = scroll
+        self.kicker = kicker
         self.accentHex = accentHex
         self.title = title()
         self.trailing = trailing()
@@ -63,9 +67,12 @@ struct LibraryPlate<Title: View, Trailing: View, Bar: View>: View {
         let shape = RoundedRectangle(cornerRadius: LibraryPlateLayout.mix(28, 26, eased), style: .continuous)
 
         ZStack(alignment: .topLeading) {
-            Text("Library")
+            Text(kicker)
                 .font(.system(size: 13, weight: .semibold))
+                .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.62))
+                .contentTransition(.opacity)
+                .animation(.smooth(duration: 0.35), value: kicker)
                 .frame(height: 16)
                 .padding(.leading, 18)
                 .offset(y: 15 - 6 * progress)
@@ -159,18 +166,5 @@ struct LibraryBlurredTop: View {
                     endPoint: .bottom
                 )
             }
-    }
-}
-
-/// One status in the status menu: its name, and under it how many titles it holds once the server has counted them.
-struct LibraryStatusOption: View {
-    let title: String
-    let detail: String?
-
-    var body: some View {
-        Text(title)
-        if let detail {
-            Text(detail)
-        }
     }
 }

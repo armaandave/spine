@@ -553,34 +553,6 @@ final class StreamingFilterTests: XCTestCase {
         XCTAssertNil(viewModel.streamingPendingNote)
     }
 
-    func testLibraryCountsEveryStatusOnTheFirstPageForItsTypeOnly() async throws {
-        let tracking = StreamingFilterTrackingRepository()
-        tracking.response = PagedResponse(
-            count: 30,
-            next: "https://spine.test/api/v1/tracking/?media_type=movie&page=2",
-            previous: nil,
-            results: [try Self.libraryItem(mediaId: "693134", title: "Dune: Part Two")],
-            statusCounts: ["tracked": 30, "Planning": 4]
-        )
-        let viewModel = LibraryViewModel(
-            mediaRepository: StreamingFilterDiscoverRepository(),
-            trackingRepository: tracking,
-            filterOptionsRepository: StreamingFilterOptionsRepository(options: Self.options(available: true)),
-            onUnauthorized: {}
-        )
-
-        await viewModel.reload()
-        await viewModel.loadNextPage()
-
-        XCTAssertEqual(tracking.requests.map(\.filter.statusCounts), [true, false], "Only the first page counts")
-        XCTAssertEqual(viewModel.count(for: .tracked), 30)
-        XCTAssertEqual(viewModel.count(for: .planning), 4)
-
-        tracking.response = PagedResponse(count: 0, next: nil, previous: nil, results: [])
-        await viewModel.selectMediaType("tv")
-        XCTAssertNil(viewModel.count(for: .planning), "Movies' counts aren't TV's")
-    }
-
     func testLibraryDropsChosenServicesTheUserNoLongerHas() async {
         let tracking = StreamingFilterTrackingRepository()
         let viewModel = LibraryViewModel(
