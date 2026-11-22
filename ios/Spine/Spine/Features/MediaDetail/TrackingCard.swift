@@ -10,6 +10,9 @@ struct TrackingCardModel: Equatable {
     /// "Logged Nov 18", "Started Oct 27", "Started Jan 17, 2025": a single log's day, else the start.
     var date: String?
     var marks: FriendCardMarks
+    /// Your latest log's review, as a friend's card shows theirs: nil when it has none, or when it is marked as a
+    /// spoiler (the eye says so instead).
+    var review: Review?
     /// "3.5", for VoiceOver.
     var starsText: String?
     /// Home's bar: where the title stands, today's part lit. Nil when there is nothing honest to draw.
@@ -19,6 +22,11 @@ struct TrackingCardModel: Equatable {
     var showsUpdate: Bool
     /// A tap on the card opens your log, or your diary for the title when it has several.
     var opensDiary: Bool
+
+    struct Review: Equatable {
+        var title: String?
+        var text: String
+    }
 
     static func make(
         detail: MediaDetail,
@@ -64,6 +72,10 @@ struct TrackingCardModel: Equatable {
             )
         }
         let done = state?.status == "Completed" || status == "Watched"
+        let reviewText = state?.diaryReview.flatMap(TrackingCardModel.words)
+        let reviewTitle = state?.diaryReviewTitle.flatMap(TrackingCardModel.words)
+        // As on a friend's card, a spoiler review shows the eye, not its words.
+        let spoiler = state?.diaryContainsSpoilers == true && (reviewText != nil || reviewTitle != nil)
 
         return TrackingCardModel(
             word: status.map { ref.trackingStatusLabel($0) },
@@ -72,8 +84,12 @@ struct TrackingCardModel: Equatable {
             marks: FriendCardMarks(
                 stars: (state?.rating.map { PostPageStyle.starSymbols(rating: $0) } ?? [])
                     .compactMap(FeedMark.init(starSymbol:)),
-                liked: state?.hasLiked == true
+                liked: state?.hasLiked == true,
+                rewatch: state?.diaryIsRewatch == true,
+                spoiler: spoiler
             ),
+            // A review with only a title shows the title as its words.
+            review: spoiler ? nil : (reviewText ?? reviewTitle).map { Review(title: reviewText == nil ? nil : reviewTitle, text: $0) },
             starsText: TrackingSummarySection.stars(detail: detail, state: state),
             meter: meter,
             finished: done && (meter?.endFraction ?? 0) >= 1,
@@ -105,6 +121,12 @@ struct TrackingCardModel: Equatable {
                   position.current > 0 else { return nil }
             return position
         }
+    }
+
+    /// The text without surrounding spaces, or nil when nothing is left.
+    static func words(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func whole(_ value: Double) -> Int {
@@ -205,6 +227,9 @@ struct TrackingCard: View {
             if model.word != nil || model.detail != nil || model.date != nil {
                 captionRow
             }
+            if let review = model.review {
+                reviewText(review)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -236,6 +261,8 @@ struct TrackingCard: View {
                 }
             }
             if model.marks.liked { FeedMarkView(mark: .heart, ink: .dark, size: 12) }
+            if model.marks.rewatch { FeedMarkView(mark: .rewatch, ink: .dark, size: 12) }
+            if model.marks.spoiler { FeedMarkView(mark: .spoiler, ink: .dark, size: 14) }
         }
         .frame(height: 16, alignment: .leading)
         .accessibilityElement(children: .ignore)
@@ -243,6 +270,8 @@ struct TrackingCard: View {
             [
                 model.starsText.map { "Rated \($0) out of 5 stars" },
                 model.marks.liked ? "Liked" : nil,
+                model.marks.rewatch ? "Rewatch" : nil,
+                model.marks.spoiler ? "Review contains spoilers" : nil,
             ]
             .compactMap { $0 }
             .joined(separator: ", ")
@@ -275,6 +304,24 @@ struct TrackingCard: View {
             }
         }
         .monospacedDigit()
+    }
+
+    /// Your review, two lines at most, its title included, as a friend's card shows theirs. Your log has the rest.
+    private func reviewText(_ review: TrackingCardModel.Review) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let title = review.title {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .lineLimit(1)
+            }
+            Text(review.text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.84))
+                .lineLimit(review.title == nil ? 2 : 1)
+        }
+        .lineSpacing(2)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var updateButton: some View {

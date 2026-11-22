@@ -82,6 +82,22 @@ final class TrackingCardModelTests: XCTestCase {
         XCTAssertEqual(card.detail, "3 logs")
     }
 
+    func testYourLatestLogShowsItsReviewAndRewatchAndASpoilerShowsOnlyTheEye() {
+        var log = UserMediaState(isTracked: true, status: "Completed", diaryEntryId: 4, diaryCount: 2, diaryConsumedAt: "2026-10-31")
+        log.diaryReview = "Even better the second time."
+        log.diaryReviewTitle = "Again"
+        log.diaryIsRewatch = true
+        let card = Self.model("movie", state: log)
+        XCTAssertEqual(card.review, TrackingCardModel.Review(title: "Again", text: "Even better the second time."))
+        XCTAssertTrue(card.marks.rewatch)
+        XCTAssertFalse(card.marks.spoiler)
+
+        log.diaryContainsSpoilers = true
+        let spoiler = Self.model("movie", state: log)
+        XCTAssertNil(spoiler.review)
+        XCTAssertTrue(spoiler.marks.spoiler)
+    }
+
     func testAFinishedBookEndsInTheCheckAndAMovieHasNoBar() {
         var book = UserMediaState(isTracked: true, status: "Completed")
         book.progress = ProgressState(kind: "pages", value: 300, max: 300, unit: "pages")
