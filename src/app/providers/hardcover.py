@@ -1,3 +1,4 @@
+import json
 import logging
 from decimal import Decimal, InvalidOperation
 
@@ -47,10 +48,39 @@ def handle_error(error):
         raise services.ProviderAPIError(Sources.HARDCOVER.value, error) from json_error
 
     if status_code == requests.codes.unauthorized:
-        details = error_json["error"]
+        details = error_json.get("error_description") or error_json.get("error")
         raise services.ProviderAPIError(Sources.HARDCOVER.value, error, details)
 
     raise services.ProviderAPIError(Sources.HARDCOVER.value, error)
+
+
+def graphql_request(query, variables, **request_options):
+    """POST a GraphQL query to Hardcover and return the response.
+
+    Hardcover answers a bad query with HTTP 200 and an ``errors`` list instead of
+    ``data``; that raises ProviderAPIError too, so callers never read or cache it.
+    """
+    try:
+        response = services.api_request(
+            Sources.HARDCOVER.value,
+            "POST",
+            base_url,
+            params={"query": query, "variables": variables},
+            headers={"Authorization": settings.HARDCOVER_API},
+            **request_options,
+        )
+    except requests.exceptions.HTTPError as error:
+        handle_error(error)
+
+    errors = response.get("errors")
+    if errors:
+        message = (errors[0] or {}).get("message") if isinstance(errors, list) else None
+        raise services.ProviderAPIError(
+            Sources.HARDCOVER.value,
+            ValueError(json.dumps(errors)),
+            message or "GraphQL error",
+        )
+    return response
 
 
 def search(query, page, *, preserve_ranking_fields=False, timeout=None):
@@ -83,17 +113,7 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
             "page": page,
         }
 
-        try:
-            response = services.api_request(
-                Sources.HARDCOVER.value,
-                "POST",
-                base_url,
-                params={"query": search_query, "variables": variables},
-                headers={"Authorization": settings.HARDCOVER_API},
-                timeout=timeout,
-            )
-        except requests.exceptions.HTTPError as error:
-            response = handle_error(error)
+        response = graphql_request(search_query, variables, timeout=timeout)
 
         hits = response["data"]["search"]["results"]["hits"]
         results = [
@@ -315,19 +335,10 @@ def discover(*, page=1, page_size=None, genre=None, year=None):
         }
         """
 
-        try:
-            response = services.api_request(
-                Sources.HARDCOVER.value,
-                "POST",
-                base_url,
-                params={
-                    "query": discover_query,
-                    "variables": {"where": where, "limit": per_page, "offset": offset},
-                },
-                headers={"Authorization": settings.HARDCOVER_API},
-            )
-        except requests.exceptions.HTTPError as error:
-            response = handle_error(error)
+        response = graphql_request(
+            discover_query,
+            {"where": where, "limit": per_page, "offset": offset},
+        )
 
         rows = response["data"]["books"]
         results = [
@@ -944,18 +955,9 @@ def person_page(person_id):
           }
         }
         """
-        try:
-            response = services.api_request(
-                Sources.HARDCOVER.value,
-                "POST",
-                base_url,
-                params={"query": query, "variables": {"author_id": int(person_id)}},
-                headers={"Authorization": settings.HARDCOVER_API},
-            )
-        except requests.exceptions.HTTPError as error:
-            handle_error(error)
+        response = graphql_request(query, {"author_id": int(person_id)})
 
-        author = (response.get("data", {}).get("authors") or [None])[0]
+        author =(response.get("data", {}).get("authors") or [None])[0]
         if not author:
             services.raise_not_found_error(Sources.HARDCOVER.value, person_id, "person")
 
@@ -1226,13 +1228,7 @@ def series_page(series_id):
     """
 
     try:
-        response = services.api_request(
-            Sources.HARDCOVER.value,
-            "POST",
-            base_url,
-            params={"query": query, "variables": {"series_id": int(series_id)}},
-            headers={"Authorization": settings.HARDCOVER_API},
-        )
+        response = graphql_request(query, {"series_id": int(series_id)})
     except SoftTimeLimitExceeded:
         raise
     except Exception as e:
