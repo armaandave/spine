@@ -69,11 +69,15 @@ final class HomeCoinSpinnerView: UIView {
     private var phase: HomeRefreshModel.Phase = .pulling
     private var pull: CGFloat = 0
     private var reduceMotion = false
-    /// After landing, the coin stays as it landed while Home closes the room, until the next pull starts.
+    /// After landing, the coin stays as it landed while Home closes the room, until the next pull starts: the page
+    /// has to come back to rest first (`sawRest`), so its bounce back from the last pull doesn't count as a new one.
     private var holdsLanding = false
+    private var sawRest = false
     /// When the spin started and from what angle, to know where it is when it lands.
     private var spinStart: CFTimeInterval = 0
     private var spinFrom: CGFloat = 0
+    /// Whether this spin is the Reduce Motion glow, so its landing matches it.
+    private var spinsStill = false
 
     private static let thickness: CGFloat = 2.6
     private static let slices = 6
@@ -99,15 +103,15 @@ final class HomeCoinSpinnerView: UIView {
         let scale = shape?.scale ?? 3
         let bounds = CGRect(origin: .zero, size: size)
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let faceImage = LaunchLogo.tinted("HomeLogoShape", LaunchLogo.milk, over: "HomeLogoRim")?.cgImage
-        let edgeImage = LaunchLogo.tinted("HomeLogoShape", Self.edge)?.cgImage
+        let faceImage = LaunchLogo.drawn("HomeLogoShape", LaunchLogo.milk, over: "HomeLogoRim")?.cgImage
+        let edgeImage = LaunchLogo.drawn("HomeLogoShape", Self.edge)?.cgImage
 
         stage.bounds = bounds
         var perspective = CATransform3DIdentity
         perspective.m34 = -1 / 240
         stage.sublayerTransform = perspective
 
-        let glowImage = LaunchLogo.tinted("HomeLogoGlow", LaunchLogo.milkGlow)
+        let glowImage = LaunchLogo.drawn("HomeLogoGlow", LaunchLogo.milkGlow)
         glow.contents = glowImage?.cgImage
         glow.contentsScale = glowImage?.scale ?? scale
         glow.bounds = CGRect(origin: .zero, size: glowImage?.size ?? size)
@@ -185,7 +189,8 @@ final class HomeCoinSpinnerView: UIView {
         }
         guard phase == .pulling else { return place() }
         if holdsLanding {
-            guard pull > 0.5 else { return }
+            if pull <= 0.5 { sawRest = true }
+            guard sawRest, pull > 0.5 else { return }
             holdsLanding = false
             stage.removeAllAnimations()
         }
@@ -217,7 +222,8 @@ final class HomeCoinSpinnerView: UIView {
         stage.setValue(1, forKeyPath: "transform.scale")
         CATransaction.commit()
         place()
-        if reduceMotion {
+        spinsStill = reduceMotion
+        if spinsStill {
             let pulse = CABasicAnimation(keyPath: "opacity")
             pulse.fromValue = 0.25
             pulse.toValue = 0.75
@@ -254,7 +260,7 @@ final class HomeCoinSpinnerView: UIView {
     /// The reload is done: it slows into a spring that lands it face up, then pops once and glows.
     private func land() {
         for layer in [coin, glow, glint] as [CALayer] { layer.removeAllAnimations() }
-        if reduceMotion {
+        if spinsStill {
             glow.opacity = Float(HomeCoinChoreography.glow(angle: 0))
             return
         }
@@ -294,6 +300,7 @@ final class HomeCoinSpinnerView: UIView {
     /// Home closes the room: the landed coin fades and shrinks away, and stays put until the next pull.
     private func leave() {
         holdsLanding = true
+        sawRest = false
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = stage.presentation()?.opacity ?? stage.opacity
         fade.toValue = 0
