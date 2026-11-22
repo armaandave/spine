@@ -2,9 +2,9 @@ import SwiftUI
 
 /// What a list shows under a poster: its number (ranked lists) with its mark, then one fact.
 ///
-/// Featured lists send the mark and the fact: a blue dot when a title is new on a chart, a green or red arrow with
-/// the places it moved, and a gold trophy before the category a one-year award was won in. A list of your own shows
-/// only the number.
+/// Featured lists send the mark and the fact: a blue dot when a title is new on a chart, a green or red arrow when it
+/// moved, and a gold trophy before the category a one-year award was won in. A list of your own shows only the
+/// number.
 struct PosterLines: View {
     /// Nil on unranked lists, which also hide a chart's movement.
     let number: Int?
@@ -52,16 +52,10 @@ struct PosterLines: View {
                 .fill(.blue)
                 .frame(width: 6, height: 6)
         case .up, .down:
-            HStack(spacing: 1) {
-                Image(systemName: mark == .up ? "arrow.up" : "arrow.down")
-                    .font(.system(size: 8, weight: .bold))
-                if let markPlaces {
-                    Text("\(markPlaces)")
-                        .font(.system(size: 10, weight: .bold))
-                        .monospacedDigit()
-                }
-            }
-            .foregroundStyle(mark == .up ? Color.green : Color.red)
+            // The arrow alone: how far it moved is only spoken.
+            Image(systemName: mark == .up ? "arrow.up" : "arrow.down")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(mark == .up ? Color.green : Color.red)
         case .won, nil:
             EmptyView()
         }
