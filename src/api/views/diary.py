@@ -164,7 +164,10 @@ class DiaryDetailView(APIView):
             if not visible.filter(id=entry.id).exists():
                 return Response(status=status.HTTP_404_NOT_FOUND)
         exposure.require_media_type(entry.item.media_type)
-        return Response(diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True))
+        payload = diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True)
+        # Only the log's own page reads it, so list payloads stay as they are.
+        payload["can_share"] = diary_service.can_share(entry, request.user)
+        return Response(payload)
 
     def patch(self, request, entry_id):
         entry = get_object_or_404(DiaryEntry, id=entry_id, user=request.user)

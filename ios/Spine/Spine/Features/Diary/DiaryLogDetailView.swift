@@ -177,6 +177,7 @@ struct DiaryLogDetailView: View {
     @State private var viewModel: DiaryLogDetailViewModel
     @State private var presentedRef: MediaRef?
     @State private var isEditing = false
+    @State private var isSharing = false
     @State private var isDeleteConfirmationPresented = false
 
     private let diaryRepository: DiaryRepository
@@ -234,7 +235,8 @@ struct DiaryLogDetailView: View {
             showsDelete: canManageEntry,
             isBusy: viewModel.isDeleting,
             onEdit: { isEditing = true },
-            onDelete: { isDeleteConfirmationPresented = true }
+            onDelete: { isDeleteConfirmationPresented = true },
+            onShare: canShare ? { isSharing = true } : nil
         ) { entry in
             hero(entry)
         } middle: { entry in
@@ -249,7 +251,7 @@ struct DiaryLogDetailView: View {
             }
         }
         // A cover or sheet over the page doesn't count as disappearing, and takes the stop button out of reach.
-        .onChange(of: presentedRef != nil || isEditing) { _, isCovered in
+        .onChange(of: presentedRef != nil || isEditing || isSharing) { _, isCovered in
             if isCovered { songPreview.stop() }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -273,6 +275,11 @@ struct DiaryLogDetailView: View {
                 ) { request in
                     await viewModel.save(request)
                 }
+            }
+        }
+        .sheet(isPresented: $isSharing) {
+            if let entry = viewModel.entry {
+                LogShareSheet(content: LogShareContent(entry: entry, detail: viewModel.mediaDetail))
             }
         }
         .alert("Could not delete log", isPresented: Binding(
@@ -300,6 +307,13 @@ struct DiaryLogDetailView: View {
                  : "This cannot be undone.")
         }
         .navigationPage(.post)
+    }
+
+    /// Your own logs, whatever their setting; someone else's only when the server says it's a public log on a public
+    /// account.
+    private var canShare: Bool {
+        guard let entry = viewModel.entry else { return false }
+        return entry.user.id == currentUserId || entry.canShare == true
     }
 
     private var canManageEntry: Bool {

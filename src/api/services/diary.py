@@ -135,6 +135,19 @@ def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
     return payload
 
 
+def can_share(entry, viewer):
+    """Return whether the viewer gets a share button on a log.
+
+    Its owner always does, whatever the log's setting; anyone else only for a public
+    log on a public account.
+    """
+    if viewer is not None and viewer.is_authenticated and entry.user_id == viewer.id:
+        return True
+    # A half-star log is always public, as the payload's visibility says.
+    is_public = single_weight.uses_half_star_rating(entry.item) or entry.visibility == "public"
+    return is_public and not entry.user.profile_private
+
+
 def consumed_at_payload(entry):
     """Return a log's date as the API shows it: a calendar date for half-star media."""
     if single_weight.uses_half_star_rating(entry.item):
