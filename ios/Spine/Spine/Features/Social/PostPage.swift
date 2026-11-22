@@ -28,6 +28,8 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
     private let isBusy: Bool
     private let onEdit: () -> Void
     private let onDelete: () -> Void
+    /// Opens the share sheet; nil shows no share button.
+    private let onShare: (() -> Void)?
     private let hero: (Item) -> Hero
     private let middle: (Item) -> Middle
 
@@ -48,6 +50,7 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
         isBusy: Bool,
         onEdit: @escaping () -> Void,
         onDelete: @escaping () -> Void,
+        onShare: (() -> Void)? = nil,
         @ViewBuilder hero: @escaping (Item) -> Hero,
         @ViewBuilder middle: @escaping (Item) -> Middle
     ) {
@@ -67,6 +70,7 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
         self.isBusy = isBusy
         self.onEdit = onEdit
         self.onDelete = onDelete
+        self.onShare = onShare
         self.hero = hero
         self.middle = middle
     }
@@ -144,7 +148,7 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
         .padding(.top, topSafeAreaInset + 68)
     }
 
-    /// Back and who posted it, then Edit and Delete when the page offers them: one row at one inset.
+    /// Back and who posted it, then Share, Edit and Delete when the page offers them: one row at one inset.
     private var topButtons: some View {
         GlassEffectContainer(spacing: 8) {
             HStack(spacing: 8) {
@@ -165,6 +169,18 @@ struct PostPage<Item, Hero: View, Middle: View>: View {
                 }
 
                 Spacer()
+
+                if let onShare, item != nil {
+                    Button(action: onShare) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(width: 38, height: 38)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(.circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Share")
+                }
 
                 if showsEdit {
                     Button(action: onEdit) {

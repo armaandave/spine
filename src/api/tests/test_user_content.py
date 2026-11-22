@@ -438,6 +438,24 @@ class DiaryDetailVisibilityTests(UserContentTestCase):
         Follow.objects.all().delete()
         self.assertEqual(self.detail(movie), status.HTTP_200_OK)
 
+    def test_share_button_is_the_owners_on_any_log_and_others_on_public_logs_of_public_accounts(self):
+        self.follow()
+        private = self.log(self.item(), visibility="private")
+        followers = self.log(self.item(media_id="two"), visibility="followers")
+        public = self.log(self.item(media_id="three"))
+        half_star = self.log(self.item(MediaTypes.MOVIE.value), visibility="private")
+
+        def can_share(entry, viewer=None):
+            return self.ok(self.get(f"diary/{entry.id}/", viewer))["can_share"]
+
+        self.assertTrue(can_share(private, self.owner))
+        self.assertFalse(can_share(followers))
+        self.assertTrue(can_share(public))
+        self.assertTrue(can_share(half_star))
+        self.make_private()
+        self.assertFalse(can_share(public))
+        self.assertTrue(can_share(public, self.owner))
+
     def test_a_private_account_or_a_block_hides_even_public_logs(self):
         entry = self.log(self.item())
         self.make_private()

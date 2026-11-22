@@ -403,7 +403,8 @@
     },
     "viewer_has_liked": false,
     "visibility": "public",
-    "comment_count": 0
+    "comment_count": 0,
+    "can_share": true
   },
   "diary_list": {
     "count": 1,
