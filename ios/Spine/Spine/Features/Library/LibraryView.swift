@@ -587,6 +587,11 @@ struct LibraryView: View {
             .onChange(of: viewModel.contentRevision) {
                 updateHeaderArt()
             }
+            // A status that fails to load doesn't keep the last one's art.
+            .onChange(of: viewModel.errorMessage) {
+                guard viewModel.errorMessage != nil, viewModel.items.isEmpty else { return }
+                updateHeaderArt()
+            }
             .onChange(of: requestedShelf) {
                 consumeRequestedShelf()
             }

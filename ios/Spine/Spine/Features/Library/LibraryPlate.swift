@@ -95,7 +95,7 @@ struct LibraryPlate<Title: View, Trailing: View, Bar: View>: View {
                 .padding(.horizontal, 12)
                 .offset(y: 84 - 10 * progress)
                 .opacity(fold)
-                .allowsHitTesting(progress < 0.3)
+                .allowsHitTesting(fold > 0)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(
