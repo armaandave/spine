@@ -365,8 +365,9 @@ struct ProgressPostDetailView: View {
             orientation: viewModel.mediaDetail?.posterOrientation ?? media.posterOrientation,
             title: PostHero.titleParts(page?.title ?? media.displayTitle).title,
             detail: viewModel.mediaDetail,
-            // "S2 E7", "E7", "Season 2": which part of the show the day was; otherwise the year, as on a log.
-            subtitle: page?.tag ?? PostHero.metadata(displayTitle: media.displayTitle, detail: viewModel.mediaDetail),
+            // "S2 E7", "E7", "Season 2": which part of the show the day was, in the year's place; otherwise the year
+            // and length, as on a log.
+            lines: PostHeroFacts.lines(displayTitle: media.displayTitle, detail: viewModel.mediaDetail, tag: page?.tag),
             isLoadingDetail: viewModel.isLoadingMediaDetail,
             onOpen: { presentedRef = media.ref }
         )

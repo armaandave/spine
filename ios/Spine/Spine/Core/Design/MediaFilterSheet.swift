@@ -10,8 +10,11 @@ struct MediaFilterSheet: View {
     let onApply: () -> Void
     private let streamingRepository: StreamingRepository
     private let onUnauthorized: () -> Void
+    /// Library's grid or list, applied with the filters.
+    private let viewMode: Binding<LibraryViewMode>?
 
     @State private var draft: MediaFilterState
+    @State private var draftViewMode: LibraryViewMode
     @State private var isGenreExpanded = false
     @State private var isLanguageExpanded = false
 
@@ -23,6 +26,7 @@ struct MediaFilterSheet: View {
         showsTagFilter: Bool = true,
         streamingRepository: StreamingRepository = AppRepositories.current().streaming,
         onUnauthorized: @escaping () -> Void = {},
+        viewMode: Binding<LibraryViewMode>? = nil,
         onApply: @escaping () -> Void
     ) {
         _filter = filter
@@ -33,12 +37,22 @@ struct MediaFilterSheet: View {
         self.onApply = onApply
         self.streamingRepository = streamingRepository
         self.onUnauthorized = onUnauthorized
+        self.viewMode = viewMode
         _draft = State(initialValue: filter.wrappedValue)
+        _draftViewMode = State(initialValue: viewMode?.wrappedValue ?? .grid)
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                if viewMode != nil {
+                    Section {
+                        Picker("View", selection: $draftViewMode) {
+                            Label("Grid", systemImage: "square.grid.2x2").tag(LibraryViewMode.grid)
+                            Label("List", systemImage: "list.bullet").tag(LibraryViewMode.list)
+                        }
+                    }
+                }
                 sortSection
                 contextSection
                 serviceSection
@@ -69,6 +83,7 @@ struct MediaFilterSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Apply") {
+                        viewMode?.wrappedValue = draftViewMode
                         filter = draft
                         onApply()
                         dismiss()
