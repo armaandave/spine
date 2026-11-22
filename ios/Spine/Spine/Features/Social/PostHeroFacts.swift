@@ -28,7 +28,6 @@ enum PostHeroFacts {
         case chapters
         case pages
         case issues
-        case songs
     }
 
     /// How long a title is.
@@ -202,10 +201,17 @@ enum PostHeroFacts {
         }
     }
 
+    /// A runtime as its source writes it ("2h 18m"), or a bare number of minutes in the same form.
     private static func runtime(_ value: JSONValue?) -> Length? {
-        guard case let .string(text) = value else { return nil }
-        let runtime = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return runtime.isEmpty ? nil : .runtime(runtime)
+        switch value {
+        case let .string(text):
+            let runtime = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return runtime.isEmpty ? nil : .runtime(runtime)
+        case let .number(minutes) where minutes >= 1:
+            return .runtime(duration(Int(minutes.rounded())))
+        default:
+            return nil
+        }
     }
 
     private static func count(_ value: JSONValue?) -> Int? {
@@ -269,12 +275,11 @@ extension PostHeroFacts {
         case .chapters: one ? "chapter" : "chapters"
         case .pages: one ? "page" : "pages"
         case .issues: one ? "issue" : "issues"
-        case .songs: one ? "song" : "songs"
         }
     }
 
     /// "1h 19m", "48m": a film's runtime's own form.
-    private static func duration(_ minutes: Int) -> String {
+    static func duration(_ minutes: Int) -> String {
         let (hours, rest) = minutes.quotientAndRemainder(dividingBy: 60)
         return hours > 0 ? "\(hours)h \(rest)m" : "\(rest)m"
     }
