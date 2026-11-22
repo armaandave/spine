@@ -24,9 +24,9 @@ final class HomeDesignTests: XCTestCase {
         XCTAssertEqual(PosterSlot.postHero.size, CGSize(width: 120, height: 180))
         XCTAssertEqual(PosterSlot.postHero.cornerRadius, 10)
         XCTAssertEqual(HomeDesign.Metric.carouselPoster, PosterSlot.homeCarousel.size)
-        // Other slots keep width x width for square art.
+        // Other slots keep width x width for square art; a post page's square has as much art as its poster.
         XCTAssertEqual(PosterSlot.homeCarousel.artworkSize(mediaType: "music", orientation: .square), CGSize(width: 120, height: 120))
-        XCTAssertEqual(PosterSlot.postHero.artworkSize(mediaType: "music", orientation: .square), CGSize(width: 120, height: 120))
+        XCTAssertEqual(PosterSlot.postHero.artworkSize(mediaType: "music", orientation: .square), CGSize(width: 147, height: 147))
     }
 
     func testExistingSlotsAreUnchanged() {
