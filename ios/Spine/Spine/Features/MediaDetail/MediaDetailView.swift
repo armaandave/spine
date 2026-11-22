@@ -6597,21 +6597,19 @@ struct TrackingSummarySection: View {
 
     var body: some View {
         if hasState {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionLabel(title: "Your Tracking")
-                TrackingCard(
-                    model: card,
-                    posterURL: detail.displayPosterURL,
-                    tint: tint,
-                    palette: meterPalette,
-                    avatarURL: avatarURL,
-                    onOpenDiary: card.opensDiary ? onOpenDiaryEntry : nil,
-                    onUpdateProgress: onUpdateProgress,
-                    upNext: upNextRow,
-                    nextTitle: state?.anime?.nextTitle,
-                    onOpenNextTitle: onOpenNextTitle
-                )
-            }
+            // No section label: "You" on the card says whose it is.
+            TrackingCard(
+                model: card,
+                posterURL: detail.displayPosterURL,
+                tint: tint,
+                palette: meterPalette,
+                avatarURL: avatarURL,
+                onOpenDiary: card.opensDiary ? onOpenDiaryEntry : nil,
+                onUpdateProgress: onUpdateProgress,
+                upNext: upNextRow,
+                nextTitle: state?.anime?.nextTitle,
+                onOpenNextTitle: onOpenNextTitle
+            )
             .task(id: detail.displayPosterURL) {
                 let url = detail.displayPosterURL.flatMap(URL.init(string:))
                 countedSwatches = await PosterPaletteStore.homePicture.swatches(server: detail.posterPalette, url: url)
