@@ -382,6 +382,27 @@ class ServicesTests(TestCase):
 
         mock_tv_with_seasons.assert_called_once_with("1", [1])
 
+    @patch("app.providers.tmdb.tv_with_seasons")
+    def test_a_season_names_its_shows_creators(self, mock_tv_with_seasons):
+        """A season's log says who created the show; TMDB's season leaves them out."""
+        creators = [{"id": 66633, "name": "Vince Gilligan"}]
+        season = {"title": "Season 2", "details": {"episodes": 13}}
+        mock_tv_with_seasons.return_value = {
+            "details": {"creators": creators},
+            "season/2": season,
+        }
+
+        result = services.get_media_metadata(
+            MediaTypes.SEASON.value,
+            "1396",
+            Sources.TMDB.value,
+            season_numbers=[2],
+        )
+
+        self.assertEqual(result["details"], {"episodes": 13, "creators": creators})
+        # The cached season is left as it was.
+        self.assertEqual(season["details"], {"episodes": 13})
+
     @patch("app.providers.tmdb.episode")
     def test_get_media_metadata_episode(self, mock_episode):
         """Test the get_media_metadata function for TV episodes."""

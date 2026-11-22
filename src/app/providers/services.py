@@ -404,6 +404,19 @@ def is_rate_limited(error):
     return status == requests.codes.too_many_requests
 
 
+def _season_with_show_creators(show, season_number):
+    """Return one season of a show, with the show's creators, which TMDB's season leaves out.
+
+    A season's log names who created the show, as the show's own log does.
+    """
+    season = show[f"season/{season_number}"]
+    details = season.get("details") or {}
+    creators = (show.get("details") or {}).get("creators")
+    if not creators or details.get("creators"):
+        return season
+    return {**season, "details": {**details, "creators": creators}}
+
+
 def get_media_metadata(
     media_type,
     media_id,
@@ -451,9 +464,10 @@ def get_media_metadata(
         MediaTypes.TV.value: lambda: tmdb.tv(media_id),
         "tv_with_seasons": lambda: tmdb.tv_with_seasons(media_id, season_numbers),
         MediaTypes.SEASON.value: (
-            lambda: tmdb.tv_with_seasons(media_id, season_numbers)[
-                f"season/{season_numbers[0]}"
-            ]
+            lambda: _season_with_show_creators(
+                tmdb.tv_with_seasons(media_id, season_numbers),
+                season_numbers[0],
+            )
         ),
         MediaTypes.EPISODE.value: lambda: tmdb.episode(
             media_id,

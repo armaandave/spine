@@ -102,6 +102,10 @@ enum PosterSlot {
         if self == .feedCard {
             return CGSize(width: 90, height: 90)
         }
+        if self == .postHero {
+            // As much art as a 120x180 poster: the square's side is the square root of its area.
+            return CGSize(width: 147, height: 147)
+        }
         return CGSize(width: size.width, height: size.width)
     }
 }
