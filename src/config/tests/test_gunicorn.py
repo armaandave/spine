@@ -51,6 +51,14 @@ class GunicornConfigTests(SimpleTestCase):
         ):
             runpy.run_path(self.config_path)
 
+    def test_preloaded_objects_are_frozen_before_each_fork(self):
+        config = runpy.run_path(self.config_path)
+
+        with mock.patch("gc.freeze") as freeze:
+            config["pre_fork"](mock.Mock(), mock.Mock())
+
+        freeze.assert_called_once_with()
+
     def test_print_config_reports_effective_concurrency(self):
         argv = [
             "gunicorn",

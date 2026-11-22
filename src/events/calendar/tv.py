@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import requests
 from django.core.cache import cache
@@ -9,7 +8,7 @@ from api.services.item_metadata import store_item_metadata
 from app import tv_tracking
 from app.models import Item, MediaTypes
 from app.providers import services, tmdb
-from events.models import Event
+from events.models import Event, SentinelDatetime
 
 from .helpers import date_parser
 
@@ -198,7 +197,7 @@ def get_episode_datetime(episode, season_number, episode_number, tvmaze_map):
                 episode["air_date"],
             )
 
-    return datetime.min.replace(tzinfo=ZoneInfo("UTC"))
+    return SentinelDatetime.min_datetime()
 
 
 def get_tvmaze_episode_map(tvdb_id):

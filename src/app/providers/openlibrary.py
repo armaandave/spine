@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 base_url = "https://openlibrary.org/api"
 search_url = "https://openlibrary.org/search.json"
 headers = {"User-Agent": "Yamtrack/1.0 (github@fuzzygrim.com)"}
+AUTHOR_FETCH_ATTEMPTS = 3
 
 
 def handle_error(error):
@@ -490,9 +491,10 @@ async def async_book(media_id):
         )
         score, score_count = await ratings_task
 
-        authors_result = await authors_task
+        authors_result, authors_complete = await authors_task
         if not authors_result and response_book:
-            authors_result = await get_authors(response_book)
+            authors_result, edition_authors_complete = await get_authors(response_book)
+            authors_complete = authors_complete and edition_authors_complete
 
         # Extract details with debugging
         publishers = get_publishers(response_book)
@@ -543,7 +545,10 @@ async def async_book(media_id):
             },
         }
 
-        cache.set(cache_key, data)
+        # An author that failed for a moment would otherwise stay missing for the
+        # cache's whole lifetime.
+        if authors_complete:
+            cache.set(cache_key, data)
 
     return data
 
@@ -653,10 +658,14 @@ def _extract_author_key(author):
 
 
 async def get_authors(response):
-    """Get list of author dicts with name, person_id, and source."""
+    """Return (author dicts with name, person_id and source, or None; complete).
+
+    complete is False when an author failed in a way that may pass, so the caller
+    doesn't cache a book missing them.
+    """
     author_entries = response.get("authors", []) or []
     if not author_entries:
-        return None
+        return None, True
 
     to_fetch = []
     for author in author_entries:
@@ -666,12 +675,16 @@ async def get_authors(response):
             to_fetch.append((author_key, author_url))
 
     if not to_fetch:
-        return None
+        return None, True
 
-    async with aiohttp.ClientSession(headers=headers) as session:
+    async with aiohttp.ClientSession(
+        headers=headers,
+        timeout=aiohttp.ClientTimeout(total=settings.REQUEST_TIMEOUT),
+    ) as session:
         tasks = [fetch_author_data(session, url) for (_, url) in to_fetch]
         author_data_list = await asyncio.gather(*tasks)
 
+    complete = all(data is not None for data in author_data_list)
     authors = []
     for i, data in enumerate(author_data_list):
         if i < len(to_fetch) and data:
@@ -684,15 +697,40 @@ async def get_authors(response):
                 "source": Sources.OPENLIBRARY.value,
             })
 
-    return authors or None
+    return authors or None, complete
 
 
 async def fetch_author_data(session, url):
-    """Fetch author data asynchronously."""
-    async with session.get(url) as response:
-        if response.status == requests.codes.ok:
-            return await response.json()
+    """Fetch one author, retrying a rate limit, server error or dropped connection.
 
+    Returns the author's JSON; an empty dict when Open Library says the author isn't
+    there (a 404 or another 4xx), so the book leaves them out and can still be cached;
+    None when the failure may pass (retries spent, or a timeout, which isn't retried
+    because each try may take the whole request timeout).
+    """
+    for attempt in range(1, AUTHOR_FETCH_ATTEMPTS + 1):
+        try:
+            async with session.get(url) as response:
+                if response.status == requests.codes.ok:
+                    return await response.json()
+                failure = response.status
+        except TimeoutError:
+            logger.warning("Open Library author %s timed out", url)
+            return None
+        except aiohttp.ClientError as error:
+            failure = error
+
+        retryable = not isinstance(failure, int) or (
+            failure == requests.codes.too_many_requests
+            or failure >= requests.codes.internal_server_error
+        )
+        if not retryable:
+            logger.warning("Open Library author %s not available: %s", url, failure)
+            return {}
+        if attempt < AUTHOR_FETCH_ATTEMPTS:
+            await asyncio.sleep(attempt)
+
+    logger.warning("Failed to fetch Open Library author %s: %s", url, failure)
     return None
 
 

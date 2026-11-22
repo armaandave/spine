@@ -1,6 +1,5 @@
 import datetime
 from unittest.mock import MagicMock, patch
-from zoneinfo import ZoneInfo
 
 import requests
 from django.core.cache import cache
@@ -18,7 +17,7 @@ from events.calendar.tv import (
     process_season_episodes,
     process_tv,
 )
-from events.models import Event
+from events.models import Event, SentinelDatetime
 from events.tests.calendar.utils import CalendarFixturesMixin
 
 
@@ -254,7 +253,7 @@ class CalendarTVTests(CalendarFixturesMixin, TestCase):
             tvmaze_map={},
         )
 
-        self.assertEqual(result, datetime.datetime.min.replace(tzinfo=ZoneInfo("UTC")))
+        self.assertEqual(result, SentinelDatetime.min_datetime())
 
     @patch("events.calendar.tv.services.api_request")
     def test_get_tvmaze_response_returns_empty_on_not_found(self, mock_api_request):

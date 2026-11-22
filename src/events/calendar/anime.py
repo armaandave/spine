@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from app import anime_listing, anime_tracking
 from app.models import MediaTypes, Sources
 from app.providers import services
-from events.models import Event
+from events.models import Event, SentinelDatetime
 
 from .other import process_other
 
@@ -59,7 +59,7 @@ def process_anime_bulk(items, events_bulk):
         if episodes:
             for episode in episodes:
                 if episode["airingAt"] is None:
-                    episode_datetime = datetime.min.replace(tzinfo=ZoneInfo("UTC"))
+                    episode_datetime = SentinelDatetime.min_datetime()
                 else:
                     episode_datetime = datetime.fromtimestamp(
                         episode["airingAt"],
