@@ -2,52 +2,53 @@ import LinkPresentation
 import SwiftUI
 import UIKit
 
-/// The sheet a log's share button opens: the picture that will be shared, then Share Image, which hands it to the iOS
-/// share sheet (Instagram Stories, Messages, Save Image and the rest).
+/// The sheet a log's share button opens: the picture that will be shared, over the log page's own blurred poster, with
+/// ✕ and Share in the bar. Share hands the picture to the iOS share sheet (Instagram Stories, Messages, Save Image).
 struct LogShareSheet: View {
     let content: LogShareContent
+    /// The log page's art and tint, so the sheet sits on the same blurred poster.
+    let backdropURL: URL?
+    let accentHex: String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var story: UIImage?
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                Group {
-                    if let story {
-                        Image(uiImage: story)
-                            .resizable()
-                            .scaledToFit()
-                            .clipShape(.rect(cornerRadius: 18, style: .continuous))
-                            .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
-                            .accessibilityLabel("The picture of \(content.username)'s log of \(content.title)")
-                    } else {
-                        ProgressView()
-                            .tint(.white)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                PostPageBackground(url: backdropURL, accentHex: accentHex)
 
-                Button(action: share) {
-                    Label("Share Image", systemImage: "square.and.arrow.up")
-                        .font(.headline)
-                        .foregroundStyle(story == nil ? .white.opacity(0.42) : .black)
-                        .frame(maxWidth: .infinity, minHeight: 52)
+                if let story {
+                    Image(uiImage: story)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(.rect(cornerRadius: 20, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .strokeBorder(.white.opacity(0.14), lineWidth: 0.5)
+                        }
+                        .shadow(color: .black.opacity(0.45), radius: 24, y: 12)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
+                        .accessibilityLabel("The picture of \(content.username)'s log of \(content.title)")
+                } else {
+                    ProgressView()
+                        .tint(.white)
                 }
-                .tint(story == nil ? .white.opacity(0.08) : .white)
-                .buttonStyle(.glassProminent)
-                .disabled(story == nil)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
-            .navigationTitle("Share")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) {
                         dismiss()
                     }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: share) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .disabled(story == nil)
+                    .accessibilityLabel("Share Image")
                 }
             }
         }

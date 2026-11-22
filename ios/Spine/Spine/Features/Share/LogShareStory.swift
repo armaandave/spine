@@ -369,17 +369,31 @@ struct LogShareAvatar: View {
     }
 }
 
-/// The Spine icon and name.
+/// The Spine logo and name: Home's glowing milk vertebra, drawn from its transparent layers.
 struct LogShareSpineMark: View {
     let iconSize: CGFloat
     let fontSize: CGFloat
 
+    /// The logo's layers are 28 x 32 pt, the glow 56 x 60 around them.
+    private static let logoHeight: CGFloat = 32
+
     var body: some View {
-        HStack(spacing: 8) {
-            Image("ShareSpineIcon")
-                .resizable()
-                .frame(width: iconSize, height: iconSize)
-                .clipShape(.rect(cornerRadius: iconSize * 0.27, style: .continuous))
+        HStack(spacing: 7) {
+            Color.clear
+                .frame(width: iconSize * 28 / Self.logoHeight, height: iconSize)
+                .overlay {
+                    ZStack {
+                        Image("HomeLogoGlow")
+                            .renderingMode(.template)
+                            .foregroundStyle(LaunchLogo.milkGlow.color)
+                            .opacity(LaunchLogo.headerGlowOpacity(for: LaunchLogo.milkGlow))
+                        Image("HomeLogoShape")
+                            .renderingMode(.template)
+                            .foregroundStyle(LaunchLogo.milk.color)
+                        Image("HomeLogoRim")
+                    }
+                    .scaleEffect(iconSize / Self.logoHeight)
+                }
             Text("Spine")
                 .font(.system(size: fontSize, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.85))

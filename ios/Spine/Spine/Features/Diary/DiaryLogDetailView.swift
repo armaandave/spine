@@ -279,7 +279,11 @@ struct DiaryLogDetailView: View {
         }
         .sheet(isPresented: $isSharing) {
             if let entry = viewModel.entry {
-                LogShareSheet(content: LogShareContent(entry: entry, detail: viewModel.mediaDetail))
+                LogShareSheet(
+                    content: LogShareContent(entry: entry, detail: viewModel.mediaDetail),
+                    backdropURL: pageArtURL,
+                    accentHex: pageAccentHex
+                )
             }
         }
         .alert("Could not delete log", isPresented: Binding(
