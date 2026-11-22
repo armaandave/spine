@@ -249,7 +249,7 @@ All of it is additive.
 **Poster marks:** builds from the poster marks on read these instead of `note`, on the same rows. A media row gains `rank` (the number under the poster: the position, or the source's shared rank for a tie), `mark` (`"new"` and `"up"`/`"down"` with `mark_places` on ranked charts, from Spine's own movement only; `"won"` on one-year award lists; else `null`) and `fact` (one short line or `null`). A person gains `fact`. The facts, set by each adapter as `Entry.fact`:
 
 - The year: all-time award lists ("2019" for every winner of a tie year) and lists that grow over time (Film Registry, Video Game Hall of Fame, MoMA, book clubs, Pitchfork Best New Album, Oprah's Book Club). Lists whose rows all share one year show none.
-- The category: one-year award lists. A winner shows the category it won ("2 wins" for more); a nominee its one category, or "4 nominations".
+- The category: one-year award lists. A winner shows the category it won ("2 wins" for more); a nominee its one category, or "4 nominations". A ceremony with one category (the Booker) shows none: the winner has the trophy alone.
 - Money: the weekend box office.
 - Nothing else: no source wording, counts, credits or dates.
 

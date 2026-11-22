@@ -491,6 +491,8 @@ def build_entries(nominees, state):
         category: set(entry.get("published") or []) for category, entry in state.get("categories", {}).items()
     }
     nominations = Counter(nominee.key for nominee in rows)
+    # A ceremony with one category (the Booker) names nothing: the trophy says enough.
+    named = len(categories(rows)) > 1
     won = defaultdict(list)  # key -> the categories it won, in category order
     for nominee in rows:
         if nominee.key in published.get(nominee.category, ()) and nominee.category not in won[nominee.key]:
@@ -509,7 +511,7 @@ def build_entries(nominees, state):
                     nominee,
                     _note("Winner", nominee, counts[(category, nominee.key)]),
                     review,
-                    fact=_fact(won[nominee.key], nominations[nominee.key], category),
+                    fact=_fact(won[nominee.key], nominations[nominee.key], category) if named else "",
                     won=True,
                 ),
             )
@@ -521,7 +523,7 @@ def build_entries(nominees, state):
             _entry(
                 nominee,
                 _note("Nominee", nominee, counts[(nominee.category, nominee.key)]),
-                fact=_fact([], nominations[nominee.key], nominee.category),
+                fact=_fact([], nominations[nominee.key], nominee.category) if named else "",
             ),
         )
     for category in categories(rows):

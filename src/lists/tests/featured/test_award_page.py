@@ -387,6 +387,11 @@ class PosterFactTests(SimpleTestCase):
         entries = award_page.build_entries(nominees, state)
         self.assertEqual([(entry.won, entry.fact) for entry in entries[:2]], [(True, "Audio"), (True, "Visual")])
 
+        # One category (the Booker): the trophy alone, and nothing under the others.
+        booker = [nominee("Booker", "1"), nominee("Booker", "2")]
+        entries = award_page.build_entries(booker, {"categories": {"Booker": {"published": ["igdb:game:2"]}}})
+        self.assertEqual([(entry.won, entry.fact) for entry in entries], [(True, ""), (False, "")])
+
 
 class EngineReplayTests(ReplayCase):
     def test_the_engine_writes_winners_first(self):
