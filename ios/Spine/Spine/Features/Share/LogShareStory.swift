@@ -49,8 +49,9 @@ struct LogShareContent {
             }
             subtitle = Self.joined([code, year])
         default:
+            // Who made it, as the log page's header names them, then the year: "Denis Villeneuve · 2024".
             title = parts.title
-            subtitle = year
+            subtitle = Self.joined([PostHeroFacts.maker(for: detail).map { PostHeroFacts.words(for: $0) }, year])
         }
 
         username = entry.user.username
