@@ -510,6 +510,29 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testLibraryOpensOnTheRememberedTypesOwnStatus() {
+        let books = LibraryViewModel(
+            mediaRepository: FakeMediaRepository(),
+            trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
+            enabledMediaTypes: ["movie", "book"],
+            selectedMediaType: "book",
+            onUnauthorized: {}
+        )
+        let turnedOff = LibraryViewModel(
+            mediaRepository: FakeMediaRepository(),
+            trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
+            enabledMediaTypes: ["movie", "book"],
+            selectedMediaType: "tv",
+            onUnauthorized: {}
+        )
+
+        XCTAssertEqual(books.mediaType, "book")
+        XCTAssertEqual(books.shelf, .currentlyReading, "Books open on Reading, not Movies' Completed")
+        XCTAssertEqual(turnedOff.mediaType, "movie")
+        XCTAssertEqual(turnedOff.shelf, .tracked)
+    }
+
+    @MainActor
     func testPersonFilterOptionsIncludeGenresAndLanguages() throws {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -1658,100 +1681,15 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
-    func testLibraryViewModelPassesSearchQuery() async {
-        let repository = ScriptedLibraryTrackingRepository(responses: [:])
-        let viewModel = LibraryViewModel(
-            mediaRepository: FakeMediaRepository(),
-            trackingRepository: repository,
-            onUnauthorized: {}
-        )
-
-        await viewModel.setSearchQuery("  Dune  ")
-
-        XCTAssertEqual(viewModel.query, "Dune")
-        XCTAssertEqual(repository.requests, [
-            LibraryTrackingRequest(mediaType: "movie", page: nil, status: "tracked", query: "Dune")
-        ])
-    }
-
-    @MainActor
-    func testLibraryViewModelClearsSearchQuery() async {
-        let repository = ScriptedLibraryTrackingRepository(responses: [:])
-        let viewModel = LibraryViewModel(
-            mediaRepository: FakeMediaRepository(),
-            trackingRepository: repository,
-            onUnauthorized: {}
-        )
-
-        await viewModel.setSearchQuery("Dune")
-        await viewModel.clearSearch()
-
-        XCTAssertEqual(viewModel.query, "")
-        XCTAssertEqual(repository.requests, [
-            LibraryTrackingRequest(mediaType: "movie", page: nil, status: "tracked", query: "Dune"),
-            LibraryTrackingRequest(mediaType: "movie", page: nil, status: "tracked")
-        ])
-    }
-
-    @MainActor
-    func testLibraryViewModelKeepsSearchQueryAcrossMediaTypeAndShelfChanges() async {
-        let repository = ScriptedLibraryTrackingRepository(responses: [:])
-        let viewModel = LibraryViewModel(
-            mediaRepository: FakeMediaRepository(),
-            trackingRepository: repository,
-            onUnauthorized: {}
-        )
-
-        await viewModel.setSearchQuery("Halo")
-        await viewModel.selectMediaType("game")
-        viewModel.shelf = .planning
-        await viewModel.reload()
-
-        XCTAssertEqual(repository.requests, [
-            LibraryTrackingRequest(mediaType: "movie", page: nil, status: "tracked", query: "Halo"),
-            LibraryTrackingRequest(mediaType: "game", page: nil, status: "In progress", query: "Halo"),
-            LibraryTrackingRequest(mediaType: "game", page: nil, status: "Planning", query: "Halo")
-        ])
-    }
-
-    @MainActor
-    func testLibraryViewModelIgnoresStaleSearchResponses() async {
-        let repository = DelayedLibraryTrackingRepository(responses: [
-            "movie:Dune": (
-                delay: .milliseconds(80),
-                response: PagedResponse(count: 1, next: nil, previous: nil, results: [libraryItem(id: "1", title: "Dune")])
-            ),
-            "movie:Halo": (
-                delay: .milliseconds(1),
-                response: PagedResponse(count: 1, next: nil, previous: nil, results: [libraryItem(id: "2", title: "Halo")])
-            )
-        ])
-        let viewModel = LibraryViewModel(
-            mediaRepository: FakeMediaRepository(),
-            trackingRepository: repository,
-            onUnauthorized: {}
-        )
-
-        let staleSearch = Task { await viewModel.setSearchQuery("Dune") }
-        try? await Task.sleep(for: .milliseconds(10))
-        await viewModel.setSearchQuery("Halo")
-        await staleSearch.value
-
-        XCTAssertEqual(viewModel.query, "Halo")
-        XCTAssertEqual(viewModel.items.map(\.media.title), ["Halo"])
-        XCTAssertEqual(viewModel.totalCount, 1)
-    }
-
-    @MainActor
-    func testLibraryMusicRequestsPreserveSearchShelfAndPagination() async {
+    func testLibraryMusicRequestsPreserveShelfAndPagination() async {
         let repository = ScriptedLibraryTrackingRepository(responses: [
-            "music::Year Zero": PagedResponse(
+            "music::": PagedResponse(
                 count: 2,
                 next: "https://spine.test/api/v1/tracking/?media_type=music&page=2",
                 previous: nil,
                 results: [libraryItem(id: "album-1", title: "Year Zero", mediaType: "music")]
             ),
-            "music:2:Year Zero": PagedResponse(
+            "music:2:": PagedResponse(
                 count: 2,
                 next: nil,
                 previous: "https://spine.test/api/v1/tracking/?media_type=music",
@@ -1765,16 +1703,16 @@ final class SpineTests: XCTestCase {
         )
         viewModel.mediaType = "music"
 
-        await viewModel.setSearchQuery("Year Zero")
+        await viewModel.reload()
         await viewModel.loadNextPage()
         viewModel.shelf = .planning
         await viewModel.reload()
 
         XCTAssertEqual(viewModel.items.map(\.media.ref.mediaType), ["music"])
         XCTAssertEqual(repository.requests, [
-            LibraryTrackingRequest(mediaType: "music", page: nil, status: "tracked", query: "Year Zero"),
-            LibraryTrackingRequest(mediaType: "music", page: "2", status: "tracked", query: "Year Zero"),
-            LibraryTrackingRequest(mediaType: "music", page: nil, status: "Planning", query: "Year Zero")
+            LibraryTrackingRequest(mediaType: "music", page: nil, status: "tracked"),
+            LibraryTrackingRequest(mediaType: "music", page: "2", status: "tracked"),
+            LibraryTrackingRequest(mediaType: "music", page: nil, status: "Planning")
         ])
     }
 
