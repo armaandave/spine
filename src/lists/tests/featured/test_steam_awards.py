@@ -147,6 +147,19 @@ class SteamAwardsAdapterTests(SimpleTestCase):
             [("Ten", "Game of the Year · Best Story"), ("Twenty", "Best Soundtrack")],
         )
 
+    def test_poster_facts(self):
+        """A year's winners won: one category, or "2 wins"; a category's wins say their year."""
+        categories = [("10", "Game of the Year", "Ten"), ("20", "Best Soundtrack", "Twenty"), ("10", "Best Story", "Ten")]
+        self.assertEqual(
+            [(entry.won, entry.fact) for entry in steam_awards._entries(categories, {})],
+            [(True, "2 wins"), (True, "Best Soundtrack")],
+        )
+        winners = [("10", "2025", "Ten"), ("10", "2023", "Ten")]
+        self.assertEqual(
+            [(entry.won, entry.fact) for entry in steam_awards._entries(winners, {}, merge=False)],
+            [(False, "2025"), (False, "2023")],
+        )
+
     def test_validate(self):
         validate = ADAPTERS["steam_awards"].validate
         validate(awards_definition(year=2025))

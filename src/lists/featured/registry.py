@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 from app.models import PRIMARY_MEDIA_TYPES
 
 # Bump to make every list re-sync once (for example after a writer change).
-ENGINE_VERSION = "1"
+ENGINE_VERSION = "2"  # 2: rows store their poster mark and fact
 
 KINDS = ("chart", "award", "canon", "community", "curator", "editorial")
 LIST_TYPES = ("media", "people")

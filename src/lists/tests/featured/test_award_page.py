@@ -362,6 +362,32 @@ class HoldRuleTests(ReplayCase):
         self.assertEqual(result.live_label, "")
 
 
+class PosterFactTests(SimpleTestCase):
+    def test_winners_show_what_they_won_and_nominees_their_category_or_count(self):
+        def nominee(category, ref):
+            return Nominee(category, None, ref, ref=f"igdb:game:{ref}")
+
+        nominees = [
+            nominee("Audio", "1"), nominee("Audio", "2"), nominee("Audio", "3"),
+            nominee("Indie", "2"), nominee("Indie", "3"), nominee("Indie", "4"),
+            nominee("Visual", "1"), nominee("Visual", "3"),
+        ]
+        state = {"categories": {"Audio": {"published": ["igdb:game:1"]}, "Visual": {"published": ["igdb:game:1"]}}}
+        entries = award_page.build_entries(nominees, state)
+        self.assertEqual(
+            [(entry.ids["ref"], entry.won, entry.fact) for entry in entries],
+            [
+                ("igdb:game:1", True, "2 wins"),
+                ("igdb:game:2", False, "2 nominations"),
+                ("igdb:game:3", False, "3 nominations"),
+                ("igdb:game:4", False, "Indie"),
+            ],
+        )
+        state["categories"]["Visual"]["published"] = ["igdb:game:3"]
+        entries = award_page.build_entries(nominees, state)
+        self.assertEqual([(entry.won, entry.fact) for entry in entries[:2]], [(True, "Audio"), (True, "Visual")])
+
+
 class EngineReplayTests(ReplayCase):
     def test_the_engine_writes_winners_first(self):
         wiki = FakeWiki.from_fixture("tga-2025-revisions.json")

@@ -281,6 +281,7 @@ class FetchTests(SimpleTestCase):
         succession, succession_2020, thrones = result.entries
         self.assertEqual(succession.ids, {"imdb": "tt7660850", "wikidata": "Q1"})
         self.assertEqual((succession.note, succession_2020.note, thrones.note), ("2022", "2020", "2019"))
+        self.assertEqual((succession.fact, succession_2020.fact, thrones.fact), ("2022", "2020", "2019"))
         self.assertEqual(succession_2020.ids, succession.ids)
         self.assertIsNone(succession.year)  # match_year is off for TV
         self.assertIsNone(succession.rank)
@@ -351,6 +352,8 @@ class FetchTests(SimpleTestCase):
                 result = wikipedia_table.fetch(definition)
         self.assertEqual(result.edition, "2026")
         self.assertEqual(len(result.entries), 3)
+        # Every row is from one year, so none shows it.
+        self.assertEqual({entry.fact for entry in result.entries}, {""})
 
     def test_failures_raise_adapter_errors(self):
         definition = self.tv_definition()

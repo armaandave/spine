@@ -154,7 +154,8 @@ def _entries(winners, games, *, merge=True):
     """``winners`` is ``[(appid, note, name)]`` in list order.
 
     With ``merge`` (one year's categories) a game is one entry noted with all its
-    categories; without it (one category's years) each win is its own entry.
+    categories, and it won: its fact is the category, or "2 wins". Without it (one
+    category's years) each win is its own entry, its year as its fact.
     """
     notes, names, order = {}, {}, []
     for appid, note, name in winners:
@@ -176,6 +177,8 @@ def _entries(winners, games, *, merge=True):
                 ids={"steam": appid, "igdb": game.igdb_id if game else None},
                 image=game.image if game else "",
                 note=" · ".join(notes[key]),
+                fact=notes[key][0] if len(notes[key]) == 1 else f"{len(notes[key])} wins",
+                won=merge,
             ),
         )
     return entries
