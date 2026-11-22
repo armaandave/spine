@@ -12,6 +12,7 @@ struct LogShareSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var story: UIImage?
+    @State private var couldNotDraw = false
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,9 @@ struct LogShareSheet: View {
                         .padding(.top, 8)
                         .padding(.bottom, 24)
                         .accessibilityLabel("The picture of \(content.username)'s log of \(content.title)")
+                } else if couldNotDraw {
+                    ContentUnavailableView("Couldn't make the picture", systemImage: "photo")
+                        .foregroundStyle(.white)
                 } else {
                     ProgressView()
                         .tint(.white)
@@ -55,6 +59,7 @@ struct LogShareSheet: View {
         .preferredColorScheme(.dark)
         .task {
             story = await LogSharePicture.story(for: content)
+            couldNotDraw = story == nil
         }
     }
 

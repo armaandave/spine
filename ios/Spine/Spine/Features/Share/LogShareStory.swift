@@ -152,7 +152,18 @@ enum ShareTextFit {
             let middle = (low + high + 1) / 2
             if fits(cut(middle)) { low = middle } else { high = middle - 1 }
         }
-        return Result(text: cut(low), isCut: true)
+        if fits(cut(low)) { return Result(text: cut(low), isCut: true) }
+
+        // Words without spaces between them (Japanese, a long link): cut between characters instead.
+        let characters = Array(text)
+        func cutCharacters(_ count: Int) -> String { String(characters.prefix(count)) + "…" }
+        var shortest = 1
+        var longest = max(characters.count - 1, 1)
+        while shortest < longest {
+            let middle = (shortest + longest + 1) / 2
+            if fits(cutCharacters(middle)) { shortest = middle } else { longest = middle - 1 }
+        }
+        return Result(text: cutCharacters(shortest), isCut: true)
     }
 }
 

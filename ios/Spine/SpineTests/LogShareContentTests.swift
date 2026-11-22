@@ -37,6 +37,15 @@ final class LogShareContentTests: XCTestCase {
         XCTAssertFalse(ShareTextFit.fit("Short.", font: .systemFont(ofSize: 15.5), lineSpacing: 4, width: 300, lines: 2).isCut)
     }
 
+    func testWordsWithoutSpacesAreCutBetweenCharacters() {
+        let text = String(repeating: "葬送のフリーレンは静かで優しい物語だった。", count: 8)
+        let fitted = ShareTextFit.fit(text, font: .systemFont(ofSize: 15.5), lineSpacing: 4, width: 300, lines: 2)
+
+        XCTAssertTrue(fitted.isCut)
+        XCTAssertLessThan(fitted.text.count, text.count)
+        XCTAssertTrue(text.hasPrefix(String(fitted.text.dropLast())))
+    }
+
     private func entry(
         mediaType: String = "movie",
         title: String = "Entry",
