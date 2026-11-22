@@ -329,7 +329,7 @@ struct DiaryLogDetailView: View {
             orientation: viewModel.mediaDetail?.posterOrientation ?? entry.media.posterOrientation,
             title: PostHero.titleParts(TVTrackingPresentation.diaryTitle(for: entry.media)).title,
             detail: viewModel.mediaDetail,
-            subtitle: PostHero.metadata(displayTitle: entry.media.displayTitle, detail: viewModel.mediaDetail),
+            lines: PostHeroFacts.lines(displayTitle: entry.media.displayTitle, detail: viewModel.mediaDetail),
             onOpen: { presentedRef = entry.media.ref }
         )
     }
@@ -545,7 +545,8 @@ enum PostPageStyle {
     static let loggedFont = Font.system(size: 13, weight: .bold)
     static let timeFont = Font.system(size: 13, weight: .semibold)
     static let titleFont = Font.system(size: 30, weight: .black)
-    static let subtitleFont = Font.system(size: 13, weight: .semibold)
+    static let subtitleSize: CGFloat = 13
+    static let subtitleFont = Font.system(size: subtitleSize, weight: .semibold)
 
     /// The art for a progress post: what its feed card draws (the poster, or an episode's still).
     static func artURL(for media: MediaSummary) -> URL? {
@@ -614,7 +615,8 @@ struct PostPageBackground: View {
     }
 }
 
-/// The 120x180 poster on a post page. It is one poster on a page that never repeats, so it takes a real shadow.
+/// The 120x180 poster on a post page (square art 147x147, the same amount of art). It is one poster on a page that
+/// never repeats, so it takes a real shadow.
 struct PostHeroPoster: View {
     let url: String?
     let title: String

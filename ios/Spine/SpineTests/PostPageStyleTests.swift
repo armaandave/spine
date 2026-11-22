@@ -159,15 +159,6 @@ final class PostPageStyleTests: XCTestCase {
         XCTAssertTrue(PostPageStyle.paragraphs("  \n\n ").isEmpty)
     }
 
-    func testTheLineUnderTheTitleSaysTheYearOnceThenTheRuntime() {
-        let ref = MediaRef(itemId: 1, source: "tmdb", mediaType: "movie", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
-        let movie = MediaDetail(ref: ref, title: "Sinners", releaseDate: "2025-04-18", details: ["runtime": .string("2h 18m")])
-        XCTAssertEqual(PostHero.metadata(displayTitle: "Sinners (2025)", detail: movie), "2025 - 2h 18m")
-        XCTAssertEqual(PostHero.metadata(displayTitle: "Sinners", detail: movie), "2025 - 2h 18m")
-        XCTAssertEqual(PostHero.metadata(displayTitle: "Sinners (2025)", detail: nil), "2025")
-        XCTAssertNil(PostHero.metadata(displayTitle: "A Feast for Crows", detail: nil))
-    }
-
     func testTheTitleWaitsUntilItKnowsWhetherItIsALogo() throws {
         let ref = MediaRef(itemId: 1, source: "tmdb", mediaType: "tv", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
         let withLogo = MediaDetail(ref: ref, title: "Pluribus", logoUrl: "https://example.com/logo.png")
