@@ -129,7 +129,7 @@ nonisolated enum AnimeTrackingPresentation {
     }
 
     /// The page's lines: the rewatch, caught-up or premiere line, and progress as a count. A single has none (AN-002).
-    static func pageLines(for anime: AnimeState) -> [String] {
+    static func pageLines(for anime: AnimeState, countSuffix: String = " watched") -> [String] {
         guard anime.inLibrary, !anime.single else { return [] }
         var lines: [String] = []
         if let rewatch = rewatchLine(for: anime) {
@@ -140,7 +140,7 @@ nonisolated enum AnimeTrackingPresentation {
             lines.append(card)
         }
         if anime.started, !anime.finished || anime.rewatch != nil, let progress = progressLine(for: anime) {
-            lines.append(anime.firstGapEpisode == nil ? "\(progress) watched" : progress)
+            lines.append(anime.firstGapEpisode == nil ? "\(progress)\(countSuffix)" : progress)
         }
         return lines
     }

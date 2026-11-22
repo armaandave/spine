@@ -124,6 +124,7 @@ final class HomeViewModel {
         listRepository: ListRepository? = nil,
         socialRepository: SocialRepository? = nil,
         loadsTileExtras: Bool = false,
+        todayStore: HomeTodayStore? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.profileRepository = profileRepository
@@ -144,7 +145,7 @@ final class HomeViewModel {
             feed: feed,
             planning: FeedPlanningStore(activityRepository: activityRepository, onUnauthorized: onUnauthorized)
         )
-        todayStore = HomeTodayStore(activityRepository: activityRepository, onUnauthorized: onUnauthorized)
+        self.todayStore = todayStore ?? HomeTodayStore(activityRepository: activityRepository, onUnauthorized: onUnauthorized)
         // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
         let mediaRepository = mediaRepository ?? AppRepositories.current().media
         let diaryRepository = diaryRepository ?? AppRepositories.current().diary
@@ -710,6 +711,7 @@ struct HomeView: View {
         socialRepository: SocialRepository = AppRepositories.current().social,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
+        todayStore: HomeTodayStore? = nil,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onFindPeople: @escaping () -> Void = {},
         onUnauthorized: @escaping () -> Void = {}
@@ -734,6 +736,7 @@ struct HomeView: View {
             listRepository: listRepository,
             socialRepository: socialRepository,
             loadsTileExtras: true,
+            todayStore: todayStore,
             onUnauthorized: onUnauthorized
         ))
     }
