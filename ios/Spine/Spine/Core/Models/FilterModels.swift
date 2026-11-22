@@ -121,6 +121,8 @@ struct MediaFilterState: Equatable {
     var service: StreamingFilterService = .any
     /// Stats drill-downs (STAT-400): filter on stored values only, with no provider call.
     var skipBackfill = false
+    /// Library: the page also counts every status (`status_counts=true`), for the status menu.
+    var statusCounts = false
     /// Stats drill-downs (STAT-400): a show's `item_id` also returns its season and episode logs,
     /// and season and episode logs match genres, languages and years through their show.
     var tvRollup = false
@@ -221,6 +223,9 @@ struct MediaFilterState: Equatable {
         }
         if tvRollup {
             items.append(URLQueryItem(name: "tv_rollup", value: "true"))
+        }
+        if statusCounts {
+            items.append(URLQueryItem(name: "status_counts", value: "true"))
         }
         if let page {
             items.append(URLQueryItem(name: "page", value: page))

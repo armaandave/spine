@@ -18,6 +18,8 @@ struct MediaFilterButton: View {
     var surface: Surface = .flat
     /// For the Streaming Services screen the sheet can open.
     var onUnauthorized: () -> Void = {}
+    /// Library: grid or list, chosen at the top of the sheet.
+    var viewMode: Binding<LibraryViewMode>?
     var onApply: () -> Void
 
     @State private var isPresented = false
@@ -57,6 +59,7 @@ struct MediaFilterButton: View {
                 mediaTypes: mediaTypes,
                 showsTagFilter: showsTagFilter,
                 onUnauthorized: onUnauthorized,
+                viewMode: viewMode,
                 onApply: onApply
             )
         }

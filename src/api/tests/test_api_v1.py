@@ -1483,6 +1483,32 @@ class ApiV1FoundationTests(TestCase):
             {Status.PLANNING.value},
         )
 
+    def test_tracking_list_counts_every_status_when_asked(self):
+        user = get_user_model().objects.create_user(username="tracking-status-counts", password="strong-password-123")
+        completed_items = self._create_movie_items(3, title_prefix="Completed", media_id_prefix="sc-c")
+        planned_items = self._create_movie_items(4, title_prefix="Planned", media_id_prefix="sc-p")
+        watching_items = self._create_movie_items(2, title_prefix="Watching", media_id_prefix="sc-w")
+        Movie.objects.bulk_create(
+            [Movie(user=user, item=item, status=Status.COMPLETED.value) for item in completed_items]
+            + [Movie(user=user, item=item, status=Status.PLANNING.value) for item in planned_items]
+            + [Movie(user=user, item=item, status=Status.IN_PROGRESS.value) for item in watching_items],
+        )
+        self.client.force_authenticate(user)
+
+        response = self.client.get(
+            "/api/v1/tracking/",
+            {"media_type": MediaTypes.MOVIE.value, "status": "Planning", "status_counts": "true"},
+        )
+        plain = self.client.get("/api/v1/tracking/", {"media_type": MediaTypes.MOVIE.value, "status": "Planning"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 4)
+        self.assertEqual(
+            response.data["status_counts"],
+            {"tracked": 5, "Planning": 4, "In progress": 2, "Paused": 0, "Dropped": 0, "Completed": 3},
+        )
+        self.assertNotIn("status_counts", plain.data)
+
     def test_tracking_filters_cached_facets_and_sorts_without_provider_calls(self):
         user = get_user_model().objects.create_user(username="tracking-filters", password="strong-password-123")
         old_drama = Item.objects.create(

@@ -102,14 +102,14 @@ def _title_has(rows_for, item_path):
     )
 
 
-def apply_service_filter(queryset, params, *, user, request, item_path="item__"):
+def apply_service_filter(queryset, params, *, user, request, item_path="item__", check_pending=True):
     """Apply the Service filter to an Item-backed queryset (ST-300, ST-301).
 
     Returns ``(queryset, streaming)``. ``streaming`` is the response block, or
     None when the request has no ``service``. Titles never checked for the
     country are excluded; in active countries they are also counted as pending
-    and queued for a check. A selection with no services matches nothing, so
-    nothing is checked for it.
+    and queued for a check, unless ``check_pending`` is off. A selection with no
+    services matches nothing, so nothing is checked for it.
     """
     selection = parse_service_param(params)
     if selection is None:
@@ -120,7 +120,7 @@ def apply_service_filter(queryset, params, *, user, request, item_path="item__")
     provider_ids = selected_provider_ids(selection, user)
     if not provider_ids:
         return queryset.none(), {"region": region, "pending_count": 0}
-    pending_count = check_pending_titles(queryset, region, user=user, item_path=item_path)
+    pending_count = check_pending_titles(queryset, region, user=user, item_path=item_path) if check_pending else 0
     queryset = queryset.filter(streamable_filter(region, provider_ids, item_path=item_path))
     return queryset, {"region": region, "pending_count": pending_count}
 

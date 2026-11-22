@@ -70,50 +70,28 @@ class TrackingListView(MediaExposureMixin, APIView):
     def get(self, request):
         return self.list_response(request, request.user)
 
-    def list_response(self, request, owner):  # noqa: C901
+    def list_response(self, request, owner):
         """Return one page of ``owner``'s tracked media of the requested type."""
         media_type = request.query_params.get("media_type")
         if not media_type:
             return Response({"media_type": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
         status_filter = request.query_params.get("status", "All")
-        manager_status_filter = "All" if str(status_filter).lower() == "tracked" else status_filter
         # Continue Watching (TV-701): shows in Watching with an aired up next that
         # aren't caught up, most recently watched first; `ordering` is ignored.
-        continue_watching = media_type in (MediaTypes.TV.value, MediaTypes.ANIME.value) and str(
-            request.query_params.get("continue_watching", ""),
-        ).lower() in {"true", "1"}
-        if continue_watching:
-            manager_status_filter = Status.IN_PROGRESS.value
-            if owner == request.user:
-                _work_out_due_for(owner, media_type)
+        continue_watching = media_type in (MediaTypes.TV.value, MediaTypes.ANIME.value) and _is_true(
+            request.query_params.get("continue_watching"),
+        )
+        if continue_watching and owner == request.user:
+            _work_out_due_for(owner, media_type)
         ordering = request.query_params.get("ordering") or request.query_params.get("sort") or "release_date"
-        search = request.query_params.get("q")
         manager_sort = ordering if ordering in {"score", "progress", "start_date", "end_date", "title"} else None
-        queryset = BasicMedia.objects.get_media_list(
+        queryset, rating_scope_queryset, streaming = _list_queryset(
+            request,
             owner,
             media_type,
-            manager_status_filter,
-            manager_sort,
-            search=None,
-        )
-        if str(status_filter).lower() == "tracked":
-            queryset = queryset.exclude(status=Status.PLANNING.value)
-        queryset = _tv_list_filters(queryset, media_type, continue_watching=continue_watching)
-        if media_type == MediaTypes.TV.value:
-            queryset = _tv_viewing_dates(queryset)
-        queryset = _last_progress_change(queryset, media_type)
-        rating_scope_queryset = queryset
-        filter_service.ensure_filter_metadata(queryset, request.query_params)
-        queryset = filter_service.apply_item_filters(queryset, request.query_params)
-        if search:
-            queryset = queryset.filter(anime_titles.title_search(search))
-        queryset = filter_service.apply_rating_range(queryset, request.query_params, "score")
-        queryset = filter_service.apply_watched_range(queryset, request.query_params, "end_date")
-        queryset, streaming = streaming_filters.apply_service_filter(
-            queryset,
-            request.query_params,
-            user=request.user,
-            request=request,
+            status_filter,
+            manager_sort=manager_sort,
+            continue_watching=continue_watching,
         )
         if continue_watching:
             queryset = queryset.order_by(
@@ -164,7 +142,91 @@ class TrackingListView(MediaExposureMixin, APIView):
         response.data["completion"] = completion
         if streaming is not None:
             response.data["streaming"] = streaming
+        if _is_true(request.query_params.get("status_counts")) and not continue_watching:
+            response.data["status_counts"] = _status_counts(request, owner, media_type)
         return response
+
+
+# The Library's statuses, as the list's `status` parameter takes them. "tracked" is
+# everything but Planning: the Movies and Music section.
+STATUS_COUNT_KEYS = (
+    "tracked",
+    Status.PLANNING.value,
+    Status.IN_PROGRESS.value,
+    Status.PAUSED.value,
+    Status.DROPPED.value,
+    Status.COMPLETED.value,
+)
+
+
+def _is_true(value):
+    return str(value or "").lower() in {"true", "1"}
+
+
+def _list_queryset(
+    request,
+    owner,
+    media_type,
+    status_filter,
+    *,
+    manager_sort=None,
+    continue_watching=False,
+    fill_metadata=True,
+    check_pending=True,
+):
+    """Return ``(queryset, rating_scope_queryset, streaming)``: one status, unordered.
+
+    The request's filters apply. Counting leaves out the metadata fill and the
+    streaming checks, which the status shown already asks for.
+    """
+    manager_status_filter = "All" if str(status_filter).lower() == "tracked" else status_filter
+    if continue_watching:
+        manager_status_filter = Status.IN_PROGRESS.value
+    queryset = BasicMedia.objects.get_media_list(
+        owner,
+        media_type,
+        manager_status_filter,
+        manager_sort,
+        search=None,
+    )
+    if str(status_filter).lower() == "tracked":
+        queryset = queryset.exclude(status=Status.PLANNING.value)
+    queryset = _tv_list_filters(queryset, media_type, continue_watching=continue_watching)
+    if media_type == MediaTypes.TV.value:
+        queryset = _tv_viewing_dates(queryset)
+    queryset = _last_progress_change(queryset, media_type)
+    rating_scope_queryset = queryset
+    if fill_metadata:
+        filter_service.ensure_filter_metadata(queryset, request.query_params)
+    queryset = filter_service.apply_item_filters(queryset, request.query_params)
+    search = request.query_params.get("q")
+    if search:
+        queryset = queryset.filter(anime_titles.title_search(search))
+    queryset = filter_service.apply_rating_range(queryset, request.query_params, "score")
+    queryset = filter_service.apply_watched_range(queryset, request.query_params, "end_date")
+    queryset, streaming = streaming_filters.apply_service_filter(
+        queryset,
+        request.query_params,
+        user=request.user,
+        request=request,
+        check_pending=check_pending,
+    )
+    return queryset, rating_scope_queryset, streaming
+
+
+def _status_counts(request, owner, media_type):
+    """How many titles each Library status lists, with the request's other filters."""
+    return {
+        key: _list_queryset(
+            request,
+            owner,
+            media_type,
+            key,
+            fill_metadata=False,
+            check_pending=False,
+        )[0].count()
+        for key in STATUS_COUNT_KEYS
+    }
 
 
 def _owner_rows(page, request, owner):

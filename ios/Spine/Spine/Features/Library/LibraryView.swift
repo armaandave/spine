@@ -129,7 +129,6 @@ final class LibraryViewModel {
 
     var mediaType = "movie"
     var mediaTypes: [String]
-    var query = ""
     var filter = MediaFilterState()
     var filterOptions: MediaFilterOptionsResponse = .empty
     var viewMode: LibraryViewMode = .grid
@@ -152,6 +151,10 @@ final class LibraryViewModel {
     private var requestGeneration = 0
     private var didBootstrap = false
     private var presentedScope: RequestScope?
+    /// How many titles each status lists, for the status menu, keyed by the list's `status` values.
+    private var statusCounts: [String: Int] = [:]
+    /// The type and filters `statusCounts` were counted for, whatever the status.
+    private var statusCountsScope: RequestScope?
 
     init(
         mediaRepository: MediaRepository,
@@ -189,13 +192,11 @@ final class LibraryViewModel {
         StreamingFilterCopy.pendingNote(pendingCount: streamingPendingCount, service: filter.service)
     }
 
-    /// The quick "On my services" toggle beside the shelf controls: for movie and TV once the user has services,
-    /// and always while a Service filter is on so it can be turned off.
-    var showsMyServicesToggle: Bool {
-        guard StreamingFilterRules.supportsService(mediaType: mediaType) else { return false }
-        guard !filter.service.isActive else { return true }
-        guard let streaming = filterOptions.streaming else { return false }
-        return streaming.available && !streaming.services.isEmpty
+    /// How many titles a status of the current type lists with the current filters, once the server has counted
+    /// them; nil while the counts are for another type or other filters.
+    func count(for shelf: LibraryShelf) -> Int? {
+        guard statusCountsScope == Self.countsScope(currentRequestScope) else { return nil }
+        return statusCounts[shelf.apiStatus]
     }
 
     static func libraryMediaTypes(from mediaTypes: [String]) -> [String] {
@@ -259,14 +260,12 @@ final class LibraryViewModel {
         mediaTypes = APIConstants.pickerMediaTypes(enabled: enabled)
     }
 
-    func selectMediaType(_ type: String, searchText: String? = nil) async {
-        let selectedQuery = searchText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? query
-        guard mediaType != type || query != selectedQuery else { return }
+    func selectMediaType(_ type: String) async {
+        guard mediaType != type else { return }
         mediaType = type
         if !availableShelves.contains(shelf) {
             shelf = LibraryShelf.defaultShelf(for: type)
         }
-        query = selectedQuery
         filter.genres = []
         filter.languages = []
         filter.excludedGenres = []
@@ -288,27 +287,6 @@ final class LibraryViewModel {
         guard presentedScope != currentRequestScope else { return }
         await loadFilterOptions(clearingUnconfirmedExternalSortOnFailure: true)
         guard !Task.isCancelled else { return }
-        await reload()
-    }
-
-    /// Any Service filter turns off; otherwise My services turns on.
-    func toggleMyServices() async {
-        filter.service = filter.service.isActive ? .any : .mine
-        await loadFilterOptions()
-        guard !Task.isCancelled else { return }
-        await reload()
-    }
-
-    func setSearchQuery(_ text: String) async {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query != trimmed else { return }
-        query = trimmed
-        await reload()
-    }
-
-    func clearSearch() async {
-        guard !query.isEmpty else { return }
-        query = ""
         await reload()
     }
 
@@ -336,9 +314,10 @@ final class LibraryViewModel {
         }
 
         do {
-            let response = try await trackingRepository.list(mediaType: scope.mediaType, page: nil, filter: scope.filter)
+            let response = try await fetch(scope, page: nil)
             guard generation == requestGeneration, scope == currentRequestScope else { return }
             apply(response, replacingItems: true)
+            applyStatusCounts(response, scope: scope)
         } catch is CancellationError {
             return
         } catch {
@@ -369,9 +348,10 @@ final class LibraryViewModel {
         do {
             let pages = try await PagedReload.pages(covering: items.count) { page in
                 guard isCurrent() else { throw CancellationError() }
-                return try await trackingRepository.list(mediaType: scope.mediaType, page: page, filter: scope.filter)
+                return try await fetch(scope, page: page)
             }
             guard isCurrent(), let first = pages.first, let last = pages.last else { return }
+            applyStatusCounts(first, scope: scope)
             var seen = Set<LibraryItem.ID>()
             items = pages.flatMap(\.results).filter { seen.insert($0.id).inserted }
             totalCount = first.count
@@ -410,7 +390,7 @@ final class LibraryViewModel {
         }
 
         do {
-            let response = try await trackingRepository.list(mediaType: scope.mediaType, page: page, filter: scope.filter)
+            let response = try await fetch(scope, page: page)
             guard generation == requestGeneration, scope == currentRequestScope else { return }
             apply(response, replacingItems: false)
         } catch is CancellationError {
@@ -420,6 +400,26 @@ final class LibraryViewModel {
             nextPageErrorMessage = error.localizedDescription
             handleUnauthorized(error)
         }
+    }
+
+    /// One page of `scope`. The first page also counts every status, for the status menu.
+    private func fetch(_ scope: RequestScope, page: String?) async throws -> PagedResponse<LibraryItem> {
+        var filter = scope.filter
+        filter.statusCounts = page == nil
+        return try await trackingRepository.list(mediaType: scope.mediaType, page: page, filter: filter)
+    }
+
+    private func applyStatusCounts(_ response: PagedResponse<LibraryItem>, scope: RequestScope) {
+        guard let counts = response.statusCounts else { return }
+        statusCounts = counts
+        statusCountsScope = Self.countsScope(scope)
+    }
+
+    /// The counts hold for every status of one type and set of filters.
+    private static func countsScope(_ scope: RequestScope) -> RequestScope {
+        var filter = scope.filter
+        filter.status = nil
+        return RequestScope(mediaType: scope.mediaType, filter: filter)
     }
 
     private func apply(_ response: PagedResponse<LibraryItem>, replacingItems: Bool) {
@@ -470,7 +470,6 @@ final class LibraryViewModel {
 
     private var currentRequestScope: RequestScope {
         var requestFilter = filter
-        requestFilter.q = query
         requestFilter.status = statusFilter
         return RequestScope(mediaType: mediaType, filter: requestFilter)
     }
@@ -504,13 +503,16 @@ struct LibraryView: View {
         let revision: Int
         let mediaType: String
         let shelf: String
-        let query: String
         let viewMode: String
     }
 
     @State private var viewModel: LibraryViewModel
-    @State private var searchDraftText = ""
     @State private var selectedGridMedia: MediaBrowsingSelection?
+    /// How far the page has scrolled: only the plate and the art at the top read it, so scrolling redraws those.
+    @State private var scroll = LibraryScroll()
+    /// The first poster of the status shown: the art at the top of the page, and the plate's hint of color.
+    @State private var headerArtURL: URL?
+    @State private var headerAccentHex: String?
     @Binding private var requestedShelf: LibraryShelf?
 
     private let mediaRepository: MediaRepository
@@ -561,38 +563,50 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .top) {
                 SpinePageBackground()
+
+                // The first poster of the status shown, blurred, from under the status bar down past the plate.
+                LibraryBlurredTop(url: headerArtURL, scroll: scroll)
 
                 ScrollView(showsIndicators: false) {
                     // A plain stack: the list and the grid are the page's only lazy stacks, one item per row or poster.
-                    // The list nested in a lazy page stack was one item of it, and clearing a search that had left a
-                    // few rows sent the two measuring each other at 100% CPU. Everything in a plain stack is built at
-                    // once, so only the rows ask for the next page, as they come near the end (`loadNextPageIfNeeded`).
+                    // The list nested in a lazy page stack was one item of it, and the two measuring each other ran
+                    // at 100% CPU. Everything in a plain stack is built at once, so only the rows ask for the next
+                    // page, as they come near the end (`loadNextPageIfNeeded`).
                     VStack(alignment: .leading, spacing: 0) {
-                        header
                         content
                             .spineContentTransition(value: contentTransitionKey)
                     }
                     .padding(.horizontal, 14)
-                    .padding(.top, 18)
                     .padding(.bottom, 28)
+                }
+                // The page starts under the plate, and pull to refresh shows below it.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    Color.clear.frame(height: LibraryPlateLayout.contentTop)
                 }
                 .refreshable {
                     await viewModel.reload()
                 }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    // Past the art's height nothing up top changes, so the offset stops there.
+                    min(geometry.contentOffset.y + geometry.contentInsets.top, LibraryPlateLayout.scrollCap)
+                } action: { _, offset in
+                    scroll.offset = offset
+                }
+
+                plate
+                    .padding(.horizontal, 14)
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .navigationBar)
+            .sensoryFeedback(.selection, trigger: viewModel.shelf)
             .task {
                 consumeRequestedShelf()
                 await viewModel.bootstrap(selectedMediaType: mediaLensStore.selectedMediaType)
                 validateSelectedMediaType()
             }
-            .task(id: searchDraftText) {
-                try? await Task.sleep(for: .milliseconds(300))
-                guard !Task.isCancelled else { return }
-                await viewModel.setSearchQuery(searchDraftText)
+            .onChange(of: viewModel.contentRevision) {
+                updateHeaderArt()
             }
             .onChange(of: requestedShelf) {
                 consumeRequestedShelf()
@@ -601,7 +615,7 @@ struct LibraryView: View {
                 Task { await viewModel.shelfDidChange() }
             }
             .onChange(of: mediaLensStore.selectedMediaType) {
-                Task { await viewModel.selectMediaType(mediaLensStore.selectedMediaType, searchText: searchDraftText) }
+                Task { await viewModel.selectMediaType(mediaLensStore.selectedMediaType) }
             }
             .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
                 guard let profile = notification.userInfo?["profile"] as? UserProfile else { return }
@@ -671,93 +685,78 @@ struct LibraryView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Library")
-                .font(.system(size: 32, weight: .black))
-                .foregroundStyle(.white)
-
-            mediaPicker
-
-            MediaSearchBar(
-                text: $searchDraftText,
-                selectedMediaType: selectedMediaTypeBinding,
-                availableTypes: viewModel.mediaTypes,
-                horizontalPadding: 0,
-                showsMediaLens: false,
-                onLensSelect: { _ in },
-                onSearch: { text in
-                    Task { await viewModel.setSearchQuery(text) }
-                },
-                onClear: {
-                    Task { await viewModel.clearSearch() }
+    /// The glass plate: "Library", the status as the title (it opens the status menu), the filter, the type bar.
+    private var plate: some View {
+        LibraryPlate(scroll: scroll, accentHex: headerAccentHex) {
+            statusMenu
+        } trailing: {
+            MediaFilterButton(
+                filter: $viewModel.filter,
+                scope: .tracking(mediaType: viewModel.mediaType),
+                options: viewModel.filterOptions,
+                mediaTypes: viewModel.mediaTypes,
+                onUnauthorized: onUnauthorized,
+                viewMode: $viewModel.viewMode
+            ) {
+                Task {
+                    await viewModel.loadFilterOptions()
+                    guard !Task.isCancelled else { return }
+                    await viewModel.reload()
                 }
+            }
+        } bar: {
+            MediaTypeBar(
+                selectedType: selectedMediaTypeBinding,
+                availableTypes: viewModel.mediaTypes
             )
-
-            HStack(spacing: 12) {
-                shelfPicker
-
-                LibraryViewModeToggle(selection: $viewModel.viewMode)
-
-                if viewModel.showsMyServicesToggle {
-                    LibraryMyServicesToggle(isOn: viewModel.filter.service.isActive) {
-                        Task { await viewModel.toggleMyServices() }
-                    }
-                }
-
-                MediaFilterButton(
-                    filter: $viewModel.filter,
-                    scope: .tracking(mediaType: viewModel.mediaType),
-                    options: viewModel.filterOptions,
-                    mediaTypes: viewModel.mediaTypes,
-                    onUnauthorized: onUnauthorized
-                ) {
-                    Task {
-                        await viewModel.loadFilterOptions()
-                        guard !Task.isCancelled else { return }
-                        await viewModel.reload()
-                    }
-                }
-            }
         }
-        .padding(.bottom, 14)
     }
 
-    @ViewBuilder
-    private var shelfPicker: some View {
-        if LibraryShelf.usesStatusShelves(viewModel.mediaType) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 7) {
-                    ForEach(viewModel.availableShelves) { shelf in
-                        Button {
-                            viewModel.shelf = shelf
-                        } label: {
-                            Text(shelf.title(mediaType: viewModel.mediaType))
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(viewModel.shelf == shelf ? .black : .white.opacity(0.72))
-                                .padding(.horizontal, 10)
-                                .frame(height: 30)
-                                .background(viewModel.shelf == shelf ? .white : .white.opacity(0.08), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        } else {
-            Picker("Shelf", selection: $viewModel.shelf) {
+    /// The status shown, as the title; a tap opens the type's statuses, each with how many titles it holds.
+    private var statusMenu: some View {
+        Menu {
+            Picker("Status", selection: $viewModel.shelf) {
                 ForEach(viewModel.availableShelves) { shelf in
-                    Text(shelf.title(mediaType: viewModel.mediaType)).tag(shelf)
+                    LibraryStatusOption(
+                        title: shelf.title(mediaType: viewModel.mediaType),
+                        detail: viewModel.count(for: shelf).map {
+                            ListCountWords.text(count: $0, mediaTypes: [viewModel.mediaType], isPeople: false)
+                        }
+                    )
+                    .tag(shelf)
                 }
             }
-            .pickerStyle(.segmented)
+        } label: {
+            HStack(spacing: 6) {
+                Text(viewModel.shelf.title(mediaType: viewModel.mediaType))
+                    .font(.system(size: 30, weight: .black))
+                    .tracking(-0.5)
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.22), radius: 5, y: 1)
+                    .lineLimit(1)
+                    .contentTransition(.opacity)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.top, 3)
+            }
+            .frame(height: LibraryPlateLayout.titleHeight)
+            .contentShape(Rectangle())
+            .animation(.smooth(duration: 0.35), value: viewModel.shelf)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Status, \(viewModel.shelf.title(mediaType: viewModel.mediaType))")
+        .accessibilityHint("Shows another status")
     }
 
-    private var mediaPicker: some View {
-        MediaTypeBar(
-            selectedType: selectedMediaTypeBinding,
-            availableTypes: viewModel.mediaTypes
-        )
+    /// The art and the plate's color follow the first poster of the status, once its titles arrive. A status with
+    /// nothing in it fades the art away.
+    private func updateHeaderArt() {
+        let first = viewModel.displayedItems.first?.media
+        withAnimation(.smooth(duration: 0.6)) {
+            headerArtURL = first?.displayPosterURL.flatMap(URL.init(string:))
+            headerAccentHex = first?.posterAccentColor
+        }
     }
 
     @ViewBuilder
@@ -828,7 +827,6 @@ struct LibraryView: View {
             revision: viewModel.contentRevision,
             mediaType: viewModel.mediaType,
             shelf: viewModel.shelf.rawValue,
-            query: viewModel.query,
             viewMode: viewModel.viewMode.rawValue
         )
     }
@@ -852,9 +850,6 @@ struct LibraryView: View {
                 service: viewModel.filter.service,
                 options: viewModel.filterOptions.streaming
             )
-        }
-        if !viewModel.query.isEmpty {
-            return "No \(MediaTypeTheme.theme(for: viewModel.mediaType).displayName.lowercased()) found"
         }
         if viewModel.mediaType == "tv" {
             return LibraryShelf.tvEmptyTitle(viewModel.shelf)
@@ -892,9 +887,6 @@ struct LibraryView: View {
     private var emptyMessage: String {
         if viewModel.filter.service.isActive {
             return StreamingFilterCopy.emptyMessage
-        }
-        if !viewModel.query.isEmpty {
-            return "No matches for \"\(viewModel.query)\" in \(viewModel.shelf.title(mediaType: viewModel.mediaType).lowercased())."
         }
         if viewModel.mediaType == "game" { return "Games with this status will appear here." }
         if viewModel.mediaType == "tv" { return LibraryShelf.tvEmptyMessage(viewModel.shelf) }
@@ -1145,59 +1137,6 @@ enum AnimeLibraryCard {
     }
 }
 
-private struct LibraryViewModeToggle: View {
-    @Binding var selection: LibraryViewMode
-
-    var body: some View {
-        HStack(spacing: 2) {
-            modeButton(.grid, systemImage: "square.grid.2x2")
-            modeButton(.list, systemImage: "list.bullet")
-        }
-        .padding(3)
-        .background(.white.opacity(0.07), in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(.white.opacity(0.10), lineWidth: 1)
-        }
-        .fixedSize()
-        .accessibilityElement(children: .contain)
-    }
-
-    private func modeButton(_ mode: LibraryViewMode, systemImage: String) -> some View {
-        Button {
-            selection = mode
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(selection == mode ? .black : .white.opacity(0.62))
-                .frame(width: 29, height: 29)
-                .background(selection == mode ? .white : .clear, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(mode.rawValue)
-        .accessibilityAddTraits(selection == mode ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-private struct LibraryMyServicesToggle: View {
-    let isOn: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "play.tv")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isOn ? Color.black : Color.white)
-                .frame(width: 34, height: 34)
-                .background(isOn ? Color.white : Color.white.opacity(0.10), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("On my services")
-        .accessibilityHint("Shows only titles streaming on your services")
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
 private struct LibraryListRow: View {
     let item: LibraryItem
 
@@ -1360,13 +1299,9 @@ private struct LibraryStateCard: View {
                     .tint(.white.opacity(0.16))
             }
         }
+        // No box: the message sits on the page.
         .frame(maxWidth: .infinity)
         .padding(.vertical, 34)
         .padding(.horizontal, 18)
-        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
-        }
     }
 }

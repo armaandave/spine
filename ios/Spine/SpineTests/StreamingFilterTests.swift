@@ -553,27 +553,32 @@ final class StreamingFilterTests: XCTestCase {
         XCTAssertNil(viewModel.streamingPendingNote)
     }
 
-    func testLibraryMyServicesToggleNeedsServicesUnlessAFilterIsOn() async {
+    func testLibraryCountsEveryStatusOnTheFirstPageForItsTypeOnly() async throws {
+        let tracking = StreamingFilterTrackingRepository()
+        tracking.response = PagedResponse(
+            count: 30,
+            next: "https://spine.test/api/v1/tracking/?media_type=movie&page=2",
+            previous: nil,
+            results: [try Self.libraryItem(mediaId: "693134", title: "Dune: Part Two")],
+            statusCounts: ["tracked": 30, "Planning": 4]
+        )
         let viewModel = LibraryViewModel(
             mediaRepository: StreamingFilterDiscoverRepository(),
-            trackingRepository: StreamingFilterTrackingRepository(),
+            trackingRepository: tracking,
             filterOptionsRepository: StreamingFilterOptionsRepository(options: Self.options(available: true)),
             onUnauthorized: {}
         )
-        XCTAssertFalse(viewModel.showsMyServicesToggle)
 
-        await viewModel.loadFilterOptions()
-        XCTAssertTrue(viewModel.showsMyServicesToggle)
+        await viewModel.reload()
+        await viewModel.loadNextPage()
 
-        await viewModel.toggleMyServices()
-        XCTAssertEqual(viewModel.filter.service, .mine)
-        await viewModel.toggleMyServices()
-        XCTAssertEqual(viewModel.filter.service, .any)
+        XCTAssertEqual(tracking.requests.map(\.filter.statusCounts), [true, false], "Only the first page counts")
+        XCTAssertEqual(viewModel.count(for: .tracked), 30)
+        XCTAssertEqual(viewModel.count(for: .planning), 4)
 
-        viewModel.filterOptions = Self.options(available: true, services: [])
-        XCTAssertFalse(viewModel.showsMyServicesToggle)
-        viewModel.filter.service = .providers([8])
-        XCTAssertTrue(viewModel.showsMyServicesToggle)
+        tracking.response = PagedResponse(count: 0, next: nil, previous: nil, results: [])
+        await viewModel.selectMediaType("tv")
+        XCTAssertNil(viewModel.count(for: .planning), "Movies' counts aren't TV's")
     }
 
     func testLibraryDropsChosenServicesTheUserNoLongerHas() async {
