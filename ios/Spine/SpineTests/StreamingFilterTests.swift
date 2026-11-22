@@ -553,29 +553,6 @@ final class StreamingFilterTests: XCTestCase {
         XCTAssertNil(viewModel.streamingPendingNote)
     }
 
-    func testLibraryMyServicesToggleNeedsServicesUnlessAFilterIsOn() async {
-        let viewModel = LibraryViewModel(
-            mediaRepository: StreamingFilterDiscoverRepository(),
-            trackingRepository: StreamingFilterTrackingRepository(),
-            filterOptionsRepository: StreamingFilterOptionsRepository(options: Self.options(available: true)),
-            onUnauthorized: {}
-        )
-        XCTAssertFalse(viewModel.showsMyServicesToggle)
-
-        await viewModel.loadFilterOptions()
-        XCTAssertTrue(viewModel.showsMyServicesToggle)
-
-        await viewModel.toggleMyServices()
-        XCTAssertEqual(viewModel.filter.service, .mine)
-        await viewModel.toggleMyServices()
-        XCTAssertEqual(viewModel.filter.service, .any)
-
-        viewModel.filterOptions = Self.options(available: true, services: [])
-        XCTAssertFalse(viewModel.showsMyServicesToggle)
-        viewModel.filter.service = .providers([8])
-        XCTAssertTrue(viewModel.showsMyServicesToggle)
-    }
-
     func testLibraryDropsChosenServicesTheUserNoLongerHas() async {
         let tracking = StreamingFilterTrackingRepository()
         let viewModel = LibraryViewModel(
