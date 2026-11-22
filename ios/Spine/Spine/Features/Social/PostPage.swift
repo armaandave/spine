@@ -228,7 +228,7 @@ struct PostAuthorButton: View {
 }
 
 /// The top of a post page: the poster, and beside it, down to the poster's bottom edge, the title (its logo when the
-/// title has one) and one muted line under it. Tapping it opens the title.
+/// title has one), who made it, and its year with how long it is. Tapping it opens the title.
 ///
 /// The words beside the poster wait until the title is known to be a logo or text, then appear together, so a title
 /// never shows as text and then turns into its logo. A logo is downloaded before it shows (one already in the image
@@ -240,8 +240,9 @@ struct PostHero: View {
     let orientation: PosterOrientation?
     let title: String
     let detail: MediaDetail?
-    /// The year and runtime under the title ("2025 - 2h 18m"), or the episode tag under a day's ("S2 E7").
-    let subtitle: String?
+    /// Under the title: who made it ("Directed by Ryan Coogler"), then the year and length ("2025 · 2h 18m"), or a
+    /// day's episode tag ("S2 E7").
+    let lines: PostHeroFacts.Lines
     /// The title's details are still on the way, so whether it has a logo isn't known yet.
     let isLoadingDetail: Bool
     let onOpen: () -> Void
@@ -264,7 +265,7 @@ struct PostHero: View {
         orientation: PosterOrientation?,
         title: String,
         detail: MediaDetail?,
-        subtitle: String?,
+        lines: PostHeroFacts.Lines,
         isLoadingDetail: Bool = false,
         onOpen: @escaping () -> Void
     ) {
@@ -274,7 +275,7 @@ struct PostHero: View {
         self.orientation = orientation
         self.title = title
         self.detail = detail
-        self.subtitle = subtitle
+        self.lines = lines
         self.isLoadingDetail = isLoadingDetail
         self.onOpen = onOpen
         _titleArt = State(initialValue: Self.titleArt(
@@ -308,12 +309,7 @@ struct PostHero: View {
                     PostHeroTitle(text: title)
                 }
 
-                if let subtitle {
-                    Text(subtitle)
-                        .font(PostPageStyle.subtitleFont)
-                        .foregroundStyle(.white.opacity(0.78))
-                        .lineLimit(2)
-                }
+                PostHeroLines(lines: lines)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 2)
@@ -366,16 +362,6 @@ struct PostHero: View {
         return isLogoCached(logoRequest) ? .logo : .pending
     }
 
-    /// The line under the title: the year (from a "(2000)" at the end of the title, or the release date) and the
-    /// runtime, each said once. Nil when there is neither.
-    static func metadata(displayTitle: String, detail: MediaDetail?) -> String? {
-        var seen = Set<String>()
-        let parts = [titleParts(displayTitle).year, DiaryLogFormat.year(detail?.releaseDate), runtime(detail)]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
-        return parts.isEmpty ? nil : parts.joined(separator: " - ")
-    }
-
     /// A title without the "(2000)" at its end, and that year.
     static func titleParts(_ title: String) -> (title: String, year: String?) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -386,15 +372,50 @@ struct PostHero: View {
         guard year.count == 4, year.allSatisfy(\.isNumber) else { return (trimmed, nil) }
         return (String(trimmed.dropLast(7)), year)
     }
+}
 
-    private static func runtime(_ detail: MediaDetail?) -> String? {
-        switch detail?.details?["runtime"] {
-        case let .string(string):
-            return string
-        case let .number(number):
-            return number.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(number))" : "\(number)"
-        default:
+/// The two lines under a post page's title: "Directed by" in grey and the names brighter, then the year in grey and
+/// the length brighter ("2023 · 1h 46m"). Either line is left out when it has nothing to say.
+struct PostHeroLines: View {
+    let lines: PostHeroFacts.Lines
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let maker = lines.maker {
+                Text(Self.styled([
+                    (PostHeroFacts.words(for: maker.role) + "\u{00A0}", .white.opacity(0.6), .medium),
+                    (PostHeroFacts.words(for: maker), .white.opacity(0.92), .semibold),
+                ]))
+                .lineLimit(2)
+            }
+            if let yearLine {
+                Text(Self.styled(yearLine))
+                    .lineLimit(2)
+            }
+        }
+        .font(PostPageStyle.subtitleFont)
+    }
+
+    private var yearLine: [(String, Color, Font.Weight)]? {
+        let length = lines.length.map(PostHeroFacts.words(for:)).flatMap { $0.isEmpty ? nil : $0 }
+        switch (lines.lead, length) {
+        case let (lead?, length?):
+            return [("\(lead) · ", .white.opacity(0.6), .semibold), (length, .white.opacity(0.85), .semibold)]
+        case let (lead?, nil):
+            return [(lead, .white.opacity(0.6), .semibold)]
+        case let (nil, length?):
+            return [(length, .white.opacity(0.85), .semibold)]
+        case (nil, nil):
             return nil
+        }
+    }
+
+    private static func styled(_ runs: [(String, Color, Font.Weight)]) -> AttributedString {
+        runs.reduce(into: AttributedString()) { text, run in
+            var part = AttributedString(run.0)
+            part.foregroundColor = run.1
+            part.font = .system(size: PostPageStyle.subtitleSize, weight: run.2)
+            text += part
         }
     }
 }
