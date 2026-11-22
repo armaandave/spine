@@ -564,7 +564,9 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                SpinePageBackground()
+                // Black like Home and Lists: the posters bring the color.
+                HomeDesign.Palette.pageBackground
+                    .ignoresSafeArea()
 
                 // The first poster of the status shown, blurred, from under the status bar down past the plate.
                 LibraryBlurredTop(url: headerArtURL, scroll: scroll)
@@ -594,6 +596,8 @@ struct LibraryView: View {
                 } action: { _, offset in
                     scroll.offset = offset
                 }
+
+                DiaryTopSoftScrim()
 
                 plate
                     .padding(.horizontal, 14)
