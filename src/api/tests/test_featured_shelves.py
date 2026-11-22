@@ -578,6 +578,12 @@ class FeaturedItemNotesTests(FeaturedApiTestCase):
         detail = self.get(f"/api/v1/lists/{custom_list.id}/").data
         self.assertEqual([tuple(item[field] for field in fields) for item in detail["items"]], expected)
 
+        # An unranked list has no rank under its posters.
+        CustomList.objects.filter(pk=custom_list.pk).update(is_ranked=False)
+        results = self.get(f"/api/v1/lists/{custom_list.id}/items/", sort="position").data["results"]
+        self.assertEqual([item["rank"] for item in results], [None, None])
+        self.assertEqual([item["rank"] for item in self.get(f"/api/v1/lists/{custom_list.id}/").data["items"]], [None, None])
+
     def test_other_lists_items_have_no_note_key(self):
         own = CustomList.objects.create(owner=self.viewer, name="Mine")
         CustomListItem.objects.create(custom_list=own, item=Item.objects.get(media_id="hf-1"), position=1)
@@ -599,6 +605,10 @@ class FeaturedItemNotesTests(FeaturedApiTestCase):
         custom_list = self.rerun("chart-films", swapped)
         results = self.get(f"/api/v1/lists/{custom_list.id}/items/", sort="position").data["results"]
         self.assertEqual([item["note"] for item in results[:3]], ["▲1 · $12.4M", "New this week", None])
+        self.assertEqual(
+            [(item["rank"], item["mark"], item["mark_places"]) for item in results[:3]],
+            [(1, "up", 1), (2, "down", 1), (3, None, None)],
+        )
         # Card previews keep the bare movement.
         shelves = self.get("/api/v1/lists/featured/shelves/").data["shelves"]
         movie = next(shelf for shelf in shelves if shelf["key"] == "movie")
