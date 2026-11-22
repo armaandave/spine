@@ -54,6 +54,12 @@ class Entry:
     isbns: tuple[str, ...] = ()
     image: str = ""
     note: str = ""
+    # What the poster shows under the new poster marks: one short fact ("2019",
+    # "Best Soundtrack", "$12.4M"), whether it won (one-year award lists), and the
+    # source's rank when tied titles share one ("Joint 21").
+    fact: str = ""
+    won: bool = False
+    shown_rank: int | None = None
 
     def __post_init__(self):
         """Normalize ids to non-empty strings and ISBNs to a de-duplicated tuple."""
@@ -73,6 +79,7 @@ class Entry:
         object.__setattr__(self, "creator", str(self.creator or "").strip())
         object.__setattr__(self, "image", str(self.image or "").strip())
         object.__setattr__(self, "note", str(self.note or "").strip())
+        object.__setattr__(self, "fact", str(self.fact or "").strip())
 
     @property
     def key(self):

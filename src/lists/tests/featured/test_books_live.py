@@ -227,6 +227,12 @@ class ReesesBookClubTests(SimpleTestCase):
             ],
         )
         self.assertEqual(result.edition, "")  # the newest pick has no label yet
+        self.assertEqual([entry.fact for entry in result.entries], ["", "", "2026"])
+
+    def test_label_year(self):
+        self.assertEqual(reeses_book_club.label_year("August ’26 Pick"), "2026")
+        self.assertEqual(reeses_book_club.label_year("May '19 Pick"), "2019")
+        self.assertEqual(reeses_book_club.label_year(""), "")
 
     def test_a_changed_layout_fails_instead_of_emptying_the_list(self):
         with api_routes({"reesesbookclub.com": lambda url, params: "<html></html>"}), self.assertRaises(AdapterError):
@@ -248,6 +254,7 @@ class ReadWithJennaTests(SimpleTestCase):
                 ("December 2020", "The Bluest Eye", "Toni Morrison", ()),
             ],
         )
+        self.assertEqual([entry.fact for entry in result.entries], ["2026", "2026", "2023", "2020"])
 
     def test_link_helpers(self):
         redirect = "https://ncls1.com/irk?o=1&amp;d=https%3A%2F%2Fbookshop.org%2Fbooks%2Fthe-family-9781432895556%2F9780525541998"

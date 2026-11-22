@@ -2192,17 +2192,13 @@ struct ProfileListDetailView: View {
                             }
                         }
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
-                        if viewModel.list?.isRanked == true, let position = item.position {
-                            // The rank says the list is ranked; quiet, under its poster.
-                            Text("\(position)")
-                                .font(.system(size: 11, weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(.white.opacity(0.6))
-                                .frame(maxWidth: .infinity)
-                        }
-                        if let note = FeaturedEntryNote.text(item.note) {
-                            entryNote(note)
-                        }
+                        // The rank says the list is ranked; quiet, under its poster.
+                        PosterLines(
+                            number: viewModel.list?.isRanked == true ? item.shownRank ?? item.position : nil,
+                            mark: item.posterMark,
+                            markPlaces: item.markPlaces,
+                            fact: item.fact
+                        )
                     }
                 }
                 .buttonStyle(.plain)
@@ -2264,8 +2260,13 @@ struct ProfileListDetailView: View {
                                     .lineLimit(1)
                             }
 
-                            if let note = FeaturedEntryNote.text(person.note) {
-                                entryNote(note)
+                            if let fact = personFact(person) {
+                                Text(fact)
+                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.5))
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                                    .frame(maxWidth: .infinity)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
@@ -2283,14 +2284,10 @@ struct ProfileListDetailView: View {
         }
     }
 
-    /// A featured entry's note under its poster or name: small and secondary.
-    private func entryNote(_ note: String) -> some View {
-        Text(note)
-            .font(.system(size: 10, weight: .semibold, design: .rounded))
-            .foregroundStyle(.white.opacity(0.5))
-            .multilineTextAlignment(.center)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity)
+    /// A featured person's one fact under their name ("2019"), if any.
+    private func personFact(_ person: PersonListEntry) -> String? {
+        guard let fact = person.fact?.trimmingCharacters(in: .whitespacesAndNewlines), !fact.isEmpty else { return nil }
+        return fact
     }
 
     /// "24 films · Ranked", "18 books", "8 people".
@@ -2309,8 +2306,8 @@ struct ProfileListDetailView: View {
             ? person.position.map { "Rank \($0), " } ?? ""
             : ""
         let department = person.knownForDepartment.map { ", \($0)" } ?? ""
-        let note = FeaturedEntryNote.text(person.note).map { ", \($0)" } ?? ""
-        return "\(rank)\(person.name)\(department)\(note)"
+        let fact = personFact(person).map { ", \($0)" } ?? ""
+        return "\(rank)\(person.name)\(department)\(fact)"
     }
 
     private var deleteConfirmationMessage: String {

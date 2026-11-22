@@ -3,10 +3,15 @@
 Params: ``{"file": "<key>.csv"}``. Columns: ``rank,title,year,creator,ref,image,note``.
 Every row needs a ``ref``; leave a row out rather than guess. ``definitions/static.py``
 builds the definitions from ``static/manifest-*.csv``.
+
+Only two note shapes reach the poster in builds with the poster marks: "Joint 21" (a
+tie: the poster shows 21) and "Inducted 2015" or "Acquired 2012" (the poster shows the
+year). Any other note is shown only by older builds.
 """
 
 import csv
 import hashlib
+import re
 from pathlib import Path
 
 from lists.featured.resolve import parse_ref
@@ -14,6 +19,17 @@ from lists.featured.types import PERSON_MEDIA_TYPE, Adapter, AdapterError, Entry
 
 DIRECTORY = Path(__file__).resolve().parent.parent / "static"
 COLUMNS = ["rank", "title", "year", "creator", "ref", "image", "note"]
+_JOINT = re.compile(r"^Joint (\d+)$")
+_JOINED_IN = re.compile(r"^(?:Inducted|Acquired) (\d{4})$")
+
+
+def note_poster(note):
+    """Return ``(fact, shown_rank)`` from a static note ("Joint 21", "Inducted 2015")."""
+    if joint := _JOINT.match(note):
+        return "", int(joint.group(1))
+    if joined := _JOINED_IN.match(note):
+        return joined.group(1), None
+    return "", None
 
 
 def path_for(definition):
@@ -57,6 +73,8 @@ def read_entries(path, *, allowed_media_types=None):
                 msg = f"line {line}: {ref} appears twice"
                 raise ValueError(msg)
             refs.add(ref)
+            note = (row["note"] or "").strip()
+            fact, shown_rank = note_poster(note)
             entries.append(
                 Entry(
                     rank=_int(row["rank"], "rank", line),
@@ -66,7 +84,9 @@ def read_entries(path, *, allowed_media_types=None):
                     media_type=media_type,
                     ids={"ref": ref},
                     image=row["image"] or "",
-                    note=row["note"] or "",
+                    note=note,
+                    fact=fact,
+                    shown_rank=shown_rank,
                 ),
             )
     return entries

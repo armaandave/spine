@@ -157,10 +157,29 @@ def person_note_key(list_person):
     return f"{list_person.source}:person:{list_person.person_id}"
 
 
+def featured_row_fields(list_item, *, ranked):
+    """Return what a featured list's media row adds to its item.
+
+    ``note`` for builds from before the poster marks; newer builds read the rest: the
+    ``rank`` under the poster on ranked lists (tied titles share one), else null; its
+    ``mark`` (``new``, ``up``, ``down``, ``won`` or null) with ``mark_places`` for a
+    move, and its one ``fact`` ("2019", "Best Soundtrack", "$12.4M") or null.
+    """
+    rank = list_item.shown_rank if list_item.shown_rank is not None else list_item.position
+    return {
+        "note": list_item.note or None,
+        "rank": rank if ranked else None,
+        "mark": list_item.mark or None,
+        "mark_places": list_item.mark_places,
+        "fact": list_item.fact or None,
+    }
+
+
 def _with_person_notes(payloads, list_people, notes):
     if notes is not None:
         for payload, list_person in zip(payloads, list_people, strict=True):
             payload["note"] = notes.get(person_note_key(list_person))
+            payload["fact"] = list_person.fact or None
     return payloads
 
 
@@ -244,7 +263,7 @@ def list_payload(
             for list_item, item in zip(list_items, summaries, strict=True):
                 item["position"] = list_item.position
                 if notes is not None:
-                    item["note"] = list_item.note or None
+                    item.update(featured_row_fields(list_item, ranked=custom_list.is_ranked))
                 items.append(item)
         if include_preview_items:
             data["preview_items"] = items
@@ -794,7 +813,7 @@ class ListItemsView(APIView):
                     "your_rating": f"{list_item.user_rating:.1f}"
                     if list_item.user_rating is not None
                     else None,
-                    **({"note": list_item.note or None} if notes is not None else {}),
+                    **(featured_row_fields(list_item, ranked=custom_list.is_ranked) if notes is not None else {}),
                 }
                 for list_item, summary in zip(page, summaries, strict=True)
             ],

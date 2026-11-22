@@ -429,6 +429,65 @@ def row_notes(definition, resolutions, rows, items, movement=None):
     return found
 
 
+@dataclass(frozen=True)
+class Poster:
+    """What a row shows under its poster in builds with the poster marks.
+
+    ``shown_rank`` only when tied titles share a rank (else the app shows the position);
+    ``mark`` is ``CustomListItem.Mark`` or ""; ``fact`` is one short line ("2019").
+    """
+
+    shown_rank: int | None = None
+    mark: str = ""
+    mark_places: int | None = None
+    fact: str = ""
+
+
+def movement_mark(note):
+    """Return ``(mark, places)`` for a chart movement ``movement_notes`` wrote."""
+    if note == "NEW":
+        return CustomListItem.Mark.NEW, None
+    if note[:1] in ("▲", "▼") and note[1:].isdigit():
+        return (CustomListItem.Mark.UP if note[0] == "▲" else CustomListItem.Mark.DOWN), int(note[1:])
+    return "", None
+
+
+def row_posters(definition, resolutions, rows, items, movement=None):
+    """Return each row's ``Poster``, in ``rows`` order.
+
+    Entries that make one row give it the first fact and shared rank among them, and
+    mark it won when any of them won; otherwise a chart's movement is its mark.
+    """
+    movement = movement or {}
+    collected = {}
+    for resolution in resolutions:
+        match = resolution.match
+        if match is None or resolution.skipped:
+            continue
+        entry = resolution.entry
+        found = collected.setdefault(row_identity(definition, entry, match), {"fact": "", "won": False, "rank": None})
+        found["fact"] = found["fact"] or entry.fact
+        found["won"] = found["won"] or entry.won
+        found["rank"] = entry.shown_rank if found["rank"] is None else found["rank"]
+    posters = []
+    for _, entry, match in rows:
+        found = collected.get(row_identity(definition, entry, match), {})
+        item = items.get(match.ref)
+        if found.get("won"):
+            mark, places = CustomListItem.Mark.WON, None
+        else:
+            mark, places = movement_mark(movement.get(str(item.pk), "") if item is not None else "")
+        posters.append(
+            Poster(
+                shown_rank=found.get("rank") if definition.is_ranked else None,
+                mark=mark,
+                mark_places=places,
+                fact=found.get("fact", "")[:MAX_NOTE_LENGTH],
+            ),
+        )
+    return posters
+
+
 def _stored_items(rows):
     """Return ``{ref: Item}`` for rows whose Items already exist."""
     existing = _existing_items([match for _, _, match in rows])
@@ -444,11 +503,11 @@ def _note_keys(people, rows, items):
     return lambda match: str(items[match.ref].pk) if match.ref in items else None
 
 
-def media_rows(custom_list, rows, items, notes):
+def media_rows(custom_list, rows, items, notes, posters):
     """Return unsaved ``CustomListItem`` rows; an item's repeats get occurrences 0, 1, 2…"""
     occurrences = defaultdict(int)
     planned = []
-    for (position, _, match), note in zip(rows, notes, strict=True):
+    for (position, _, match), note, poster in zip(rows, notes, posters, strict=True):
         item = items.get(match.ref)
         if item is None:
             continue
@@ -459,6 +518,10 @@ def media_rows(custom_list, rows, items, notes):
                 position=position,
                 occurrence=occurrences[item.pk],
                 note=note,
+                shown_rank=poster.shown_rank,
+                mark=poster.mark,
+                mark_places=poster.mark_places,
+                fact=poster.fact,
             ),
         )
         occurrences[item.pk] += 1
@@ -470,19 +533,26 @@ def _replace_media(custom_list, planned):
     CustomListItem.objects.bulk_create(planned, batch_size=500)
 
 
+ROW_LINE_FIELDS = ("note", "shown_rank", "mark", "mark_places", "fact")
+
+
 def _update_media_notes(custom_list, planned):
-    """Rewrite the stored rows' notes; the content is unchanged, so the rows match."""
-    wanted = {(row.item_id, row.occurrence): row.note for row in planned}
+    """Rewrite the stored rows' notes and poster lines; the content is unchanged, so the
+    rows match.
+    """
+    wanted = {(row.item_id, row.occurrence): row for row in planned}
     stale = []
-    for stored in CustomListItem.objects.filter(custom_list=custom_list).only("id", "item_id", "occurrence", "note"):
-        note = wanted.get((stored.item_id, stored.occurrence), "")
-        if stored.note != note:
-            stored.note = note
+    for stored in CustomListItem.objects.filter(custom_list=custom_list).only("id", "item_id", "occurrence", *ROW_LINE_FIELDS):
+        row = wanted.get((stored.item_id, stored.occurrence))
+        values = {name: getattr(row, name) for name in ROW_LINE_FIELDS} if row else {"note": "", "shown_rank": None, "mark": "", "mark_places": None, "fact": ""}
+        if any(getattr(stored, name) != value for name, value in values.items()):
+            for name, value in values.items():
+                setattr(stored, name, value)
             stale.append(stored)
-    CustomListItem.objects.bulk_update(stale, ["note"], batch_size=500)
+    CustomListItem.objects.bulk_update(stale, list(ROW_LINE_FIELDS), batch_size=500)
 
 
-def _replace_people(custom_list, rows):
+def _replace_people(custom_list, rows, posters):
     PersonListItem.objects.filter(custom_list=custom_list).delete()
     PersonListItem.objects.bulk_create(
         [
@@ -494,11 +564,27 @@ def _replace_people(custom_list, rows):
                 profile_url=(match.image or entry.image)[:2048],
                 known_for_department=match.known_for_department[:255],
                 position=position,
+                fact=poster.fact,
             )
-            for position, entry, match in rows
+            for (position, entry, match), poster in zip(rows, posters, strict=True)
         ],
         batch_size=500,
     )
+
+
+def _update_people_facts(custom_list, rows, posters):
+    """Rewrite the stored people's facts; the content is unchanged, so the people match."""
+    wanted = {
+        (match.source, str(match.media_id)[:255]): poster.fact
+        for (_, _, match), poster in zip(rows, posters, strict=True)
+    }
+    stale = []
+    for stored in PersonListItem.objects.filter(custom_list=custom_list).only("id", "source", "person_id", "fact"):
+        fact = wanted.get((stored.source, stored.person_id), "")
+        if stored.fact != fact:
+            stored.fact = fact
+            stale.append(stored)
+    PersonListItem.objects.bulk_update(stale, ["fact"], batch_size=500)
 
 
 def _save_list(definition, owner, fetch, now):
@@ -550,7 +636,7 @@ def commit(definition, owner, fetch, resolutions, *, sync, now, definition_hash)
         if changed:
             sync.item_notes = {}
             if people:
-                _replace_people(custom_list, rows)
+                _replace_people(custom_list, rows, row_posters(definition, resolutions, rows, {}))
             else:
                 with collect_external_rating_item_ids() as new_item_ids:
                     items = ensure_items(rows)
@@ -560,13 +646,17 @@ def commit(definition, owner, fetch, resolutions, *, sync, now, definition_hash)
                     )
                     sync.item_notes = movement_notes(previous, rows, items)
                 notes = row_notes(definition, resolutions, rows, items, sync.item_notes)
-                _replace_media(custom_list, media_rows(custom_list, rows, items, notes))
+                posters = row_posters(definition, resolutions, rows, items, sync.item_notes)
+                _replace_media(custom_list, media_rows(custom_list, rows, items, notes, posters))
                 if new_item_ids:  # trickled onto the default worker by the dispatcher
                     transaction.on_commit(partial(ratings.add_pending, sorted(new_item_ids)), robust=True)
-        elif not people:  # same rows; a source note ("$12.4M") may still have changed
+        elif people:  # same people; a fact may still have changed
+            _update_people_facts(custom_list, rows, row_posters(definition, resolutions, rows, {}))
+        else:  # same rows; a source note ("$12.4M") may still have changed
             items = _stored_items(rows)
             notes = row_notes(definition, resolutions, rows, items, sync.item_notes)
-            _update_media_notes(custom_list, media_rows(custom_list, rows, items, notes))
+            posters = row_posters(definition, resolutions, rows, items, sync.item_notes)
+            _update_media_notes(custom_list, media_rows(custom_list, rows, items, notes, posters))
 
         sync.entry_notes = entry_notes(resolutions, _note_keys(people, rows, items), sync.item_notes)
 

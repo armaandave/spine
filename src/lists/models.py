@@ -243,7 +243,24 @@ class CustomListItem(models.Model):
     # 0); featured award histories list a work once per win (Succession: 0, 1, 2).
     occurrence = models.PositiveSmallIntegerField(default=0, db_default=0)
     # Featured lists only: what the row shows under the poster ("2023", "▲2 · $12.4M").
+    # Builds from before the poster marks read it; newer ones read the fields below.
     note = models.CharField(max_length=200, blank=True, default="", db_default="")
+
+    class Mark(models.TextChoices):
+        """The one mark a featured row shows beside its rank or fact."""
+
+        NEW = "new", "New on the chart"
+        UP = "up", "Moved up"
+        DOWN = "down", "Moved down"
+        WON = "won", "Won"
+
+    # Featured lists only: the poster's number when it isn't the position (tied
+    # titles share one), its mark, how many places it moved, and its one fact
+    # ("2019", "Best Soundtrack", "$12.4M").
+    shown_rank = models.PositiveIntegerField(null=True, blank=True)
+    mark = models.CharField(max_length=8, choices=Mark.choices, blank=True, default="", db_default="")
+    mark_places = models.PositiveIntegerField(null=True, blank=True)
+    fact = models.CharField(max_length=200, blank=True, default="", db_default="")
 
     objects = CustomListItemManager()
 
@@ -321,6 +338,8 @@ class PersonListItem(models.Model):
     known_for_department = models.CharField(max_length=255, blank=True, default="")
     position = models.PositiveIntegerField(null=True, blank=True)
     date_added = models.DateTimeField(auto_now_add=True)
+    # Featured lists only: the one fact under the person ("2023").
+    fact = models.CharField(max_length=200, blank=True, default="", db_default="")
 
     class Meta:
         """Meta options for people in custom lists."""

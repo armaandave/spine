@@ -842,10 +842,28 @@ final class FeaturedEntryNoteTests: XCTestCase {
         XCTAssertNil(try person(#", "note": ["2022"]"#).note)
     }
 
-    func testNoteTextIgnoresBlankNotes() {
-        XCTAssertEqual(FeaturedEntryNote.text("  Nominee · Fiction "), "Nominee · Fiction")
-        XCTAssertNil(FeaturedEntryNote.text("   "))
-        XCTAssertNil(FeaturedEntryNote.text(nil))
+    func testListItemsDecodeTheirPosterMarksTolerantly() throws {
+        let json = """
+        {"count": 3, "next": null, "previous": null, "results": [
+          {"ref": {"item_id": 1, "source": "tmdb", "media_type": "movie", "media_id": "1"}, "title": "One", "position": 22,
+           "rank": 21, "mark": "down", "mark_places": 2, "fact": "$8.3M"},
+          {"ref": {"item_id": 2, "source": "tmdb", "media_type": "movie", "media_id": "2"}, "title": "Two", "position": 2,
+           "rank": 2, "mark": "sideways", "mark_places": null, "fact": null},
+          {"ref": {"item_id": 3, "source": "tmdb", "media_type": "movie", "media_id": "3"}, "title": "Three", "position": 3}
+        ]}
+        """
+        let page = try JSONDecoder.api.decode(PagedResponse<MediaSummary>.self, from: Data(json.utf8))
+
+        XCTAssertEqual(page.results.map(\.shownRank), [21, 2, nil])
+        XCTAssertEqual(page.results.map(\.posterMark), [.down, nil, nil])
+        XCTAssertEqual(page.results.map(\.markPlaces), [2, nil, nil])
+        XCTAssertEqual(page.results.map(\.fact), ["$8.3M", nil, nil])
+
+        let person = try JSONDecoder.api.decode(PersonListEntry.self, from: Data("""
+        {"entry_id": 1, "id": "OL1A", "source": "openlibrary", "name": "Annie Ernaux", "profile_url": null,
+         "known_for_department": null, "position": 1, "date_added": "2026-10-21T18:00:00Z", "fact": "2022"}
+        """.utf8))
+        XCTAssertEqual(person.fact, "2022")
     }
 
     func testListDetailKeepsEachItemsNote() async throws {

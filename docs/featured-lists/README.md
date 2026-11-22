@@ -54,7 +54,10 @@ class Entry:
     ids: Mapping[str, str] = {}      # tmdb, imdb, wikidata, steam, igdb, mal, anilist, mbid_rg, apple_album, olid, hardcover, goodreads, ref
     isbns: tuple[str, ...] = ()
     image: str = ""                  # poster hint, so Items can be created without a provider call
-    note: str = ""                   # "2027" (award histories), "Winner · Best Picture", "▲2"
+    note: str = ""                   # "2027" (award histories), "Winner · Best Picture", "▲2"; older builds
+    fact: str = ""                   # the poster's one fact in newer builds: "2027", "Best Picture", "$12.4M"
+    won: bool = False                # one-year award lists: the poster gets the trophy
+    shown_rank: int | None = None    # the source's rank when tied titles share one ("Joint 21")
     # .key: the first strong id ("imdb:tt0111161", "isbn:978…", "ref:tmdb:movie:550"),
     # else "t:<normalized title>|<year>"
 
@@ -203,6 +206,7 @@ Featured syncs share production's provider keys with the app, so every run (and 
 - **`FeaturedListSnapshot`**: `sync` (foreign key); `taken_on` (date); `edition`; `fingerprint`; `entries` (JSON `[[rank, entry_key, item_id|null], …]`). Unique on `(sync, taken_on)`. Written only when the fingerprint changes.
 
 - **`CustomListItem`** (migration `lists/0011_customlistitem_occurrence_note`): `occurrence` (which repeat of the item the row is; unique with the list and the item, so people's own lists still hold an item once at occurrence 0) and `note` (the row's note, rewritten on every successful run). Both have database defaults, so code from before the migration can still insert rows.
+- **Poster marks** (migration `lists/0013_featured_poster_marks`): `CustomListItem` gains `shown_rank` (only when tied titles share a rank), `mark` (`new`, `up`, `down`, `won` or blank), `mark_places` (how far an `up`/`down` moved) and `fact`; `PersonListItem` gains `fact`. All are rewritten on every successful run. `ENGINE_VERSION` 2 made every list re-sync once to fill them.
 
 No new `CustomList` columns.
 
@@ -241,6 +245,13 @@ All of it is additive.
 **`GET /api/v1/lists/{id}/`** gains the same optional `featured` object when the list is featured and public; other lists' responses are unchanged (no key).
 
 **Entry notes:** on lists the engine writes, every item in `GET /api/v1/lists/{id}/items/` and the detail's `items`, and every person in `GET /api/v1/lists/{id}/people/` and the detail's `people`, gains `note`: a string or `null`. It's the row's own note ("2023", "Nominee · Fiction", "Joint 21", "Inducted 2019"), with a chart's movement in front ("▲2 · $12.4M"); a source note that already gives the movement ("New this week") stands alone, and an item listed by several entries joins their notes with "; " (except on award histories, where each win is its own row). Media rows read it from `CustomListItem.note`, people from `entry_notes`. Other lists' items have no `note` key.
+
+**Poster marks:** builds from the poster marks on read these instead of `note`, on the same rows. A media row gains `rank` (the number under the poster on ranked lists: the position, or the source's shared rank for a tie; null on unranked lists), `mark` (`"new"` and `"up"`/`"down"` with `mark_places` on ranked charts, from Spine's own movement only; `"won"` on one-year award lists; else `null`) and `fact` (one short line or `null`). A person gains `fact`. The facts, set by each adapter as `Entry.fact`:
+
+- The year: all-time award lists ("2019" for every winner of a tie year) and lists that grow over time (Film Registry, Video Game Hall of Fame, MoMA, book clubs, Pitchfork Best New Album, Oprah's Book Club). Lists whose rows all share one year show none.
+- The category: one-year award lists. A winner shows the category it won ("2 wins" for more); a nominee its one category, or "4 nominations". A ceremony with one category (the Booker) shows none: the winner has the trophy alone.
+- Money: the weekend box office.
+- Nothing else: no source wording, counts, credits or dates.
 
 **`GET /api/v1/lists/featured/shelves/`:**
 

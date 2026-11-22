@@ -23,6 +23,7 @@ _POPUP = re.compile(r'<div class="popup-details[^"]*" id="post-(\d+)">(.*?)(?=<d
 _POPUP_TITLE = re.compile(r"<h3>(.*?)</h3>", re.S)
 _POPUP_AUTHOR = re.compile(r"<h4>\s*by\s*(.*?)</h4>", re.S | re.IGNORECASE)
 _TAGS = re.compile(r"<[^>]+>")
+_LABEL_YEAR = re.compile(r"[’'](\d{2})\b")  # "August ’26 Pick"
 MIN_PICKS = 10
 
 
@@ -35,6 +36,12 @@ def validate(definition):
     if limit is not None and (not isinstance(limit, int) or limit < 1):
         msg = "limit must be a positive integer"
         raise ValueError(msg)
+
+
+def label_year(label):
+    """Return the year of a pick label ("August ’26 Pick" → "2026"), or ""."""
+    found = _LABEL_YEAR.search(label or "")
+    return f"20{found.group(1)}" if found else ""
 
 
 def _text(value):
@@ -68,7 +75,7 @@ def fetch(definition):
     limit = definition.params.get("limit")
     picks = picks[:limit] if limit else picks
     entries = [
-        Entry(rank=None, title=title, creator=author, media_type="book", note=label)
+        Entry(rank=None, title=title, creator=author, media_type="book", note=label, fact=label_year(label))
         for title, author, label in picks
     ]
     # "August ’26" when the newest pick is labeled; unlabeled newest picks get no edition.
