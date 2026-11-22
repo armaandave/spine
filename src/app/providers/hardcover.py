@@ -957,7 +957,7 @@ def person_page(person_id):
         """
         response = graphql_request(query, {"author_id": int(person_id)})
 
-        author =(response.get("data", {}).get("authors") or [None])[0]
+        author = (response.get("data", {}).get("authors") or [None])[0]
         if not author:
             services.raise_not_found_error(Sources.HARDCOVER.value, person_id, "person")
 
