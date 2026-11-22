@@ -264,3 +264,9 @@ Every feature follows this path. Armaan drives it with the prompts in quotes.
 - `node ~/.appstoreconnect/asc.mjs` reads Pylon's app by default; `ASC_APP_ID=<id>` points it at another app. `status` and `get` are reads. `post` and `patch` write: ask first, except where `scripts/ios/SHIP.md` says the ship request covers it.
 - The tool signs requests with the API key in `~/.appstoreconnect/private_keys/`. Never copy, print, or commit that key.
 - Xcode Cloud assigns build numbers when it uploads. Tag the commit behind each TestFlight build, for example `ios-1.0-build3`.
+
+## 18) Spine World (`world/`)
+
+- `world/` is a standalone Vite + three.js web page that shows Armaan's logged titles as posters in three modes: Burst, Orbit and Tunnel. It is separate from the Django app and the iOS app, and its own `world/README.md` covers running it, its data contract and `window.spine` for a web view.
+- Its data, about 127 MB of posters plus his `world.json`, is never committed. `world/public/data` is a symlink to `~/projects/spine-world/site-data` on HomeMac.
+- Design rule (`world/DESIGN.md`): only posters and edge typography, flat posters, no lines, glows or panels.

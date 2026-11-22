@@ -1,0 +1,59 @@
+/* Burst's language: paper or dark ground, three inks, Host Grotesk + Fragment Mono. Only edge
+   typography lives here; posters are drawn by the engine. Inks follow the mode's theme. */
+@property --ink { syntax: "<color>"; inherits: true; initial-value: #141413; }
+@property --ink2 { syntax: "<color>"; inherits: true; initial-value: #4A4843; }
+@property --ink3 { syntax: "<color>"; inherits: true; initial-value: #86827A; }
+@property --bg { syntax: "<color>"; inherits: true; initial-value: #E7E5E0; }
+:root {
+  --bg: #E7E5E0; --ink: #141413; --ink2: #4A4843; --ink3: #86827A;
+  --sans: "Host Grotesk", "Schibsted Grotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: "Fragment Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(.2, .75, .15, 1);
+  color-scheme: light;
+}
+body[data-theme="dark"] { --ink: #F2EFE8; --ink2: #BDB9B0; --ink3: #8C887F; --bg: #050505; color-scheme: dark; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font: 13px/1.45 var(--sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; transition: --ink 1.2s cubic-bezier(.37,0,.63,1), --ink2 1.2s cubic-bezier(.37,0,.63,1), --ink3 1.2s cubic-bezier(.37,0,.63,1), --bg 1.2s cubic-bezier(.37,0,.63,1); }
+body { user-select: none; -webkit-user-select: none; touch-action: none; }
+.stage { position: fixed; inset: 0; display: block; touch-action: none; }
+.mode-overlay, .mode-overlay-out { position: fixed; inset: 0; pointer-events: none; }
+
+/* intro / loader: paper, ink, a mono count. Fast. */
+.intro { position: fixed; inset: 0; z-index: 100; background: var(--bg); pointer-events: none; }
+.intro-label { position: absolute; left: 28px; bottom: 24px; font: 9px/1.6 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
+.intro-label b { font-weight: 400; color: var(--ink); }
+.intro-name { position: absolute; left: 28px; top: 24px; font: 500 13px/1.25 var(--sans); letter-spacing: -.005em; }
+
+/* mode index (bottom-left) + readout (bottom-right) */
+.nav { position: fixed; left: 28px; bottom: 24px; z-index: 10; display: flex; gap: 22px; padding-bottom: 5px; font: 9.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.nav button { all: unset; cursor: pointer; color: var(--ink); opacity: .38; transition: opacity .4s var(--ease); }
+.nav button span { margin-right: .5em; }
+.nav button:hover { opacity: .8; }
+.nav button[aria-current="true"] { opacity: 1; }
+.nav-u { position: absolute; left: 0; bottom: 0; height: 1px; width: 0; background: var(--ink); }
+.corner-br { position: fixed; right: 28px; bottom: 24px; z-index: 10; pointer-events: none; font: 9px/1.75 var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--ink3); }
+
+/* hover label: small mono, no line */
+.tip { position: fixed; left: 0; top: 0; z-index: 20; pointer-events: none; opacity: 0; transition: opacity .2s; white-space: nowrap; font: 9.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink); margin-top: -5px; }
+.tip.on { opacity: 1; }
+body .stage { cursor: grab; }
+body.on-poster .stage { cursor: pointer; }
+body.grabbing .stage { cursor: grabbing; }
+
+/* captions pinned to posters (src/engine/captions.ts) */
+.caps { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+.cap { position: absolute; left: 0; top: 0; will-change: transform, opacity; opacity: 0; box-sizing: border-box; }
+.cap .t { font: 500 13px/1.18 var(--sans); letter-spacing: -.012em; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.cap .i { font: 9px/1 var(--mono); letter-spacing: .04em; color: var(--ink3); margin-right: 6px; }
+.cap .m { font: 9px/1.5 var(--mono); letter-spacing: .02em; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cap .t + .m { margin-top: 3px; }
+.cap.big .t { font-size: 26px; line-height: 1.05; letter-spacing: -.035em; }
+.cap.big .m { font-size: 10px; }
+.cap.big .t + .m { margin-top: 8px; }
+.cap.left { text-align: right; }
+
+@media (max-width: 760px) {
+  .nav { left: 16px; gap: 12px; bottom: 64px; font-size: 8.5px; letter-spacing: .1em; flex-wrap: wrap; right: 16px; }
+  body.focused .nav { opacity: 0 !important; pointer-events: none; }
+  .corner-br { display: none; }
+  .cap.big .t { font-size: 20px; }
+}
