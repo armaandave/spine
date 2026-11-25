@@ -174,6 +174,8 @@ struct TaggedDiaryView: View {
             }
         }
         .pickerStyle(.segmented)
+        // White on dark glass whatever the phone's appearance, like the month headers.
+        .environment(\.colorScheme, .dark)
         .padding(.bottom, 16)
         .diaryPinnedHeaderBlur()
     }
