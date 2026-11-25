@@ -917,6 +917,9 @@ struct LibraryView: View {
                             PosterBadgeLabel(text: progressText)
                                 .lineLimit(item.media.ref.isSeries ? 1 : nil)
                                 .padding(5)
+                        } else if let marks = LibraryPosterMarks.marks(for: item) {
+                            PosterMarksPill(marks: marks)
+                                .padding(5)
                         }
                     }
                 }
@@ -932,11 +935,13 @@ struct LibraryView: View {
     }
 
     private func gridAccessibilityLabel(_ item: LibraryItem) -> String {
-        switch item.media.ref.mediaType {
+        let label = switch item.media.ref.mediaType {
         case "tv": "View \(item.media.title), \(TVLibraryCard.line(for: item))"
         case "anime": "View \(item.media.title), \(AnimeLibraryCard.line(for: item))"
         default: "View \(item.media.title)"
         }
+        guard let marks = LibraryPosterMarks.marks(for: item) else { return label }
+        return "\(label), \(marks.spokenText)"
     }
 
     private func libraryList(_ items: [LibraryItem]) -> some View {
@@ -1022,6 +1027,70 @@ struct PosterBadgeLabel: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .glassEffect(.regular.tint(.black.opacity(0.3)), in: .capsule)
+    }
+}
+
+/// The pill on a finished title's Library grid poster: your stars and heart in the progress pill's glass at 65% of its
+/// height, drawn with the feed's glowing marks at 8 pt. Five stars and a heart come to 68 pt of the 70 a poster has.
+struct PosterMarksPill: View {
+    let marks: LibraryPosterMarks
+
+    /// 65% of the progress pill's 19 pt.
+    static let height: CGFloat = 12.35
+    private static let markSize: CGFloat = 8
+    /// Each mark's ink at 8 pt, so the pill is as wide as what it draws.
+    private static let starBox = CGSize(width: 9, height: 8.7)
+    private static let heartBox = CGSize(width: 8.2, height: 7.6)
+
+    var body: some View {
+        HStack(spacing: 3.5) {
+            if !marks.stars.isEmpty {
+                HStack(spacing: 0.5) {
+                    ForEach(Array(marks.stars.enumerated()), id: \.offset) { _, mark in
+                        FeedMarkView(mark: mark, ink: .dark, size: Self.markSize)
+                            .frame(width: Self.starBox.width, height: Self.starBox.height)
+                    }
+                }
+            }
+            if marks.liked {
+                FeedMarkView(mark: .heart, ink: .dark, size: Self.markSize)
+                    .frame(width: Self.heartBox.width, height: Self.heartBox.height)
+            }
+        }
+        .padding(.horizontal, 5)
+        .frame(height: Self.height)
+        .glassEffect(.regular.tint(.black.opacity(0.3)), in: .capsule)
+    }
+}
+
+/// What a finished title's Library grid poster shows: the title's own stars (a show's are the show's, TV-500) and your
+/// heart, gold and pink on every poster. A title that isn't finished, or is finished with no stars and no heart, has
+/// none.
+struct LibraryPosterMarks {
+    let stars: [FeedMark]
+    let liked: Bool
+    /// The stars as a number, to the half star the poster draws.
+    let rating: Double
+
+    static func marks(for item: LibraryItem) -> LibraryPosterMarks? {
+        guard LibraryViewModel.hasStatus(item, "Completed") else { return nil }
+        let rating = item.tracking.rating ?? ""
+        let stars = PostPageStyle.starSymbols(rating: rating).compactMap(FeedMark.init(starSymbol:))
+        // Movies, music, books, games, manga and comics carry the heart on the row. A show's and an anime's is on your
+        // own state, which every Library row carries, since the Library is always yours.
+        let liked = item.tracking.liked ?? item.media.userState?.hasLiked ?? false
+        guard !stars.isEmpty || liked else { return nil }
+        return LibraryPosterMarks(stars: stars, liked: liked, rating: Double(rating.ratingHalfSteps) / 2)
+    }
+
+    /// What VoiceOver adds to the poster's name: "4.5 stars, liked".
+    var spokenText: String {
+        var parts: [String] = []
+        if !stars.isEmpty {
+            parts.append(rating == 1 ? "1 star" : "\(rating.formatted()) stars")
+        }
+        if liked { parts.append("liked") }
+        return parts.joined(separator: ", ")
     }
 }
 
