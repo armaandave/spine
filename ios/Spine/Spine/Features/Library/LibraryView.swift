@@ -1038,6 +1038,8 @@ struct PosterMarksPill: View {
     /// 65% of the progress pill's 19 pt.
     static let height: CGFloat = 12.35
     private static let markSize: CGFloat = 8
+    /// The marks glow 30% less than on the feed.
+    private static let glow = 0.7
     /// Each mark's ink at 8 pt, so the pill is as wide as what it draws.
     private static let starBox = CGSize(width: 9, height: 8.7)
     private static let heartBox = CGSize(width: 8.2, height: 7.6)
@@ -1047,13 +1049,13 @@ struct PosterMarksPill: View {
             if !marks.stars.isEmpty {
                 HStack(spacing: 0.5) {
                     ForEach(Array(marks.stars.enumerated()), id: \.offset) { _, mark in
-                        FeedMarkView(mark: mark, ink: .dark, size: Self.markSize)
+                        FeedMarkView(mark: mark, ink: .dark, size: Self.markSize, glow: Self.glow)
                             .frame(width: Self.starBox.width, height: Self.starBox.height)
                     }
                 }
             }
             if marks.liked {
-                FeedMarkView(mark: .heart, ink: .dark, size: Self.markSize)
+                FeedMarkView(mark: .heart, ink: .dark, size: Self.markSize, glow: Self.glow)
                     .frame(width: Self.heartBox.width, height: Self.heartBox.height)
             }
         }
