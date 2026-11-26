@@ -123,6 +123,8 @@ struct FeedMarkView: View {
     let mark: FeedMark
     let ink: ArtInk
     var size: CGFloat = HomeDesign.FeedDepth.markSymbolSize
+    /// How strong the glow is: 1 is the feed's own; the Library grid's pill turns it down.
+    var glow: Double = 1
 
     var body: some View {
         FeedMarkSymbol(mark: mark, ink: ink, size: size)
@@ -131,6 +133,7 @@ struct FeedMarkView: View {
                     Image(uiImage: image)
                         .resizable()
                         .frame(width: image.size.width, height: image.size.height)
+                        .opacity(glow)
                 }
             }
             .accessibilityHidden(true)
