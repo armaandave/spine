@@ -2113,7 +2113,7 @@ struct ProfileListDetailView: View {
                 if list.listType == .media,
                    let completion = list.completion,
                    completion.isVisible {
-                    SWCompletionProgressButton(progress: completion, isCompact: true)
+                    CompletionBar(progress: completion)
                         .accessibilityLabel("\(list.name) completion")
                 }
             }

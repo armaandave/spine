@@ -4434,6 +4434,7 @@ private struct MediaDetailPageView: View {
                     EpisodesSection(
                         rows: TVEpisodeRowModel.rows(episodes: detail.episodes ?? [], unlisted: detail.tvUnlistedEpisodes),
                         completion: detail.completion,
+                        tint: MediaPageTint.known(detail.displayPosterURL),
                         state: { viewModel.tvEpisodeState($0.tv) },
                         isWatched: { episode in viewModel.viewer?.tvIsWatched(episode) ?? episode.watched },
                         onTick: { viewModel.toggleTVEpisode($0) },
@@ -8786,6 +8787,8 @@ private struct SeasonsSection: View {
 private struct EpisodesSection: View {
     let rows: [TVEpisodeRowModel]
     let completion: CompletionProgress?
+    /// The show's poster color for the completion bar; nil draws it white.
+    var tint: Color? = nil
     /// An episode's current TV state: a confirmed write's answer when the list predates it.
     let state: (TVEpisodeRowModel) -> TVEpisodeState?
     /// Whether an episode shows as watched, counting a pending tick (TV-705).
@@ -8798,11 +8801,13 @@ private struct EpisodesSection: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
                 SectionLabel(title: "Episodes")
-                Spacer()
                 if let completion, completion.isVisible {
-                    SWCompletionProgressButton(progress: completion)
+                    CompletionBar(progress: completion, tint: tint)
+                } else {
+                    Spacer()
                 }
             }
+            .frame(minHeight: 44)
             if rows.isEmpty {
                 ContentUnavailableView(
                     "No episodes available",
