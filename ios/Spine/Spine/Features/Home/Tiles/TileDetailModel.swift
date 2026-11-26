@@ -195,8 +195,11 @@ enum InProgressTilePresenter {
     /// Where the title stands, or nil for a type the tile has no numbers for (movies, music, board games) and for a
     /// title with nothing stored yet.
     static func position(for item: LibraryItem) -> TilePosition? {
-        let tracking = item.tracking
-        let ref = item.media.ref
+        position(ref: item.media.ref, tracking: item.tracking)
+    }
+
+    /// `position(for:)` from a title's ref and tracking alone, for a page that has no Library item (the media page).
+    static func position(ref: MediaRef, tracking: TrackingState) -> TilePosition? {
         switch ref.mediaType {
         case "tv":
             guard let tv = tracking.tv, let watched = tv.watchedCount else { return nil }
@@ -212,11 +215,11 @@ enum InProgressTilePresenter {
                 pagesTotal: nil
             )
         case "book":
-            return bookPosition(item)
+            return bookPosition(ref: ref, tracking: tracking)
         case "manga", "comic":
-            return seriesPosition(item)
+            return seriesPosition(ref: ref, tracking: tracking)
         case "game":
-            return gamePosition(item)
+            return gamePosition(ref: ref, tracking: tracking)
         default:
             return nil
         }
@@ -230,15 +233,15 @@ enum InProgressTilePresenter {
         value.map { NSDecimalNumber(decimal: $0).doubleValue }
     }
 
-    private static func bookPosition(_ item: LibraryItem) -> TilePosition? {
-        guard let progress = item.tracking.reading?.currentJourney?.progress ?? item.tracking.progress,
+    private static func bookPosition(ref: MediaRef, tracking: TrackingState) -> TilePosition? {
+        guard let progress = tracking.reading?.currentJourney?.progress ?? tracking.progress,
               progress.value != nil else { return nil }
         if progress.mode == .percentage {
             // A percent has no page count behind it, so it cannot be shown in pages.
             return percentPosition(progress.savedPercentage, pagesTotal: nil)
         }
         let pages = double(progress.max).flatMap { $0 > 0 ? $0 : nil }
-        if ProgressDisplayPreferences.mode(for: item.media.ref) == .percentage, pages != nil,
+        if ProgressDisplayPreferences.mode(for: ref) == .percentage, pages != nil,
            let percent = progress.savedPercentage {
             return percentPosition(percent, pagesTotal: pages)
         }
@@ -251,12 +254,12 @@ enum InProgressTilePresenter {
         return TilePosition(unit: .percent, current: double(percent) ?? 0, total: 100, pagesTotal: pagesTotal)
     }
 
-    private static func seriesPosition(_ item: LibraryItem) -> TilePosition? {
-        let reading = item.tracking.reading
-        guard let progress = reading?.currentJourney?.progress ?? item.tracking.progress,
+    private static func seriesPosition(ref: MediaRef, tracking: TrackingState) -> TilePosition? {
+        let reading = tracking.reading
+        guard let progress = reading?.currentJourney?.progress ?? tracking.progress,
               let value = double(progress.value) else { return nil }
         let total = double(progress.max) ?? reading?.total.map(Double.init)
-        let issues = reading?.unit == "issue" || item.media.ref.mediaType == "comic"
+        let issues = reading?.unit == "issue" || ref.mediaType == "comic"
         return TilePosition(
             unit: issues ? .issues : .chapters,
             current: value.rounded(),
@@ -265,9 +268,9 @@ enum InProgressTilePresenter {
         )
     }
 
-    private static func gamePosition(_ item: LibraryItem) -> TilePosition? {
-        guard let playthrough = item.tracking.game?.currentPlaythrough else { return nil }
-        switch GameProgressMode.initial(for: item.media.ref, playthrough: playthrough) {
+    private static func gamePosition(ref: MediaRef, tracking: TrackingState) -> TilePosition? {
+        guard let playthrough = tracking.game?.currentPlaythrough else { return nil }
+        switch GameProgressMode.initial(for: ref, playthrough: playthrough) {
         case .percent:
             return percentPosition(playthrough.completion, pagesTotal: nil)
         case .hours:

@@ -14,6 +14,8 @@ struct AppShellView: View {
     @State private var openedPushRoute: PushRoute?
     /// What every poster's hold menu runs through.
     @State private var posterHold: PosterHoldController
+    /// What you did today on each title: Home's tiles and every media page's Your Tracking bar read it.
+    @State private var todayStore: HomeTodayStore
 
     let session: AppSession
 
@@ -27,6 +29,10 @@ struct AppShellView: View {
             diaryRepository: session.repositories.diary,
             listRepository: session.repositories.lists,
             peopleRepository: session.repositories.people,
+            onUnauthorized: { Task { await session.logout() } }
+        ))
+        _todayStore = State(initialValue: HomeTodayStore(
+            activityRepository: session.repositories.activity,
             onUnauthorized: { Task { await session.logout() } }
         ))
     }
@@ -84,6 +90,7 @@ struct AppShellView: View {
                 peopleRepository: session.repositories.people,
                 currentUserId: currentUserId,
                 selectedTab: selectedTab,
+                todayStore: todayStore,
                 onSelectTab: { selectedTab = $0 },
                 onFindPeople: {
                     findPeopleRequest += 1
@@ -215,12 +222,14 @@ struct AppShellView: View {
         .environment(\.appNavigationState, appNavigationState)
         .environment(\.userProfileBuilder, profileBuilder)
         .environment(posterHold)
+        .environment(todayStore)
         .environment(\.titlePageBuilder, titlePageBuilder)
         .posterHoldHost(posterHold, isActive: openedPushRoute == nil)
         .fullScreenCover(item: $openedPushRoute) { route in
             pushRouteDestination(route)
                 .environment(\.userProfileBuilder, profileBuilder)
                 .environment(posterHold)
+                .environment(todayStore)
                 .environment(\.titlePageBuilder, titlePageBuilder)
                 .posterHoldHost(posterHold)
         }

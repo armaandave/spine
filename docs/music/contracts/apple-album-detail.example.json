@@ -44,7 +44,11 @@
     "direct_consumption": false,
     "rating_source_diary_entry_id": null,
     "like_source_diary_entry_id": null,
-    "like_is_independent": false
+    "like_is_independent": false,
+    "diary_review": null,
+    "diary_review_title": null,
+    "diary_contains_spoilers": false,
+    "diary_is_rewatch": false
   },
   "synopsis": null,
   "logo_url": null,

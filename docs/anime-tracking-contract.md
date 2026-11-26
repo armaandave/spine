@@ -282,7 +282,7 @@ A rewatch counts again in activity and stats (AN-703, AN-704).
 | Completed | Nothing extra |
 
 A Paused or Dropped title with nothing watched reads "Paused" or "Dropped".
-A grid poster's badge names up next, as "E8", only once an episode has been watched in the current pass, while the title is Watching, Paused or Dropped and not caught up. Every other poster has no badge.
+A grid poster's badge names up next, as "E8", only once an episode has been watched in the current pass, while the title is Watching, Paused or Dropped and not caught up. Every other poster has no badge; a Completed title's poster shows its stars and heart instead (SW-701).
 
 ### AN-701: Home's Update progress opens the episode sheet
 
