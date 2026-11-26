@@ -286,24 +286,29 @@ enum LaunchLogo {
     private static var tints: [String: UIImage] = [:]
 
     /// The asset `mask` (a white image whose alpha is the shape) in `color`, with the asset `over` drawn as it is on
-    /// top: the logo's shape in a color with its white rim, or its glow in a color.
+    /// top: the logo's shape in a color with its white rim, or its glow in a color. Kept for the rest of the launch.
     static func tinted(_ mask: String, _ color: MeterTint.RGB, over: String? = nil) -> UIImage? {
         let key = "\(mask) \(color.red) \(color.green) \(color.blue) \(over ?? "")"
         if let made = tints[key] { return made }
+        let made = drawn(mask, color, over: over)
+        tints[key] = made
+        return made
+    }
+
+    /// The same image drawn fresh and not kept, for views made after the launch (Home's refresh coin).
+    static func drawn(_ mask: String, _ color: MeterTint.RGB, over: String? = nil) -> UIImage? {
         guard let image = UIImage(named: mask) else { return nil }
         let top = over.flatMap { UIImage(named: $0) }
         let format = UIGraphicsImageRendererFormat()
         format.scale = image.scale
         format.opaque = false
-        let made = UIGraphicsImageRenderer(size: image.size, format: format).image { context in
+        return UIGraphicsImageRenderer(size: image.size, format: format).image { context in
             let rect = CGRect(origin: .zero, size: image.size)
             UIColor(red: color.red, green: color.green, blue: color.blue, alpha: 1).setFill()
             context.fill(rect)
             image.draw(in: rect, blendMode: .destinationIn, alpha: 1)
             top?.draw(in: rect)
         }
-        tints[key] = made
-        return made
     }
 
     static func forgetTints() {

@@ -545,6 +545,7 @@ def _award_entries(definition, works, supplement):
                     media_type=media_type,
                     ids=ids,
                     note=_note(year, ties),
+                    fact=str(year),
                 ),
                 work,
             )
@@ -602,6 +603,7 @@ def _registry_entries(definition, works, supplement):
                     media_type=media_type,
                     ids=_entry_ids(media_type, work),
                     note=f"Inducted {year}",
+                    fact=str(year),
                 ),
                 work,
             ),
@@ -619,6 +621,7 @@ def _registry_entries(definition, works, supplement):
                         media_type="movie",
                         ids={"ref": row["ref"]} if row["ref"] else {},
                         note=f"Inducted {row['year']}",
+                        fact=str(row["year"]),
                     ),
                     None,
                 ),
@@ -871,6 +874,7 @@ def _book_ids(pairs):
                 ids={**ids, **entry.ids},
                 image=image or entry.image,
                 note=entry.note,
+                fact=entry.fact,
             ),
         )
     return entries

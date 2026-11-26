@@ -141,6 +141,7 @@ def fetch(definition):
                         ids=ids,
                         image=person.get("image", ""),
                         note=f"{year} · shared" if shared else str(year),
+                        fact=str(year) if year else "",
                     ),
                 ),
             )

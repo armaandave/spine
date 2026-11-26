@@ -168,7 +168,7 @@ def fetch(definition):
         raise AdapterError(msg)
     matched = {record_id: _entry(definition, media_type, found[record_id], years) for record_id, years in by_record.items()}
     wins = sorted({(year, record_id) for year, record_id in won}, key=lambda win: (-win[0], win[1]))
-    entries = [replace(matched[record_id], note=str(year)) for year, record_id in wins]
+    entries = [replace(matched[record_id], note=str(year), fact=str(year)) for year, record_id in wins]
     return FetchResult(entries=entries, edition=str(max(year for year, _ in won)))
 
 

@@ -171,6 +171,13 @@ class StaticAdapterTests(SimpleTestCase):
         with self.assertRaises(AdapterError):
             ADAPTERS["static"].fetch(definition)
 
+    def test_only_ties_and_join_years_reach_the_poster(self):
+        self.assertEqual(static_adapter.note_poster("Joint 21"), ("", 21))
+        self.assertEqual(static_adapter.note_poster("Inducted 2015"), ("2015", None))
+        self.assertEqual(static_adapter.note_poster("Acquired 2012"), ("2012", None))
+        self.assertEqual(static_adapter.note_poster("Ranked for the Jon Stewart years (1999-2015)"), ("", None))
+        self.assertEqual(static_adapter.note_poster(""), ("", None))
+
     def test_tie_notes_mark_every_row_of_a_tie(self):
         """A "Joint N" tie starts at place N and runs unbroken; a left-out row may open it."""
         checked = 0

@@ -218,6 +218,12 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
     var madeBy: [String]? = nil
     /// Search results only: the year it came out, however its provider says it.
     var year: Int? = nil
+    /// Featured lists only: the number under the poster (tied titles share one), its mark and how many places it
+    /// moved, and its one fact ("2019", "Best Soundtrack", "$12.4M").
+    var shownRank: Int? = nil
+    var posterMark: PosterMark? = nil
+    var markPlaces: Int? = nil
+    var fact: String? = nil
 
     var id: String { ref.id }
 
@@ -273,6 +279,10 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         case posterPalette
         case madeBy
         case year
+        case shownRank = "rank"
+        case posterMark = "mark"
+        case markPlaces
+        case fact
     }
 
     init(
@@ -385,7 +395,19 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         friends = container.decodeLossily(MediaFriendsSummary.self, forKey: .friends)
         madeBy = container.decodeLossily([String].self, forKey: .madeBy)
         year = container.decodeLossily(Int.self, forKey: .year)
+        shownRank = container.decodeLossily(Int.self, forKey: .shownRank)
+        posterMark = container.decodeLossily(PosterMark.self, forKey: .posterMark)
+        markPlaces = container.decodeLossily(Int.self, forKey: .markPlaces)
+        fact = container.decodeLossily(String.self, forKey: .fact)
     }
+}
+
+/// The one mark a featured list's poster shows: new on a chart, moved up or down, or won (one-year awards).
+nonisolated enum PosterMark: String, Codable, Hashable {
+    case new
+    case up
+    case down
+    case won
 }
 
 /// The people you follow who've done something with a title, as a search result names them: how many, and the newest

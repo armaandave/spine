@@ -1159,18 +1159,30 @@ private struct HomeStatusBarFade: View {
 }
 
 /// Home's pull to refresh. The page is pulled past its top by `pull` points; letting go beyond `threshold` reloads
-/// once, and the spinner shows until the reload is done.
+/// once, and the spinner shows until the reload is done, then lands before the page closes the room.
 @MainActor
 @Observable
 final class HomeRefreshModel {
+    /// What the spinner is doing: following the pull, spinning while Home reloads, or landing once it's done.
+    enum Phase {
+        case pulling, spinning, landing
+    }
+
     /// Points the page is pulled past its top; 0 anywhere else.
     var pull: CGFloat = 0
     private(set) var isRefreshing = false
+    private(set) var isLanding = false
+
+    var phase: Phase {
+        isLanding ? .landing : (isRefreshing ? .spinning : .pulling)
+    }
 
     /// How far to pull before letting go reloads.
     nonisolated static let threshold: CGFloat = 70
     /// The room the spinner takes above the page while it is reloading (and the most it takes while pulling).
     nonisolated static let gap: CGFloat = 44
+    /// How long the spinner has to land once the reload is done, before the page closes the room.
+    nonisolated static let landing: Duration = .milliseconds(320)
 
     /// Letting go (the finger left the page) reloads when the pull is far enough and no reload is running.
     nonisolated static func shouldRefresh(pull: CGFloat, isRefreshing: Bool) -> Bool {
@@ -1183,12 +1195,16 @@ final class HomeRefreshModel {
         return Double(min(1, max(0, (pull - 10) / (threshold - 10))))
     }
 
-    /// Runs `reload` once; the page opens `gap` for the spinner while it runs and closes it after.
+    /// Runs `reload` once; the page opens `gap` for the spinner while it runs, gives it `landing` once it's done, and
+    /// closes the room after.
     func run(_ reload: @MainActor () async -> Void) async {
         guard !isRefreshing else { return }
         withAnimation(.smooth) { isRefreshing = true }
         await reload()
+        isLanding = true
+        try? await Task.sleep(for: Self.landing)
         withAnimation(.smooth) { isRefreshing = false }
+        isLanding = false
     }
 }
 
@@ -1226,19 +1242,21 @@ private struct HomeRefreshShift: ViewModifier {
     }
 }
 
-/// The plain system spinner above the page: it grows into the space the pull opens, then sits in the room the reload
-/// keeps. It reads the pull itself, so a pull redraws only this.
+/// The logo above the page, turning like a coin as it's pulled and spinning while Home reloads (`HomeCoinSpinner`). It
+/// places and fades itself in the room the pull opens, so it reads the pull itself and a pull redraws only this. A
+/// light tap as the pull reaches the point where letting go reloads.
 private struct HomeRefreshIndicator: View {
     let model: HomeRefreshModel
 
     var body: some View {
-        ProgressView()
-            .tint(.white)
+        HomeCoinSpinner(pull: model.pull, phase: model.phase)
             .frame(maxWidth: .infinity)
-            .frame(height: model.isRefreshing ? HomeRefreshModel.gap : min(model.pull, HomeRefreshModel.gap))
-            .opacity(HomeRefreshModel.spinnerOpacity(pull: model.pull, isRefreshing: model.isRefreshing))
+            .frame(height: HomeRefreshModel.gap)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+            .sensoryFeedback(.impact(weight: .light), trigger: model.pull >= HomeRefreshModel.threshold) { old, new in
+                !old && new && !model.isRefreshing
+            }
             .frame(maxHeight: .infinity, alignment: .top)
     }
 }

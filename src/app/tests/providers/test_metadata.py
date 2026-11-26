@@ -1799,6 +1799,45 @@ class Metadata(TestCase):
 
         self.assertEqual(cm.exception.provider, Sources.HARDCOVER.value)
 
+    def test_handle_error_hardcover_unauthorized_prefers_description(self):
+        """An invalid token's error_description is the message, and a body without "error" still raises."""
+        for body, expected in (
+            (
+                {"error": "invalid_token", "error_description": "Token is not associated with a user"},
+                "Token is not associated with a user",
+            ),
+            ({"message": "Unauthorized"}, "HTTP 401"),
+        ):
+            with self.subTest(body=body):
+                mock_response = MagicMock(status_code=401)
+                mock_response.json.return_value = body
+                error = requests.exceptions.HTTPError("401 Unauthorized", response=mock_response)
+
+                with self.assertRaises(services.ProviderAPIError) as cm:
+                    hardcover.handle_error(error)
+
+                self.assertIn(expected, str(cm.exception))
+
+    @patch("app.providers.services.api_request")
+    def test_hardcover_graphql_errors_raise_and_are_not_cached(self, mock_api_request):
+        """A 200 carrying GraphQL errors raises a provider error and leaves nothing cached."""
+        cache.clear()
+        mock_api_request.return_value = {
+            "errors": [{"message": "field 'search' not found in type: 'query_root'"}],
+        }
+
+        with self.assertRaises(services.ProviderAPIError) as cm:
+            hardcover.search("dune", 1)
+        self.assertIn("field 'search' not found", str(cm.exception))
+        with self.assertRaises(services.ProviderAPIError):
+            hardcover.discover(genre="Fantasy")
+        with self.assertRaises(services.ProviderAPIError):
+            hardcover.person_page("1")
+
+        # A series page shows empty on a failure, and asks Hardcover again next time.
+        self.assertEqual(hardcover.series_page("981")["books"], [])
+        self.assertIsNone(cache.get(hardcover._series_cache_key("981")))  # noqa: SLF001
+
     def test_handle_error_hardcover_other(self):
         """Test the handle_error function with Hardcover other error."""
         mock_response = MagicMock()

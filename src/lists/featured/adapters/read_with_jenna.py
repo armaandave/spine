@@ -150,7 +150,15 @@ def fetch(definition):
     limit = definition.params.get("limit")
     picks = picks[:limit] if limit else picks
     entries = [
-        Entry(rank=None, title=title, creator=author, media_type="book", isbns=(isbn,) if isbn else (), note=month)
+        Entry(
+            rank=None,
+            title=title,
+            creator=author,
+            media_type="book",
+            isbns=(isbn,) if isbn else (),
+            note=month,
+            fact=_MONTH.match(month).group(2),  # the pick's year
+        )
         for month, title, author, isbn in picks
     ]
     return FetchResult(entries=entries, edition=picks[0][0] if picks else "")

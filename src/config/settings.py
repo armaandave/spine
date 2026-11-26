@@ -228,7 +228,13 @@ if config("DB_HOST", default=None):
             "PASSWORD": config("DB_PASSWORD", default=secret("DB_PASSWORD_FILE")),
             "PORT": config("DB_PORT"),
             "OPTIONS": {
-                "pool": True,
+                # Per process. psycopg's default keeps 4 open in every process (each
+                # gunicorn worker, Celery child and beat) even when idle; the most stays
+                # 4, one per gunicorn thread, and idle processes keep 1.
+                "pool": {
+                    "min_size": config("DB_POOL_MIN_SIZE", default=1, cast=int),
+                    "max_size": config("DB_POOL_MAX_SIZE", default=4, cast=int),
+                },
             },
         },
     }

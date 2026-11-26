@@ -249,6 +249,53 @@ class WriterTests(FeaturedTestCase):
         self.assertEqual(sync.item_notes, {ids["2"]: "▲1", ids["1"]: "▼1", ids["4"]: "NEW"})
         self.assertEqual(sync.entry_notes, {ids["2"]: "▲1 · $12.4M", ids["1"]: "▼1", ids["4"]: "NEW"})
 
+    def test_rows_store_their_poster_marks_and_facts(self):
+        definition = make_definition()
+        self.run_list(definition, movies("1", "2", "3"))
+        self.assertEqual(set(CustomListItem.objects.values_list("mark", "mark_places", "fact")), {("", None, "")})
+
+        swapped = [replace(movie, rank=rank) for movie, rank in zip(movies("2", "1", "4"), (1, 2, 3), strict=True)]
+        swapped[0] = replace(swapped[0], note="$12.4M", fact="$12.4M")
+        self.run_list(definition, swapped)
+        rows = CustomListItem.objects.order_by("position")
+        self.assertEqual(
+            [(row.item.media_id, row.mark, row.mark_places, row.fact) for row in rows],
+            [("2", "up", 1, "$12.4M"), ("1", "down", 1, ""), ("4", "new", None, "")],
+        )
+
+        # Same rows: a fact refreshes and the marks stay.
+        swapped[0] = replace(swapped[0], note="$13.0M", fact="$13.0M")
+        self.assertEqual(self.run_list(definition, swapped).status, "unchanged")
+        self.assertEqual(
+            list(CustomListItem.objects.order_by("position").values_list("mark", "mark_places", "fact")),
+            [("up", 1, "$13.0M"), ("down", 1, ""), ("new", None, "")],
+        )
+
+    def test_winners_and_shared_ranks_reach_their_rows(self):
+        award = make_definition(kind="award", live_windows=(CEREMONY,), is_ranked=False)
+        won, nominated = movies("1", "2")
+        self.run_list(award, [replace(won, won=True, fact="Best Picture"), replace(nominated, fact="2 nominations")])
+        self.assertEqual(
+            list(CustomListItem.objects.order_by("position").values_list("mark", "fact", "shown_rank")),
+            [("won", "Best Picture", None), ("", "2 nominations", None)],
+        )
+
+        canon = make_definition(key="canon", kind="canon", cadence=None)
+        first, second, third = movies("3", "4", "5", start=20)
+        result = self.run_list(canon, [first, replace(second, shown_rank=20), third])
+        self.assertEqual(
+            list(result.custom_list.customlistitem_set.order_by("position").values_list("position", "shown_rank")),
+            [(20, None), (21, 20), (22, None)],
+        )
+
+    def test_people_rows_store_their_fact(self):
+        definition = make_definition(list_type="people", media_types=("book",), position=950, kind="award")
+        laureate = Entry(None, "Annie Ernaux", ids={"openlibrary_person": "OL1A"}, note="2022 · shared", fact="2022")
+        self.run_list(definition, [laureate])
+        self.assertEqual(PersonListItem.objects.get().fact, "2022")
+        self.assertEqual(self.run_list(definition, [replace(laureate, fact="2023")]).status, "unchanged")
+        self.assertEqual(PersonListItem.objects.get().fact, "2023")
+
     def test_combine_notes(self):
         self.assertEqual(combine_notes("▲2", "$12.4M"), "▲2 · $12.4M")
         self.assertEqual(combine_notes("▲2", ""), "▲2")

@@ -97,7 +97,7 @@ def _latest(spec):
     raise AdapterError(msg)
 
 
-def _entry(relation, *, rank=None, note=""):
+def _entry(relation, *, rank=None, note="", fact=""):
     group = relation["release_group"]
     info = _music.release_group_info(group)
     return Entry(
@@ -109,6 +109,7 @@ def _entry(relation, *, rank=None, note=""):
         ids={"mbid_rg": info["id"]},
         image=_music.cover_url(info["id"]),
         note=note,
+        fact=fact,
     )
 
 
@@ -141,7 +142,8 @@ def _by_date(relations, window_days, today):
             dated.append((awarded, relation))
     dated.sort(key=lambda pair: pair[0], reverse=True)
     return [
-        _entry(relation, note=f"{awarded:%b} {awarded.day}, {awarded.year}") for awarded, relation in dated
+        _entry(relation, note=f"{awarded:%b} {awarded.day}, {awarded.year}", fact=str(awarded.year))
+        for awarded, relation in dated
     ], cutoff
 
 
@@ -152,7 +154,7 @@ def _winners(relations):
         if match:
             won.append((int(match.group(1)), relation))
     won.sort(key=lambda pair: pair[0], reverse=True)
-    return [_entry(relation, note=str(year)) for year, relation in won], won
+    return [_entry(relation, note=str(year), fact=str(year)) for year, relation in won], won
 
 
 def fetch(definition):

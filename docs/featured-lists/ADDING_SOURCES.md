@@ -60,7 +60,7 @@ Rules:
 
 ## Entries
 
-`Entry(rank, title, year=None, creator="", media_type=None, ids={}, isbns=(), image="", note="")`
+`Entry(rank, title, year=None, creator="", media_type=None, ids={}, isbns=(), image="", note="", fact="", won=False, shown_rank=None)`
 
 - `rank`: source rank (int), or `None` for unranked lists.
 - `media_type`: set it per entry whenever the list holds more than one type (`movie` and `tv` charts, cross-media awards). An entry whose type isn't in `definition.media_types` stays unresolved.
@@ -86,7 +86,9 @@ Rules:
 
 - `isbns`: every ISBN you have, best first. Books try Hardcover, then Open Library, per ISBN.
 - `image`: a poster URL lets the writer create a new Item without a provider call. Without one (or without a title) the writer fetches the provider's metadata once; if that fails, the entry is unresolved instead of getting placeholder art.
-- `note`: free text shown later ("Winner · Best Picture", "▲2", "Inducted 2019"); on all-time award lists, the year alone ("2027").
+- `note`: free text shown by builds from before the poster marks ("Winner · Best Picture", "▲2", "Inducted 2019"); on all-time award lists, the year alone ("2027").
+- `fact`: the one short line newer builds show under the poster, and only one of three kinds (README, "Poster marks"): the year (all-time awards, lists that grow over time), the category (one-year awards), or box-office money. Leave it empty for anything else. Never write movement here: Spine works it out.
+- `won`: one-year award lists only; the poster gets the trophy. `shown_rank`: the source's rank when tied titles share it.
 - `entry.key` is the entry's stable identity: the first id in the order `ref, tmdb, imdb, igdb, steam, mal, mangaupdates, anilist, mbid_rg, hardcover, olid, comicvine, wikidata, goodreads, apple_album`, then a `*_person` id, then `isbn:<first>`, else `t:<normalized title>|<year>`. `tmdb` and `mal` keys include the media type (`tmdb:movie:550`). Overrides and the health report use it. New ids go at the end of the order, so an entry that already had a key keeps it, with its snapshots and chart moves.
 - Music matches are made canonical after they resolve (`docs/music/apple-music-catalog.md`, Featured lists), so an `mbid_rg` of an album that moved to Apple Music lands on its Apple Music Item.
 

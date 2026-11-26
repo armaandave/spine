@@ -108,6 +108,7 @@ def fetch(definition):
     for rank, row in enumerate(rows, start=1):
         item = row.get(key) or {}
         ids = item.get("ids") or {}
+        revenue = _revenue_note(row.get("revenue")) if chart == "boxoffice" else ""
         entries.append(
             Entry(
                 rank=rank,
@@ -115,7 +116,8 @@ def fetch(definition):
                 year=item.get("year"),
                 media_type=media_type,
                 ids={"tmdb": ids.get("tmdb"), "imdb": ids.get("imdb")},
-                note=_revenue_note(row.get("revenue")) if chart == "boxoffice" else "",
+                note=revenue,
+                fact=revenue,
             ),
         )
     edition = box_office_label(rows, timezone.localdate()) if chart == "boxoffice" else ""

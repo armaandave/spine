@@ -565,12 +565,35 @@ class FeaturedItemNotesTests(FeaturedApiTestCase):
         detail = self.get(f"/api/v1/lists/{custom_list.id}/").data
         self.assertEqual([item["note"] for item in detail["items"]], ["Winner · Best Picture", None])
 
+    def test_list_items_carry_poster_marks(self):
+        entries = movie_entries("pm", 2)
+        custom_list = self.rerun("awards-live", [
+            Entry(1, entries[0].title, media_type="movie", ids=entries[0].ids, image=entries[0].image, note="Winner · Best Picture", fact="Best Picture", won=True),
+            entries[1],
+        ])
+        fields = ("rank", "mark", "mark_places", "fact")
+        expected = [(1, "won", None, "Best Picture"), (2, None, None, None)]
+        results = self.get(f"/api/v1/lists/{custom_list.id}/items/", sort="position").data["results"]
+        self.assertEqual([tuple(item[field] for field in fields) for item in results], expected)
+        detail = self.get(f"/api/v1/lists/{custom_list.id}/").data
+        self.assertEqual([tuple(item[field] for field in fields) for item in detail["items"]], expected)
+
+        # An unranked list has no rank under its posters.
+        CustomList.objects.filter(pk=custom_list.pk).update(is_ranked=False)
+        results = self.get(f"/api/v1/lists/{custom_list.id}/items/", sort="position").data["results"]
+        self.assertEqual([item["rank"] for item in results], [None, None])
+        self.assertEqual([item["rank"] for item in self.get(f"/api/v1/lists/{custom_list.id}/").data["items"]], [None, None])
+
     def test_other_lists_items_have_no_note_key(self):
         own = CustomList.objects.create(owner=self.viewer, name="Mine")
         CustomListItem.objects.create(custom_list=own, item=Item.objects.get(media_id="hf-1"), position=1)
         for custom_list in (own, self.manual):
-            self.assertNotIn("note", self.get(f"/api/v1/lists/{custom_list.id}/items/").data["results"][0])
-            self.assertNotIn("note", self.get(f"/api/v1/lists/{custom_list.id}/").data["items"][0])
+            for item in (
+                self.get(f"/api/v1/lists/{custom_list.id}/items/").data["results"][0],
+                self.get(f"/api/v1/lists/{custom_list.id}/").data["items"][0],
+            ):
+                self.assertNotIn("note", item)
+                self.assertNotIn("fact", item)
 
     def test_chart_movement_combines_with_the_entry_note(self):
         entries = movie_entries("cf", 7)
@@ -582,6 +605,10 @@ class FeaturedItemNotesTests(FeaturedApiTestCase):
         custom_list = self.rerun("chart-films", swapped)
         results = self.get(f"/api/v1/lists/{custom_list.id}/items/", sort="position").data["results"]
         self.assertEqual([item["note"] for item in results[:3]], ["▲1 · $12.4M", "New this week", None])
+        self.assertEqual(
+            [(item["rank"], item["mark"], item["mark_places"]) for item in results[:3]],
+            [(1, "up", 1), (2, "down", 1), (3, None, None)],
+        )
         # Card previews keep the bare movement.
         shelves = self.get("/api/v1/lists/featured/shelves/").data["shelves"]
         movie = next(shelf for shelf in shelves if shelf["key"] == "movie")
@@ -612,9 +639,12 @@ class FeaturedItemNotesTests(FeaturedApiTestCase):
         self.assertEqual([item["position"] for item in card["preview_items"]], [1, 2, 3])
 
     def test_people_list_entries_carry_notes(self):
-        custom_list = self.rerun("laureates", [Entry(1, "Annie Ernaux", ids={"openlibrary_person": "OL1A"}, image="https://p/1.jpg", note="2022")])
-        self.assertEqual(self.get(f"/api/v1/lists/{custom_list.id}/people/").data["results"][0]["note"], "2022")
-        self.assertEqual(self.get(f"/api/v1/lists/{custom_list.id}/").data["people"][0]["note"], "2022")
+        custom_list = self.rerun("laureates", [Entry(1, "Annie Ernaux", ids={"openlibrary_person": "OL1A"}, image="https://p/1.jpg", note="2022 · shared", fact="2022")])
+        for person in (
+            self.get(f"/api/v1/lists/{custom_list.id}/people/").data["results"][0],
+            self.get(f"/api/v1/lists/{custom_list.id}/").data["people"][0],
+        ):
+            self.assertEqual((person["note"], person["fact"]), ("2022 · shared", "2022"))
 
 
 @override_settings(FEATURED_REPORT_TOKEN="report-token-value")

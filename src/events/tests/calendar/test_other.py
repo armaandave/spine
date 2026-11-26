@@ -1,6 +1,5 @@
 import datetime
 from unittest.mock import MagicMock, patch
-from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 
@@ -8,6 +7,7 @@ from app.models import Item, MediaTypes, Sources
 from app.providers import services
 from events.calendar.helpers import date_parser
 from events.calendar.other import process_other
+from events.models import SentinelDatetime
 from events.tests.calendar.utils import CalendarFixturesMixin
 
 
@@ -90,7 +90,7 @@ class CalendarOtherTests(CalendarFixturesMixin, TestCase):
         self.assertEqual(len(events_bulk), 1)
         self.assertEqual(events_bulk[0].item, mangaupdates_item)
         self.assertEqual(events_bulk[0].content_number, 100)
-        expected_date = datetime.datetime.min.replace(tzinfo=ZoneInfo("UTC"))
+        expected_date = SentinelDatetime.min_datetime()
         self.assertEqual(events_bulk[0].datetime, expected_date)
 
     @patch("events.calendar.other.services.get_media_metadata")
@@ -112,7 +112,7 @@ class CalendarOtherTests(CalendarFixturesMixin, TestCase):
         self.assertEqual(len(events_bulk), 1)
         self.assertEqual(
             events_bulk[0].datetime,
-            datetime.datetime.min.replace(tzinfo=ZoneInfo("UTC")),
+            SentinelDatetime.min_datetime(),
         )
 
     @patch("events.calendar.other.services.get_media_metadata")

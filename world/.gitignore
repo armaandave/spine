@@ -1,0 +1,8 @@
+node_modules/
+dist/
+stable/
+stable.tmp/
+frozen/
+frozen.tmp/
+demos/
+# public/data is a symlink to the local data folder (README: Data); the data itself is never committed

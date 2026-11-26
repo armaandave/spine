@@ -42,6 +42,7 @@ import dataclasses
 import hashlib
 import logging
 import re
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -439,7 +440,7 @@ def poll(definition, nominees):
 # Entries -------------------------------------------------------------------------
 
 
-def _entry(nominee, note, review=None):
+def _entry(nominee, note, review=None, *, fact="", won=False):
     if review or not nominee.ref:
         return Entry(
             rank=None,
@@ -457,7 +458,18 @@ def _entry(nominee, note, review=None):
         media_type=parse_ref(nominee.ref)[1],
         ids={"ref": nominee.ref},
         note=note,
+        fact=fact,
+        won=won,
     )
+
+
+def _fact(categories_won, nominations, category):
+    """Return what the poster says: the category it won ("2 wins" for more), else its
+    one category, or "4 nominations".
+    """
+    if categories_won:
+        return categories_won[0] if len(categories_won) == 1 else f"{len(categories_won)} wins"
+    return category if nominations == 1 else f"{nominations} nominations"
 
 
 def _note(label, nominee, rows_with_key):
@@ -478,6 +490,13 @@ def build_entries(nominees, state):
     published = {
         category: set(entry.get("published") or []) for category, entry in state.get("categories", {}).items()
     }
+    nominations = Counter(nominee.key for nominee in rows)
+    # A ceremony with one category (the Booker) names nothing: the trophy says enough.
+    named = len(categories(rows)) > 1
+    won = defaultdict(list)  # key -> the categories it won, in category order
+    for nominee in rows:
+        if nominee.key in published.get(nominee.category, ()) and nominee.category not in won[nominee.key]:
+            won[nominee.key].append(nominee.category)
     entries, emitted = [], set()
     for category in categories(rows):
         for nominee in rows:
@@ -487,12 +506,26 @@ def build_entries(nominees, state):
                 continue
             emitted.add(nominee.key)
             review = None if nominee.ref else NO_MATCH_WINNER
-            entries.append(_entry(nominee, _note("Winner", nominee, counts[(category, nominee.key)]), review))
+            entries.append(
+                _entry(
+                    nominee,
+                    _note("Winner", nominee, counts[(category, nominee.key)]),
+                    review,
+                    fact=_fact(won[nominee.key], nominations[nominee.key], category) if named else "",
+                    won=True,
+                ),
+            )
     for nominee in rows:
         if nominee.key in emitted:
             continue
         emitted.add(nominee.key)
-        entries.append(_entry(nominee, _note("Nominee", nominee, counts[(nominee.category, nominee.key)])))
+        entries.append(
+            _entry(
+                nominee,
+                _note("Nominee", nominee, counts[(nominee.category, nominee.key)]),
+                fact=_fact([], nominations[nominee.key], nominee.category) if named else "",
+            ),
+        )
     for category in categories(rows):
         entry = state.get("categories", {}).get(category) or {}
         if entry.get("state") != wikitext.REVIEW:

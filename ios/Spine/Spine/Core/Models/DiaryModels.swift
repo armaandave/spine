@@ -26,6 +26,9 @@ struct DiaryEntry: Codable, Identifiable {
     let visibility: String
     let likeCount: Int
     var commentCount: Int? = nil
+    /// The log's own page only: whether someone else may share it (a public log on a public account). Nil elsewhere
+    /// and from servers before sharing; the owner can always share their own.
+    var canShare: Bool? = nil
     let viewerHasLiked: Bool
     let createdAt: String?
     let updatedAt: String?

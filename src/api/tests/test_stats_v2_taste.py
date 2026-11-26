@@ -514,7 +514,7 @@ class OpenLibraryFirstPublicationTests(SimpleTestCase):
 
     @patch("app.providers.openlibrary.get_ratings", new_callable=AsyncMock, return_value=(None, 0))
     @patch("app.providers.openlibrary.get_editions", new_callable=AsyncMock, return_value=[])
-    @patch("app.providers.openlibrary.get_authors", new_callable=AsyncMock, return_value=[])
+    @patch("app.providers.openlibrary.get_authors", new_callable=AsyncMock, return_value=(None, True))
     @patch("app.providers.openlibrary.cache")
     @patch("app.providers.openlibrary.services.api_request")
     def test_book_details_keep_the_first_publication_apart_from_the_edition(

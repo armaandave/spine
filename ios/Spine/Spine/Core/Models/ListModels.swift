@@ -14,8 +14,9 @@ nonisolated struct PersonListEntry: Codable, Identifiable, Hashable {
     let knownForDepartment: String?
     let position: Int?
     let dateAdded: String
-    /// Featured lists only: the entry's note ("Inducted 2019").
+    /// Featured lists only: the entry's note ("Inducted 2019"), and the one fact shown under the person ("2019").
     let note: String?
+    let fact: String?
 
     var id: Int {
         entryId
@@ -35,6 +36,7 @@ nonisolated struct PersonListEntry: Codable, Identifiable, Hashable {
         case position
         case dateAdded
         case note
+        case fact
     }
 
     init(
@@ -46,7 +48,8 @@ nonisolated struct PersonListEntry: Codable, Identifiable, Hashable {
         knownForDepartment: String?,
         position: Int?,
         dateAdded: String,
-        note: String? = nil
+        note: String? = nil,
+        fact: String? = nil
     ) {
         self.entryId = entryId
         self.personId = personId
@@ -57,6 +60,7 @@ nonisolated struct PersonListEntry: Codable, Identifiable, Hashable {
         self.position = position
         self.dateAdded = dateAdded
         self.note = note
+        self.fact = fact
     }
 
     init(from decoder: Decoder) throws {
@@ -70,6 +74,7 @@ nonisolated struct PersonListEntry: Codable, Identifiable, Hashable {
         position = try container.decodeIfPresent(Int.self, forKey: .position)
         dateAdded = try container.decode(String.self, forKey: .dateAdded)
         note = (try? container.decodeIfPresent(String.self, forKey: .note)) ?? nil
+        fact = (try? container.decodeIfPresent(String.self, forKey: .fact)) ?? nil
     }
 }
 

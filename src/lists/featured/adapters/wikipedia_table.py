@@ -580,6 +580,9 @@ def _entries(definition, rows):
     albums = {}
     if definition.params.get("musicbrainz_search"):
         albums = wikidata.musicbrainz_albums((row.title, row.creator) for row in rows)
+    # The year is each row's fact, unless every row is from one year (a yearly top 10,
+    # this year's number ones).
+    one_year = definition.params.get("latest_only") or "{year}" in "".join(definition.params.get("pages") or ())
     entries = []
     for row in rows:
         qid = qids.get(row.link, "")
@@ -603,6 +606,7 @@ def _entries(definition, rows):
                 ids={**ids, "wikidata": qid},
                 image=image,
                 note=", ".join(row.notes),
+                fact=str(row.year) if row.year and not one_year else "",
             ),
         )
     return entries
