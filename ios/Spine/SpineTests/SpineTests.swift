@@ -55,8 +55,6 @@ final class SpineTests: XCTestCase {
         )
 
         XCTAssertEqual(FilmographyType.available(in: [manga]), [.manga])
-        XCTAssertEqual(FilmographyType.manga.sectionTitle, "Manga")
-        XCTAssertEqual(FilmographyType.manga.creditNoun(count: 2), "manga")
     }
 
     func testAnimeVoiceActorOpensSharedPersonWhileCharacterDoesNot() {
@@ -100,8 +98,6 @@ final class SpineTests: XCTestCase {
 
         XCTAssertEqual(FilmographyType.available(in: [anime]), [.anime])
         XCTAssertEqual(FilmographyType.anime.title, "Anime")
-        XCTAssertEqual(FilmographyType.anime.sectionTitle, "Anime")
-        XCTAssertEqual(FilmographyType.anime.creditNoun(count: 1), "anime")
         XCTAssertEqual(anime.ref, MediaRef(
             itemId: nil,
             source: "mal",

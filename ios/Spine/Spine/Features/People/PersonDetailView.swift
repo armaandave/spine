@@ -389,7 +389,8 @@ struct PersonDetailView: View {
     @State private var viewModel: PersonDetailViewModel
     @State private var selectedMedia: MediaBrowsingSelection?
     @State private var selectedSeries: SeriesRef?
-    /// The globe (every type together) or one media type; empty until the credits arrive.
+    /// The globe (every type together) or one media type, as the reader picked it on the type bar or in the filter;
+    /// empty until they do (`kind` falls back to the default).
     @State private var selectedKind = ""
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var presentedSheet: PersonDetailSheet?
@@ -532,7 +533,6 @@ struct PersonDetailView: View {
         .task {
             if viewModel.detail == nil {
                 await viewModel.load()
-                syncSelectedKind()
             } else {
                 viewModel.resumePreparationIfNeeded()
             }
@@ -553,7 +553,6 @@ struct PersonDetailView: View {
             else { return }
             Task {
                 await viewModel.reloadLoadedPages()
-                syncSelectedKind()
             }
         }
         .navigationPage(.exploring)
@@ -612,7 +611,6 @@ struct PersonDetailView: View {
                 }
                 .refreshable {
                     await viewModel.reloadLoadedPages()
-                    syncSelectedKind()
                 }
                 .onChange(of: kind) { _, _ in
                     // A new kind starts at its first section when the plate had stopped under the back button.
@@ -627,7 +625,6 @@ struct PersonDetailView: View {
             PersonLoadFailed {
                 Task {
                     await viewModel.load()
-                    syncSelectedKind()
                 }
             }
         }
@@ -655,6 +652,8 @@ struct PersonDetailView: View {
         PersonCreditSections.kinds(in: viewModel.filmography)
     }
 
+    /// The kind the reader picked while it's still offered; until then (or once it's gone) the default, which follows
+    /// the credits as their pages arrive: the globe once there are two types.
     private var kind: String {
         let kinds = kinds
         return kinds.contains(selectedKind) ? selectedKind : PersonCreditSections.defaultKind(in: viewModel.filmography)
@@ -770,7 +769,6 @@ struct PersonDetailView: View {
                     if let mediaType = viewModel.filter.mediaType, FilmographyType(rawValue: mediaType) != nil {
                         selectedKind = mediaType
                     }
-                    syncSelectedKind()
                 }
             }
         }
@@ -813,13 +811,6 @@ struct PersonDetailView: View {
         }
         let lastHeight = PersonCreditsLayout.height(of: last, width: width)
         return max(0, viewport.height - viewport.insetBottom - jumpLine - lastHeight - 36)
-    }
-
-    private func syncSelectedKind() {
-        let kinds = kinds
-        if !kinds.contains(selectedKind) {
-            selectedKind = PersonCreditSections.defaultKind(in: viewModel.filmography)
-        }
     }
 
     // MARK: Hero
@@ -900,7 +891,6 @@ struct PersonDetailView: View {
             Button {
                 Task {
                     await viewModel.loadNextPage()
-                    syncSelectedKind()
                 }
             } label: {
                 Text("Retry loading credits")
@@ -913,13 +903,15 @@ struct PersonDetailView: View {
             .padding(.top, 16)
             .accessibilityHint(viewModel.nextPageErrorMessage ?? "")
         } else if viewModel.canLoadMore {
+            // Every section shows all of its posters and its full count, and any page can add to any section, so
+            // the credits load every page as soon as the one before arrives, not when a reader reaches the end.
+            // This sits outside the lazy lines on purpose: it appears at once, and again for each next page.
             Color.clear
                 .frame(height: 1)
                 .id(viewModel.detail?.creditsNextPage)
                 .onAppear {
                     Task {
                         await viewModel.loadNextPage()
-                        syncSelectedKind()
                     }
                 }
         }
@@ -1491,21 +1483,6 @@ enum FilmographyType: String, CaseIterable, Identifiable {
         }
     }
 
-    var sectionTitle: String {
-        switch self {
-        case .book:
-            "Books"
-        case .anime:
-            "Anime"
-        case .manga:
-            "Manga"
-        case .music:
-            "Discography"
-        case .movie, .tv:
-            "Filmography"
-        }
-    }
-
     static func available(in media: [MediaSummary]) -> [FilmographyType] {
         allCases.filter { type in
             media.contains { $0.ref.mediaType == type.rawValue }
@@ -1620,25 +1597,6 @@ struct FilmographyCreditGroup: Identifiable {
             "Live releases", "Remix releases", "DJ mixes", "Demos", "Broadcasts",
             "Audiobooks", "Interviews", "Other",
         ].firstIndex(of: role) ?? .max
-    }
-}
-
-extension FilmographyType {
-    func creditNoun(count: Int) -> String {
-        switch self {
-        case .movie:
-            count == 1 ? "film" : "films"
-        case .tv:
-            count == 1 ? "show" : "shows"
-        case .anime:
-            "anime"
-        case .book:
-            count == 1 ? "book" : "books"
-        case .manga:
-            "manga"
-        case .music:
-            count == 1 ? "release" : "releases"
-        }
     }
 }
 
