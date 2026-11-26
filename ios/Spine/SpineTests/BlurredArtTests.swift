@@ -457,7 +457,9 @@ final class BlurredArtTests: XCTestCase {
     func testThePictureIsBakedAsOneOpaqueImageInTheFramesShape() throws {
         let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
         let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
-        XCTAssertEqual(CGFloat(output.width) / CGFloat(output.height), HomeBackdropArt.aspect, accuracy: 0.01)
+        // Above the frame, the strip that sits behind the status bar (`HomeBackdropBand.share` of the width).
+        let band = Int((CGFloat(output.width) * HomeBackdropBand.share).rounded())
+        XCTAssertEqual(CGFloat(output.width) / CGFloat(output.height - band), HomeBackdropArt.aspect, accuracy: 0.01)
         XCTAssertEqual(output.width, 135, "a 16:9 backdrop is cropped to the media page's 3:2, keeping its height")
         let pixels = rgbaPixels(output)
         for (x, y) in [(0, 0), (output.width - 1, 0), (10, 45), (output.width - 1, output.height - 1), (5, output.height - 1)] {
@@ -469,24 +471,81 @@ final class BlurredArtTests: XCTestCase {
         let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
         let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
         let pixels = rgbaPixels(output)
-        // The strip is the top 90 rows; above its last 60% (row 36) the rows are the source's own, never blurred.
+        // The picture starts under the strip that sits behind the status bar.
+        let band = Int((CGFloat(output.width) * HomeBackdropBand.share).rounded())
+        // The media page's strip is the picture's top 90 rows; above its last 60% (row 36) the rows are the source's
+        // own, never blurred.
         for row in 0 ... 32 {
             let white = (row / 2) % 2 == 0
-            XCTAssertEqual(Int(pixels.red(10, row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
+            XCTAssertEqual(Int(pixels.red(10, band + row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
         }
         // Below the strip is a smooth field of the picture's own colors: no stripes left in it (neighboring rows are
         // nearly the same) and not black.
-        for row in 92 ..< (output.height - 1) {
+        for row in (band + 92) ..< (output.height - 1) {
             let step = abs(Int(pixels.red(10, row + 1)) - Int(pixels.red(10, row)))
             XCTAssertLessThan(step, 10, "rows \(row) and \(row + 1) blend smoothly")
         }
         // Dimmed to a dark tint of those colors (`HomeBackdropArt.dim`): never brighter than white times the dim (an
         // undimmed wash of this black and white source reaches about 240 at the bottom), and still not black.
         let brightest = Int((255 * HomeBackdropArt.dim).rounded(.up))
-        for row in [100, output.height - 1] {
+        for row in [band + 100, output.height - 1] {
             XCTAssertGreaterThan(Int(pixels.red(10, row)), 30, "row \(row) has the picture's color, not black")
             XCTAssertLessThanOrEqual(Int(pixels.red(10, row)), brightest, "row \(row) is a dim tint, not a pale haze")
         }
+    }
+
+    func testTheStripAboveHomesPictureIsGrownFromItsOwnTopAndLeavesThePictureAlone() throws {
+        // A 600 x 400 picture: blue with fine grain, greener toward the bottom, so there's a real top to grow from.
+        let width = 600, height = 400
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        var state: UInt32 = 12345
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                state = state &* 1_664_525 &+ 1_013_904_223
+                let grain = Int(state >> 28) - 8
+                let i = (y * width + x) * 4
+                bytes[i] = UInt8(clamping: 40 + grain)
+                bytes[i + 1] = UInt8(clamping: 90 + y / 4 + grain)
+                bytes[i + 2] = UInt8(clamping: 160 + grain)
+            }
+        }
+        let picture = bytes.withUnsafeMutableBytes { raw in
+            CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!.makeImage()!
+        }
+
+        let output = try XCTUnwrap(HomeBackdropBand.grow(picture, sharpRows: 300))
+        let band = Int((CGFloat(width) * HomeBackdropBand.share).rounded())
+        XCTAssertEqual(output.width, width)
+        XCTAssertEqual(output.height, height + band, "the strip sits on top of the whole picture")
+
+        let pixels = rgbaPixels(output)
+        let source = Pixels(width: width, data: bytes)
+        // Below the join (its first 12 rows blend into the strip) the picture is exactly itself.
+        for row in [12, 50, 200, height - 1] {
+            for x in [0, 299, width - 1] {
+                XCTAssertEqual(pixels.red(x, band + row), source.red(x, row), "picture row \(row) at \(x)")
+                XCTAssertEqual(pixels.blue(x, band + row), source.blue(x, row), "picture row \(row) at \(x)")
+            }
+        }
+        // The strip carries on the picture's own colors and grain: not black, not blank, close to its top's colors.
+        var red = 0, blue = 0, distinct = Set<UInt8>()
+        for row in 0 ..< band {
+            for x in stride(from: 0, to: width, by: 7) {
+                red += Int(pixels.red(x, row))
+                blue += Int(pixels.blue(x, row))
+                distinct.insert(pixels.red(x, row))
+            }
+        }
+        let count = band * ((width + 6) / 7)
+        XCTAssertEqual(red / count, 40, accuracy: 6)
+        XCTAssertEqual(blue / count, 160, accuracy: 6)
+        XCTAssertGreaterThan(distinct.count, 8, "grain, not a flat fill")
+        // The same picture always grows the same strip (it's cached once).
+        let again = try XCTUnwrap(HomeBackdropBand.grow(picture, sharpRows: 300))
+        XCTAssertEqual(rgbaPixels(again).data, pixels.data)
     }
 
     func testThePictureProcessorHasAStableIdentifierThatNamesItsNumbers() {

@@ -42,12 +42,14 @@ nonisolated enum HomeBackdropArt {
 /// are left, so the colors under the picture are the ones of its lower part, carried on down and changing as they go
 /// rather than one row smeared into a flat block. The strip's lower `fade` dissolves smoothly into that wash, and the
 /// whole is dimmed toward the bottom to a dark tint of those colors (`dim`), so there is no pale haze under the picture.
-/// The output is one opaque bitmap.
+/// Above it all, a strip `HomeBackdropBand.share` of the width tall, grown from the picture's own sharp top, which sits
+/// behind the status bar so the picture itself starts under it. The output is one opaque bitmap.
 nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
     var identifier: String {
         "com.armaan.spine.homebackdrop?aspect=\(HomeBackdropArt.aspect)&strip=\(HomeBackdropArt.stripAspect)"
             + "&fade=\(HomeBackdropArt.fade)&wash=\(HomeBackdropArt.wash)&washsat=\(HomeBackdropArt.washSaturation)"
             + "&mirror=1&dim=\(HomeBackdropArt.dim)&dimspan=\(HomeBackdropArt.dimSpan)"
+            + "&band=\(HomeBackdropBand.share)&quilt=1"
     }
 
     /// The part of a `width` x `height` image with the strip's shape, centered.
@@ -139,6 +141,9 @@ nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
             format: .RGBA8,
             colorSpace: CGColorSpace(name: CGColorSpace.sRGB)
         ) else { return nil }
-        return PlatformImage(cgImage: output, scale: image.scale, orientation: image.imageOrientation)
+        // On top, the strip that sits behind the status bar, grown from the picture's sharp top (`HomeBackdropBand`).
+        let sharpRows = Int((crop.height * (1 - HomeBackdropArt.fade)).rounded(.down))
+        guard let grown = HomeBackdropBand.grow(output, sharpRows: sharpRows) else { return nil }
+        return PlatformImage(cgImage: grown, scale: image.scale, orientation: image.imageOrientation)
     }
 }

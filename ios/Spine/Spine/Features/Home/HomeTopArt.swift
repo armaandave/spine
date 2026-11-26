@@ -218,10 +218,6 @@ enum HomeTopArtSpec {
     static let headerRowHeight: CGFloat = 54
     /// From the header row to the tiles.
     static let headerToTiles: CGFloat = 16
-    /// The picture starts under the status bar, not behind it. The strip above it is the picture's own top edge,
-    /// reflected and blurred this much, and its first `stripJoin` points fade in from that blur, so no line shows.
-    static let stripBlur: CGFloat = 12
-    static let stripJoin: CGFloat = 16
 
     /// Black over the picture: (opacity, location). A light shade keeps the status bar readable; from the picture's
     /// lower part the colors (already dimmed in the image, `HomeBackdropArt.dim`) fade out gradually, eased, through
@@ -325,61 +321,23 @@ struct HomeTopArtView: View {
 }
 
 /// Home's picture starting under the status bar instead of behind it, so the island and the clock never sit on it.
-/// The strip above it is the picture's own top edge, reflected and blurred, and the picture's first points fade in
-/// from that blur, so there is no line where the two meet. The frame keeps its height: the picture's last points,
-/// already black under the shade, fall off its bottom.
+/// The baked image carries a strip above the picture, grown from the picture's own top (`HomeBackdropBand`); only its
+/// lower part shows, behind the status bar. The frame keeps its height: the picture's last points, already black under
+/// the shade, fall off its bottom.
 private struct HomePictureUnderStatusBar: View {
     let image: Image
     let topInset: CGFloat
 
     var body: some View {
         GeometryReader { proxy in
-            let size = proxy.size
-            ZStack(alignment: .top) {
-                picture(size)
-                    .offset(y: topInset)
-                if topInset > 0 {
-                    strip(size)
-                }
-            }
-            .frame(width: size.width, height: size.height, alignment: .top)
+            let band = proxy.size.width * HomeBackdropBand.share
+            image
+                .resizable()
+                .scaledToFill()
+                .frame(width: proxy.size.width, height: proxy.size.height + band)
+                .offset(y: topInset - band)
         }
         .clipped()
-    }
-
-    private func picture(_ size: CGSize) -> some View {
-        image
-            .resizable()
-            .scaledToFill()
-            .frame(width: size.width, height: size.height)
-            .clipped()
-    }
-
-    /// The picture and its reflection about its top edge, blurred together so the colors carry on over the join: shown
-    /// over the status bar, then fading out over the picture's first points. Drawn only as far down as the blur reads.
-    private func strip(_ size: CGSize) -> some View {
-        let shown = topInset + HomeTopArtSpec.stripJoin
-        let height = shown + HomeTopArtSpec.stripBlur * 3
-        return ZStack(alignment: .top) {
-            picture(size)
-                .scaleEffect(x: 1, y: -1, anchor: .top)
-                .offset(y: topInset)
-            picture(size)
-                .offset(y: topInset)
-        }
-        .frame(width: size.width, height: height, alignment: .top)
-        .clipped()
-        .blur(radius: HomeTopArtSpec.stripBlur, opaque: true)
-        .mask {
-            LinearGradient(
-                stops: [
-                    .init(color: .white, location: topInset / height),
-                    .init(color: .clear, location: shown / height),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
     }
 }
 
