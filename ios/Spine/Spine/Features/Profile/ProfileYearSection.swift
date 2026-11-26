@@ -2,9 +2,9 @@ import Nuke
 import SwiftUI
 
 /// The profile's This Year section, under the menu: this year's numbers per turned-on type, the Stats page's own
-/// (STAT-312), on a glass plate over a wall of the year's posters. The wall is as wide as the menu. Its top tucks
-/// under the Stats row, fading in from under the menu's glass, and it runs on below the plate, fading off the bottom
-/// of the screen. Under 12 posters there's no wall: the numbers sit on glass like the menu's. Each type with something
+/// (STAT-312), on a glass plate over a wall of the year's posters. The wall runs off the screen's left and right
+/// edges. Its top tucks under the Stats row, fading in from under the menu's glass, and it runs on below the plate,
+/// fading off the bottom of the screen. Under 12 posters there's no wall: the numbers sit on glass like the menu's. Each type with something
 /// this year opens the Stats page on that type and year.
 struct ProfileYearSection<Destination: View>: View {
     let year: ProfileYear
@@ -46,9 +46,14 @@ struct ProfileYearSection<Destination: View>: View {
             .frame(maxWidth: .infinity)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
             .background(alignment: .top) {
-                // Drawn past the section's bottom, under the tab bar, so the fade reaches the screen's edge.
-                ProfileYearWallImage(posters: year.posters, width: width, height: height + ProfileYearWall.bleed)
-                    .accessibilityHidden(true)
+                // Drawn past the section's bottom, under the tab bar, so the fade reaches the screen's edge, and past
+                // the page's side margins, so it runs off the screen's left and right edges.
+                ProfileYearWallImage(
+                    posters: year.posters,
+                    width: width + 2 * ProfileYearWall.pageSide,
+                    height: height + ProfileYearWall.bleed
+                )
+                .accessibilityHidden(true)
             }
             .environment(\.colorScheme, .dark)
             // The top tucks under the Stats row; the menu draws over it.
@@ -149,6 +154,8 @@ enum ProfileYearWall {
     static let above: CGFloat = 120
     /// ProfileView's space under its last section, which the wall runs on into.
     static let pageBottom: CGFloat = 100
+    /// ProfileView's side margin around this section, which the wall runs out into.
+    static let pageSide: CGFloat = 16
     /// The wall under the plate, inside the section: the plate sits centered on the wall, with as much of it below
     /// (down to the tab bar, when the page is scrolled to its end) as above (up to the Stats row).
     static var below: CGFloat { above + pageBottom }
@@ -199,9 +206,9 @@ enum ProfileYearWall {
     }
 }
 
-/// The wall as one picture: the posters drawn once, dimmed, with the top corners rounded and the fades baked in, so
-/// scrolling moves a single image instead of dozens of filtered, masked layers. It fades in once drawn, and a wall
-/// already drawn this session shows at once.
+/// The wall as one picture: the posters drawn once, dimmed, with the fades baked in, so scrolling moves a single
+/// image instead of dozens of filtered, masked layers. It fades in once drawn, and a wall already drawn this session
+/// shows at once.
 private struct ProfileYearWallImage: View {
     let posters: [MediaSummary]
     let width: CGFloat
@@ -296,7 +303,6 @@ enum ProfileYearWallRenderer {
                     height: cell.height
                 )
             },
-            cornerRadius: ProfileMenuRow.groupCornerRadius,
             fade: ProfileYearWall.fadeStops(height: key.size.height)
         )
         let image = await Task.detached(priority: .userInitiated) { plan.draw(posters) }.value
@@ -318,11 +324,10 @@ private nonisolated struct WallPlan: Sendable {
     let size: CGSize
     let scale: CGFloat
     let cells: [CGRect]
-    let cornerRadius: CGFloat
     let fade: [(location: CGFloat, alpha: CGFloat)]
 
     /// Each poster filling its poster-shaped cell over the tile color, 10% less saturated, darkened 22%, at 62%. Then
-    /// the top corners rounded and the fades applied as the picture's own transparency.
+    /// the fades applied as the picture's own transparency.
     func draw(_ posters: [UIImage?]) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
@@ -330,11 +335,6 @@ private nonisolated struct WallPlan: Sendable {
         return UIGraphicsImageRenderer(size: size, format: format).image { context in
             let cg = context.cgContext
             let bounds = CGRect(origin: .zero, size: size)
-            UIBezierPath(
-                roundedRect: bounds,
-                byRoundingCorners: [.topLeft, .topRight],
-                cornerRadii: CGSize(width: cornerRadius, height: cornerRadius)
-            ).addClip()
             UIColor(red: 0.102, green: 0.102, blue: 0.098, alpha: 1).setFill()
             cg.fill(bounds)
             for (cell, poster) in zip(cells, posters) {
