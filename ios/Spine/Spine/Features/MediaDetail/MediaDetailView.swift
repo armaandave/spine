@@ -6615,17 +6615,23 @@ struct TrackingSummarySection: View {
                 countedSwatches = await PosterPaletteStore.homePicture.swatches(server: detail.posterPalette, url: url)
                 tint = countedSwatches.flatMap { HomeTitleTint.color(from: $0)?.color }
             }
-            .onChange(of: current, initial: true) {
-                if baseline == nil { baseline = current }
-            }
+            .onChange(of: current, initial: true) { captureBaseline() }
+            .onChange(of: state != nil) { captureBaseline() }
             .onChange(of: today) {
                 // The server's part now counts what this page did, so only what comes after it is new.
-                baseline = current
+                baseline = current ?? 0
             }
         }
     }
 
     private var current: Double? { TrackingCardModel.current(detail: detail, state: state) }
+
+    /// Where the title stood when the page first knew your state: nothing yet (0) for a title not started, so the
+    /// first episode or page saved here lights up too.
+    private func captureBaseline() {
+        guard baseline == nil, state != nil else { return }
+        baseline = current ?? 0
+    }
 
     private var card: TrackingCardModel {
         TrackingCardModel.make(

@@ -124,7 +124,7 @@ struct TrackingCardModel: Equatable {
     }
 
     /// The text without surrounding spaces, or nil when nothing is left.
-    static func words(_ text: String) -> String? {
+    nonisolated static func words(_ text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
