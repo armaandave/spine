@@ -165,12 +165,13 @@ struct SeriesDetailView: View {
                             .foregroundStyle(.white.opacity(0.56))
 
                         if let completion = detail.completion, completion.isVisible {
-                            SWCompletionProgressButton(progress: completion)
+                            CompletionBar(progress: completion)
+                        } else {
+                            Spacer()
                         }
-
-                        Spacer()
                     }
-                    .padding(.leading, firstPosterInset)
+                    .padding(.horizontal, firstPosterInset)
+                    .frame(height: proxy.size.height)
                 }
                 .frame(height: 44)
                 .padding(.horizontal, 16)

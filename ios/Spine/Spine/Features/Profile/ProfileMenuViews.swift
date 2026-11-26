@@ -2104,7 +2104,8 @@ struct ProfileListDetailView: View {
                 tagRow(list.tags, owner: list.owner)
             }
 
-            // "24 films · Ranked", then the app's completion button as it ships. Its 44 pt tap area sets the row.
+            // "24 films · Ranked", then the completion bar. The row keeps the 44 pt the old completion button gave
+            // it, so the plate's height didn't change with the bar.
             HStack(spacing: 10) {
                 Text(plateCountLabel(list))
                     .font(.system(size: 13, weight: .semibold))
@@ -2113,7 +2114,7 @@ struct ProfileListDetailView: View {
                 if list.listType == .media,
                    let completion = list.completion,
                    completion.isVisible {
-                    SWCompletionProgressButton(progress: completion, isCompact: true)
+                    CompletionBar(progress: completion)
                         .accessibilityLabel("\(list.name) completion")
                 }
             }
