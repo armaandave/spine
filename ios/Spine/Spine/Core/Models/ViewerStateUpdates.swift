@@ -72,6 +72,10 @@ nonisolated extension UserMediaState {
         state.diaryEntryId = entry.id
         state.diaryConsumedAt = entryDate
         state.diaryRating = entry.rating
+        state.diaryReview = entry.review.flatMap(TrackingCardModel.words)
+        state.diaryReviewTitle = entry.reviewTitle.flatMap(TrackingCardModel.words)
+        state.diaryContainsSpoilers = entry.containsSpoilers
+        state.diaryIsRewatch = entry.isRewatch
         return state
     }
 

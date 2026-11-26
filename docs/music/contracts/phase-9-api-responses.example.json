@@ -254,9 +254,13 @@
     "title": "Year Zero",
     "user_state": {
       "diary_consumed_at": null,
+      "diary_contains_spoilers": false,
       "diary_count": 0,
       "diary_entry_id": null,
+      "diary_is_rewatch": false,
       "diary_rating": null,
+      "diary_review": null,
+      "diary_review_title": null,
       "has_liked": false,
       "in_lists": [],
       "is_tracked": false,
