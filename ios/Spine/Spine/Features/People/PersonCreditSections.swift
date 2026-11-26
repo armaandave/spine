@@ -138,8 +138,88 @@ enum PersonCreditSections {
     }
 }
 
-/// Where each credit section sits, worked out from its count, so the plate's title can follow the section in view and
-/// its menu can jump to one before the grid below has been drawn. The page draws the sections with these same sizes.
+/// One line of the credits: a section's header, or one row of its posters or series cards. The page draws the credits
+/// as one lazy stack of these lines, each a fixed height, so the scroll view always knows where every section starts.
+/// (A lazy grid per section only estimates the rows it hasn't drawn, and a long page drifted as those estimates
+/// changed.)
+enum PersonCreditLine: Identifiable {
+    case header(PersonCreditSection)
+    /// One row of posters and the space under it.
+    case media(PersonCreditSection, row: Int, [MediaSummary], gap: CGFloat)
+    /// One row of series cards and the space under it.
+    case series(PersonCreditSection, row: Int, [MediaSeriesSummary], gap: CGFloat)
+
+    var id: String {
+        switch self {
+        case let .header(section): Self.headerID(section.id)
+        case let .media(section, row, _, _), let .series(section, row, _, _): "row-\(section.id)-\(row)"
+        }
+    }
+
+    static func headerID(_ sectionID: String) -> String {
+        "header-\(sectionID)"
+    }
+
+    /// Each section's header, then its rows. A section's last row leaves the gap to the next section; the page's
+    /// last row leaves none.
+    static func lines(for sections: [PersonCreditSection]) -> [PersonCreditLine] {
+        var lines: [PersonCreditLine] = []
+        for (index, section) in sections.enumerated() {
+            lines.append(.header(section))
+            let after = index == sections.count - 1 ? 0 : PersonCreditsLayout.sectionGap
+            switch section.content {
+            case let .media(media):
+                let rows = rows(of: media, columns: PersonCreditsLayout.columns)
+                for (row, items) in rows.enumerated() {
+                    let gap = row == rows.count - 1 ? after : PersonCreditsLayout.rowGap
+                    lines.append(.media(section, row: row, items, gap: gap))
+                }
+            case let .series(series):
+                let rows = rows(of: series, columns: PersonCreditsLayout.seriesColumns)
+                for (row, items) in rows.enumerated() {
+                    let gap = row == rows.count - 1 ? after : PersonCreditsLayout.seriesRowGap
+                    lines.append(.series(section, row: row, items, gap: gap))
+                }
+            }
+        }
+        return lines
+    }
+
+    private static func rows<Element>(of items: [Element], columns: Int) -> [[Element]] {
+        stride(from: 0, to: items.count, by: columns).map { Array(items[$0..<min($0 + columns, items.count)]) }
+    }
+}
+
+/// Where every line of the credits starts, from the top of the first line, and where each section's header starts.
+/// Every line is a fixed height, so these are exact: one line on screen places all the others.
+struct PersonCreditsMap {
+    let lineTops: [String: CGFloat]
+    /// By section, in order.
+    let headerTops: [CGFloat]
+
+    init(lines: [PersonCreditLine], width: CGFloat) {
+        var lineTops: [String: CGFloat] = [:]
+        var headerTops: [CGFloat] = []
+        var y: CGFloat = 0
+        for line in lines {
+            lineTops[line.id] = y
+            switch line {
+            case .header:
+                headerTops.append(y)
+                y += PersonCreditsLayout.headerHeight + PersonCreditsLayout.headerGap
+            case let .media(section, _, _, gap):
+                y += PersonCreditsLayout.posterSize(width: width, isSquare: section.isSquare).height + gap
+            case let .series(_, _, _, gap):
+                y += PersonCreditsLayout.seriesCardHeight + gap
+            }
+        }
+        self.lineTops = lineTops
+        self.headerTops = headerTops
+    }
+}
+
+/// The sizes the page draws the credit sections with, and a section's height worked out from its count. The page
+/// leaves room under the last section from it.
 enum PersonCreditsLayout {
     static let headerHeight: CGFloat = 28
     static let headerGap: CGFloat = 12
@@ -177,19 +257,7 @@ enum PersonCreditsLayout {
         headerHeight + headerGap + bodyHeight(of: section, width: width)
     }
 
-    /// Each section's top, measured from the top of the first one.
-    static func tops(of sections: [PersonCreditSection], width: CGFloat) -> [CGFloat] {
-        var tops: [CGFloat] = []
-        var y: CGFloat = 0
-        for section in sections {
-            tops.append(y)
-            y += height(of: section, width: width) + sectionGap
-        }
-        return tops
-    }
-
-    /// The section a reader is in: the last one whose top has reached `line` (both measured from the first section's
-    /// top). The first section until then.
+    /// The section a reader is in: the last one whose header top has reached `line`; the first one until then.
     static func currentIndex(tops: [CGFloat], line: CGFloat) -> Int {
         tops.lastIndex { $0 <= line } ?? 0
     }

@@ -396,7 +396,6 @@ struct PersonDetailView: View {
     /// The photo's color, for the plate's glass and the bars.
     @State private var photoTint: Color?
     @State private var creditsScroll = PersonCreditsScroll()
-    @State private var scrollPosition = ScrollPosition(edge: .top)
     /// The bottom of the back and more buttons and the top of the page's scroll view, on screen. The plate stops just
     /// under the buttons.
     @State private var topButtonsBottom: CGFloat = 0
@@ -566,64 +565,62 @@ struct PersonDetailView: View {
             PersonLoadingPlaceholder(topInset: topSafeAreaInset)
         } else if let detail = viewModel.detail {
             let sections = creditSections
-            ScrollView(showsIndicators: false) {
-                ZStack(alignment: .top) {
-                    PersonHeroArtwork(urlString: detail.profileUrl)
-                        .frame(height: topSafeAreaInset + 390)
-                        .offset(y: BackdropLayout.topOffset)
-                        .allowsHitTesting(false)
+            let lines = PersonCreditLine.lines(for: sections)
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    ZStack(alignment: .top) {
+                        PersonHeroArtwork(urlString: detail.profileUrl)
+                            .frame(height: topSafeAreaInset + 390)
+                            .offset(y: BackdropLayout.topOffset)
+                            .allowsHitTesting(false)
 
-                    VStack(alignment: .leading, spacing: 26) {
-                        hero(detail)
-                        biographySection(detail)
-                        credits(sections)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, topSafeAreaInset + 68)
-                    .padding(.bottom, 36)
-                }
-            }
-            .scrollPosition($scrollPosition)
-            .onScrollGeometryChange(for: PersonCreditsScroll.Geometry.self) { geometry in
-                PersonCreditsScroll.Geometry(
-                    offset: geometry.contentOffset.y + geometry.contentInsets.top,
-                    viewport: geometry.containerSize.height
-                )
-            } action: { _, geometry in
-                creditsScroll.offset = geometry.offset
-                if creditsScroll.viewport != geometry.viewport {
-                    creditsScroll.viewport = geometry.viewport
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .ignoresSafeArea(edges: .top)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.frame(in: .global).minY
-            } action: { top in
-                scrollViewTop = top
-            }
-            // The plate, drawn over the page so it can stop under the back button; the black under the top buttons
-            // once it has.
-            .overlay(alignment: .topLeading) {
-                ZStack(alignment: .topLeading) {
-                    PersonPlateScrim(scroll: creditsScroll, pinY: plateTop)
-                    if !sections.isEmpty {
-                        pinnedPlate(sections)
+                        VStack(alignment: .leading, spacing: 26) {
+                            hero(detail)
+                            biographySection(detail)
+                            credits(sections, lines: lines)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, topSafeAreaInset + 68)
+                        .padding(.bottom, 36)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .onScrollGeometryChange(for: PersonCreditsScroll.Viewport.self) { geometry in
+                    PersonCreditsScroll.Viewport(
+                        height: geometry.containerSize.height,
+                        insetBottom: geometry.contentInsets.bottom
+                    )
+                } action: { _, viewport in
+                    creditsScroll.viewport = viewport
+                }
+                .scrollContentBackground(.hidden)
                 .ignoresSafeArea(edges: .top)
-            }
-            .refreshable {
-                await viewModel.reloadLoadedPages()
-                syncSelectedKind()
-            }
-            .onChange(of: kind) { _, _ in
-                // A new kind starts at its first section when the plate had stopped under the back button.
-                guard creditsScroll.isPinned(below: plateTop) else { return }
-                Task { @MainActor in
-                    await Task.yield()
-                    jump(to: creditSections.first?.id)
+                // The plate, drawn over the page so it can stop under the back button; the black under the top
+                // buttons once it has.
+                .overlay(alignment: .topLeading) {
+                    ZStack(alignment: .topLeading) {
+                        PersonPlateScrim(scroll: creditsScroll, pinY: plateTop)
+                        if !sections.isEmpty {
+                            pinnedPlate(
+                                sections,
+                                map: PersonCreditsMap(lines: lines, width: creditsScroll.stackWidth),
+                                proxy: proxy
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .ignoresSafeArea(edges: .top)
+                }
+                .refreshable {
+                    await viewModel.reloadLoadedPages()
+                    syncSelectedKind()
+                }
+                .onChange(of: kind) { _, _ in
+                    // A new kind starts at its first section when the plate had stopped under the back button.
+                    guard creditsScroll.isPinned(below: plateTop) else { return }
+                    Task { @MainActor in
+                        await Task.yield()
+                        jump(to: creditSections.first?.id, proxy: proxy)
+                    }
                 }
             }
         } else if viewModel.errorMessage != nil, viewModel.detail == nil {
@@ -673,7 +670,7 @@ struct PersonDetailView: View {
     }
 
     @ViewBuilder
-    private func credits(_ sections: [PersonCreditSection]) -> some View {
+    private func credits(_ sections: [PersonCreditSection], lines: [PersonCreditLine]) -> some View {
         if sections.isEmpty {
             Text("No credits yet")
                 .font(.system(size: 15, weight: .semibold))
@@ -684,33 +681,42 @@ struct PersonDetailView: View {
                 // The plate's place in the page. The plate itself is drawn over the page (`pinnedPlate`).
                 Color.clear
                     .frame(height: PersonPlateLayout.fullHeight)
+                    .id(PersonPlateLayout.placeID)
                     .onGeometryChange(for: CGFloat.self) { proxy in
                         proxy.frame(in: .scrollView).minY
                     } action: { y in
                         creditsScroll.plateY = y
                     }
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.width
+                    } action: { width in
+                        creditsScroll.stackWidth = width
+                    }
+                    // Read from inside: the scroll view reaches under the status bar, and its own frame doesn't say so.
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        (proxy.frame(in: .global).minY - proxy.frame(in: .scrollView).minY).rounded()
+                    } action: { top in
+                        scrollViewTop = top
+                    }
 
                 ratingPreparationStatus
                     .padding(.top, 12)
 
-                VStack(alignment: .leading, spacing: PersonCreditsLayout.sectionGap) {
-                    ForEach(sections) { section in
-                        PersonCreditSectionView(
-                            section: section,
-                            tint: photoTint,
-                            onSelectMedia: { item in
-                                selectedMedia = MediaBrowsingSelection(ref: item.ref, within: section.media.map(\.ref))
-                            },
-                            onSelectSeries: { selectedSeries = $0.ref }
-                        )
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(lines) { line in
+                        creditLine(line)
+                            // The lines on screen, for the plate's title.
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.frame(in: .scrollView).minY
+                            } action: { top in
+                                creditsScroll.lineTops[line.id] = top
+                            }
+                            .onDisappear {
+                                creditsScroll.lineTops[line.id] = nil
+                            }
                     }
                 }
                 .padding(.top, PersonPlateLayout.firstSectionGap)
-                .onGeometryChange(for: CGRect.self) { proxy in
-                    proxy.frame(in: .scrollView)
-                } action: { frame in
-                    creditsScroll.stackFrame = frame
-                }
 
                 creditPagination
 
@@ -721,15 +727,37 @@ struct PersonDetailView: View {
         }
     }
 
-    private func pinnedPlate(_ sections: [PersonCreditSection]) -> some View {
+    @ViewBuilder
+    private func creditLine(_ line: PersonCreditLine) -> some View {
+        switch line {
+        case let .header(section):
+            PersonCreditHeader(section: section, tint: photoTint)
+                .padding(.bottom, PersonCreditsLayout.headerGap)
+        case let .media(section, _, items, gap):
+            PersonCreditPosterRow(section: section, items: items) { item in
+                selectedMedia = MediaBrowsingSelection(ref: item.ref, within: section.media.map(\.ref))
+            }
+            .padding(.bottom, gap)
+        case let .series(_, _, items, gap):
+            PersonSeriesRow(items: items) { selectedSeries = $0.ref }
+                .padding(.bottom, gap)
+        }
+    }
+
+    private func pinnedPlate(
+        _ sections: [PersonCreditSection],
+        map: PersonCreditsMap,
+        proxy: ScrollViewProxy
+    ) -> some View {
         PersonPinnedPlate(
             scroll: creditsScroll,
             sections: sections,
+            map: map,
             pinY: plateTop,
             tint: photoTint,
             kinds: kinds,
             kind: Binding(get: { kind }, set: { selectedKind = $0 }),
-            onJump: { jump(to: $0) }
+            onJump: { jump(to: $0, proxy: proxy) }
         ) {
             MediaFilterButton(
                 filter: $viewModel.filter,
@@ -749,27 +777,42 @@ struct PersonDetailView: View {
         .padding(.horizontal, 16)
     }
 
-    /// Scrolls so the section's header sits just under the slim plate.
-    private func jump(to id: String?) {
-        guard let id,
-              let stack = creditsScroll.stackFrame else { return }
-        let sections = creditSections
-        guard let index = sections.firstIndex(where: { $0.id == id }) else { return }
-        let tops = PersonCreditsLayout.tops(of: sections, width: stack.width)
-        let line = plateTop + PersonPlateLayout.slimHeight + PersonPlateLayout.jumpGap
-        let target = max(0, creditsScroll.offset + stack.minY + tops[index] - line)
+    /// Where a section's header lands when the menu jumps to it, from the top of the scroll view: just under the slim
+    /// plate.
+    private var jumpLine: CGFloat {
+        plateTop + PersonPlateLayout.slimHeight + PersonPlateLayout.jumpGap
+    }
+
+    /// Scrolls so the section's header sits just under the slim plate; the first section, which starts under the whole
+    /// plate, stops the plate where it pins instead. The scroll view finds the line itself, drawn or not. An anchor
+    /// lines up the same point of the line and of the scroll view, so these put the line's top where it belongs.
+    private func jump(to id: String?, proxy: ScrollViewProxy) {
+        let height = creditsScroll.viewport.height
+        guard let id, height > PersonPlateLayout.fullHeight else { return }
+        let target: String
+        let anchor: UnitPoint
+        if id == creditSections.first?.id {
+            target = PersonPlateLayout.placeID
+            anchor = UnitPoint(x: 0.5, y: plateTop / (height - PersonPlateLayout.fullHeight))
+        } else {
+            let headerLine = PersonCreditsLayout.headerHeight + PersonCreditsLayout.headerGap
+            target = PersonCreditLine.headerID(id)
+            anchor = UnitPoint(x: 0.5, y: jumpLine / (height - headerLine))
+        }
         withAnimation(.smooth(duration: 0.45)) {
-            scrollPosition.scrollTo(y: target)
+            proxy.scrollTo(target, anchor: anchor)
         }
     }
 
+    /// Reads only the width and the viewport (both change rarely), so scrolling never redraws the page.
     private func tailRoom(_ sections: [PersonCreditSection]) -> CGFloat {
-        guard let last = sections.last, let width = creditsScroll.stackFrame?.width, creditsScroll.viewport > 0 else {
+        let width = creditsScroll.stackWidth
+        let viewport = creditsScroll.viewport
+        guard let last = sections.last, width > 0, viewport.height > 0 else {
             return 0
         }
-        let below = plateTop + PersonPlateLayout.slimHeight + PersonPlateLayout.jumpGap
         let lastHeight = PersonCreditsLayout.height(of: last, width: width)
-        return max(0, creditsScroll.viewport - below - lastHeight - 36)
+        return max(0, viewport.height - viewport.insetBottom - jumpLine - lastHeight - 36)
     }
 
     private func syncSelectedKind() {
@@ -946,22 +989,25 @@ struct PersonDetailView: View {
 
 // MARK: - Credits: scroll, plate, sections
 
-/// How far the page has scrolled and where the credits sit. Only the plate and the scrim read it, so scrolling redraws
-/// those and not the grids.
+/// Where the plate and the section headers sit as the page scrolls. Only the plate and the scrim read the moving parts,
+/// so scrolling redraws those and not the grids.
 @MainActor
 @Observable
 final class PersonCreditsScroll {
-    nonisolated struct Geometry: Equatable {
-        let offset: CGFloat
-        let viewport: CGFloat
+    /// The scroll view's height, and the inset its content stops above at the bottom (the home indicator).
+    nonisolated struct Viewport: Equatable {
+        var height: CGFloat = 0
+        var insetBottom: CGFloat = 0
     }
 
-    var offset: CGFloat = 0
-    var viewport: CGFloat = 0
-    /// The plate's place in the page, from the top of the screen. Nil until laid out.
+    var viewport = Viewport()
+    /// The plate's place in the page, from the top of the scroll view. Nil until laid out.
     var plateY: CGFloat?
-    /// The sections, from the top of the screen.
-    var stackFrame: CGRect?
+    /// The top of each credits line on screen, from the top of the scroll view, by line. They change on every scroll:
+    /// only the plate reads them.
+    var lineTops: [String: CGFloat] = [:]
+    /// The sections' width, for the page itself.
+    var stackWidth: CGFloat = 0
 
     func isPinned(below pinY: CGFloat) -> Bool {
         guard let plateY else { return false }
@@ -976,6 +1022,8 @@ final class PersonCreditsScroll {
 }
 
 enum PersonPlateLayout {
+    /// The id of the plate's place in the page, which a jump to the first section scrolls to.
+    static let placeID = "person-plate-place"
     static let fullHeight: CGFloat = 108
     static let slimHeight: CGFloat = 52
     /// The plate stops this far under the back and more buttons.
@@ -1029,6 +1077,7 @@ private struct PersonPlateScrim: View {
 private struct PersonPinnedPlate<Trailing: View>: View {
     let scroll: PersonCreditsScroll
     let sections: [PersonCreditSection]
+    let map: PersonCreditsMap
     let pinY: CGFloat
     let tint: Color?
     let kinds: [String]
@@ -1094,12 +1143,17 @@ private struct PersonPinnedPlate<Trailing: View>: View {
         return .regular.tint(tint.opacity(0.1))
     }
 
-    /// The section whose header has reached the plate's bottom; the first one until then.
+    /// The section whose header has reached the plate's bottom; the first one until then. A jump lands the header
+    /// `jumpGap` under the plate; the few points of slack keep rounding from leaving the title a section behind. The
+    /// line on screen nearest the plate places every header, so a section whose header has scrolled away still counts.
     private func currentSection(plateTop: CGFloat, plateHeight: CGFloat) -> PersonCreditSection {
-        guard let stack = scroll.stackFrame else { return sections[0] }
-        let tops = PersonCreditsLayout.tops(of: sections, width: stack.width)
-        let line = plateTop + plateHeight + PersonPlateLayout.jumpGap + 1 - stack.minY
-        return sections[PersonCreditsLayout.currentIndex(tops: tops, line: line)]
+        let line = plateTop + plateHeight + PersonPlateLayout.jumpGap + 4
+        let nearest = scroll.lineTops
+            .filter { map.lineTops[$0.key] != nil }
+            .min { abs($0.value - line) < abs($1.value - line) }
+        guard let nearest, let mapped = map.lineTops[nearest.key] else { return sections[0] }
+        let index = PersonCreditsLayout.currentIndex(tops: map.headerTops, line: mapped + line - nearest.value)
+        return sections[min(index, sections.count - 1)]
     }
 
     private func titleMenu(current: PersonCreditSection) -> some View {
@@ -1157,26 +1211,12 @@ private struct PersonPinnedPlate<Trailing: View>: View {
     }
 }
 
-/// One section: a quiet header (the role, its slim bar, its numbers) over every one of its posters.
-private struct PersonCreditSectionView: View {
+/// A section's quiet header: the role, its slim bar, its numbers.
+private struct PersonCreditHeader: View {
     let section: PersonCreditSection
     let tint: Color?
-    let onSelectMedia: (MediaSummary) -> Void
-    let onSelectSeries: (MediaSeriesSummary) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PersonCreditsLayout.headerGap) {
-            header
-            if section.isSeries {
-                seriesGrid
-            } else {
-                posterGrid
-            }
-        }
-        .id(section.id)
-    }
-
-    private var header: some View {
         HStack(spacing: 12) {
             Text(section.title)
                 .font(.system(size: 15, weight: .bold))
@@ -1203,21 +1243,21 @@ private struct PersonCreditSectionView: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
+}
 
-    private var posterGrid: some View {
+/// One row of a section's posters, in four columns; a short last row leaves its other columns empty.
+private struct PersonCreditPosterRow: View {
+    let section: PersonCreditSection
+    let items: [MediaSummary]
+    let onSelect: (MediaSummary) -> Void
+
+    var body: some View {
         let media = section.media
         let isSquare = section.isSquare
-        return LazyVGrid(
-            columns: Array(
-                repeating: GridItem(.flexible(), spacing: PersonCreditsLayout.columnGap),
-                count: PersonCreditsLayout.columns
-            ),
-            alignment: .leading,
-            spacing: PersonCreditsLayout.rowGap
-        ) {
-            ForEach(media) { item in
+        HStack(alignment: .top, spacing: PersonCreditsLayout.columnGap) {
+            ForEach(items) { item in
                 Button {
-                    onSelectMedia(item)
+                    onSelect(item)
                 } label: {
                     PersonCreditPoster(item: item, isSquare: isSquare)
                 }
@@ -1226,28 +1266,37 @@ private struct PersonCreditSectionView: View {
                 .accessibilityLabel("View \(item.title)")
                 .prefetchingArtwork(after: item, in: media) { PersonCreditPoster.request(for: $0, isSquare: isSquare) }
             }
+            ForEach(items.count..<PersonCreditsLayout.columns, id: \.self) { _ in
+                Color.clear
+                    .aspectRatio(isSquare ? 1 : 2.0 / 3.0, contentMode: .fit)
+            }
         }
     }
+}
 
-    private var seriesGrid: some View {
-        LazyVGrid(
-            columns: Array(
-                repeating: GridItem(.flexible(), spacing: PersonCreditsLayout.columnGap),
-                count: PersonCreditsLayout.seriesColumns
-            ),
-            alignment: .leading,
-            spacing: PersonCreditsLayout.seriesRowGap
-        ) {
-            ForEach(section.series) { series in
+/// One row of series cards, in three columns.
+private struct PersonSeriesRow: View {
+    let items: [MediaSeriesSummary]
+    let onSelect: (MediaSeriesSummary) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: PersonCreditsLayout.columnGap) {
+            ForEach(items) { series in
                 Button {
-                    onSelectSeries(series)
+                    onSelect(series)
                 } label: {
                     PersonSeriesCard(series: series)
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
                 .accessibilityLabel("View \(series.name) series")
             }
+            ForEach(items.count..<PersonCreditsLayout.seriesColumns, id: \.self) { _ in
+                Color.clear
+                    .frame(maxWidth: .infinity)
+            }
         }
+        .frame(height: PersonCreditsLayout.seriesCardHeight, alignment: .top)
     }
 }
 

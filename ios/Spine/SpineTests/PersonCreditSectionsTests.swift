@@ -85,21 +85,58 @@ final class PersonCreditSectionsTests: XCTestCase {
         XCTAssertEqual(sections[1].count, 1)
     }
 
-    func testLayoutPlacesSectionsFromTheirCountsAndFindsTheOneInView() {
-        let sections = [
-            PersonCreditSection(id: "a", title: "A", content: .media((1...5).map { credit("a\($0)") })),
-            PersonCreditSection(id: "b", title: "B", content: .media((1...2).map { credit("b\($0)") })),
-        ]
+    func testLayoutWorksOutASectionsHeightFromItsCount() {
+        let section = PersonCreditSection(id: "a", title: "A", content: .media((1...5).map { credit("a\($0)") }))
 
         // 398 wide: four 93.5 pt columns, so 140.25 pt posters; five posters are two rows.
-        let tops = PersonCreditsLayout.tops(of: sections, width: 398)
+        // Header 28 + gap 12 + two rows (2 x 140.25 + 10).
+        XCTAssertEqual(PersonCreditsLayout.height(of: section, width: 398), 330.5, accuracy: 0.001)
+    }
 
-        // Header 28 + gap 12 + two rows (2 x 140.25 + 10) + the 40 between sections.
-        XCTAssertEqual(tops[0], 0)
-        XCTAssertEqual(tops[1], 370.5, accuracy: 0.001)
-        XCTAssertEqual(PersonCreditsLayout.currentIndex(tops: tops, line: -5), 0)
-        XCTAssertEqual(PersonCreditsLayout.currentIndex(tops: tops, line: tops[1] - 1), 0)
-        XCTAssertEqual(PersonCreditsLayout.currentIndex(tops: tops, line: tops[1]), 1)
+    func testLinesAreEachHeaderThenRowsOfFourAndOnlyTheLastSectionEndsWithoutAGap() {
+        let sections = [
+            PersonCreditSection(id: "a", title: "A", content: .media((1...5).map { credit("a\($0)") })),
+            PersonCreditSection(id: "b", title: "B", content: .media([credit("b1")])),
+        ]
+
+        let lines = PersonCreditLine.lines(for: sections)
+
+        XCTAssertEqual(lines.map(\.id), ["header-a", "row-a-0", "row-a-1", "header-b", "row-b-0"])
+        guard case let .media(_, _, first, firstGap) = lines[1],
+              case let .media(_, _, second, secondGap) = lines[2],
+              case let .media(_, _, last, lastGap) = lines[4] else {
+            return XCTFail("Expected poster rows")
+        }
+        XCTAssertEqual(first.map(\.ref.mediaId), ["a1", "a2", "a3", "a4"])
+        XCTAssertEqual(second.map(\.ref.mediaId), ["a5"])
+        XCTAssertEqual(last.map(\.ref.mediaId), ["b1"])
+        XCTAssertEqual(firstGap, PersonCreditsLayout.rowGap)
+        XCTAssertEqual(secondGap, PersonCreditsLayout.sectionGap)
+        XCTAssertEqual(lastGap, 0)
+    }
+
+    func testTheMapPlacesEveryLineFromTheFixedHeights() {
+        let sections = [
+            PersonCreditSection(id: "a", title: "A", content: .media((1...5).map { credit("a\($0)") })),
+            PersonCreditSection(id: "b", title: "B", content: .media([credit("b1")])),
+        ]
+
+        // 398 wide: 140.25 pt posters. A header line is 28 + 12; rows are 10 apart, sections 40.
+        let map = PersonCreditsMap(lines: PersonCreditLine.lines(for: sections), width: 398)
+
+        XCTAssertEqual(map.headerTops.count, 2)
+        XCTAssertEqual(map.headerTops[0], 0)
+        XCTAssertEqual(map.headerTops[1], 370.5, accuracy: 0.001)
+        XCTAssertEqual(map.lineTops["row-a-1"] ?? -1, 190.25, accuracy: 0.001)
+    }
+
+    func testTheSectionInViewIsTheLastHeaderToReachTheLine() {
+        let tops: [CGFloat] = [0, 370.5, 900]
+
+        XCTAssertEqual(PersonCreditsLayout.currentIndex(tops: tops, line: -40), 0)
+        XCTAssertEqual(PersonCreditsLayout.currentIndex(tops: tops, line: 370), 0)
+        XCTAssertEqual(PersonCreditsLayout.currentIndex(tops: tops, line: 370.5), 1)
+        XCTAssertEqual(PersonCreditsLayout.currentIndex(tops: tops, line: 5000), 2)
     }
 
     private func credit(
