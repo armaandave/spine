@@ -242,6 +242,8 @@ private struct SearchListsPlateLight: View {
             )
         }
         .animation(.easeOut(duration: 0.35), value: luma)
+        // A new poster is measured afresh, so it never shows at the last one's brightness.
+        .onChange(of: url) { luma = nil }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
