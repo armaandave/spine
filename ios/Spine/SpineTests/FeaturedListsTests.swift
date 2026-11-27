@@ -51,6 +51,13 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertEqual(live.label, "7 of 23 announced")
         XCTAssertEqual(live.startsAt, FeaturedFixtures.date("2026-10-21T17:00:00Z"))
         XCTAssertEqual(live.endsAt, FeaturedFixtures.date("2026-10-21T21:00:00Z"))
+
+        // A list names its source as Search shows it, with its icon; from an older server, by its own name.
+        let oscars = try XCTUnwrap(now.lists.first?.source)
+        XCTAssertEqual(oscars.shownName, "Oscars")
+        XCTAssertEqual(oscars.iconURL, URL(string: "https://example.com/static/img/sources/oscars.png"))
+        XCTAssertEqual(card.source?.shownName, "Netflix")
+        XCTAssertNil(card.source?.iconURL)
     }
 
     func testUnknownEnumValuesFallBackToUnknown() throws {
@@ -178,7 +185,6 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertEqual(card.stackPeople.map(\.entryId), [1, 3])
         XCTAssertEqual(card.itemsCount, 121)
         XCTAssertNil(FeaturedPersonPhoto.url(for: card.previewPeople[1]))
-        XCTAssertEqual(card.tileArtworkRequests().count, 1)
     }
 
     func testMissingOrMalformedPreviewPeopleDecodeEmpty() throws {
@@ -1080,7 +1086,8 @@ private enum FeaturedFixtures {
          "lists": [
            {"id": 30, "name": "Oscars 2027", "slug": "oscars-2027", "description": "Winners as they're announced.",
             "is_ranked": false, "items_count": 7, "media_types": ["movie"], "kind": "award",
-            "source": {"name": "The Academy", "url": "https://www.oscars.org"},
+            "source": {"name": "The Academy", "url": "https://www.oscars.org",
+                       "short_name": "Oscars", "icon_url": "https://example.com/static/img/sources/oscars.png"},
             "cadence": "live", "period_label": "2027", "content_changed_at": "2026-10-21T17:58:00.000001Z",
             "last_synced_at": "2026-10-21T18:01:00Z",
             "live": {"status": "live", "label": "7 of 23 announced", "starts_at": "2026-10-21T17:00:00Z", "ends_at": "2026-10-21T21:00:00Z"},

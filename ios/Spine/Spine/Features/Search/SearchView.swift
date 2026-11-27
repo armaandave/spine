@@ -469,6 +469,9 @@ private struct SearchViewContent: View {
     @State private var draftText = ""
     @State private var recentMedia: [MediaSummary] = []
     @State private var featuredStore: FeaturedListsStore?
+    /// A type's lists page shows its art behind the field and the type bar, from under the status bar.
+    @State private var featuredTop = FeaturedTopArt()
+    @State private var searchBarHeight: CGFloat = 96
     @State private var selectedSearchType: String
     @State private var handledFindPeopleRequest = 0
     /// Tapping Search again on its first page puts the cursor in the box.
@@ -574,6 +577,7 @@ private struct SearchViewContent: View {
                         },
                         focusRequest: focusRequest + reselectFocusRequest
                     )
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { searchBarHeight = $0 }
 
                     Group {
                         if selectedSearchType == SearchViewModel.usersScope {
@@ -591,6 +595,7 @@ private struct SearchViewContent: View {
                                 isSearchActive: isSearchActive,
                                 recentMedia: recentMedia,
                                 featuredStore: featuredStore,
+                                featuredTop: featuredTop,
                                 enabledMediaTypes: viewModel.mediaTypes,
                                 onFeaturedList: onFeaturedList,
                                 onPickKind: pickKind,
@@ -608,6 +613,15 @@ private struct SearchViewContent: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .animation(.smooth(duration: 0.35), value: showsLargeTitle)
+                // Down past the type page's plate, which sits under the field and the type bar.
+                .background(alignment: .top) {
+                    LibraryBlurredTop(
+                        url: showsTypeLists ? featuredTop.url : nil,
+                        scroll: featuredTop.scroll,
+                        height: searchBarHeight + FeaturedKindLayout.artBelowPage
+                    )
+                    .animation(.smooth(duration: 0.35), value: showsTypeLists)
+                }
                 .background(Color.black)
                 .mediaLensAtmosphere(theme: currentTheme)
                 .navigationTitle(title)
@@ -679,6 +693,12 @@ private struct SearchViewContent: View {
     /// The Search tab itself, not a picker built on this screen: only it has the lists to show.
     private var isSearchTab: Bool {
         featuredStore != nil
+    }
+
+    /// One type's lists are on the page (not typing, not every kind, not people): their art shows behind the field.
+    private var showsTypeLists: Bool {
+        isSearchTab && !isSearchActive && draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && selectedSearchType != APIConstants.allMedia && selectedSearchType != SearchViewModel.usersScope
     }
 
     /// "Search" in big type over the box while the page shows every kind's lists; it tucks away once you search.
@@ -802,6 +822,7 @@ private struct SearchResultsSection: View {
     let isSearchActive: Bool
     let recentMedia: [MediaSummary]
     let featuredStore: FeaturedListsStore?
+    let featuredTop: FeaturedTopArt
     let enabledMediaTypes: [String]
     let onFeaturedList: (FeaturedListSelection) -> Void
     let onPickKind: (String) -> Void
@@ -817,7 +838,8 @@ private struct SearchResultsSection: View {
             }
 
             ZStack {
-                Color.black
+                // Clear: the page behind is black, and a type's lists show their art through it.
+                Color.clear
 
                 content
                     .spineContentTransition(value: contentPhase)
@@ -840,6 +862,7 @@ private struct SearchResultsSection: View {
                 isSearchActive: isSearchActive,
                 recentMedia: recentMedia,
                 featuredStore: featuredStore,
+                featuredTop: featuredTop,
                 enabledMediaTypes: enabledMediaTypes,
                 onFeaturedList: onFeaturedList,
                 onPickKind: onPickKind,
@@ -866,6 +889,7 @@ private struct SearchEmptyState: View {
     let isSearchActive: Bool
     let recentMedia: [MediaSummary]
     let featuredStore: FeaturedListsStore?
+    let featuredTop: FeaturedTopArt
     let enabledMediaTypes: [String]
     let onFeaturedList: (FeaturedListSelection) -> Void
     let onPickKind: (String) -> Void
@@ -879,6 +903,7 @@ private struct SearchEmptyState: View {
                 store: featuredStore,
                 selectedMediaType: selectedMediaType,
                 enabledMediaTypes: enabledMediaTypes,
+                top: featuredTop,
                 onSelect: onFeaturedList,
                 onPickKind: onPickKind
             )

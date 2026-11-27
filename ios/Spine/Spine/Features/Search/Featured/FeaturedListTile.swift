@@ -1,89 +1,4 @@
-import Nuke
 import SwiftUI
-
-/// Five overlapping posters: the lead at the front left, the rest stepping back behind it, darker and smaller,
-/// bottoms aligned. A people list stacks its people's photos the same way.
-struct FeaturedPosterStack: View {
-    enum Style {
-        /// Landing tiles: 54×81 posters (music 60×60) across 148 pt.
-        case tile
-        /// See-all tiles: 64×96 posters (music 64×64).
-        case medium(width: CGFloat)
-
-        var width: CGFloat {
-            switch self {
-            case .tile: 148
-            case let .medium(width): width
-            }
-        }
-
-        func slot(squareArtwork: Bool) -> PosterSlot {
-            switch self {
-            case .tile: squareArtwork ? .featuredSquare : .searchRow
-            case .medium: .hofCrown
-            }
-        }
-    }
-
-    static let maxPosters = 5
-
-    let card: FeaturedListCard
-    var style: Style = .tile
-
-    var body: some View {
-        let slot = style.slot(squareArtwork: card.usesSquareArtwork)
-        let posterSize = slot.artworkSize(mediaType: card.singleMediaType, orientation: nil)
-        let previews = Array(card.previews.prefix(Self.maxPosters))
-        let people = Array(card.stackPeople.prefix(Self.maxPosters))
-        let step = (style.width - posterSize.width) / CGFloat(Self.maxPosters - 1)
-
-        ZStack(alignment: .bottomLeading) {
-            if previews.isEmpty, people.isEmpty {
-                MediaArtwork(url: nil, title: card.name, slot: slot, mediaType: card.singleMediaType ?? APIConstants.allMedia)
-            }
-            ForEach(Array(previews.enumerated()), id: \.offset) { index, preview in
-                stacked(poster(preview.media, slot: slot), slot: slot, index: index, step: step)
-            }
-            ForEach(Array(people.enumerated()), id: \.offset) { index, person in
-                stacked(
-                    FeaturedPersonPhoto(person: person, size: posterSize, cornerRadius: slot.cornerRadius),
-                    slot: slot,
-                    index: index,
-                    step: step
-                )
-            }
-        }
-        .frame(width: style.width, height: posterSize.height, alignment: .bottomLeading)
-        // One shadow for the whole stack instead of one per poster.
-        .compositingGroup()
-        .shadow(color: .black.opacity(0.32), radius: 4, x: 2, y: 2)
-        .accessibilityHidden(true)
-    }
-
-    private func poster(_ media: MediaSummary, slot: PosterSlot) -> some View {
-        MediaArtwork(
-            url: media.displayPosterURL,
-            title: media.title,
-            slot: slot,
-            mediaType: media.ref.mediaType,
-            orientation: card.usesSquareArtwork ? .square : nil
-        )
-    }
-
-    /// Places one artwork in the stack: further back is darker, smaller and further right.
-    private func stacked(_ artwork: some View, slot: PosterSlot, index: Int, step: CGFloat) -> some View {
-        let depth = CGFloat(index) / CGFloat(Self.maxPosters - 1)
-        return artwork
-            .overlay {
-                // Brightness 1.0 at the front to 0.55 at the back.
-                RoundedRectangle(cornerRadius: slot.cornerRadius, style: .continuous)
-                    .fill(.black.opacity(0.45 * depth))
-            }
-            .scaleEffect(1 - 0.08 * depth, anchor: .bottom)
-            .offset(x: CGFloat(index) * step)
-            .zIndex(Double(-index))
-    }
-}
 
 /// A person's photo in a poster's shape, with their initials when there's no photo.
 struct FeaturedPersonPhoto: View {
@@ -114,26 +29,6 @@ struct FeaturedPersonPhoto: View {
             return nil
         }
         return URL(string: value)
-    }
-}
-
-extension FeaturedListCard {
-    /// The artwork requests a tile's poster stack makes, for prefetching.
-    func tileArtworkRequests() -> [ImageRequest] {
-        let slot = FeaturedPosterStack.Style.tile.slot(squareArtwork: usesSquareArtwork)
-        let posters = previews.prefix(FeaturedPosterStack.maxPosters).compactMap { preview in
-            MediaArtwork.imageRequest(
-                url: preview.media.displayPosterURL,
-                slot: slot,
-                mediaType: preview.media.ref.mediaType,
-                orientation: usesSquareArtwork ? .square : nil
-            )
-        }
-        let photoSize = slot.artworkSize(mediaType: singleMediaType, orientation: nil)
-        let photos = stackPeople.prefix(FeaturedPosterStack.maxPosters).compactMap { person in
-            SpineImagePipeline.request(url: FeaturedPersonPhoto.url(for: person), thumbnailSize: photoSize)
-        }
-        return posters + photos
     }
 }
 
@@ -195,50 +90,6 @@ struct FeaturedStatusBadge: View {
                 .foregroundStyle(.white.opacity(0.4))
                 .lineLimit(1)
         }
-    }
-}
-
-/// A see-all tile: bigger posters and a line of description.
-struct FeaturedMediumTile: View {
-    let card: FeaturedListCard
-    let width: CGFloat
-    var showsMediaTypes = true
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            FeaturedPosterStack(card: card, style: .medium(width: width))
-
-            HStack(spacing: 6) {
-                FeaturedStatusBadge(card: card)
-                Spacer(minLength: 4)
-                if showsMediaTypes {
-                    FeaturedMediaTypeIcons(mediaTypes: card.mediaTypes, size: 9)
-                        .opacity(0.6)
-                }
-            }
-            .frame(height: 14)
-            .padding(.top, 9)
-
-            Text(card.name)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.leading)
-                .lineLimit(2, reservesSpace: true)
-                .padding(.top, 4)
-
-            Text(card.description.isEmpty ? " " : card.description)
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.55))
-                .lineLimit(1)
-                .padding(.top, 2)
-
-            Text(card.countText)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
-                .lineLimit(1)
-                .padding(.top, 2)
-        }
-        .frame(width: width, alignment: .leading)
     }
 }
 
@@ -307,20 +158,21 @@ struct FeaturedListPeek: View {
     /// The peek is 334 pt wide with 16 pt padding: 302 pt holds five 54 pt artworks 8 pt apart.
     static let width: CGFloat = 334
     static let squareSide = PosterSlot.searchRow.size.width
+    static let maxPosters = 5
 
     let card: FeaturedListCard
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .bottom, spacing: 8) {
-                ForEach(Array(card.stackPeople.prefix(FeaturedPosterStack.maxPosters).enumerated()), id: \.offset) { _, person in
+                ForEach(Array(card.stackPeople.prefix(Self.maxPosters).enumerated()), id: \.offset) { _, person in
                     FeaturedPersonPhoto(
                         person: person,
                         size: PosterSlot.searchRow.artworkSize(mediaType: card.singleMediaType, orientation: nil),
                         cornerRadius: PosterSlot.searchRow.cornerRadius
                     )
                 }
-                ForEach(Array(card.previews.prefix(FeaturedPosterStack.maxPosters).enumerated()), id: \.offset) { _, preview in
+                ForEach(Array(card.previews.prefix(Self.maxPosters).enumerated()), id: \.offset) { _, preview in
                     MediaArtwork(
                         url: preview.media.displayPosterURL,
                         title: preview.media.title,

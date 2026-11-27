@@ -7,32 +7,60 @@ struct FeaturedShelfDetailView: View {
     let title: String
     let onSelect: (FeaturedListSelection) -> Void
 
+    @State private var top = FeaturedTopArt()
+
     var body: some View {
-        FeaturedTypeLayer(store: store, mediaType: mediaType, title: title, onSelect: onSelect)
+        FeaturedTypeLayer(store: store, mediaType: mediaType, title: title, top: top, onSelect: onSelect)
+            .background(alignment: .top) {
+                LibraryBlurredTop(url: top.url, scroll: top.scroll, height: FeaturedKindLayout.artBelowPage)
+            }
             .background(Color.black)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            // Opaque like the pinned chips under it, so nothing scrolls into view above them.
-            .toolbarBackground(Color.black, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+            // Clear, so the art runs up behind the back button as it does behind Search's field.
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }
 
-/// A media type's lists grouped by kind: a header, kind chips pinned under it, then one section per kind. Charts
-/// are wide rows; everything else is a two-column grid.
-struct FeaturedTypeLayer: View {
-    /// Room for the pinned chips above a section that a chip scrolled to.
-    private static let chipBarHeight: CGFloat = 46
-    private static let columnSpacing: CGFloat = 11
-    private static let horizontalInset: CGFloat = 16
+/// What a type's page shows behind the top of the screen: the first cover of the kind shown, blurred, moving up as the
+/// page scrolls. The page sets it; the screen around the page draws it while the page is shown (Search draws it behind
+/// its field), since the art runs above the page.
+@MainActor
+@Observable
+final class FeaturedTopArt {
+    var url: URL?
+    let scroll = LibraryScroll()
+}
 
+enum FeaturedKindLayout {
+    static let fullHeight: CGFloat = 96
+    static let slimHeight: CGFloat = 52
+    /// The plate's gap below the page's top (Search's type bar).
+    static let plateTop: CGFloat = 4
+    /// The first list starts this far below the page's top: under the plate, after a gap.
+    static let contentTop: CGFloat = plateTop + fullHeight + 8
+    /// How far the art reaches below the page's top: about Library's reach below its plate.
+    static let artBelowPage: CGFloat = contentTop + 170
+    static let rowHeight: CGFloat = 104
+    /// A row of square album art.
+    static let squareRowHeight: CGFloat = 84
+}
+
+/// A media type's lists, one kind at a time (Library's twin): a glass plate whose title is the kind shown, a menu of
+/// the type's kinds, over that kind's lists. The plate condenses as the page scrolls.
+struct FeaturedTypeLayer: View {
     let store: FeaturedListsStore
     let mediaType: String
     var title: String?
+    let top: FeaturedTopArt
     let onSelect: (FeaturedListSelection) -> Void
 
-    @State private var contentWidth: CGFloat = 393
+    /// The kind shown, by its shelf key; until one is picked, the type's first.
+    @State private var kindKey: String?
+    @State private var position = ScrollPosition(edge: .top)
+    /// Coming back from a list keeps the page where it was; only a new page starts at the top.
+    @State private var hasAppeared = false
 
     var body: some View {
         let layer = store.layer(mediaType: mediaType)
@@ -56,6 +84,25 @@ struct FeaturedTypeLayer: View {
             }
         }
         .featuredLayerLifecycle(store: store, mediaType: mediaType)
+        .onAppear {
+            if !hasAppeared {
+                hasAppeared = true
+                top.scroll.offset = 0
+            }
+            showArt(artURL(layer.response))
+        }
+        .onChange(of: artURL(layer.response)) { _, url in
+            showArt(url)
+        }
+        .sensoryFeedback(.selection, trigger: kindKey)
+    }
+
+    /// Cross-fades to a new kind's (or type's) art; the screen around the page decides when it shows.
+    private func showArt(_ url: URL?) {
+        guard top.url != url else { return }
+        withAnimation(.smooth(duration: 0.6)) {
+            top.url = url
+        }
     }
 
     private var displayTitle: String {
@@ -63,119 +110,142 @@ struct FeaturedTypeLayer: View {
         return mediaType == FeaturedShelf.mixedMediaType ? "Across Media" : MediaTypeTheme.theme(for: mediaType).displayName
     }
 
-    private var columnWidth: CGFloat {
-        max(140, ((contentWidth - Self.horizontalInset * 2 - Self.columnSpacing) / 2).rounded(.down))
+    private func shown(_ response: FeaturedShelvesResponse?) -> FeaturedShelf? {
+        guard let shelves = response?.shelves, let first = shelves.first else { return nil }
+        return shelves.first { $0.key == kindKey } ?? first
+    }
+
+    /// The art at the top: the first cover (or a people list's first photo) of the kind shown.
+    private func artURL(_ response: FeaturedShelvesResponse?) -> URL? {
+        guard let shelf = shown(response) else { return nil }
+        for card in shelf.lists {
+            if let poster = card.previews.first?.media.displayPosterURL, let url = URL(string: poster) {
+                return url
+            }
+            if let person = card.stackPeople.first, let url = FeaturedPersonPhoto.url(for: person) {
+                return url
+            }
+        }
+        return nil
     }
 
     private func content(_ response: FeaturedShelvesResponse) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(displayTitle)
-                            .font(.system(size: 30, weight: .black))
-                            .foregroundStyle(.white)
-                            .accessibilityAddTraits(.isHeader)
-                        Text(response.summaryLine(now: .now))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.55))
-                    }
-                    .padding(.horizontal, Self.horizontalInset)
-                    .padding(.top, 8)
-                    .padding(.bottom, 10)
-
-                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        Section {
-                            ForEach(response.shelves) { shelf in
-                                kindSection(shelf)
-                                    .padding(.top, Self.chipBarHeight + 6)
-                                    .id(shelf.key)
-                            }
-                        } header: {
-                            if response.shelves.count > 1 {
-                                chipBar(response.shelves, proxy: proxy)
-                            }
+        let shelves = response.shelves
+        let shelf = shown(response) ?? shelves[0]
+        return ZStack(alignment: .top) {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    ForEach(shelf.lists) { card in
+                        FeaturedListButton(card: card, sourceKey: "\(mediaType)/\(shelf.key)", onSelect: onSelect) {
+                            FeaturedKindRow(card: card)
                         }
                     }
                 }
+                .id(shelf.key)
+                .transition(.opacity.combined(with: .offset(y: 6)))
                 .padding(.bottom, 28)
+            }
+            .scrollPosition($position)
+            // The lists start under the plate, and pull to refresh shows below it.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear.frame(height: FeaturedKindLayout.contentTop)
             }
             .refreshable {
                 await store.load(mediaType: mediaType, force: true)
             }
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                // Past the art's reach nothing up top changes, so the offset stops there.
+                min(geometry.contentOffset.y + geometry.contentInsets.top, LibraryPlateLayout.scrollCap)
+            } action: { _, offset in
+                top.scroll.offset = offset
+            }
+            // Rows fade out where the page meets the type bar instead of being cut.
+            .mask {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: FeaturedKindLayout.plateTop + 8)
+                    Color.black
+                }
+            }
+
+            FeaturedKindPlate(
+                scroll: top.scroll,
+                kicker: kicker(response),
+                count: listCount(shelf.count),
+                accentHex: shelf.lists.first?.previews.first?.media.posterAccentColor
+            ) {
+                kindTitle(shelves, shown: shelf)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, FeaturedKindLayout.plateTop)
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
     }
 
-    private func chipBar(_ shelves: [FeaturedShelf], proxy: ScrollViewProxy) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(shelves) { shelf in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            proxy.scrollTo(shelf.key, anchor: .top)
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Text(shelf.title)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.white)
-                            Text(shelf.count.formatted())
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.5))
-                        }
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .background(.white.opacity(0.1), in: Capsule())
+    /// The kind shown, as the title; with more than one kind, a tap opens the type's kinds.
+    @ViewBuilder
+    private func kindTitle(_ shelves: [FeaturedShelf], shown shelf: FeaturedShelf) -> some View {
+        if shelves.count > 1 {
+            Menu {
+                Picker("Kind", selection: kindBinding(current: shelf.key)) {
+                    ForEach(shelves) { shelf in
+                        Text(shelf.title).tag(shelf.key)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(shelf.title), \(shelf.count) lists")
-                    .accessibilityHint("Jumps to the section")
                 }
+            } label: {
+                titleLabel(shelf.title, showsChevron: true)
             }
-            .padding(.horizontal, Self.horizontalInset)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Kind of list, \(shelf.title)")
+            .accessibilityHint("Shows another kind of list")
+        } else {
+            titleLabel(shelf.title, showsChevron: false)
+                .accessibilityAddTraits(.isHeader)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: Self.chipBarHeight)
-        // Opaque and the page's color, so cards scrolled under the pinned chips don't show through.
-        .background(Color.black)
     }
 
-    private func kindSection(_ shelf: FeaturedShelf) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text(shelf.title.uppercased())
-                    .font(.system(size: 13, weight: .black))
-                    .tracking(0.8)
-                    .foregroundStyle(.white)
-                    .accessibilityAddTraits(.isHeader)
-                Text(shelf.count.formatted())
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.42))
-            }
-
-            if shelf.kind == .chart {
-                VStack(spacing: 10) {
-                    ForEach(shelf.lists) { card in
-                        FeaturedListButton(card: card, sourceKey: "\(mediaType)/\(shelf.key)", onSelect: onSelect) {
-                            FeaturedChartRow(card: card)
-                        }
-                    }
-                }
-            } else {
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.fixed(columnWidth), spacing: Self.columnSpacing, alignment: .topLeading), count: 2),
-                    alignment: .leading,
-                    spacing: 20
-                ) {
-                    ForEach(shelf.lists) { card in
-                        FeaturedListButton(card: card, sourceKey: "\(mediaType)/\(shelf.key)", onSelect: onSelect) {
-                            FeaturedMediumTile(card: card, width: columnWidth)
-                        }
-                    }
-                }
+    private func titleLabel(_ title: String, showsChevron: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 30, weight: .black))
+                .tracking(-0.5)
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.22), radius: 5, y: 1)
+                .lineLimit(1)
+                .contentTransition(.opacity)
+            if showsChevron {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.top, 3)
             }
         }
-        .padding(.horizontal, Self.horizontalInset)
+        .frame(height: LibraryPlateLayout.titleHeight)
+        .contentShape(Rectangle())
+        .animation(.smooth(duration: 0.35), value: title)
+    }
+
+    /// Picking a kind shows its lists from the top.
+    private func kindBinding(current: String) -> Binding<String> {
+        Binding(
+            get: { current },
+            set: { key in
+                guard key != current else { return }
+                position.scrollTo(edge: .top)
+                withAnimation(.smooth(duration: 0.35)) {
+                    kindKey = key
+                }
+            }
+        )
+    }
+
+    /// "Books · 64 lists", and how many are live while any is.
+    private func kicker(_ response: FeaturedShelvesResponse) -> String {
+        let total = response.shelves.reduce(0) { $0 + $1.count }
+        let live = Set(response.allCards.filter { $0.isLive(at: .now) }.map(\.id)).count
+        return ([displayTitle, listCount(total)] + (live > 0 ? ["\(live) live"] : [])).joined(separator: " · ")
+    }
+
+    private func listCount(_ count: Int) -> String {
+        count == 1 ? "1 list" : "\(count.formatted()) lists"
     }
 }

@@ -294,7 +294,8 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
 ```json
 {"id": 12, "name": "Netflix Top 10: Films", "slug": "netflix-top-10-films", "description": "…",
  "is_ranked": true, "list_type": "media", "items_count": 10, "media_types": ["movie"], "kind": "chart",
- "source": {"name": "Netflix", "url": "https://www.netflix.com/tudum/top10"},
+ "source": {"name": "Netflix", "url": "https://www.netflix.com/tudum/top10",
+            "short_name": "Netflix", "icon_url": "https://…/static/img/sources/netflix.png"},
  "cadence": "weekly", "period_label": "Week of Oct 13",
  "content_changed_at": "…", "last_synced_at": "…",
  "live": null,
@@ -306,6 +307,7 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
 - `cadence` is one of `live`, `daily`, `weekly`, `monthly`, `yearly`, `static`.
 - `live` is either `null` or `{"status": "upcoming"|"live"|"done", "label": "7 of 23 announced", "starts_at": "…", "ends_at": "…"}`.
 - `source.name` and `source.url` may be `null`. `period_label` is the sync's edition, or `null`.
+- `source.short_name` and `source.icon_url` (added for the type page's rows) are the name and icon the shelves' `sources` show for that source ("The New York Times" shows as "NYT"): `short_name` is the source's own name when Search has none for it, `icon_url` is `null` when it has no icon, and both are `null` without a `source_name`.
 - Each preview item's `note` is chart movement against the list's previous content: `"▲2"`, `"▼1"` or `"NEW"`; `null` when its position didn't change, on a list's first sync, and for every kind other than `chart`. The writer stores it as `FeaturedListSync.item_notes` (`{"<item_id>": note}`) whenever it replaces a chart's items, so requests never scan snapshots.
 - People lists (`list_type: "people"`) count people in `items_count`; their `preview_items` is empty and `preview_people` holds their first five people, in list order. Media-list cards have no `preview_people` key, and neither does the `featured` block on the legacy endpoint and list detail.
 
@@ -330,7 +332,7 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
 ## iOS: shelves on Search
 
 - **Landing:** the "Now" strip of chart cards, then one sideways row of compact tiles per media type, then "Across Media". A tile is about 148×162 pt: a stack of five posters, a rank chip, a status badge, the name and a count.
-- **See all:** opens the media type grouped by kind.
+- **A type's page** (pick a type in the picker or tap its big word): one kind at a time. The kind shown is the title of a glass plate, a menu of the type's kinds; its lists are rows of the first cover, the name, and the source's icon and short name with the period (or LIVE). The first cover of the kind shown, blurred, runs behind the top of the page, and the plate condenses as the page scrolls, as Library's does.
 - **Peek:** a long-press shows a context-menu preview.
 - **List detail:** gains a metadata line, a live banner and a source link.
 - **Edit and Delete:** Edit is shown to the list's owner and collaborators, Delete only to its owner, matching what the server allows. Before this feature every user saw both on Spine's lists.
