@@ -566,6 +566,7 @@ private struct SearchViewContent: View {
                         onClear: {
                             viewModel.clear()
                         },
+                        isActive: isSearchActive,
                         // Out of searching: Recently opened gives way to the lists again.
                         onDismiss: {
                             isSearchActive = false

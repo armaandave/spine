@@ -118,6 +118,32 @@ final class SearchRowPresentationTests: XCTestCase {
         XCTAssertEqual(SearchListsSummary.totals(for: [older]).sources, 0)
     }
 
+    func testAKindsRowIsLitByTheFirstPosterInItsLists() throws {
+        let json = #"""
+        {"shelves": [
+          {"key": "movie", "title": "Movies", "media_type": "movie", "count": 2, "lists": [
+            {"id": 1, "name": "Directors", "list_type": "people", "preview_items": []},
+            {"id": 2, "name": "Letterboxd's Top 500 Films", "preview_items": [
+              {"ref": {"item_id": 3, "source": "tmdb", "media_type": "movie", "media_id": "14537"}, "title": "Harakiri",
+               "poster_url": "https://image.tmdb.org/t/p/w342/harakiri.jpg"}]}]},
+          {"key": "comic", "title": "Comics", "media_type": "comic", "count": 0, "lists": []}
+        ]}
+        """#
+        let shelves = try JSONDecoder.api.decode(FeaturedShelvesResponse.self, from: Data(json.utf8)).shelves
+
+        XCTAssertEqual(SearchListsLight.artURL(for: shelves[0])?.absoluteString, "https://image.tmdb.org/t/p/w342/harakiri.jpg")
+        XCTAssertNil(SearchListsLight.artURL(for: shelves[1]))
+    }
+
+    func testEveryKindsRowIsLitAboutAsBrightly() {
+        // A dark poster shows at its most; a lighter one is dimmed until it gives off the same light.
+        XCTAssertEqual(SearchListsLight.opacity(forLuma: 0.05), 0.8)
+        let even = 0.2 * SearchListsLight.opacity(forLuma: 0.2)
+        for luma in [0.35, 0.6, 0.9] {
+            XCTAssertEqual(luma * SearchListsLight.opacity(forLuma: luma), even, accuracy: 0.0001)
+        }
+    }
+
     func testShelvesDecodeTheirSourcesAndDropABrokenOne() throws {
         let json = #"""
         {"shelves": [
