@@ -293,14 +293,15 @@ nonisolated private struct StripCanvas {
                 for row in (h - bottomOverlap + path[column] + 1)..<h { take[row * w + column] = 0 }
             }
         }
-        // Soften the cut by a pixel, and always take the patch where nothing is there yet.
+        // Soften the cut by two pixels (a smooth sky shows a hard cut as a faint dashed line), and always take the patch
+        // where nothing is there yet.
         var soft = take
         for row in 0..<h {
             for column in 0..<w {
                 var sum: Float = 0
                 var count: Float = 0
-                for dy in -1...1 {
-                    for dx in -1...1 {
+                for dy in -2...2 {
+                    for dx in -2...2 {
                         let r = row + dy, c = column + dx
                         if r >= 0, r < h, c >= 0, c < w { sum += take[r * w + c]; count += 1 }
                     }
