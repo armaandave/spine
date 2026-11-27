@@ -1222,7 +1222,7 @@ struct ProfileView: View {
         .padding(.top, backdropURL == nil ? topSafeAreaInset + 28 : topSafeAreaInset + 74 + backdropContentOffset)
         .background(alignment: .top) {
             if let backdropURL {
-                ProfileBackdropArtwork(urlString: backdropURL)
+                ProfileBackdropArtwork(urlString: backdropURL, pictureTop: topSafeAreaInset - BackdropLayout.topOffset)
                     .frame(height: topSafeAreaInset + ProfileHeroBackdropLayout.backdropHeight)
                     .offset(y: BackdropLayout.topOffset)
                     .onLongPressGesture {
@@ -1271,48 +1271,38 @@ struct ProfileView: View {
         .accessibilityLabel(profile.displayName)
     }
 
+    /// The profile's backdrop: the picture starts `pictureTop` down the frame, under the status bar, with the strip grown
+    /// from its own top above it (`TopStripPictureView`), and ends where it always has. Its shade and fade are unchanged.
     private struct ProfileBackdropArtwork: View {
         let urlString: String
+        let pictureTop: CGFloat
 
         var body: some View {
-            GeometryReader { proxy in
-                ZStack {
-                    SpineAsyncImage(url: URL(string: urlString)) { phase in
-                        switch phase {
-                        case let .success(image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: proxy.size.width, height: proxy.size.height)
-                                .clipped()
-                        default:
-                            Color.clear
-                        }
-                    }
+            ZStack {
+                TopStripPictureView(url: URL(string: urlString), pictureTop: pictureTop)
 
-                    LinearGradient(
-                        stops: [
-                            .init(color: .black.opacity(0.42), location: 0),
-                            .init(color: .black.opacity(0.18), location: 0.36),
-                            .init(color: .clear, location: 0.72),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white, location: 0),
-                            .init(color: .white, location: 0.52),
-                            .init(color: .white.opacity(0.35), location: 0.78),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.42), location: 0),
+                        .init(color: .black.opacity(0.18), location: 0.36),
+                        .init(color: .clear, location: 0.72),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
             }
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white, location: 0.52),
+                        .init(color: .white.opacity(0.35), location: 0.78),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
             .clipped()
         }
     }

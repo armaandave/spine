@@ -2002,8 +2002,10 @@ struct ProfileListDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(alignment: .top) {
                 if let backdropURL {
-                    ProfileListBackdropArtwork(url: backdropURL)
-                        .frame(height: stripHeight)
+                    // The picture starts under the status bar; the strip grown above it reaches the header's top.
+                    let pictureTop = topSafeAreaInset - BackdropLayout.topOffset
+                    ProfileListBackdropArtwork(url: backdropURL, pictureTop: pictureTop)
+                        .frame(height: stripHeight + pictureTop)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
             }
@@ -2477,24 +2479,17 @@ private struct ProfileListCircleIconLabel: View {
 }
 
 /// The list's backdrop across the top of the page, uncovered: a light shade under the status bar, then the image
-/// fading into the black page over its last 40%.
+/// fading into the black page over its last 40%. The picture starts `pictureTop` down the frame, under the status bar,
+/// with the strip grown from its own top above it (`TopStripPictureView`); the shade stays where it always has.
 private struct ProfileListBackdropArtwork: View {
     let url: String
+    let pictureTop: CGFloat
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                SpineAsyncImage(url: URL(string: url)) { phase in
-                    if case let .success(image) = phase {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: proxy.size.width, height: proxy.size.height)
-                            .clipped()
-                    } else {
-                        Color.clear
-                    }
-                }
+            let pictureHeight = max(0, proxy.size.height - pictureTop)
+            ZStack(alignment: .top) {
+                TopStripPictureView(url: URL(string: url), pictureTop: pictureTop)
 
                 LinearGradient(
                     stops: [
@@ -2504,18 +2499,25 @@ private struct ProfileListBackdropArtwork: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
+                .frame(height: pictureHeight)
             }
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .white, location: 0),
-                        .init(color: .white, location: 0.6),
-                        .init(color: .clear, location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .mask(alignment: .top) {
+                VStack(spacing: 0) {
+                    Color.white
+                        .frame(height: pictureTop)
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white, location: 0),
+                            .init(color: .white, location: 0.6),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: pictureHeight)
+                }
+            }
         }
         .clipped()
         .allowsHitTesting(false)

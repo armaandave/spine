@@ -548,6 +548,22 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertEqual(rgbaPixels(again).data, pixels.data)
     }
 
+    func testATopStripPictureIsThePagesShapeWithTheStripAboveIt() throws {
+        // A 16:9 backdrop on the media page's 3:2 strip: cropped around its center, keeping its height, with the strip
+        // grown above it.
+        let source = UIImage(cgImage: stripedImage(width: 640, height: 360), scale: 3, orientation: .up)
+        let output = try XCTUnwrap(TopStripProcessor(aspect: 1.5).process(source)?.cgImage)
+        let band = Int((CGFloat(540) * TopStrip.share).rounded())
+        XCTAssertEqual(output.width, 540)
+        XCTAssertEqual(output.height, 360 + band, "the strip sits on top of the picture")
+        // Below the join (its first 12 rows blend into the strip) the picture is the source's own rows.
+        let pixels = rgbaPixels(output)
+        for row in [12, 101, 359] {
+            let white = (row / 2) % 2 == 0
+            XCTAssertEqual(Int(pixels.red(10, band + row)), white ? 255 : 0, accuracy: 3, "picture row \(row)")
+        }
+    }
+
     func testThePictureProcessorHasAStableIdentifierThatNamesItsNumbers() {
         let identifier = HomeBackdropMeltProcessor().identifier
         XCTAssertEqual(identifier, HomeBackdropMeltProcessor().identifier)

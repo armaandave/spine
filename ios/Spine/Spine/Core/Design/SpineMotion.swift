@@ -118,17 +118,21 @@ struct SpineAsyncImage<Content: View>: View {
     let url: URL?
     let thumbnailSize: CGSize?
     let processors: [any ImageProcessing]
+    /// Nil for the shared pipeline; `SpineImagePipeline.strips` for pictures with a strip grown above them.
+    let pipeline: ImagePipeline?
     private let content: (AsyncImagePhase) -> Content
 
     init(
         url: URL?,
         thumbnailSize: CGSize? = nil,
         processors: [any ImageProcessing] = [],
+        pipeline: ImagePipeline? = nil,
         @ViewBuilder content: @escaping (AsyncImagePhase) -> Content
     ) {
         self.url = url
         self.thumbnailSize = thumbnailSize
         self.processors = processors
+        self.pipeline = pipeline
         self.content = content
     }
 
@@ -139,6 +143,7 @@ struct SpineAsyncImage<Content: View>: View {
         ) { state in
             resolvedContent(for: SpineImagePhase.phase(url: url, image: state.image, error: state.error))
         }
+        .pipeline(pipeline ?? .shared)
         // A new URL gets a fresh view, so the old and new images crossfade.
         .id(url)
         .transition(.opacity)

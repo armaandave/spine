@@ -103,7 +103,7 @@ final class HomeTopArtModel {
                 self.siteArt = siteArt
                 hasSitePick = true
                 art = siteArt
-                ArtworkPrefetch.prefetch([HomeBackdropArt.request(url: siteArt.backdrop)].compactMap { $0 })
+                ArtworkPrefetch.prefetchStrips([HomeBackdropArt.request(url: siteArt.backdrop)].compactMap { $0 })
                 return
             }
         }
@@ -118,7 +118,7 @@ final class HomeTopArtModel {
            stored.dayKey == today {
             art = stored.art
             artDay = today
-            ArtworkPrefetch.prefetch([HomeBackdropArt.request(url: stored.art.backdrop)].compactMap { $0 })
+            ArtworkPrefetch.prefetchStrips([HomeBackdropArt.request(url: stored.art.backdrop)].compactMap { $0 })
         }
     }
 
@@ -136,7 +136,7 @@ final class HomeTopArtModel {
             hasSitePick = true
             if art != picked {
                 art = picked
-                if let request = HomeBackdropArt.request(url: picked.backdrop) { ArtworkPrefetch.prefetch([request]) }
+                if let request = HomeBackdropArt.request(url: picked.backdrop) { ArtworkPrefetch.prefetchStrips([request]) }
                 onChange(picked)
             }
             saveSite()
@@ -200,7 +200,7 @@ final class HomeTopArtModel {
             if let data = try? JSONEncoder().encode(Stored(dayKey: key, art: picked)) {
                 defaults.set(data, forKey: Self.defaultsKey)
             }
-            if let request = HomeBackdropArt.request(url: backdrop) { ArtworkPrefetch.prefetch([request]) }
+            if let request = HomeBackdropArt.request(url: backdrop) { ArtworkPrefetch.prefetchStrips([request]) }
             onChange(picked)
             return
         }
@@ -288,7 +288,8 @@ struct HomeTopArtView: View {
                     SpineAsyncImage(
                         url: backdrop,
                         thumbnailSize: HomeBackdropArt.thumbnailSize,
-                        processors: HomeBackdropArt.processors
+                        processors: HomeBackdropArt.processors,
+                        pipeline: SpineImagePipeline.strips
                     ) { phase in
                         if case let .success(image) = phase {
                             HomePictureUnderStatusBar(image: image, topInset: topInset)
