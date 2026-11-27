@@ -1806,9 +1806,18 @@ struct ProfileListDetailView: View {
                 )
             )
 
+            if let list = viewModel.list {
+                ProfileListPlateLayer(scroll: listScroll, plate: listPlate(list, scroll: listScroll))
+                    .padding(.horizontal, 14)
+            }
+
             topButtons
                 .padding(.horizontal, 16)
                 .padding(.top, topSafeAreaInset + CustomListHeaderLayout.topControlTopPadding)
+                // The plate stops 13 pt under the buttons, where a list without a backdrop starts it.
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: {
+                    listScroll.pinLine = $0 + CustomListHeaderLayout.plateGap
+                }
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
@@ -1985,7 +1994,12 @@ struct ProfileListDetailView: View {
         let hasBackdrop = backdropURL != nil
         // Never above the header, even before the width (and so the strip's height) is measured.
         let plateTop = max(0, CustomListHeaderLayout.plateTop(hasBackdrop: hasBackdrop, stripHeight: stripHeight))
-        return listPlate(list)
+        // The plate's place in the page; the live plate is drawn over it (`ProfileListPlateLayer`) so it can stop under
+        // the top buttons and condense there. This copy is invisible but still takes touches, so a drag that starts on
+        // the plate scrolls the page and its owner and tags open as before; VoiceOver reads it in the page's order.
+        return listPlate(list, scroll: nil)
+            .opacity(0.001)
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { listScroll.slotTop = $0 }
             .background {
                 // Under a backdrop: its blur behind the glass, as wide as the page, fading in as the backdrop fades out.
                 if let backdropURL, let lightURL = URL(string: backdropURL) {
@@ -2020,12 +2034,16 @@ struct ProfileListDetailView: View {
     }
 
     /// The plate: who made the list, its name, its description, its tags, then its count beside the completion
-    /// button.
-    private func listPlate(_ list: CustomListDetail) -> some View {
+    /// bar. With `scroll` it is the live plate that condenses as the page scrolls.
+    private func listPlate(_ list: CustomListDetail, scroll: ProfileListScroll?) -> some View {
         let isOwnerCurrentUser = list.owner.id == currentUserId
         let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return VStack(alignment: .leading, spacing: 10) {
+        return ProfileListPlate(
+            scroll: scroll,
+            name: list.name,
+            hasBelow: !description.isEmpty || !list.tags.isEmpty
+        ) {
             if let featured = featuredCard {
                 FeaturedListLiveBanner(card: featured)
             }
@@ -2083,14 +2101,7 @@ struct ProfileListDetailView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            Text(list.name)
-                .font(.system(size: 30, weight: .black))
-                .tracking(-0.5)
-                .foregroundStyle(.white)
-                .lineLimit(3)
-                .minimumScaleFactor(0.72)
-
+        } below: {
             // The description comes before the tags.
             if !description.isEmpty {
                 Text(description)
@@ -2103,9 +2114,8 @@ struct ProfileListDetailView: View {
             if !list.tags.isEmpty {
                 tagRow(list.tags, owner: list.owner)
             }
-
-            // "24 films · Ranked", then the completion bar. The row keeps the 44 pt the old completion button gave
-            // it, so the plate's height didn't change with the bar.
+        } meta: {
+            // "24 films · Ranked", then the completion bar.
             HStack(spacing: 10) {
                 Text(plateCountLabel(list))
                     .font(.system(size: 13, weight: .semibold))
@@ -2118,16 +2128,7 @@ struct ProfileListDetailView: View {
                         .accessibilityLabel("\(list.name) completion")
                 }
             }
-            .frame(minHeight: 44)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-        // The meta row's 44 pt already holds 11 under its words.
-        .padding(.bottom, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        // The page is always dark; light glass would wash out the white text.
-        .environment(\.colorScheme, .dark)
     }
 
     /// The list's tags, each opening the owner's lists with that tag, as a log's tags open its tag page. They wrap.
@@ -2523,11 +2524,160 @@ private struct ProfileListBackdropArtwork: View {
     }
 }
 
-/// How far a list's page has scrolled. Only the blurred top reads it, so scrolling redraws that and not the whole page.
+/// How far a list's page has scrolled. Only the blurred top and the glass plate read it, so scrolling redraws those
+/// and not the whole page.
 @MainActor
 @Observable
 private final class ProfileListScroll {
     var offset: CGFloat = 0
+    /// On the screen: the top of the plate's place in the page (nil until measured), the line under the top buttons
+    /// where the plate stops, and the top of the layer the plate is drawn in.
+    var slotTop: CGFloat?
+    var pinLine: CGFloat = 0
+    var layerTop: CGFloat = 0
+
+    /// How far the page has scrolled the plate's place past the buttons.
+    var pastPin: CGFloat {
+        slotTop.map { pinLine - $0 } ?? 0
+    }
+}
+
+/// A list's glass plate, condensing like Library's: once it reaches the top buttons it stays under them and shrinks
+/// to a slim bar with only the name and the count row. The owner, description and tags fold away in the first third
+/// of the scroll and the name scales down to 0.62. Without `scroll` it is the plate at rest.
+private struct ProfileListPlate<Top: View, Below: View, Meta: View>: View {
+    let scroll: ProfileListScroll?
+    let name: String
+    /// The description or tags; without either, nothing sits between the name and the count row.
+    let hasBelow: Bool
+    private let top: Top
+    private let below: Below
+    private let meta: Meta
+
+    /// Each part's own height, which it shrinks from.
+    @State private var topHeight: CGFloat?
+    @State private var nameHeight: CGFloat?
+    @State private var belowHeight: CGFloat?
+    @State private var metaHeight: CGFloat?
+
+    init(
+        scroll: ProfileListScroll?,
+        name: String,
+        hasBelow: Bool,
+        @ViewBuilder top: () -> Top,
+        @ViewBuilder below: () -> Below,
+        @ViewBuilder meta: () -> Meta
+    ) {
+        self.scroll = scroll
+        self.name = name
+        self.hasBelow = hasBelow
+        self.top = top()
+        self.below = below()
+        self.meta = meta()
+    }
+
+    /// How much the plate shrinks from full to slim, from its parts' own heights and the padding it drops.
+    private var shrink: CGFloat {
+        let meta = metaHeight ?? 44
+        return (topHeight ?? 0)
+            + (hasBelow ? belowHeight ?? 0 : 0)
+            + (nameHeight ?? 0) * (1 - 0.62)
+            + max(44 - meta, 0)
+            + (10 - 4) + (20 - 11) + (9 - 11)
+    }
+
+    /// The scroll it takes to condense: Library's 110 pt for its 78 pt of shrinking, kept in proportion, so the page
+    /// slides under the plate as it does there.
+    private var collapseDistance: CGFloat {
+        let libraryRatio = LibraryPlateLayout.collapseDistance
+            / (LibraryPlateLayout.fullHeight - LibraryPlateLayout.slimHeight)
+        return max(LibraryPlateLayout.collapseDistance, shrink * libraryRatio)
+    }
+
+    var body: some View {
+        // 0 with the plate full, 1 once it has condensed to its slim bar; it starts once the plate reaches the buttons.
+        let progress = min(max((scroll?.pastPin ?? 0) / collapseDistance, 0), 1)
+        let eased = progress * progress * (3 - 2 * progress)
+        // What folds away goes in the first third of the scroll.
+        let fold = max(0, 1 - progress * 3)
+        let scale = LibraryPlateLayout.mix(1, 0.62, eased)
+        let shape = RoundedRectangle(cornerRadius: LibraryPlateLayout.mix(24, 22, eased), style: .continuous)
+
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                top
+            }
+            .padding(.bottom, 10)
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
+            .frame(height: topHeight.map { $0 * (1 - eased) }, alignment: .bottom)
+            .opacity(fold)
+            .allowsHitTesting(fold > 0)
+
+            Text(name)
+                .font(.system(size: 30, weight: .black))
+                .tracking(-0.5)
+                .foregroundStyle(.white)
+                .lineLimit(3)
+                .minimumScaleFactor(0.72)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { nameHeight = $0 }
+                .scaleEffect(scale, anchor: .topLeading)
+                .frame(height: nameHeight.map { $0 * scale }, alignment: .top)
+
+            if hasBelow {
+                VStack(alignment: .leading, spacing: 10) {
+                    below
+                }
+                .padding(.top, 10)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { belowHeight = $0 }
+                .frame(height: belowHeight.map { $0 * (1 - eased) }, alignment: .top)
+                .opacity(fold)
+                .allowsHitTesting(fold > 0)
+            }
+
+            // The row keeps the 44 pt the old completion button gave it, so the plate's height didn't change with
+            // the bar; the slim bar drops that.
+            meta
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { metaHeight = $0 }
+                .frame(minHeight: LibraryPlateLayout.mix(44, 0, eased))
+                .padding(.top, LibraryPlateLayout.mix(10, 4, eased))
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, LibraryPlateLayout.mix(20, 11, eased))
+        // The meta row's 44 pt already holds 11 under its words.
+        .padding(.bottom, LibraryPlateLayout.mix(9, 11, eased))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipShape(shape)
+        .glassEffect(.regular, in: shape)
+        // The page is always dark; light glass would wash out the white text.
+        .environment(\.colorScheme, .dark)
+    }
+}
+
+/// The layer the live plate is drawn in, over the page and under the top buttons: the plate sits on its place in the
+/// page and stays under the buttons once the page has scrolled it there.
+private struct ProfileListPlateLayer<Plate: View>: View {
+    let scroll: ProfileListScroll
+    let plate: Plate
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { scroll.layerTop = $0 }
+            .overlay(alignment: .top) {
+                if let slotTop = scroll.slotTop {
+                    plate
+                        .offset(y: max(slotTop, scroll.pinLine) - scroll.layerTop)
+                        // Until it's held under the buttons, touches go through to the page and the copy in it, so
+                        // drags on the plate scroll. Held there it takes them, as Library's slim bar does.
+                        .allowsHitTesting(scroll.pastPin > 1)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
 }
 
 /// A list without a backdrop: its first item, baked blurred, as the backdrop. It runs `height` down from the top of the
