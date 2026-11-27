@@ -11,7 +11,7 @@ import Foundation
 public enum PictureStrip {
     /// Part of every cache key a strip is stored under (the finished pictures are kept on disk): raise it whenever the
     /// strip comes out differently, or phones keep showing strips grown the old way.
-    public static let version = 3
+    public static let version = 4
 
     /// The patches are chosen on a copy this many times smaller, then cut from the picture at full size.
     static let searchScale = 6
@@ -178,7 +178,11 @@ public enum PictureStrip {
         for placement in placements {
             let x = placement.x * scale
             let top = placement.y * scale
-            let blockWidth = min(placement.width * scale, width - x)
+            // The last patch in a row also covers the few columns past the smaller copy's width (a width that isn't a
+            // multiple of the search scale). Its source always has them: no patch starts closer than a whole patch to
+            // the smaller copy's right edge.
+            let reachesEdge = placement.x + placement.width == lowWidth
+            let blockWidth = reachesEdge ? width - x : min(placement.width * scale, width - x)
             let blockHeight = min(placement.height * scale, fullRows - top)
             guard blockWidth > 0, blockHeight > 0 else { continue }
             strip.place(
@@ -188,8 +192,6 @@ public enum PictureStrip {
                 bottomOverlap: min(overlapF, blockHeight)
             )
         }
-        // The few columns past the last whole patch (a width that isn't a multiple of the search scale).
-        strip.fillGapsFromTheLeft()
 
         // The strip's lower `band` rows, then the blended join rows, then the rest of the picture.
         let first = fullRows - overlapF - band
@@ -261,13 +263,15 @@ struct Pixels {
         return Pixels.image(out, width: width, height: height + band)
     }
 
+    /// Opaque (no alpha channel), so the image cache keeps the finished picture on disk as a JPEG: with alpha it would
+    /// be a PNG, several times larger.
     static func image(_ bytes: [UInt8], width: Int, height: Int) -> CGImage? {
         var bytes = bytes
         return bytes.withUnsafeMutableBytes { raw in
             CGContext(
                 data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
                 space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
             )?.makeImage()
         }
     }
@@ -277,14 +281,12 @@ struct Pixels {
 
 struct StripCanvas {
     let width: Int
-    let rows: Int
     /// RGB floats.
     var color: [Float]
     var filled: [Bool]
 
     init(width: Int, rows: Int) {
         self.width = width
-        self.rows = rows
         color = [Float](repeating: 0, count: width * rows * 3)
         filled = [Bool](repeating: false, count: width * rows)
     }
@@ -392,16 +394,6 @@ struct StripCanvas {
             }
         }
         return path
-    }
-
-    mutating func fillGapsFromTheLeft() {
-        for row in 0..<rows {
-            for x in 1..<width where !filled[row * width + x] {
-                let o = (row * width + x) * 3
-                for c in 0..<3 { color[o + c] = color[o - 3 + c] }
-                filled[row * width + x] = true
-            }
-        }
     }
 
     func write(row: Int, into out: inout [UInt8], at outRow: Int) {

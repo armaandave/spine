@@ -602,6 +602,45 @@ final class BlurredArtTests: XCTestCase {
         }
     }
 
+    func testTheStripCarriesOnAllTheWayToTheRightEdge() throws {
+        // 603 px wide, which isn't a multiple of the six times smaller copy the patches are chosen on (nor is a 393 pt
+        // phone's 1179 px): grey stripes 12 px apart, the same in every row, so the strip simply carries them on.
+        let width = 603, height = 400
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let i = (y * width + x) * 4
+                let grey = UInt8((x % 12) * 20)
+                bytes[i] = grey; bytes[i + 1] = grey; bytes[i + 2] = grey
+            }
+        }
+        let picture = bytes.withUnsafeMutableBytes { raw in
+            CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!.makeImage()!
+        }
+
+        let output = try XCTUnwrap(HomeBackdropBand.grow(picture, sharpRows: 300))
+        let band = Int((CGFloat(width) * HomeBackdropBand.share).rounded())
+        let pixels = rgbaPixels(output)
+        // Every column of the strip carries on its own stripe, the last few too: not copies of the column before them.
+        for row in 0 ..< band {
+            for x in [0, 301, width - 4, width - 3, width - 2, width - 1] {
+                XCTAssertEqual(Int(pixels.red(x, row)), (x % 12) * 20, "strip row \(row) at \(x)")
+            }
+        }
+    }
+
+    func testAFinishedStripIsKeptOnDiskAsAJPEG() throws {
+        // The strips pipeline keeps finished pictures on disk with Nuke's default encoder, which saves a picture with an
+        // alpha channel as a PNG, several times larger. A strip has none.
+        let source = UIImage(cgImage: stripedImage(width: 640, height: 360), scale: 3, orientation: .up)
+        let output = try XCTUnwrap(TopStripProcessor(aspect: 1.5).process(source))
+        let data = try XCTUnwrap(ImageEncoders.Default().encode(output))
+        XCTAssertEqual(AssetType(data), .jpeg)
+    }
+
     func testThePictureProcessorHasAStableIdentifierThatNamesItsNumbers() {
         let identifier = HomeBackdropMeltProcessor().identifier
         XCTAssertEqual(identifier, HomeBackdropMeltProcessor().identifier)
