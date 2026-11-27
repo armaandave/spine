@@ -2483,49 +2483,87 @@ private struct ProfileListCircleIconLabel: View {
 }
 
 /// The list's backdrop across the top of the page, uncovered: a light shade under the status bar, then the image
-/// fading into the black page over its last 40%. The picture starts `pictureTop` down the frame, under the status bar,
-/// with the strip grown from its own top above it (`TopStripPictureView`); the shade stays where it always has.
+/// fading into the black page over its last 40%. With a strip grown from its own top (`TopStripLoader`), the picture
+/// starts `pictureTop` down the frame, under the status bar; a busy top gets no strip, and the picture fills the frame's
+/// top as it always has. The shade stays where it always has.
 private struct ProfileListBackdropArtwork: View {
     let url: String
     let pictureTop: CGFloat
 
     var body: some View {
         GeometryReader { proxy in
+            let width = proxy.size.width
             let pictureHeight = max(0, proxy.size.height - pictureTop)
-            ZStack(alignment: .top) {
-                TopStripPictureView(url: URL(string: url), pictureTop: pictureTop)
-
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.25), location: 0),
-                        .init(color: .black.opacity(0), location: 0.22),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: pictureHeight)
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            .mask(alignment: .top) {
-                VStack(spacing: 0) {
-                    Color.white
-                        .frame(height: pictureTop)
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white, location: 0),
-                            .init(color: .white, location: 0.6),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: pictureHeight)
+            TopStripLoader(
+                request: TopStrip.request(url: URL(string: url), size: CGSize(width: width, height: pictureHeight))
+            ) { result in
+                switch result {
+                case .loading:
+                    Color.clear
+                case let .strip(image):
+                    layers(top: pictureTop, pictureHeight: pictureHeight) {
+                        TopStripImage(image: image, pictureTop: pictureTop)
+                    }
+                case .none:
+                    layers(top: 0, pictureHeight: pictureHeight) {
+                        SpineAsyncImage(url: URL(string: url)) { phase in
+                            if case let .success(image) = phase {
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: width, height: pictureHeight)
+                                    .clipped()
+                            } else {
+                                Color.clear
+                            }
+                        }
+                        .frame(width: width, height: pictureHeight)
+                    }
                 }
             }
         }
         .clipped()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// The picture, the light shade over the frame's first `pictureHeight`, and the picture fading out over its last
+    /// 40%, the picture starting `top` down the frame.
+    private func layers<Picture: View>(
+        top: CGFloat,
+        pictureHeight: CGFloat,
+        @ViewBuilder picture: () -> Picture
+    ) -> some View {
+        ZStack(alignment: .top) {
+            picture()
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.25), location: 0),
+                    .init(color: .black.opacity(0), location: 0.22),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: pictureHeight)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .mask(alignment: .top) {
+            VStack(spacing: 0) {
+                Color.white
+                    .frame(height: top)
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white, location: 0.6),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: pictureHeight)
+            }
+        }
     }
 }
 

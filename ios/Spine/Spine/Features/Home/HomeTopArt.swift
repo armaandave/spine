@@ -103,7 +103,7 @@ final class HomeTopArtModel {
                 self.siteArt = siteArt
                 hasSitePick = true
                 art = siteArt
-                ArtworkPrefetch.prefetchStrips([HomeBackdropArt.request(url: siteArt.backdrop)].compactMap { $0 })
+                Self.prefetchPicture(siteArt.backdrop)
                 return
             }
         }
@@ -118,8 +118,14 @@ final class HomeTopArtModel {
            stored.dayKey == today {
             art = stored.art
             artDay = today
-            ArtworkPrefetch.prefetchStrips([HomeBackdropArt.request(url: stored.art.backdrop)].compactMap { $0 })
+            Self.prefetchPicture(stored.art.backdrop)
         }
+    }
+
+    /// Starts making `url` into Home's picture both ways: with its strip, and as it always was (for a busy top).
+    private static func prefetchPicture(_ url: URL) {
+        if let request = HomeBackdropBand.request(url: url) { ArtworkPrefetch.prefetchStrips([request]) }
+        if let request = HomeBackdropArt.request(url: url) { ArtworkPrefetch.prefetch([request]) }
     }
 
     /// Asks the server for the site-wide picture. A failed read changes nothing.
@@ -136,7 +142,7 @@ final class HomeTopArtModel {
             hasSitePick = true
             if art != picked {
                 art = picked
-                if let request = HomeBackdropArt.request(url: picked.backdrop) { ArtworkPrefetch.prefetchStrips([request]) }
+                Self.prefetchPicture(picked.backdrop)
                 onChange(picked)
             }
             saveSite()
@@ -200,7 +206,7 @@ final class HomeTopArtModel {
             if let data = try? JSONEncoder().encode(Stored(dayKey: key, art: picked)) {
                 defaults.set(data, forKey: Self.defaultsKey)
             }
-            if let request = HomeBackdropArt.request(url: backdrop) { ArtworkPrefetch.prefetchStrips([request]) }
+            Self.prefetchPicture(backdrop)
             onChange(picked)
             return
         }
@@ -259,8 +265,10 @@ enum HomeTopArtSpec {
 
 /// The picture: a background of the scrolling content like the glow, so it scrolls away with the page and stays at
 /// the top while the page is pulled (`GlowPlacement`). One baked image under two plain gradients, starting under the
-/// status bar (`HomePictureUnderStatusBar`). It gives way to the glow while a tile is open: the image and the shade
-/// fade out on their own, with the glow fully there under them, so there is no dip and nothing is flattened.
+/// status bar with a strip grown from its own top above it (`HomePictureUnderStatusBar`); a busy top gets no strip and
+/// the picture starts at the top of the screen as it always has. It gives way to the glow while a tile is open: the
+/// image and the shade fade out on their own, with the glow fully there under them, so there is no dip and nothing is
+/// flattened.
 struct HomeTopArtView: View {
     let art: HomeTopArtModel
     let glow: HomeGlowModel
@@ -285,16 +293,27 @@ struct HomeTopArtView: View {
             }
             .overlay {
                 if let backdrop {
-                    SpineAsyncImage(
-                        url: backdrop,
-                        thumbnailSize: HomeBackdropArt.thumbnailSize,
-                        processors: HomeBackdropArt.processors,
-                        pipeline: SpineImagePipeline.strips
-                    ) { phase in
-                        if case let .success(image) = phase {
-                            HomePictureUnderStatusBar(image: image, topInset: topInset)
-                        } else {
+                    TopStripLoader(request: HomeBackdropBand.request(url: backdrop)) { result in
+                        switch result {
+                        case .loading:
                             Color.clear
+                        case let .strip(image):
+                            HomePictureUnderStatusBar(image: image, topInset: topInset)
+                        case .none:
+                            // A busy top: the picture as it always was, from the top of the screen.
+                            SpineAsyncImage(
+                                url: backdrop,
+                                thumbnailSize: HomeBackdropArt.thumbnailSize,
+                                processors: HomeBackdropArt.processors
+                            ) { phase in
+                                if case let .success(image) = phase {
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                } else {
+                                    Color.clear
+                                }
+                            }
                         }
                     }
                     .opacity(open ? 0 : 1)

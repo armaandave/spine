@@ -207,7 +207,7 @@ private enum AniListReviewTestError: LocalizedError {
     var errorDescription: String? { "Loading failed." }
 }
 
-private actor AniListReviewRepositoryStub: MediaRepository {
+private final class AniListReviewRepositoryStub: MediaRepository {
     private var results: [Result<AniListReviewPage, Error>]
     private(set) var requestedPages: [Int] = []
 
@@ -235,7 +235,7 @@ private actor AniListReviewRepositoryStub: MediaRepository {
     func saveLogo(ref _: MediaRef, logoURL _: String) async throws -> LogoSaveResponse { fatalError("Not used") }
 }
 
-private actor MediaReviewRepositoryStub: MediaRepository {
+private final class MediaReviewRepositoryStub: MediaRepository {
     private var results: [PagedResponse<MediaReview>]
     private(set) var requestedPages: [String?] = []
 

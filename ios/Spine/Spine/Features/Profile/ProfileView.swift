@@ -1275,15 +1275,39 @@ struct ProfileView: View {
         .accessibilityLabel(profile.displayName)
     }
 
-    /// The profile's backdrop: the picture starts `pictureTop` down the frame, under the status bar, with the strip grown
-    /// from its own top above it (`TopStripPictureView`), and ends where it always has. Its shade and fade are unchanged.
+    /// The profile's backdrop. With a strip grown from its own top (`TopStripLoader`), the picture starts `pictureTop`
+    /// down the frame, under the status bar, the strip above it, and ends where it always has; a busy top gets no strip
+    /// and the picture fills the frame as it always has. Its shade and fade are the same either way.
     private struct ProfileBackdropArtwork: View {
         let urlString: String
         let pictureTop: CGFloat
 
         var body: some View {
             ZStack {
-                TopStripPictureView(url: URL(string: urlString), pictureTop: pictureTop)
+                GeometryReader { proxy in
+                    let pictureSize = CGSize(width: proxy.size.width, height: max(0, proxy.size.height - pictureTop))
+                    TopStripLoader(request: TopStrip.request(url: URL(string: urlString), size: pictureSize)) { result in
+                        switch result {
+                        case .loading:
+                            Color.clear
+                        case let .strip(image):
+                            TopStripImage(image: image, pictureTop: pictureTop)
+                        case .none:
+                            SpineAsyncImage(url: URL(string: urlString)) { phase in
+                                switch phase {
+                                case let .success(image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: proxy.size.width, height: proxy.size.height)
+                                        .clipped()
+                                default:
+                                    Color.clear
+                                }
+                            }
+                        }
+                    }
+                }
 
                 LinearGradient(
                     stops: [

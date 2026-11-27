@@ -457,9 +457,7 @@ final class BlurredArtTests: XCTestCase {
     func testThePictureIsBakedAsOneOpaqueImageInTheFramesShape() throws {
         let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
         let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
-        // Above the frame, the strip that sits behind the status bar (`HomeBackdropBand.share` of the width).
-        let band = Int((CGFloat(output.width) * HomeBackdropBand.share).rounded())
-        XCTAssertEqual(CGFloat(output.width) / CGFloat(output.height - band), HomeBackdropArt.aspect, accuracy: 0.01)
+        XCTAssertEqual(CGFloat(output.width) / CGFloat(output.height), HomeBackdropArt.aspect, accuracy: 0.01)
         XCTAssertEqual(output.width, 135, "a 16:9 backdrop is cropped to the media page's 3:2, keeping its height")
         let pixels = rgbaPixels(output)
         for (x, y) in [(0, 0), (output.width - 1, 0), (10, 45), (output.width - 1, output.height - 1), (5, output.height - 1)] {
@@ -471,24 +469,21 @@ final class BlurredArtTests: XCTestCase {
         let source = UIImage(cgImage: stripedImage(width: 160, height: 90), scale: 3, orientation: .up)
         let output = try XCTUnwrap(HomeBackdropMeltProcessor().process(source)?.cgImage)
         let pixels = rgbaPixels(output)
-        // The picture starts under the strip that sits behind the status bar.
-        let band = Int((CGFloat(output.width) * HomeBackdropBand.share).rounded())
-        // The media page's strip is the picture's top 90 rows; above its last 60% (row 36) the rows are the source's
-        // own, never blurred.
+        // The strip is the top 90 rows; above its last 60% (row 36) the rows are the source's own, never blurred.
         for row in 0 ... 32 {
             let white = (row / 2) % 2 == 0
-            XCTAssertEqual(Int(pixels.red(10, band + row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
+            XCTAssertEqual(Int(pixels.red(10, row)), white ? 255 : 0, accuracy: 3, "row \(row) is sharp")
         }
         // Below the strip is a smooth field of the picture's own colors: no stripes left in it (neighboring rows are
         // nearly the same) and not black.
-        for row in (band + 92) ..< (output.height - 1) {
+        for row in 92 ..< (output.height - 1) {
             let step = abs(Int(pixels.red(10, row + 1)) - Int(pixels.red(10, row)))
             XCTAssertLessThan(step, 10, "rows \(row) and \(row + 1) blend smoothly")
         }
         // Dimmed to a dark tint of those colors (`HomeBackdropArt.dim`): never brighter than white times the dim (an
         // undimmed wash of this black and white source reaches about 240 at the bottom), and still not black.
         let brightest = Int((255 * HomeBackdropArt.dim).rounded(.up))
-        for row in [band + 100, output.height - 1] {
+        for row in [100, output.height - 1] {
             XCTAssertGreaterThan(Int(pixels.red(10, row)), 30, "row \(row) has the picture's color, not black")
             XCTAssertLessThanOrEqual(Int(pixels.red(10, row)), brightest, "row \(row) is a dim tint, not a pale haze")
         }
@@ -548,7 +543,7 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertEqual(rgbaPixels(again).data, pixels.data)
     }
 
-    func testABusyTopGetsNoStripAndThePictureKeepsItsUsualPlace() throws {
+    func testABusyTopGetsNoStrip() throws {
         // 600 x 400 of random 6 px blocks of color: nothing in it can be carried on without pasted pieces.
         let width = 600, height = 400
         var bytes = [UInt8](repeating: 255, count: width * height * 4)
@@ -572,19 +567,23 @@ final class BlurredArtTests: XCTestCase {
             )!.makeImage()!
         }
 
-        let output = try XCTUnwrap(HomeBackdropBand.grow(picture, sharpRows: 300))
-        let band = Int((CGFloat(width) * HomeBackdropBand.share).rounded())
-        XCTAssertEqual(output.height, height + band, "the same size as with a strip, so the page lays it out the same")
-        // The picture comes first, untouched, so it sits `band` higher than a picture with a strip: about where it
-        // always was. Copies of its last row follow it.
-        let pixels = rgbaPixels(output)
-        let source = Pixels(width: width, data: bytes)
-        for row in [0, 3, 200, height - 1] {
-            for x in [0, 301, width - 1] {
-                XCTAssertEqual(pixels.red(x, row), source.red(x, row), "picture row \(row) at \(x)")
-            }
-        }
-        XCTAssertEqual(pixels.red(301, height + band - 1), source.red(301, height - 1))
+        // The processor says so with its one-pixel answer, which is cached like a strip; the page then shows the
+        // picture the way it always has.
+        let output = try XCTUnwrap(TopStripProcessor(aspect: 1.5).process(UIImage(cgImage: picture, scale: 3, orientation: .up)))
+        XCTAssertTrue(TopStrip.isNoStrip(output))
+    }
+
+    func testAPageShowsItsPictureAsItAlwaysHasWhenThereIsNoStrip() throws {
+        let strip = UIImage(cgImage: stripedImage(width: 90, height: 60))
+        let noStrip = try XCTUnwrap(TopStrip.noStrip(scale: 3))
+        let loading = TopStripLoader<EmptyView>.result(image: nil, container: nil, failed: false)
+        let failed = TopStripLoader<EmptyView>.result(image: nil, container: nil, failed: true)
+        let busy = TopStripLoader<EmptyView>.result(image: Image(uiImage: noStrip), container: ImageContainer(image: noStrip), failed: false)
+        let grown = TopStripLoader<EmptyView>.result(image: Image(uiImage: strip), container: ImageContainer(image: strip), failed: false)
+        guard case .loading = loading else { return XCTFail("nothing yet: wait") }
+        guard case .none = failed else { return XCTFail("no picture with a strip: as it always was") }
+        guard case .none = busy else { return XCTFail("a busy top: as it always was") }
+        guard case .strip = grown else { return XCTFail("a grown strip: under the status bar") }
     }
 
     func testATopStripPictureIsThePagesShapeWithTheStripAboveIt() throws {

@@ -6,11 +6,12 @@ import Foundation
 /// what is already there, and joined along the path where the two differ least (image quilting, Efros and Freeman).
 /// Nothing is mirrored, blurred or stretched. Plain tops (sky, dark, walls, smoke, grain) carry on convincingly. A busy
 /// top (faces, a sun's rim, a crowded room right at the edge) can't be carried on this way without pasted pieces or
-/// repeats, so when the patches match too poorly (`busyLimit`) the picture keeps its usual place instead.
+/// repeats, so when the patches match too poorly (`busyLimit`) there is no strip, and the page shows the picture the
+/// way it always has.
 public enum PictureStrip {
     /// Part of every cache key a strip is stored under (the finished pictures are kept on disk): raise it whenever the
     /// strip comes out differently, or phones keep showing strips grown the old way.
-    public static let version = 2
+    public static let version = 3
 
     /// The patches are chosen on a copy this many times smaller, then cut from the picture at full size.
     static let searchScale = 6
@@ -34,10 +35,9 @@ public enum PictureStrip {
     /// a sun's rim behind hats).
     static let busyLimit: Float = 400
 
-    /// The picture with `band` rows grown above it. `sharpRows`: how far down the picture is still sharp; the
-    /// patches come only from there. The same picture always grows the same strip. When the top is too busy
-    /// (`busyLimit`), the picture comes first and `band` rows of its last row follow it instead, so a page that places
-    /// the picture under the status bar shows it `band` higher: about where it always was, with no strip.
+    /// The picture with `band` rows grown above it, or nil when its top is too busy (`busyLimit`) or the picture can't
+    /// be read. `sharpRows`: how far down the picture is still sharp; the patches come only from there. The same
+    /// picture always grows the same strip.
     public static func grow(_ picture: CGImage, band requestedBand: Int, sharpRows: Int) -> CGImage? {
         let width = picture.width
         let height = picture.height
@@ -51,9 +51,8 @@ public enum PictureStrip {
         // The area the patches come from: the sharp top edge of the picture (`sourceShare`).
         let sourceRows = min(sharpRows, height, max(blockF * 3 / 2, Int(Double(band) * sourceShare)))
         let lowSourceRows = sourceRows / scale
-        guard lowWidth > block * 2, lowSourceRows > block + overlap else {
-            return pixels.withBand(band, rows: Array(repeating: 0, count: band))
-        }
+        // Too small to grow anything from: no strip.
+        guard lowWidth > block * 2, lowSourceRows > block + overlap else { return nil }
 
         // The smaller copy of the source area, and the strip grown on it first.
         let low = pixels.downsampled(by: scale, rows: lowSourceRows * scale)
@@ -165,9 +164,9 @@ public enum PictureStrip {
             y -= step
         }
 
-        // Too busy to carry on: the picture keeps its usual place.
+        // Too busy to carry on: no strip.
         if bestTotal / Float(max(bestCount, 1)) > busyLimit {
-            return pixels.pictureFirst(followedBy: band)
+            return nil
         }
 
         // The same patches cut from the picture at full size, each joined along its least different path.
@@ -248,29 +247,6 @@ struct Pixels {
             }
         }
         return out
-    }
-
-    /// The picture, then `band` copies of its last row: the same size as the picture with a strip on top.
-    func pictureFirst(followedBy band: Int) -> CGImage? {
-        var out = [UInt8](repeating: 255, count: width * (height + band) * 4)
-        out.replaceSubrange(0..<height * width * 4, with: data)
-        let last = (height - 1) * width * 4
-        for row in 0..<band {
-            let start = (height + row) * width * 4
-            out.replaceSubrange(start..<start + width * 4, with: data[last..<last + width * 4])
-        }
-        return Pixels.image(out, width: width, height: height + band)
-    }
-
-    /// The picture with `band` rows on top: a copy of its first row each (when no strip could be grown).
-    func withBand(_ band: Int, rows: [Int]) -> CGImage? {
-        var out = [UInt8](repeating: 255, count: width * (height + band) * 4)
-        for row in 0..<band {
-            let source = rows[row] * width * 4
-            out.replaceSubrange(row * width * 4..<(row + 1) * width * 4, with: data[source..<source + width * 4])
-        }
-        out.replaceSubrange(band * width * 4..<(band + height) * width * 4, with: data)
-        return Pixels.image(out, width: width, height: height + band)
     }
 
     /// The picture with the grown strip on top: the strip's rows from `firstRow`, the join rows as blended in the strip,
