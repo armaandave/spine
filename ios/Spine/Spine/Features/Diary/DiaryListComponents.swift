@@ -197,42 +197,31 @@ private struct DiaryPinnedHeaders: ViewModifier {
                 top = newTop
             }
             .environment(\.diaryPinnedHeaderTop, top)
-            .modifier(DiaryCleanTop(top: top))
+            .modifier(DiaryCleanTop())
     }
 }
 
-/// Nothing scrolled draws above where headers pin: the page fades out over the last 18 pt before it, under the
-/// status bar (or the navigation bar). One mask and no blur layers, so there is no seam between two of them.
+/// Nothing scrolled draws under the status bar (or the navigation bar): the page fades out over the last 18 pt
+/// above the safe area. One mask and no blur layers, so there is no seam between two of them. It follows the safe
+/// area, not the scroll view's top inset, which grows by the refresh spinner's height while a pull to refresh
+/// runs and would hide the spinner.
 private struct DiaryCleanTop: ViewModifier {
-    let top: CGFloat
-
     static let fade: CGFloat = 18
 
     func body(content: Content) -> some View {
         content
             .scrollEdgeEffectHidden(true, for: .top)
             .mask {
-                VStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: Self.fade)
-                    Rectangle()
+                GeometryReader { proxy in
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: Self.fade)
+                        Rectangle()
+                    }
+                    .padding(.top, max(0, proxy.safeAreaInsets.top - Self.fade))
+                    .ignoresSafeArea(edges: .top)
                 }
-                .padding(.top, max(0, top - Self.fade))
-                .ignoresSafeArea()
             }
-    }
-}
-
-/// The clean top for a scroll view without pinned headers, such as the month index.
-private struct DiaryCleanTopOnly: ViewModifier {
-    @State private var top: CGFloat = 0
-
-    func body(content: Content) -> some View {
-        content
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.top } action: { _, newTop in
-                top = newTop
-            }
-            .modifier(DiaryCleanTop(top: top))
     }
 }
 
@@ -289,7 +278,7 @@ extension View {
     /// Keeps a diary page clear under the status bar, as `diaryPinnedHeaders()` does, for a scroll view with no
     /// pinned headers.
     func diaryCleanTop() -> some View {
-        modifier(DiaryCleanTopOnly())
+        modifier(DiaryCleanTop())
     }
 
     /// The blur behind a pinned header that isn't a month's tab (the tag page's Diary/Grid switch), in a scroll
