@@ -5810,7 +5810,7 @@ private struct EpisodeHeroArtwork: View {
                         case .loading:
                             Color.clear
                         case let .strip(image):
-                            TopStripImage(image: image, pictureTop: pictureTop)
+                            TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
                         case .none:
                             SpineAsyncImage(url: url) { phase in
                                 if case let .success(image) = phase {
@@ -6041,7 +6041,7 @@ struct BackdropArtwork: View {
                     Color.clear
                 case let .strip(image):
                     layers(top: pictureTop, pictureHeight: pictureHeight) {
-                        TopStripImage(image: image, pictureTop: pictureTop)
+                        TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
                     }
                 case .none:
                     layers(top: 0, pictureHeight: pictureHeight) {

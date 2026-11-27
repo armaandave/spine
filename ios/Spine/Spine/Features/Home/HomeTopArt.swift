@@ -298,7 +298,14 @@ struct HomeTopArtView: View {
                         case .loading:
                             Color.clear
                         case let .strip(image):
-                            HomePictureUnderStatusBar(image: image, topInset: topInset)
+                            HomePictureUnderStatusBar(
+                                image: image,
+                                topInset: topInset,
+                                size: CGSize(
+                                    width: glow.screenWidth,
+                                    height: HomeTopArtSpec.height(width: glow.screenWidth)
+                                )
+                            )
                         case .none:
                             // A busy top: the picture as it always was, from the top of the screen.
                             SpineAsyncImage(
@@ -342,22 +349,21 @@ struct HomeTopArtView: View {
 
 /// Home's picture starting under the status bar instead of behind it, so the island and the clock never sit on it.
 /// The baked image carries a strip above the picture, grown from the picture's own top (`HomeBackdropBand`); only its
-/// lower part shows, behind the status bar. The frame keeps its height: the picture's last points, already black under
-/// the shade, fall off its bottom.
+/// lower part shows, behind the status bar. The frame (`size`, Home's picture at the screen's width) keeps its height:
+/// the picture's last points, already black under the shade, fall off its bottom.
 private struct HomePictureUnderStatusBar: View {
     let image: Image
     let topInset: CGFloat
+    let size: CGSize
 
     var body: some View {
-        GeometryReader { proxy in
-            let band = proxy.size.width * HomeBackdropBand.share
-            image
-                .resizable()
-                .scaledToFill()
-                .frame(width: proxy.size.width, height: proxy.size.height + band)
-                .offset(y: topInset - band)
-        }
-        .clipped()
+        let band = size.width * HomeBackdropBand.share
+        image
+            .resizable()
+            .frame(width: size.width, height: size.height + band)
+            .offset(y: topInset - band)
+            .frame(width: size.width, height: size.height, alignment: .top)
+            .clipped()
     }
 }
 

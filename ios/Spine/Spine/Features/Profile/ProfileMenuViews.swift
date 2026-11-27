@@ -2502,7 +2502,7 @@ private struct ProfileListBackdropArtwork: View {
                     Color.clear
                 case let .strip(image):
                     layers(top: pictureTop, pictureHeight: pictureHeight) {
-                        TopStripImage(image: image, pictureTop: pictureTop)
+                        TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
                     }
                 case .none:
                     layers(top: 0, pictureHeight: pictureHeight) {

@@ -1291,7 +1291,7 @@ struct ProfileView: View {
                         case .loading:
                             Color.clear
                         case let .strip(image):
-                            TopStripImage(image: image, pictureTop: pictureTop)
+                            TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
                         case .none:
                             SpineAsyncImage(url: URL(string: urlString)) { phase in
                                 switch phase {

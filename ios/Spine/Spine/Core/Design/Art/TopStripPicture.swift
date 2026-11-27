@@ -126,20 +126,20 @@ struct TopStripLoader<Content: View>: View {
     }
 }
 
-/// A picture with its strip, in a frame: the picture from `pictureTop` to the frame's bottom, the strip above it.
+/// A picture with its strip in a frame of `size`: the picture from `pictureTop` to the frame's bottom, the strip above
+/// it. The page passes the size it measured, so nothing here reads geometry.
 struct TopStripImage: View {
     let image: Image
     let pictureTop: CGFloat
+    let size: CGSize
 
     var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let band = width * TopStrip.share
-            image
-                .resizable()
-                .frame(width: width, height: max(0, proxy.size.height - pictureTop) + band)
-                .offset(y: pictureTop - band)
-        }
-        .clipped()
+        let band = size.width * TopStrip.share
+        image
+            .resizable()
+            .frame(width: size.width, height: max(0, size.height - pictureTop) + band)
+            .offset(y: pictureTop - band)
+            .frame(width: size.width, height: size.height, alignment: .top)
+            .clipped()
     }
 }
