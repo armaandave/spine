@@ -126,21 +126,39 @@ nonisolated struct FeaturedLiveState: Codable, Hashable {
 nonisolated struct FeaturedSource: Codable, Hashable {
     let name: String
     let url: String?
+    /// The name Search shows ("NYT" for "The New York Times"), from servers that send it.
+    let shortName: String?
+    let iconUrl: String?
 
-    init(name: String, url: String? = nil) {
+    init(name: String, url: String? = nil, shortName: String? = nil, iconUrl: String? = nil) {
         self.name = name
         self.url = url
+        self.shortName = shortName
+        self.iconUrl = iconUrl
     }
 
     private enum CodingKeys: String, CodingKey {
         case name
         case url
+        case shortName
+        case iconUrl
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = container.lenient(String.self, forKey: .name) ?? ""
         url = container.lenient(String.self, forKey: .url)
+        shortName = container.lenient(String.self, forKey: .shortName)?.nilIfBlank
+        iconUrl = container.lenient(String.self, forKey: .iconUrl)?.nilIfBlank
+    }
+
+    /// The name a list shows for where it's from: the short one when the server sends it.
+    var shownName: String {
+        shortName ?? name
+    }
+
+    var iconURL: URL? {
+        iconUrl.flatMap(URL.init(string:))
     }
 
     /// The source page, when it's a web link.

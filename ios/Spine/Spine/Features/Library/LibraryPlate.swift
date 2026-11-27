@@ -120,11 +120,13 @@ struct LibraryPlate<Title: View, Trailing: View, Bar: View>: View {
 struct LibraryBlurredTop: View {
     let url: URL?
     let scroll: LibraryScroll
+    /// How far the art reaches below the top of the safe area.
+    var height: CGFloat = LibraryPlateLayout.artHeight
 
     var body: some View {
         let offset = scroll.offset
         Color.clear
-            .frame(height: LibraryPlateLayout.artHeight)
+            .frame(height: height)
             .frame(maxWidth: .infinity)
             .background(alignment: .bottom) {
                 ZStack {

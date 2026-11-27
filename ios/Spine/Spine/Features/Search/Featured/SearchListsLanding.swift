@@ -189,7 +189,7 @@ private struct SearchListsSourcesLine: View {
         return HStack(spacing: 11) {
             ForEach(named) { source in
                 HStack(spacing: 6) {
-                    SearchListsSourceIcon(source: source)
+                    FeaturedSourceIcon(name: source.name, iconURL: source.iconUrl.flatMap(URL.init(string:)))
                     Text(source.name)
                         .font(.system(size: 12.5, weight: .semibold))
                         .tracking(-0.1)
@@ -203,49 +203,6 @@ private struct SearchListsSourcesLine: View {
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.4))
             }
-        }
-    }
-}
-
-/// A source's icon as a small rounded square; its first letter when it has none.
-private struct SearchListsSourceIcon: View {
-    let source: FeaturedShelfSource
-
-    private static var side: CGFloat { 16 }
-
-    var body: some View {
-        Group {
-            if let url = source.iconUrl.flatMap(URL.init(string:)) {
-                SpineAsyncImage(url: url, thumbnailSize: CGSize(width: Self.side, height: Self.side)) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        letter
-                    default:
-                        Color.white.opacity(0.08)
-                    }
-                }
-            } else {
-                letter
-            }
-        }
-        .frame(width: Self.side, height: Self.side)
-        .clipShape(RoundedRectangle(cornerRadius: 4.5, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 4.5, style: .continuous)
-                .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)
-        }
-    }
-
-    private var letter: some View {
-        ZStack {
-            Color.white.opacity(0.12)
-            Text(source.name.prefix(1).uppercased())
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.white.opacity(0.8))
         }
     }
 }
