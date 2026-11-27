@@ -22,6 +22,16 @@ enum SpineImagePipeline {
         ImagePipeline.shared = ImagePipeline(configuration: makeConfiguration())
     }
 
+    /// For pictures with a strip grown above them (Home's picture, backdrops, episode stills): the same memory and disk
+    /// caches as every other image, but the finished picture is kept on disk too, so each one is made once and shows at
+    /// once after a relaunch. Only these requests use it: keeping every processed image would also encode and store
+    /// every poster thumbnail. Made on first use, after `install()`.
+    static let strips: ImagePipeline = {
+        var configuration = ImagePipeline.shared.configuration
+        configuration.dataCachePolicy = .storeAll
+        return ImagePipeline(configuration: configuration)
+    }()
+
     /// With a `thumbnailSize` (in points), ImageIO decodes straight to that size: a 2000×3000 poster in an
     /// 80×120 grid cell costs ~0.35 MB of memory instead of ~24 MB. The disk cache still keeps the original
     /// bytes, so a full-size view of the same URL needs no new download.

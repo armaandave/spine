@@ -1443,6 +1443,10 @@ def media_detail(  # noqa: C901, PLR0912, PLR0915
         user=user,
         metadata=metadata,
     )
+    if summary.get("user_state") is not None and summary["ref"].get("item_id"):
+        # Your Tracking shows your latest log's review and rewatch mark.
+        # Only the page carries them, so lists stay small. Additive.
+        summary["user_state"].update(viewer_latest_log(user, summary["ref"]["item_id"]))
     completion = None
     if tv_detail is not None and media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
         # Watched over aired regular episodes (TV-104); a season's own episodes.
@@ -1543,6 +1547,27 @@ def _tv_show_item_for(item, *, create):
     if show_item is None and create:
         show_item = tv_listing.show_item_for(item)
     return show_item
+
+
+def viewer_latest_log(user, item_id):
+    """Return your latest log's review, title, spoiler flag and rewatch.
+
+    It is the log ``diary_entry_id`` names.
+    """
+    from app.models import DiaryEntry
+
+    entry = (
+        DiaryEntry.objects.filter(user=user, item_id=item_id)
+        .order_by("-consumed_at", "-id")
+        .only("review", "review_title", "contains_spoilers", "is_rewatch")
+        .first()
+    )
+    return {
+        "diary_review": (entry.review.strip() or None) if entry else None,
+        "diary_review_title": (entry.review_title.strip() or None) if entry else None,
+        "diary_contains_spoilers": bool(entry and entry.contains_spoilers),
+        "diary_is_rewatch": bool(entry and entry.is_rewatch),
+    }
 
 
 def _anime_detail(media_type, item, *, metadata, page_metadata, user):

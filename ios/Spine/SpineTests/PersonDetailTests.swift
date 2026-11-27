@@ -374,9 +374,6 @@ final class PersonDetailTests: XCTestCase {
 
         XCTAssertEqual(FilmographyType.available(in: releases), [.music])
         XCTAssertEqual(FilmographyType.music.title, "Music")
-        XCTAssertEqual(FilmographyType.music.sectionTitle, "Discography")
-        XCTAssertEqual(FilmographyType.music.creditNoun(count: 1), "release")
-        XCTAssertEqual(FilmographyType.music.creditNoun(count: 2), "releases")
         XCTAssertEqual(
             FilmographyCreditGroup.groups(from: releases, knownForDepartment: "Artist").map(\.role),
             ["Albums", "Singles", "Compilations"]

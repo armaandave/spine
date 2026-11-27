@@ -11,6 +11,9 @@ enum ArtworkPrefetch {
     // low priority, two at a time, and decode into the memory cache: visible cells still load first, and a
     // prefetched cell shows its image on the first frame.
     private static let prefetcher = ImagePrefetcher(pipeline: .shared)
+    /// The same for pictures with a strip grown above them, which go through their own pipeline
+    /// (`SpineImagePipeline.strips`) so they're kept on disk once made.
+    private static let stripPrefetcher = ImagePrefetcher(pipeline: SpineImagePipeline.strips)
 
     static func upcoming<Item: Identifiable>(after item: Item, in items: [Item]) -> ArraySlice<Item> {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return [] }
@@ -27,6 +30,12 @@ enum ArtworkPrefetch {
     static func prefetch(_ requests: [ImageRequest]) {
         guard !requests.isEmpty else { return }
         prefetcher.startPrefetching(with: requests)
+    }
+
+    /// `prefetch` for pictures with a strip grown above them (Home's picture).
+    static func prefetchStrips(_ requests: [ImageRequest]) {
+        guard !requests.isEmpty else { return }
+        stripPrefetcher.startPrefetching(with: requests)
     }
 }
 

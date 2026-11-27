@@ -1,4 +1,5 @@
 import Foundation
+import Nuke
 import SwiftUI
 
 private struct PersonTopSafeAreaInsetKey: PreferenceKey {
@@ -388,10 +389,18 @@ struct PersonDetailView: View {
     @State private var viewModel: PersonDetailViewModel
     @State private var selectedMedia: MediaBrowsingSelection?
     @State private var selectedSeries: SeriesRef?
-    @State private var selectedFilmographyType: FilmographyType = .movie
-    @State private var expandedCreditRoles = Set<String>()
+    /// The globe (every type together) or one media type, as the reader picked it on the type bar or in the filter;
+    /// empty until they do (`kind` falls back to the default).
+    @State private var selectedKind = ""
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var presentedSheet: PersonDetailSheet?
+    /// The photo's color, for the plate's glass and the bars.
+    @State private var photoTint: Color?
+    @State private var creditsScroll = PersonCreditsScroll()
+    /// The bottom of the back and more buttons and the top of the page's scroll view, on screen. The plate stops just
+    /// under the buttons.
+    @State private var topButtonsBottom: CGFloat = 0
+    @State private var scrollViewTop: CGFloat = 0
 
     private let peopleRepository: PeopleRepository
     private let mediaRepository: MediaRepository
@@ -433,7 +442,8 @@ struct PersonDetailView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            SpinePageBackground()
+            Color.black
+                .ignoresSafeArea()
 
             content
                 .spineContentTransition(value: contentPhase)
@@ -458,6 +468,11 @@ struct PersonDetailView: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .global).maxY
+            } action: { bottom in
+                topButtonsBottom = bottom
+            }
         }
         .navigationBarBackButtonHidden()
         .background {
@@ -518,17 +533,19 @@ struct PersonDetailView: View {
         .task {
             if viewModel.detail == nil {
                 await viewModel.load()
-                syncSelectedFilmographyType()
-                expandPrimaryCreditRole()
             } else {
                 viewModel.resumePreparationIfNeeded()
             }
         }
+        .task(id: viewModel.detail?.profileUrl) {
+            guard let url = viewModel.detail?.profileUrl else { return }
+            photoTint = MediaPageTint.known(url)
+            if let loaded = await MediaPageTint.load(url) {
+                photoTint = loaded
+            }
+        }
         .onDisappear {
             viewModel.cancelPreparation()
-        }
-        .onChange(of: selectedFilmographyType) { _, _ in
-            expandPrimaryCreditRole()
         }
         .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
             guard let changedRef = notification.userInfo?["ref"] as? MediaRef,
@@ -536,7 +553,6 @@ struct PersonDetailView: View {
             else { return }
             Task {
                 await viewModel.reloadLoadedPages()
-                syncSelectedFilmographyType()
             }
         }
         .navigationPage(.exploring)
@@ -545,41 +561,72 @@ struct PersonDetailView: View {
     @ViewBuilder
     private var content: some View {
         if viewModel.isLoading, viewModel.detail == nil {
-            ProgressView()
-                .tint(.white)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PersonLoadingPlaceholder(topInset: topSafeAreaInset)
         } else if let detail = viewModel.detail {
-            ScrollView(showsIndicators: false) {
-                ZStack(alignment: .top) {
-                    PersonHeroArtwork(urlString: detail.profileUrl)
-                        .frame(height: topSafeAreaInset + 390)
-                        .offset(y: BackdropLayout.topOffset)
-                        .allowsHitTesting(false)
+            let sections = creditSections
+            let lines = PersonCreditLine.lines(for: sections)
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    ZStack(alignment: .top) {
+                        PersonHeroArtwork(urlString: detail.profileUrl)
+                            .frame(height: topSafeAreaInset + 390)
+                            .offset(y: BackdropLayout.topOffset)
+                            .allowsHitTesting(false)
 
-                    VStack(alignment: .leading, spacing: 26) {
-                        hero(detail)
-                        biographySection(detail)
-                        filmographySection
+                        VStack(alignment: .leading, spacing: 26) {
+                            hero(detail)
+                            biographySection(detail)
+                            credits(sections, lines: lines)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, topSafeAreaInset + 68)
+                        .padding(.bottom, 36)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, topSafeAreaInset + 68)
-                    .padding(.bottom, 36)
+                }
+                .onScrollGeometryChange(for: PersonCreditsScroll.Viewport.self) { geometry in
+                    PersonCreditsScroll.Viewport(
+                        height: geometry.containerSize.height,
+                        insetBottom: geometry.contentInsets.bottom
+                    )
+                } action: { _, viewport in
+                    creditsScroll.viewport = viewport
+                }
+                .scrollContentBackground(.hidden)
+                .ignoresSafeArea(edges: .top)
+                // The plate, drawn over the page so it can stop under the back button; the black under the top
+                // buttons once it has.
+                .overlay(alignment: .topLeading) {
+                    ZStack(alignment: .topLeading) {
+                        PersonPlateScrim(scroll: creditsScroll, pinY: plateTop)
+                        if !sections.isEmpty {
+                            pinnedPlate(
+                                sections,
+                                map: PersonCreditsMap(lines: lines, width: creditsScroll.stackWidth),
+                                proxy: proxy
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .ignoresSafeArea(edges: .top)
+                }
+                .refreshable {
+                    await viewModel.reloadLoadedPages()
+                }
+                .onChange(of: kind) { _, _ in
+                    // A new kind starts at its first section when the plate had stopped under the back button.
+                    guard creditsScroll.isPinned(below: plateTop) else { return }
+                    Task { @MainActor in
+                        await Task.yield()
+                        jump(to: creditSections.first?.id, proxy: proxy)
+                    }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .ignoresSafeArea(edges: .top)
-            .refreshable {
-                await viewModel.reloadLoadedPages()
-                syncSelectedFilmographyType()
+        } else if viewModel.errorMessage != nil, viewModel.detail == nil {
+            PersonLoadFailed {
+                Task {
+                    await viewModel.load()
+                }
             }
-        } else if let error = viewModel.errorMessage, viewModel.detail == nil {
-            ContentUnavailableView(
-                "Could not load person",
-                systemImage: "exclamationmark.triangle",
-                description: Text(error)
-            )
-            .foregroundStyle(.white)
-            .padding()
         }
     }
 
@@ -590,6 +637,183 @@ struct PersonDetailView: View {
             hasError: viewModel.errorMessage != nil
         )
     }
+
+    // MARK: Credits
+
+    /// Where the plate stops, from the top of the page's scroll view: just under the back and more buttons.
+    private var plateTop: CGFloat {
+        guard topButtonsBottom > 0 else {
+            return topSafeAreaInset + PersonPlateLayout.pinBelowSafeArea
+        }
+        return topButtonsBottom - scrollViewTop + PersonPlateLayout.pinGap
+    }
+
+    private var kinds: [String] {
+        PersonCreditSections.kinds(in: viewModel.filmography)
+    }
+
+    /// The kind the reader picked while it's still offered; until then (or once it's gone) the default, which follows
+    /// the credits as their pages arrive: the globe once there are two types.
+    private var kind: String {
+        let kinds = kinds
+        return kinds.contains(selectedKind) ? selectedKind : PersonCreditSections.defaultKind(in: viewModel.filmography)
+    }
+
+    private var creditSections: [PersonCreditSection] {
+        PersonCreditSections.make(
+            filmography: viewModel.filmography,
+            kind: kind,
+            knownForDepartment: viewModel.detail?.knownForDepartment,
+            series: { viewModel.detail?.series(for: $0) ?? [] }
+        )
+    }
+
+    @ViewBuilder
+    private func credits(_ sections: [PersonCreditSection], lines: [PersonCreditLine]) -> some View {
+        if sections.isEmpty {
+            Text("No credits yet")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.62))
+                .frame(maxWidth: .infinity, minHeight: 120)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                // The plate's place in the page. The plate itself is drawn over the page (`pinnedPlate`).
+                Color.clear
+                    .frame(height: PersonPlateLayout.fullHeight)
+                    .id(PersonPlateLayout.placeID)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.frame(in: .scrollView).minY
+                    } action: { y in
+                        creditsScroll.plateY = y
+                    }
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.width
+                    } action: { width in
+                        creditsScroll.stackWidth = width
+                    }
+                    // Read from inside: the scroll view reaches under the status bar, and its own frame doesn't say so.
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        (proxy.frame(in: .global).minY - proxy.frame(in: .scrollView).minY).rounded()
+                    } action: { top in
+                        scrollViewTop = top
+                    }
+
+                ratingPreparationStatus
+                    .padding(.top, 12)
+
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(lines) { line in
+                        creditLine(line)
+                            // The lines on screen, for the plate's title.
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.frame(in: .scrollView).minY
+                            } action: { top in
+                                creditsScroll.lineTops[line.id] = top
+                            }
+                            .onDisappear {
+                                creditsScroll.lineTops[line.id] = nil
+                            }
+                    }
+                }
+                .padding(.top, PersonPlateLayout.firstSectionGap)
+
+                creditPagination
+
+                // Room for the last section to reach the plate, so the menu can jump to it.
+                Color.clear
+                    .frame(height: tailRoom(sections))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func creditLine(_ line: PersonCreditLine) -> some View {
+        switch line {
+        case let .header(section):
+            PersonCreditHeader(section: section, tint: photoTint)
+                .padding(.bottom, PersonCreditsLayout.headerGap)
+        case let .media(section, _, items, gap):
+            PersonCreditPosterRow(section: section, items: items) { item in
+                selectedMedia = MediaBrowsingSelection(ref: item.ref, within: section.media.map(\.ref))
+            }
+            .padding(.bottom, gap)
+        case let .series(_, _, items, gap):
+            PersonSeriesRow(items: items) { selectedSeries = $0.ref }
+                .padding(.bottom, gap)
+        }
+    }
+
+    private func pinnedPlate(
+        _ sections: [PersonCreditSection],
+        map: PersonCreditsMap,
+        proxy: ScrollViewProxy
+    ) -> some View {
+        PersonPinnedPlate(
+            scroll: creditsScroll,
+            sections: sections,
+            map: map,
+            pinY: plateTop,
+            tint: photoTint,
+            kinds: kinds,
+            kind: Binding(get: { kind }, set: { selectedKind = $0 }),
+            onJump: { jump(to: $0, proxy: proxy) }
+        ) {
+            MediaFilterButton(
+                filter: $viewModel.filter,
+                scope: .person(ref: viewModel.detail?.ref ?? PersonRef(source: "", id: "")),
+                options: viewModel.filterOptions,
+                mediaTypes: FilmographyType.available(in: viewModel.filmography).map(\.rawValue)
+            ) {
+                Task {
+                    await viewModel.load()
+                    if let mediaType = viewModel.filter.mediaType, FilmographyType(rawValue: mediaType) != nil {
+                        selectedKind = mediaType
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    /// Where a section's header lands when the menu jumps to it, from the top of the scroll view: just under the slim
+    /// plate.
+    private var jumpLine: CGFloat {
+        plateTop + PersonPlateLayout.slimHeight + PersonPlateLayout.jumpGap
+    }
+
+    /// Scrolls so the section's header sits just under the slim plate; the first section, which starts under the whole
+    /// plate, stops the plate where it pins instead. The scroll view finds the line itself, drawn or not. An anchor
+    /// lines up the same point of the line and of the scroll view, so these put the line's top where it belongs.
+    private func jump(to id: String?, proxy: ScrollViewProxy) {
+        let height = creditsScroll.viewport.height
+        guard let id, height > PersonPlateLayout.fullHeight else { return }
+        let target: String
+        let anchor: UnitPoint
+        if id == creditSections.first?.id {
+            target = PersonPlateLayout.placeID
+            anchor = UnitPoint(x: 0.5, y: plateTop / (height - PersonPlateLayout.fullHeight))
+        } else {
+            let headerLine = PersonCreditsLayout.headerHeight + PersonCreditsLayout.headerGap
+            target = PersonCreditLine.headerID(id)
+            anchor = UnitPoint(x: 0.5, y: jumpLine / (height - headerLine))
+        }
+        withAnimation(.smooth(duration: 0.45)) {
+            proxy.scrollTo(target, anchor: anchor)
+        }
+    }
+
+    /// Reads only the width and the viewport (both change rarely), so scrolling never redraws the page.
+    private func tailRoom(_ sections: [PersonCreditSection]) -> CGFloat {
+        let width = creditsScroll.stackWidth
+        let viewport = creditsScroll.viewport
+        guard let last = sections.last, width > 0, viewport.height > 0 else {
+            return 0
+        }
+        let lastHeight = PersonCreditsLayout.height(of: last, width: width)
+        return max(0, viewport.height - viewport.insetBottom - jumpLine - lastHeight - 36)
+    }
+
+    // MARK: Hero
 
     private func hero(_ detail: PersonDetail) -> some View {
         VStack(spacing: 16) {
@@ -654,87 +878,6 @@ struct PersonDetailView: View {
         }
     }
 
-    private var filmographySection: some View {
-        let types = FilmographyType.available(in: viewModel.filmography)
-        let selectedType = types.contains(selectedFilmographyType) ? selectedFilmographyType : types.first ?? selectedFilmographyType
-        let filmography = viewModel.filmography.filter { $0.ref.mediaType == selectedType.rawValue }
-        let groups = FilmographyCreditGroup.groups(
-            from: filmography,
-            knownForDepartment: viewModel.detail?.knownForDepartment
-        )
-
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                PersonSectionLabel(title: selectedType.sectionTitle)
-                    .accessibilityIdentifier("person-filmography-section-title")
-
-                Spacer(minLength: 8)
-
-                if let completion = mediaTypeCompletion(for: selectedType),
-                   completion.isVisible {
-                    SWCompletionProgressButton(progress: completion)
-                        .accessibilityLabel("\(selectedType.sectionTitle) completion")
-                        .accessibilityIdentifier("person-filmography-completion")
-                }
-
-                MediaFilterButton(
-                    filter: $viewModel.filter,
-                    scope: .person(ref: viewModel.detail?.ref ?? PersonRef(source: "", id: "")),
-                    options: viewModel.filterOptions,
-                    mediaTypes: types.map(\.rawValue)
-                ) {
-                    Task {
-                        await viewModel.load()
-                        if let mediaType = viewModel.filter.mediaType, let selectedType = FilmographyType(rawValue: mediaType) {
-                            selectedFilmographyType = selectedType
-                        }
-                        syncSelectedFilmographyType()
-                        expandPrimaryCreditRole()
-                    }
-                }
-
-            }
-
-            if types.count > 1 {
-                Picker("Credit type", selection: $selectedFilmographyType) {
-                    ForEach(types) { type in
-                        Text(type.title).tag(type)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: .infinity)
-            }
-
-            ratingPreparationStatus
-
-            Group {
-                if filmography.isEmpty {
-                    ContentUnavailableView(
-                        "No \(selectedType.title.lowercased())",
-                        systemImage: "square.grid.2x2",
-                        description: Text("Credits will appear here when available.")
-                    )
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 220)
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        let series = viewModel.detail?.series(for: selectedType.rawValue) ?? []
-                        if !series.isEmpty {
-                            seriesDisclosureRow(series)
-                        }
-
-                        ForEach(groups) { group in
-                            roleDisclosureRow(group, type: selectedType)
-                        }
-
-                        creditPagination
-                    }
-                }
-            }
-            .spineContentTransition(value: selectedType)
-        }
-    }
-
     @ViewBuilder
     private var creditPagination: some View {
         if viewModel.isLoadingNextPage {
@@ -743,30 +886,32 @@ struct PersonDetailView: View {
                 .tint(.white.opacity(0.72))
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
+                .padding(.top, 16)
         } else if viewModel.nextPageErrorMessage != nil {
             Button {
                 Task {
                     await viewModel.loadNextPage()
-                    syncSelectedFilmographyType()
                 }
             } label: {
                 Text("Retry loading credits")
                     .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white.opacity(0.78))
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
             }
             .buttonStyle(.plain)
+            .padding(.top, 16)
             .accessibilityHint(viewModel.nextPageErrorMessage ?? "")
         } else if viewModel.canLoadMore {
+            // Every section shows all of its posters and its full count, and any page can add to any section, so
+            // the credits load every page as soon as the one before arrives, not when a reader reaches the end.
+            // This sits outside the lazy lines on purpose: it appears at once, and again for each next page.
             Color.clear
                 .frame(height: 1)
                 .id(viewModel.detail?.creditsNextPage)
                 .onAppear {
                     Task {
                         await viewModel.loadNextPage()
-                        syncSelectedFilmographyType()
                     }
                 }
         }
@@ -787,6 +932,7 @@ struct PersonDetailView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.68))
             }
+            .padding(.leading, 18)
             .accessibilityElement(children: .combine)
         }
     }
@@ -802,124 +948,6 @@ struct PersonDetailView: View {
             $0.value == viewModel.filter.sort?.rawValue
         }?.label ?? "ratings"
         return "Preparing \(label.lowercased()) · \(preparation.processed) of \(preparation.total)"
-    }
-
-    private func roleDisclosureRow(_ group: FilmographyCreditGroup, type: FilmographyType) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Button {
-                    toggleCreditRole(group.id)
-                } label: {
-                    Text(group.compactTitle(for: type))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.74))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityValue(expandedCreditRoles.contains(group.id) ? "Expanded" : "Collapsed")
-                .accessibilityIdentifier("person-role-header.\(type.rawValue).\(group.id)")
-
-                Button {
-                    toggleCreditRole(group.id)
-                } label: {
-                    Image(systemName: expandedCreditRoles.contains(group.id) ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.44))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(group.role) section")
-                .accessibilityValue(expandedCreditRoles.contains(group.id) ? "Expanded" : "Collapsed")
-                .accessibilityIdentifier("person-role-chevron.\(type.rawValue).\(group.id)")
-            }
-            .padding(.leading, 12)
-            .padding(.trailing, 2)
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 44)
-            .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
-
-            if expandedCreditRoles.contains(group.id) {
-                filmographyGrid(group.media)
-            }
-        }
-    }
-
-    private func filmographyGrid(_ media: [MediaSummary]) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 10) {
-            ForEach(media) { item in
-                Button {
-                    selectedMedia = MediaBrowsingSelection(
-                        ref: item.ref,
-                        within: media.map(\.ref)
-                    )
-                } label: {
-                    MediaArtwork(
-                        url: item.displayPosterURL,
-                        title: item.title,
-                        slot: .tagGrid,
-                        mediaType: item.ref.mediaType,
-                        orientation: item.posterOrientation
-                    )
-                    .posterHoldMenu(item)
-                    .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("View \(item.title)")
-                .prefetchingArtwork(after: item, in: media) { $0.artworkRequest(slot: .tagGrid) }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func seriesDisclosureRow(_ series: [MediaSeriesSummary]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    if expandedCreditRoles.contains(Self.seriesRoleID) {
-                        expandedCreditRoles.remove(Self.seriesRoleID)
-                    } else {
-                        expandedCreditRoles.insert(Self.seriesRoleID)
-                    }
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Text("Series · \(series.count)")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.74))
-
-                    Spacer()
-
-                    Image(systemName: expandedCreditRoles.contains(Self.seriesRoleID) ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.44))
-                }
-                .padding(.horizontal, 12)
-                .frame(height: 42)
-                .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-
-            if expandedCreditRoles.contains(Self.seriesRoleID) {
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
-                    spacing: 14
-                ) {
-                    ForEach(series) { item in
-                        Button {
-                            selectedSeries = item.ref
-                        } label: {
-                            MediaSeriesCard(series: item)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("View \(item.name) series")
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
     }
 
     private func metadataChips(_ detail: PersonDetail) -> [String] {
@@ -939,40 +967,6 @@ struct PersonDetailView: View {
         return chips
     }
 
-    private func syncSelectedFilmographyType() {
-        let types = FilmographyType.available(in: viewModel.filmography)
-        if let first = types.first, !types.contains(selectedFilmographyType) {
-            selectedFilmographyType = first
-        }
-    }
-
-    private func expandPrimaryCreditRole() {
-        let types = FilmographyType.available(in: viewModel.filmography)
-        let selectedType = types.contains(selectedFilmographyType) ? selectedFilmographyType : types.first ?? selectedFilmographyType
-        let filmography = viewModel.filmography.filter { $0.ref.mediaType == selectedType.rawValue }
-        if let primaryGroup = FilmographyCreditGroup.groups(
-            from: filmography,
-            knownForDepartment: viewModel.detail?.knownForDepartment
-        ).first {
-            expandedCreditRoles = [primaryGroup.id]
-        } else {
-            expandedCreditRoles = []
-        }
-        if !(viewModel.detail?.series(for: selectedType.rawValue).isEmpty ?? true) {
-            expandedCreditRoles.insert(Self.seriesRoleID)
-        }
-    }
-
-    private func toggleCreditRole(_ id: String) {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            if expandedCreditRoles.contains(id) {
-                expandedCreditRoles.remove(id)
-            } else {
-                expandedCreditRoles.insert(id)
-            }
-        }
-    }
-
     private func clean(_ value: String?) -> String? {
         guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
             return nil
@@ -983,19 +977,389 @@ struct PersonDetailView: View {
     private func yearOrDate(_ value: String) -> String {
         value.count >= 4 ? String(value.prefix(4)) : value
     }
-
-    private func mediaTypeCompletion(for type: FilmographyType) -> CompletionProgress? {
-        if let completion = viewModel.detail?.mediaTypeCompletions?[type.rawValue] {
-            return completion
-        }
-        let types = FilmographyType.available(in: viewModel.filmography)
-        return types.count == 1 ? viewModel.detail?.completion : nil
-    }
-
-    private static let seriesRoleID = "media-series"
 }
 
-private struct MediaSeriesCard: View {
+// MARK: - Credits: scroll, plate, sections
+
+/// Where the plate and the section headers sit as the page scrolls. Only the plate and the scrim read the moving parts,
+/// so scrolling redraws those and not the grids.
+@MainActor
+@Observable
+final class PersonCreditsScroll {
+    /// The scroll view's height, and the inset its content stops above at the bottom (the home indicator).
+    nonisolated struct Viewport: Equatable {
+        var height: CGFloat = 0
+        var insetBottom: CGFloat = 0
+    }
+
+    var viewport = Viewport()
+    /// The plate's place in the page, from the top of the scroll view. Nil until laid out.
+    var plateY: CGFloat?
+    /// The top of each credits line on screen, from the top of the scroll view, by line. They change on every scroll:
+    /// only the plate reads them.
+    var lineTops: [String: CGFloat] = [:]
+    /// The sections' width, for the page itself.
+    var stackWidth: CGFloat = 0
+
+    func isPinned(below pinY: CGFloat) -> Bool {
+        guard let plateY else { return false }
+        return plateY < pinY
+    }
+
+    /// 0 while the plate scrolls with the page, 1 once it has stopped and condensed to its slim bar.
+    func collapse(pinY: CGFloat) -> CGFloat {
+        guard let plateY else { return 0 }
+        return min(max((pinY - plateY) / PersonPlateLayout.collapseDistance, 0), 1)
+    }
+}
+
+enum PersonPlateLayout {
+    /// The id of the plate's place in the page, which a jump to the first section scrolls to.
+    static let placeID = "person-plate-place"
+    static let fullHeight: CGFloat = 108
+    static let slimHeight: CGFloat = 52
+    /// The plate stops this far under the back and more buttons.
+    static let pinGap: CGFloat = 8
+    /// Before the buttons have been measured: this far below the top of the safe area.
+    static let pinBelowSafeArea: CGFloat = 60
+    /// The scroll it takes the plate to condense once it has stopped.
+    static let collapseDistance: CGFloat = 110
+    static let titleHeight: CGFloat = 38
+    static let cornerRadius: CGFloat = 24
+    /// The first section starts this far under the plate.
+    static let firstSectionGap: CGFloat = 18
+    /// A section the menu jumps to lands this far under the slim plate.
+    static let jumpGap: CGFloat = 12
+
+    static func mix(_ from: CGFloat, _ to: CGFloat, _ amount: CGFloat) -> CGFloat {
+        from + (to - from) * amount
+    }
+}
+
+/// The black that fades in under the back and more buttons once the plate has stopped there, so the posters
+/// scrolling under them don't fight the glass.
+private struct PersonPlateScrim: View {
+    let scroll: PersonCreditsScroll
+    let pinY: CGFloat
+
+    var body: some View {
+        let amount: CGFloat = {
+            guard let plateY = scroll.plateY else { return 0 }
+            return min(max((pinY - plateY) / 40, 0), 1)
+        }()
+        LinearGradient(
+            stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black.opacity(0.8), location: 0.55),
+                .init(color: .black.opacity(0), location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: pinY + 30)
+        .opacity(amount)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The glass plate over the credits: the section in view as the title (its menu jumps to any section), the filter,
+/// the section's bar and numbers, and the type bar with the globe. It scrolls with the page until it reaches the back
+/// button, stops there and condenses to a slim bar that keeps the title and the filter.
+private struct PersonPinnedPlate<Trailing: View>: View {
+    let scroll: PersonCreditsScroll
+    let sections: [PersonCreditSection]
+    let map: PersonCreditsMap
+    let pinY: CGFloat
+    let tint: Color?
+    let kinds: [String]
+    @Binding var kind: String
+    let onJump: (String) -> Void
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        if let plateY = scroll.plateY, !sections.isEmpty {
+            let progress = scroll.collapse(pinY: pinY)
+            let eased = progress * progress * (3 - 2 * progress)
+            let fold = max(0, 1 - progress * 3)
+            let height = PersonPlateLayout.mix(PersonPlateLayout.fullHeight, PersonPlateLayout.slimHeight, eased)
+            let top = max(plateY, pinY)
+            let current = currentSection(plateTop: top, plateHeight: height)
+            let shape = RoundedRectangle(cornerRadius: PersonPlateLayout.cornerRadius, style: .continuous)
+
+            ZStack(alignment: .topLeading) {
+                titleMenu(current: current)
+                    .scaleEffect(PersonPlateLayout.mix(1, 0.62, eased), anchor: .topLeading)
+                    .padding(.leading, 18)
+                    .padding(.trailing, 64)
+                    .offset(y: PersonPlateLayout.mix(16, 14, eased))
+
+                trailing()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.trailing, 12)
+                    .offset(y: PersonPlateLayout.mix(14, 7, eased))
+
+                meterRow(current: current)
+                    .padding(.leading, 18)
+                    .padding(.trailing, kinds.count > 1 ? typeBarWidth + 24 : 18)
+                    .offset(y: 64 - 10 * progress)
+                    .opacity(fold)
+                    .allowsHitTesting(false)
+
+                if kinds.count > 1 {
+                    MediaTypeBar(selectedType: $kind, availableTypes: kinds)
+                        .frame(width: typeBarWidth)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.trailing, 12)
+                        .offset(y: 64 - 10 * progress)
+                        .opacity(fold)
+                        .allowsHitTesting(fold > 0.3)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(height: height, alignment: .top)
+            .clipShape(shape)
+            .glassEffect(glass, in: shape)
+            // The page is always dark; light glass would wash out the white text.
+            .environment(\.colorScheme, .dark)
+            .offset(y: top)
+        }
+    }
+
+    private var typeBarWidth: CGFloat {
+        CGFloat(kinds.count) * 44
+    }
+
+    private var glass: Glass {
+        guard let tint else { return .regular }
+        return .regular.tint(tint.opacity(0.1))
+    }
+
+    /// The section whose header has reached the plate's bottom; the first one until then. A jump lands the header
+    /// `jumpGap` under the plate; the few points of slack keep rounding from leaving the title a section behind. The
+    /// line on screen nearest the plate places every header, so a section whose header has scrolled away still counts.
+    private func currentSection(plateTop: CGFloat, plateHeight: CGFloat) -> PersonCreditSection {
+        let line = plateTop + plateHeight + PersonPlateLayout.jumpGap + 4
+        let nearest = scroll.lineTops
+            .filter { map.lineTops[$0.key] != nil }
+            .min { abs($0.value - line) < abs($1.value - line) }
+        guard let nearest, let mapped = map.lineTops[nearest.key] else { return sections[0] }
+        let index = PersonCreditsLayout.currentIndex(tops: map.headerTops, line: mapped + line - nearest.value)
+        return sections[min(index, sections.count - 1)]
+    }
+
+    private func titleMenu(current: PersonCreditSection) -> some View {
+        Menu {
+            ForEach(sections) { section in
+                Toggle(isOn: Binding(get: { section.id == current.id }, set: { _ in onJump(section.id) })) {
+                    Text(section.title)
+                    Text(menuDetail(section))
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(current.title)
+                    .font(.system(size: 30, weight: .black))
+                    .tracking(-0.5)
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.22), radius: 5, y: 1)
+                    .lineLimit(1)
+                    .minimumScaleFactor(22 / 30)
+                    .contentTransition(.opacity)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.top, 3)
+            }
+            .frame(height: PersonPlateLayout.titleHeight)
+            .contentShape(Rectangle())
+            .animation(.smooth(duration: 0.35), value: current.id)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Section, \(current.title)")
+        .accessibilityHint("Jumps to another section")
+    }
+
+    private func menuDetail(_ section: PersonCreditSection) -> String {
+        if let done = section.done {
+            return "\(done) of \(section.count)"
+        }
+        return section.count == 1 ? "1 series" : "\(section.count) series"
+    }
+
+    @ViewBuilder
+    private func meterRow(current: PersonCreditSection) -> some View {
+        HStack(spacing: 10) {
+            if let done = current.done {
+                CompletionBar(done: done, total: current.count, tint: tint)
+            } else {
+                Text(menuDetail(current))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.62))
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(height: 32)
+    }
+}
+
+/// A section's quiet header: the role, its slim bar, its numbers.
+private struct PersonCreditHeader: View {
+    let section: PersonCreditSection
+    let tint: Color?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(section.title)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(1)
+                .layoutPriority(1)
+            if let done = section.done {
+                CompletionBar(
+                    done: done,
+                    total: section.count,
+                    tint: tint,
+                    height: 4,
+                    countFont: .system(size: 12, weight: .semibold),
+                    countOpacity: 0.58
+                )
+            } else {
+                Spacer(minLength: 0)
+                Text(section.count == 1 ? "1 series" : "\(section.count) series")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+        }
+        .frame(height: PersonCreditsLayout.headerHeight)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// One row of a section's posters, in four columns; a short last row leaves its other columns empty.
+private struct PersonCreditPosterRow: View {
+    let section: PersonCreditSection
+    let items: [MediaSummary]
+    let onSelect: (MediaSummary) -> Void
+
+    var body: some View {
+        let media = section.media
+        let isSquare = section.isSquare
+        HStack(alignment: .top, spacing: PersonCreditsLayout.columnGap) {
+            ForEach(items) { item in
+                Button {
+                    onSelect(item)
+                } label: {
+                    PersonCreditPoster(item: item, isSquare: isSquare)
+                }
+                .buttonStyle(.plain)
+                .posterHoldMenu(item)
+                .accessibilityLabel("View \(item.title)")
+                .prefetchingArtwork(after: item, in: media) { PersonCreditPoster.request(for: $0, isSquare: isSquare) }
+            }
+            ForEach(items.count..<PersonCreditsLayout.columns, id: \.self) { _ in
+                Color.clear
+                    .aspectRatio(isSquare ? 1 : 2.0 / 3.0, contentMode: .fit)
+            }
+        }
+    }
+}
+
+/// One row of series cards, in three columns.
+private struct PersonSeriesRow: View {
+    let items: [MediaSeriesSummary]
+    let onSelect: (MediaSeriesSummary) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: PersonCreditsLayout.columnGap) {
+            ForEach(items) { series in
+                Button {
+                    onSelect(series)
+                } label: {
+                    PersonSeriesCard(series: series)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel("View \(series.name) series")
+            }
+            ForEach(items.count..<PersonCreditsLayout.seriesColumns, id: \.self) { _ in
+                Color.clear
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(height: PersonCreditsLayout.seriesCardHeight, alignment: .top)
+    }
+}
+
+/// A plain poster that fills its column: no marks, no badges. Square for music.
+private struct PersonCreditPoster: View {
+    let item: MediaSummary
+    let isSquare: Bool
+
+    private static func thumbnailSize(isSquare: Bool) -> CGSize {
+        isSquare ? CGSize(width: 96, height: 96) : CGSize(width: 96, height: 144)
+    }
+
+    private static func url(for item: MediaSummary) -> URL? {
+        guard let url = item.displayPosterURL?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty else {
+            return nil
+        }
+        return URL(string: url)
+    }
+
+    /// The request the poster loads, so the grid can prefetch the same cache entry.
+    static func request(for item: MediaSummary, isSquare: Bool) -> ImageRequest? {
+        SpineImagePipeline.request(url: url(for: item), thumbnailSize: thumbnailSize(isSquare: isSquare))
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let url = Self.url(for: item)
+        Color.clear
+            .aspectRatio(isSquare ? 1 : 2.0 / 3.0, contentMode: .fit)
+            .overlay {
+                if url == nil {
+                    missingArt
+                } else {
+                    SpineAsyncImage(url: url, thumbnailSize: Self.thumbnailSize(isSquare: isSquare)) { phase in
+                        switch phase {
+                        case let .success(image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            missingArt
+                        default:
+                            Color.white.opacity(0.06)
+                        }
+                    }
+                }
+            }
+            .clipShape(shape)
+            .overlay {
+                shape.strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+            }
+            .contentShape(shape)
+            .contentShape(.contextMenuPreview, shape)
+    }
+
+    /// A title with no art: its name, quietly, on a dark card.
+    private var missingArt: some View {
+        ZStack {
+            Color(red: 0.05, green: 0.05, blue: 0.05)
+            Text(item.title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white.opacity(0.62))
+                .multilineTextAlignment(.center)
+                .lineLimit(5)
+                .padding(8)
+        }
+    }
+}
+
+/// A book series: its covers fanned, its name and how many books it has.
+private struct PersonSeriesCard: View {
     let series: MediaSeriesSummary
 
     var body: some View {
@@ -1003,18 +1367,92 @@ private struct MediaSeriesCard: View {
             PosterFan(
                 urls: series.posterUrls.map(Optional.some),
                 title: series.name,
-                slot: .profileRail,
+                slot: .activityPost,
                 mediaType: series.mediaType
             )
-            .frame(width: 80, height: 120)
+            .frame(maxWidth: .infinity)
+            .frame(height: PersonCreditsLayout.seriesFanHeight)
 
-            Text(series.name)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white.opacity(0.82))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .frame(width: 80, height: 28, alignment: .top)
+            VStack(spacing: 0) {
+                Text(series.name)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30, alignment: .top)
+                Text(series.bookCount == 1 ? "1 book" : "\(series.bookCount) books")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .frame(height: 14)
+            }
         }
+        .frame(height: PersonCreditsLayout.seriesCardHeight, alignment: .top)
+    }
+}
+
+/// Loading: the page's shapes in faint glass, still, until the credits arrive and fade in together.
+private struct PersonLoadingPlaceholder: View {
+    let topInset: CGFloat
+
+    var body: some View {
+        VStack(spacing: 26) {
+            VStack(spacing: 16) {
+                Circle()
+                    .fill(.white.opacity(0.07))
+                    .frame(width: 156, height: 156)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.white.opacity(0.07))
+                    .frame(width: 220, height: 30)
+            }
+            RoundedRectangle(cornerRadius: PersonPlateLayout.cornerRadius, style: .continuous)
+                .fill(.white.opacity(0.05))
+                .frame(height: PersonPlateLayout.fullHeight)
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: PersonCreditsLayout.columnGap),
+                    count: PersonCreditsLayout.columns
+                ),
+                spacing: PersonCreditsLayout.rowGap
+            ) {
+                ForEach(0..<8, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.white.opacity(0.05))
+                        .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, topInset + 68)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea(edges: .top)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
+    }
+}
+
+/// The page couldn't load: one quiet line and a way to try again.
+private struct PersonLoadFailed: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("Couldn't load this page.")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.72))
+            Button(action: onRetry) {
+                Text("Try again")
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.horizontal, 16)
+                    .frame(height: 32)
+            }
+            .buttonStyle(.plain)
+            .contentShape(.capsule)
+            .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.colorScheme, .dark)
     }
 }
 
@@ -1045,21 +1483,6 @@ enum FilmographyType: String, CaseIterable, Identifiable {
         }
     }
 
-    var sectionTitle: String {
-        switch self {
-        case .book:
-            "Books"
-        case .anime:
-            "Anime"
-        case .manga:
-            "Manga"
-        case .music:
-            "Discography"
-        case .movie, .tv:
-            "Filmography"
-        }
-    }
-
     static func available(in media: [MediaSummary]) -> [FilmographyType] {
         allCases.filter { type in
             media.contains { $0.ref.mediaType == type.rawValue }
@@ -1068,6 +1491,10 @@ enum FilmographyType: String, CaseIterable, Identifiable {
 }
 
 struct FilmographyCreditGroup: Identifiable {
+    static let actorRole = "Actor"
+    /// Acting credits where they play themselves (`MediaSummary.isSelfAppearance`): always the last role.
+    static let appearancesRole = "Appearances"
+
     let role: String
     let media: [MediaSummary]
 
@@ -1080,7 +1507,10 @@ struct FilmographyCreditGroup: Identifiable {
         var grouped: [String: [MediaSummary]] = [:]
 
         for item in media {
-            let roles = cleanRoles(item.creditRoles)
+            var roles = cleanRoles(item.creditRoles)
+            if item.isSelfAppearance, let actor = roles.firstIndex(of: actorRole) {
+                roles[actor] = appearancesRole
+            }
             for role in roles.isEmpty ? ["Credits"] : roles {
                 grouped[role, default: []].append(item)
             }
@@ -1091,49 +1521,38 @@ struct FilmographyCreditGroup: Identifiable {
 
         return grouped
             .map { FilmographyCreditGroup(role: $0.key, media: $0.value) }
-            .sorted {
-                if isMusic {
-                    let firstOrder = musicRoleOrder($0.role)
-                    let secondOrder = musicRoleOrder($1.role)
-                    if firstOrder != secondOrder {
-                        return firstOrder < secondOrder
-                    }
-                }
-                let firstIsPrimary = primaryRoles.contains($0.role.lowercased())
-                let secondIsPrimary = primaryRoles.contains($1.role.lowercased())
-                if firstIsPrimary != secondIsPrimary {
-                    return firstIsPrimary
-                }
-                if $0.media.count != $1.media.count {
-                    return $0.media.count > $1.media.count
-                }
-                return $0.role < $1.role
+            .sorted { precedes($0, $1, primaryRoles: primaryRoles, isMusic: isMusic) }
+    }
+
+    /// The app's role order: Appearances last; music in release order; the person's main role first; then the role
+    /// with more credits; then by name.
+    static func precedes(
+        _ first: FilmographyCreditGroup,
+        _ second: FilmographyCreditGroup,
+        primaryRoles: Set<String>,
+        isMusic: Bool
+    ) -> Bool {
+        let firstIsAppearances = first.role == appearancesRole
+        let secondIsAppearances = second.role == appearancesRole
+        if firstIsAppearances != secondIsAppearances {
+            return secondIsAppearances
+        }
+        if isMusic {
+            let firstOrder = musicRoleOrder(first.role)
+            let secondOrder = musicRoleOrder(second.role)
+            if firstOrder != secondOrder {
+                return firstOrder < secondOrder
             }
-    }
-
-    fileprivate func title(for type: FilmographyType) -> String {
-        if role == "Credits" {
-            return compactTitle(for: type)
         }
-        return "\(role) \(connector) \(media.count) \(type.creditNoun(count: media.count))"
-    }
-
-    fileprivate func compactTitle(for type: FilmographyType) -> String {
-        if type == .music {
-            return "\(role) · \(media.count)"
+        let firstIsPrimary = primaryRoles.contains(first.role.lowercased())
+        let secondIsPrimary = primaryRoles.contains(second.role.lowercased())
+        if firstIsPrimary != secondIsPrimary {
+            return firstIsPrimary
         }
-        return "\(role) · \(media.count) \(type.creditNoun(count: media.count))"
-    }
-
-    private var connector: String {
-        switch role.lowercased() {
-        case "actor", "actress":
-            "in"
-        case "author":
-            "of"
-        default:
-            "of"
+        if first.media.count != second.media.count {
+            return first.media.count > second.media.count
         }
+        return first.role < second.role
     }
 
     private static func cleanRoles(_ roles: [String]) -> [String] {
@@ -1145,7 +1564,7 @@ struct FilmographyCreditGroup: Identifiable {
         }
     }
 
-    private static func primaryRoles(for department: String?) -> Set<String> {
+    static func primaryRoles(for department: String?) -> Set<String> {
         let department = department?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
@@ -1178,25 +1597,6 @@ struct FilmographyCreditGroup: Identifiable {
             "Live releases", "Remix releases", "DJ mixes", "Demos", "Broadcasts",
             "Audiobooks", "Interviews", "Other",
         ].firstIndex(of: role) ?? .max
-    }
-}
-
-extension FilmographyType {
-    func creditNoun(count: Int) -> String {
-        switch self {
-        case .movie:
-            count == 1 ? "film" : "films"
-        case .tv:
-            count == 1 ? "show" : "shows"
-        case .anime:
-            "anime"
-        case .book:
-            count == 1 ? "book" : "books"
-        case .manga:
-            "manga"
-        case .music:
-            count == 1 ? "release" : "releases"
-        }
     }
 }
 
@@ -1251,7 +1651,7 @@ private struct PersonHeroArtwork: View {
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .clipped()
                     default:
-                        SpinePalette.pageBackground
+                        Color.black
                     }
                 }
                 .blur(radius: 30, opaque: true)
@@ -1273,9 +1673,9 @@ private struct PersonHeroArtwork: View {
                 LinearGradient(
                     stops: [
                         .init(color: .clear, location: 0.32),
-                        .init(color: SpinePalette.pageBackground.opacity(0.2), location: 0.54),
-                        .init(color: SpinePalette.pageBackground.opacity(0.7), location: 0.78),
-                        .init(color: SpinePalette.pageBackground, location: 1),
+                        .init(color: Color.black.opacity(0.2), location: 0.54),
+                        .init(color: Color.black.opacity(0.7), location: 0.78),
+                        .init(color: Color.black, location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -1329,19 +1729,5 @@ private struct PersonActionSheet: View {
             .accessibilityIdentifier("person-detail.add-to-list")
         }
         .presentationBackground(.regularMaterial)
-    }
-}
-
-private struct PersonSectionLabel: View {
-    let title: String
-
-    var body: some View {
-        Text(title.uppercased())
-            .font(.system(size: 12, weight: .heavy))
-            .foregroundStyle(.white.opacity(0.54))
-            .tracking(1.2)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .layoutPriority(1)
     }
 }

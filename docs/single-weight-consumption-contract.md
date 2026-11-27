@@ -569,6 +569,17 @@ and search/discovery surfaces must agree about:
 Optimistic UI may temporarily represent a pending mutation, but failure must
 restore the last confirmed canonical state.
 
+### SW-701: A finished title's Library poster shows its stars and heart
+
+On the Library grid, the poster of a Completed title of any media type shows
+its current rating as stars and its media like as a heart, in one small pill. A
+show's stars and heart are the show's own (TV-500).
+
+- A Completed title with no current rating and no like has no pill.
+- A like with no rating shows the heart alone.
+- The stars and the heart keep the same colors on every poster.
+- A title that isn't Completed shows its type's progress badge, or nothing.
+
 ## Contract change policy
 
 The numbered laws above are normative product behavior. Implementation details

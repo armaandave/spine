@@ -1709,6 +1709,12 @@ nonisolated struct UserMediaState: Codable, Hashable {
     var diaryCount: Int?
     var diaryRating: String?
     var diaryConsumedAt: String?
+    /// The media page only: your latest log's review, its title, whether it is marked as a spoiler, and whether it
+    /// was a rewatch. Nil (false) on every list payload.
+    var diaryReview: String? = nil
+    var diaryReviewTitle: String? = nil
+    var diaryContainsSpoilers = false
+    var diaryIsRewatch = false
     var inLists: [Int]
     var hasLiked: Bool
     var directConsumption: Bool?
@@ -1735,6 +1741,10 @@ nonisolated struct UserMediaState: Codable, Hashable {
         case diaryCount
         case diaryRating
         case diaryConsumedAt
+        case diaryReview
+        case diaryReviewTitle
+        case diaryContainsSpoilers
+        case diaryIsRewatch
         case inLists
         case hasLiked
         case directConsumption
@@ -1805,6 +1815,10 @@ nonisolated struct UserMediaState: Codable, Hashable {
         diaryCount = try container.decodeIfPresent(Int.self, forKey: .diaryCount)
         diaryRating = try container.decodeIfPresent(String.self, forKey: .diaryRating)
         diaryConsumedAt = try container.decodeIfPresent(String.self, forKey: .diaryConsumedAt)
+        diaryReview = try container.decodeIfPresent(String.self, forKey: .diaryReview)
+        diaryReviewTitle = try container.decodeIfPresent(String.self, forKey: .diaryReviewTitle)
+        diaryContainsSpoilers = try container.decodeIfPresent(Bool.self, forKey: .diaryContainsSpoilers) ?? false
+        diaryIsRewatch = try container.decodeIfPresent(Bool.self, forKey: .diaryIsRewatch) ?? false
         inLists = try container.decodeIfPresent([Int].self, forKey: .inLists) ?? []
         hasLiked = try container.decodeIfPresent(Bool.self, forKey: .hasLiked) ?? false
         directConsumption = try container.decodeIfPresent(Bool.self, forKey: .directConsumption)
@@ -1829,6 +1843,10 @@ nonisolated struct UserMediaState: Codable, Hashable {
         try container.encodeIfPresent(diaryCount, forKey: .diaryCount)
         try container.encodeIfPresent(diaryRating, forKey: .diaryRating)
         try container.encodeIfPresent(diaryConsumedAt, forKey: .diaryConsumedAt)
+        try container.encodeIfPresent(diaryReview, forKey: .diaryReview)
+        try container.encodeIfPresent(diaryReviewTitle, forKey: .diaryReviewTitle)
+        try container.encode(diaryContainsSpoilers, forKey: .diaryContainsSpoilers)
+        try container.encode(diaryIsRewatch, forKey: .diaryIsRewatch)
         try container.encode(inLists, forKey: .inLists)
         try container.encode(hasLiked, forKey: .hasLiked)
         try container.encodeIfPresent(directConsumption, forKey: .directConsumption)

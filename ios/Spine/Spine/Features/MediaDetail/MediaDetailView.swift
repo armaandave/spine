@@ -2327,6 +2327,8 @@ private struct MediaDetailPageView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// What you did today on each title, shared from Home: the Your Tracking bar lights today's part.
+    @Environment(HomeTodayStore.self) private var todayStore: HomeTodayStore?
     @State private var viewModel: MediaDetailViewModel
     @State private var presentedSheet: MediaDetailSheet?
     @State private var presentedRef: MediaRef?
@@ -3785,11 +3787,13 @@ private struct MediaDetailPageView: View {
                         HeroArtwork(detail: detail)
                         if let backdropURL = backdropURLString(for: detail) {
                             GeometryReader { proxy in
-                                BackdropArtwork(urlString: backdropURL)
+                                // The picture starts under the status bar; the strip above it reaches the frame's top.
+                                let pictureTop = resolvedTopSafeAreaInset - BackdropLayout.topOffset
+                                BackdropArtwork(urlString: backdropURL, pictureTop: pictureTop)
                                     .frame(height: BackdropLayout.stripHeight(
                                         width: proxy.size.width,
                                         topInset: resolvedTopSafeAreaInset
-                                    ))
+                                    ) + pictureTop)
                                     .onLongPressGesture {
                                         openBackdropPicker(for: detail)
                                     }
@@ -3916,7 +3920,8 @@ private struct MediaDetailPageView: View {
             VStack(alignment: .leading, spacing: 0) {
                 EpisodeHeroArtwork(
                     urlString: detail.episodeStillURL,
-                    title: detail.title
+                    title: detail.title,
+                    pictureTop: resolvedTopSafeAreaInset - BackdropLayout.topOffset
                 )
                 .frame(height: resolvedTopSafeAreaInset + MediaDetailLayout.episodeAccessibilityArtworkHeight)
                 .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
@@ -3933,7 +3938,8 @@ private struct MediaDetailPageView: View {
             ZStack(alignment: .bottomLeading) {
                 EpisodeHeroArtwork(
                     urlString: detail.episodeStillURL,
-                    title: detail.title
+                    title: detail.title,
+                    pictureTop: resolvedTopSafeAreaInset - BackdropLayout.topOffset
                 )
                 .frame(height: resolvedTopSafeAreaInset + MediaDetailLayout.episodeHeroHeight)
                 .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
@@ -4434,6 +4440,7 @@ private struct MediaDetailPageView: View {
                     EpisodesSection(
                         rows: TVEpisodeRowModel.rows(episodes: detail.episodes ?? [], unlisted: detail.tvUnlistedEpisodes),
                         completion: detail.completion,
+                        tint: MediaPageTint.known(detail.displayPosterURL),
                         state: { viewModel.tvEpisodeState($0.tv) },
                         isWatched: { episode in viewModel.viewer?.tvIsWatched(episode) ?? episode.watched },
                         onTick: { viewModel.toggleTVEpisode($0) },
@@ -4612,7 +4619,9 @@ private struct MediaDetailPageView: View {
                 else { return }
                 viewModel.askMarkTVUpTo(rows.state(of: row))
             },
-            onOpenNextTitle: { presentedRef = $0.ref }
+            onOpenNextTitle: { presentedRef = $0.ref },
+            today: todayStore?.part(for: detail.ref),
+            avatarURL: viewerAvatarURL
         )
     }
 
@@ -5785,6 +5794,9 @@ private struct EpisodeDetailLoadingView: View {
 private struct EpisodeHeroArtwork: View {
     let urlString: String?
     let title: String
+    /// Where the still starts, from the frame's top, when a strip could be grown from its own top (`TopStripLoader`):
+    /// under the status bar, the strip above it. A busy top gets no strip and the still fills the frame as it always has.
+    var pictureTop: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -5792,13 +5804,23 @@ private struct EpisodeHeroArtwork: View {
                 placeholder
 
                 if let urlString, let url = URL(string: urlString) {
-                    SpineAsyncImage(url: url) { phase in
-                        if case let .success(image) = phase {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: proxy.size.width, height: proxy.size.height)
-                                .clipped()
+                    let pictureSize = CGSize(width: proxy.size.width, height: max(0, proxy.size.height - pictureTop))
+                    TopStripLoader(request: TopStrip.request(url: url, size: pictureSize)) { result in
+                        switch result {
+                        case .loading:
+                            Color.clear
+                        case let .strip(image):
+                            TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
+                        case .none:
+                            SpineAsyncImage(url: url) { phase in
+                                if case let .success(image) = phase {
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: proxy.size.width, height: proxy.size.height)
+                                        .clipped()
+                                }
+                            }
                         }
                     }
                 }
@@ -5999,36 +6021,76 @@ struct HeroArtwork: View {
 
 }
 
+/// The media page's backdrop strip, 3:2. With a strip grown from its own top (`TopStripLoader`), the picture starts
+/// `pictureTop` down its frame, under the status bar; the frame is `pictureTop` taller than the picture for it. A busy
+/// top gets no strip, and the picture fills the frame's top as it always has. Either way the status bar's shade sits
+/// over the frame's first 3:2 height and the picture fades out over its own lower part.
 struct BackdropArtwork: View {
     let urlString: String
+    var pictureTop: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                SpineAsyncImage(url: URL(string: urlString)) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: proxy.size.width, height: proxy.size.height)
-                            .clipped()
-                    default:
-                        Color.clear
+            let width = proxy.size.width
+            let pictureHeight = max(0, proxy.size.height - pictureTop)
+            TopStripLoader(
+                request: TopStrip.request(url: URL(string: urlString), size: CGSize(width: width, height: pictureHeight))
+            ) { result in
+                switch result {
+                case .loading:
+                    Color.clear
+                case let .strip(image):
+                    layers(top: pictureTop, pictureHeight: pictureHeight) {
+                        TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
+                    }
+                case .none:
+                    layers(top: 0, pictureHeight: pictureHeight) {
+                        SpineAsyncImage(url: URL(string: urlString)) { phase in
+                            switch phase {
+                            case let .success(image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: width, height: pictureHeight)
+                                    .clipped()
+                            default:
+                                Color.clear
+                            }
+                        }
+                        .frame(width: width, height: pictureHeight)
                     }
                 }
-
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.42), location: 0),
-                        .init(color: .black.opacity(0.18), location: 0.36),
-                        .init(color: .clear, location: 0.72),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
             }
-            .mask(
+        }
+        .clipped()
+    }
+
+    /// The picture, the status bar's shade over the frame's first `pictureHeight`, and the picture fading out over its
+    /// own lower part, the picture starting `top` down the frame.
+    private func layers<Picture: View>(
+        top: CGFloat,
+        pictureHeight: CGFloat,
+        @ViewBuilder picture: () -> Picture
+    ) -> some View {
+        ZStack(alignment: .top) {
+            picture()
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.42), location: 0),
+                    .init(color: .black.opacity(0.18), location: 0.36),
+                    .init(color: .clear, location: 0.72),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: pictureHeight)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .mask(alignment: .top) {
+            VStack(spacing: 0) {
+                Color.white
+                    .frame(height: top)
                 LinearGradient(
                     stops: [
                         .init(color: .white, location: 0),
@@ -6039,9 +6101,9 @@ struct BackdropArtwork: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-            )
+                .frame(height: pictureHeight)
+            }
         }
-        .clipped()
     }
 }
 
@@ -6579,97 +6641,89 @@ struct TrackingSummarySection: View {
     var onMarkUpToNext: ((TVEpisodePointer) -> Void)?
     /// Opens the title after this one (AN-500).
     var onOpenNextTitle: ((AnimeNextTitle) -> Void)?
+    /// What you did on this title today, from your Activity rows (`HomeTodayStore`): the bar lights it.
+    var today: TodayPart? = nil
+    /// Your profile picture, beside "You".
+    var avatarURL: String? = nil
+
+    /// Where the title stood when today's part last changed, so progress made on this page lights up at once.
+    @State private var baseline: Double?
+    /// The poster's colors when the server sent none, counted on this phone, and the title's color for the wash.
+    @State private var countedSwatches: [PosterSwatch]?
+    @State private var tint: Color?
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         if hasState {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionLabel(title: detail.ref.mediaType == "game" ? "Your Progress" : "Your Tracking")
-                HStack(alignment: .top, spacing: 10) {
-                    if detail.ref.mediaType != "episode" {
-                        MediaArtwork(
-                            url: detail.displayPosterURL,
-                            title: detail.title,
-                            slot: .libraryRow,
-                            mediaType: detail.ref.mediaType,
-                            orientation: detail.posterOrientation
-                        )
-                        .onTapGesture { if hasLogs { onOpenDiaryEntry() } }
-                        .allowsHitTesting(hasLogs)
-                        .accessibilityLabel(hasLogs ? "View diary log for \(detail.title)" : "\(detail.title) cover")
-                        .accessibilityAddTraits(hasLogs ? .isButton : [])
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        if let status {
-                            Text(detail.ref.trackingStatusLabel(status))
-                                .font(.system(size: 14, weight: .heavy))
-                                .foregroundStyle(.white)
-                                .onTapGesture {
-                                    if hasMultipleLogs {
-                                        onOpenDiaryEntry()
-                                    }
-                                }
-                                .accessibilityAddTraits(hasMultipleLogs ? .isButton : [])
-                            if showsUpdateProgressButton {
-                                Button(action: onUpdateProgress) {
-                                    Text("Update Progress")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(.white.opacity(0.82))
-                                        .padding(.horizontal, 11)
-                                        .frame(height: 24)
-                                        .background(.white.opacity(0.12), in: Capsule())
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.top, 3)
-                            }
-                        }
-                        if showsRatingLine {
-                            ratingLine
-                        }
-                        ForEach(lines, id: \.self) { line in
-                            Text(line)
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(.white.opacity(0.76))
-                                .onTapGesture {
-                                    if line == logLine {
-                                        onOpenDiaryEntry()
-                                    }
-                                }
-                                .accessibilityAddTraits(line == logLine ? .isButton : [])
-                        }
-                    }
-
-                    Spacer()
-                }
-
-                if let upNext = Self.tvUpNext(detail: detail, state: state), let onTickUpNext {
-                    // The season page's episode row, so the two look and behave alike.
-                    let row = TVEpisodeRowModel.upNext(upNext)
-                    VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel(title: detail.ref.isAnime
-                            ? AnimeTrackingPresentation.upNextLabel(for: upNext)
-                            : TVTrackingPresentation.upNextLabel(for: upNext))
-                        EpisodeCard(
-                            row: row,
-                            trailing: TVEpisodeTrailing.resolve(
-                                row.tv,
-                                isWatched: state?.tvPending.episodes[upNext.coordinate] == true
-                            ),
-                            onTick: { onTickUpNext(upNext) },
-                            onMarkUpTo: detail.ref.isAnime ? onMarkUpToNext.map { mark in { mark(upNext) } } : nil,
-                            onSelect: onOpenUpNext.map { open in { open(upNext) } }
-                        )
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("tv.up-next")
-                }
-
-                if let next = state?.anime?.nextTitle, let onOpenNextTitle {
-                    MediaDetailNavigationRow(title: "Next: \(next.title)") { onOpenNextTitle(next) }
-                        .accessibilityIdentifier("anime.next-title")
-                }
+            // No section label: "You" on the card says whose it is.
+            TrackingCard(
+                model: card,
+                posterURL: detail.displayPosterURL,
+                tint: tint,
+                palette: meterPalette,
+                avatarURL: avatarURL,
+                onOpenDiary: card.opensDiary ? onOpenDiaryEntry : nil,
+                onUpdateProgress: onUpdateProgress,
+                upNext: upNextRow,
+                nextTitle: state?.anime?.nextTitle,
+                onOpenNextTitle: onOpenNextTitle
+            )
+            .task(id: detail.displayPosterURL) {
+                let url = detail.displayPosterURL.flatMap(URL.init(string:))
+                countedSwatches = await PosterPaletteStore.homePicture.swatches(server: detail.posterPalette, url: url)
+                tint = countedSwatches.flatMap { HomeTitleTint.color(from: $0)?.color }
+            }
+            .onChange(of: current, initial: true) { captureBaseline() }
+            .onChange(of: state != nil) { captureBaseline() }
+            .onChange(of: today) {
+                // The server's part now counts what this page did, so only what comes after it is new.
+                baseline = current ?? 0
             }
         }
+    }
+
+    private var current: Double? { TrackingCardModel.current(detail: detail, state: state) }
+
+    /// Where the title stood when the page first knew your state: nothing yet (0) for a title not started, so the
+    /// first episode or page saved here lights up too.
+    private func captureBaseline() {
+        guard baseline == nil, state != nil else { return }
+        baseline = current ?? 0
+    }
+
+    private var card: TrackingCardModel {
+        TrackingCardModel.make(
+            detail: detail,
+            state: state,
+            preferredMode: ProgressDisplayPreferences.mode(for: detail.ref),
+            today: today,
+            baseline: baseline
+        )
+    }
+
+    private var meterPalette: MeterPalette {
+        let tint = MeterTint.choose(server: detail.posterPalette, counted: countedSwatches, highContrast: contrast == .increased)
+        return FeedMeterColors.palette(ink: .dark, accent: .white, tint: tint)
+    }
+
+    /// The Up next row's episode, tick and taps, when the page has one (TV-105, AN-702).
+    private var upNextRow: TrackingCard.UpNext? {
+        guard let upNext = Self.tvUpNext(detail: detail, state: state), let onTickUpNext else { return nil }
+        let row = TVEpisodeRowModel.upNext(upNext)
+        return TrackingCard.UpNext(
+            pointer: upNext,
+            row: row,
+            code: detail.ref.isAnime
+                ? AnimeTrackingPresentation.episodeCode(upNext.episodeNumber)
+                : TVTrackingPresentation.episodeCode(season: upNext.seasonNumber, episode: upNext.episodeNumber),
+            trailing: TVEpisodeTrailing.resolve(
+                row.tv,
+                isWatched: state?.tvPending.episodes[upNext.coordinate] == true
+            ),
+            onTick: { onTickUpNext(upNext) },
+            onMarkUpTo: detail.ref.isAnime ? onMarkUpToNext.map { mark in { mark(upNext) } } : nil,
+            onSelect: onOpenUpNext.map { open in { open(upNext) } }
+        )
     }
 
     private var status: String? { Self.status(detail: detail, state: state) }
@@ -6687,46 +6741,12 @@ struct TrackingSummarySection: View {
         return tv.upNext
     }
     private var stars: String? { Self.stars(detail: detail, state: state) }
-    private var isLiked: Bool { state?.hasLiked == true }
-    private var showsRatingLine: Bool { stars != nil || isLiked }
-
-    /// "3.5★ ♥" in the rail's star yellow and heart pink.
-    private var ratingLine: some View {
-        HStack(spacing: 6) {
-            if let stars {
-                HStack(spacing: 2) {
-                    Text(stars)
-                    Image(systemName: "star.fill")
-                }
-                .foregroundStyle(.yellow)
-            }
-            if isLiked {
-                Image(systemName: "heart.fill")
-                    .foregroundStyle(.pink)
-            }
-        }
-        .font(.system(size: 13, weight: .bold))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            [stars.map { "Rated \($0) out of 5 stars" }, isLiked ? "Liked" : nil]
-                .compactMap { $0 }
-                .joined(separator: ", ")
-        )
-    }
-
-    private var showsUpdateProgressButton: Bool {
-        Self.showsUpdateProgress(ref: detail.ref, status: status, state: state)
-    }
-
     static func showsUpdateProgress(ref: MediaRef, status: String?, state: UserMediaState?) -> Bool {
         if ref.mediaType == "game" { return state?.game?.canUpdateProgress == true }
         // A series needs an attempt to update, which an imported On Hold doesn't have: it has Resume (MC-300).
         if ref.isSeries { return state?.book?.hasLiveJourney == true }
         return ["In progress", "Paused"].contains(status) && ref.readsLikeBook
     }
-    private var hasLogs: Bool { (state?.diaryCount ?? 0) > 0 || state?.diaryEntryId != nil }
-    private var hasMultipleLogs: Bool { Self.hasMultipleLogs(state) }
-    private var logLine: String? { Self.logLine(state) }
 
     private var lines: [String] {
         Self.lines(detail: detail, state: state, preferredMode: ProgressDisplayPreferences.mode(for: detail.ref))
@@ -6738,21 +6758,7 @@ struct TrackingSummarySection: View {
         preferredMode: ProgressUpdateMode?,
         calendar: Calendar = .autoupdatingCurrent
     ) -> [String] {
-        let status = Self.status(detail: detail, state: state)
-        var values: [String] = []
-        if detail.ref.mediaType == "game", let game = state?.game,
-           let text = game.currentPlaythrough?.progress.summary, !text.isEmpty {
-            values.append(text)
-        }
-        if detail.ref.isTVFamily, let tv = state?.tv {
-            values += tvLines(detail: detail, tv: tv)
-        } else if detail.ref.isAnime, let anime = state?.anime {
-            values += AnimeTrackingPresentation.pageLines(for: anime)
-        } else if detail.ref.mediaType != "game", (status == "In progress" || (detail.ref.readsLikeBook && status == "Paused")),
-           detail.ref.mediaType != "movie",
-            let progressText = state?.progress?.detailDisplayText(preferredMode: preferredMode) {
-            values.append(progressText)
-        }
+        var values = progressLines(detail: detail, state: state, preferredMode: preferredMode)
         if let logLine = Self.logLine(state) {
             values.append(logLine)
         }
@@ -6770,7 +6776,33 @@ struct TrackingSummarySection: View {
         return values
     }
 
-    private static func status(detail: MediaDetail, state: UserMediaState?) -> String? {
+    /// Where the title stands, in words: a game's summary, a show's or an anime's rewatch, caught-up or premiere line and
+    /// its count, a book's progress. `countSuffix` follows a show's or an anime's count (" watched" in the lines).
+    static func progressLines(
+        detail: MediaDetail,
+        state: UserMediaState?,
+        preferredMode: ProgressUpdateMode?,
+        countSuffix: String = " watched"
+    ) -> [String] {
+        let status = Self.status(detail: detail, state: state)
+        var values: [String] = []
+        if detail.ref.mediaType == "game", let game = state?.game,
+           let text = game.currentPlaythrough?.progress.summary, !text.isEmpty {
+            values.append(text)
+        }
+        if detail.ref.isTVFamily, let tv = state?.tv {
+            values += tvLines(detail: detail, tv: tv, countSuffix: countSuffix)
+        } else if detail.ref.isAnime, let anime = state?.anime {
+            values += AnimeTrackingPresentation.pageLines(for: anime, countSuffix: countSuffix)
+        } else if detail.ref.mediaType != "game", (status == "In progress" || (detail.ref.readsLikeBook && status == "Paused")),
+           detail.ref.mediaType != "movie",
+            let progressText = state?.progress?.detailDisplayText(preferredMode: preferredMode) {
+            values.append(progressText)
+        }
+        return values
+    }
+
+    static func status(detail: MediaDetail, state: UserMediaState?) -> String? {
         if detail.ref.isTVFamily, let tv = state?.tv {
             return tvStatus(detail: detail, tv: tv, state: state)
         }
@@ -6801,7 +6833,7 @@ struct TrackingSummarySection: View {
 
     /// The show page's lines: the rewatch, caught-up or premiere line (TV-600, TV-202, TV-700) and progress as a
     /// count of aired regular episodes (TV-104).
-    static func tvLines(detail: MediaDetail, tv: TVShowState) -> [String] {
+    static func tvLines(detail: MediaDetail, tv: TVShowState, countSuffix: String = " watched") -> [String] {
         guard detail.ref.mediaType == "tv", tv.inLibrary else { return [] }
         var lines: [String] = []
         if let rewatch = TVTrackingPresentation.rewatchLine(for: tv) {
@@ -6813,7 +6845,7 @@ struct TrackingSummarySection: View {
         }
         if tv.started, !tv.finished || tv.rewatch != nil,
            let progress = TVTrackingPresentation.progressText(watched: tv.watchedCount, aired: tv.airedCount) {
-            lines.append("\(progress) watched")
+            lines.append("\(progress)\(countSuffix)")
         }
         return lines
     }
@@ -6822,11 +6854,11 @@ struct TrackingSummarySection: View {
         state?.rating?.starCount
     }
 
-    private static func hasMultipleLogs(_ state: UserMediaState?) -> Bool {
+    static func hasMultipleLogs(_ state: UserMediaState?) -> Bool {
         (state?.diaryCount ?? 0) > 1
     }
 
-    private static func logLine(_ state: UserMediaState?) -> String? {
+    static func logLine(_ state: UserMediaState?) -> String? {
         guard hasMultipleLogs(state), let diaryCount = state?.diaryCount else { return nil }
         return "\(diaryCount) logs"
     }
@@ -8786,6 +8818,8 @@ private struct SeasonsSection: View {
 private struct EpisodesSection: View {
     let rows: [TVEpisodeRowModel]
     let completion: CompletionProgress?
+    /// The show's poster color for the completion bar; nil draws it white.
+    var tint: Color? = nil
     /// An episode's current TV state: a confirmed write's answer when the list predates it.
     let state: (TVEpisodeRowModel) -> TVEpisodeState?
     /// Whether an episode shows as watched, counting a pending tick (TV-705).
@@ -8798,11 +8832,13 @@ private struct EpisodesSection: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
                 SectionLabel(title: "Episodes")
-                Spacer()
                 if let completion, completion.isVisible {
-                    SWCompletionProgressButton(progress: completion)
+                    CompletionBar(progress: completion, tint: tint)
+                } else {
+                    Spacer()
                 }
             }
+            .frame(minHeight: 44)
             if rows.isEmpty {
                 ContentUnavailableView(
                     "No episodes available",

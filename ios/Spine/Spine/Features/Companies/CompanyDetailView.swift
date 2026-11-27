@@ -476,11 +476,12 @@ struct CompanyDetailView: View {
                 CompanySectionLabel(title: detail.resolvedMediaType == "anime" ? "Anime" : "Games")
 
                 if let completion = catalogCompletion(detail), completion.isVisible {
-                    SWCompletionProgressButton(progress: completion)
+                    CompletionBar(progress: completion)
                         .accessibilityLabel("\(detail.name) catalog completion")
+                        .padding(.horizontal, 4)
+                } else {
+                    Spacer()
                 }
-
-                Spacer()
 
                 MediaFilterButton(
                     filter: $viewModel.filter,

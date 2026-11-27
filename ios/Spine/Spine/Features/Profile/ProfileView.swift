@@ -648,6 +648,7 @@ struct ProfileView: View {
     /// Only the hero reads it, so scrolling redraws the header, not the whole page.
     @State private var heroScroll = ProfileHeroScroll()
     @State private var topSafeAreaInset: CGFloat = 0
+    @State private var statusBarHeight: CGFloat = 0
     @State private var isProfileBackdropSearchPresented = false
     @State private var pendingSocialAction: ProfileSocialAction?
 
@@ -987,6 +988,9 @@ struct ProfileView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
+        // The status bar's real height, for where the backdrop's picture starts. (`topSafeAreaInset` reads 0 here,
+        // since a background sits outside the safe area; the buttons and the hero are laid out around that.)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { statusBarHeight = $0 }
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: ProfileTopSafeAreaInsetKey.self, value: proxy.safeAreaInsets.top)
@@ -1222,7 +1226,7 @@ struct ProfileView: View {
         .padding(.top, backdropURL == nil ? topSafeAreaInset + 28 : topSafeAreaInset + 74 + backdropContentOffset)
         .background(alignment: .top) {
             if let backdropURL {
-                ProfileBackdropArtwork(urlString: backdropURL)
+                ProfileBackdropArtwork(urlString: backdropURL, pictureTop: statusBarHeight - BackdropLayout.topOffset)
                     .frame(height: topSafeAreaInset + ProfileHeroBackdropLayout.backdropHeight)
                     .offset(y: BackdropLayout.topOffset)
                     .onLongPressGesture {
@@ -1271,48 +1275,62 @@ struct ProfileView: View {
         .accessibilityLabel(profile.displayName)
     }
 
+    /// The profile's backdrop. With a strip grown from its own top (`TopStripLoader`), the picture starts `pictureTop`
+    /// down the frame, under the status bar, the strip above it, and ends where it always has; a busy top gets no strip
+    /// and the picture fills the frame as it always has. Its shade and fade are the same either way.
     private struct ProfileBackdropArtwork: View {
         let urlString: String
+        let pictureTop: CGFloat
 
         var body: some View {
-            GeometryReader { proxy in
-                ZStack {
-                    SpineAsyncImage(url: URL(string: urlString)) { phase in
-                        switch phase {
-                        case let .success(image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: proxy.size.width, height: proxy.size.height)
-                                .clipped()
-                        default:
+            ZStack {
+                GeometryReader { proxy in
+                    let pictureSize = CGSize(width: proxy.size.width, height: max(0, proxy.size.height - pictureTop))
+                    TopStripLoader(request: TopStrip.request(url: URL(string: urlString), size: pictureSize)) { result in
+                        switch result {
+                        case .loading:
                             Color.clear
+                        case let .strip(image):
+                            TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
+                        case .none:
+                            SpineAsyncImage(url: URL(string: urlString)) { phase in
+                                switch phase {
+                                case let .success(image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: proxy.size.width, height: proxy.size.height)
+                                        .clipped()
+                                default:
+                                    Color.clear
+                                }
+                            }
                         }
                     }
-
-                    LinearGradient(
-                        stops: [
-                            .init(color: .black.opacity(0.42), location: 0),
-                            .init(color: .black.opacity(0.18), location: 0.36),
-                            .init(color: .clear, location: 0.72),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
                 }
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white, location: 0),
-                            .init(color: .white, location: 0.52),
-                            .init(color: .white.opacity(0.35), location: 0.78),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.42), location: 0),
+                        .init(color: .black.opacity(0.18), location: 0.36),
+                        .init(color: .clear, location: 0.72),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
             }
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white, location: 0.52),
+                        .init(color: .white.opacity(0.35), location: 0.78),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
             .clipped()
         }
     }
