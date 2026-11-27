@@ -548,6 +548,45 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertEqual(rgbaPixels(again).data, pixels.data)
     }
 
+    func testABusyTopGetsNoStripAndThePictureKeepsItsUsualPlace() throws {
+        // 600 x 400 of random 6 px blocks of color: nothing in it can be carried on without pasted pieces.
+        let width = 600, height = 400
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        var state: UInt32 = 99
+        for by in stride(from: 0, to: height, by: 6) {
+            for bx in stride(from: 0, to: width, by: 6) {
+                state = state &* 1_664_525 &+ 1_013_904_223
+                let color = [UInt8(truncatingIfNeeded: state >> 8), UInt8(truncatingIfNeeded: state >> 16), UInt8(truncatingIfNeeded: state >> 24)]
+                for y in by ..< min(by + 6, height) {
+                    for x in bx ..< min(bx + 6, width) {
+                        let i = (y * width + x) * 4
+                        bytes[i] = color[0]; bytes[i + 1] = color[1]; bytes[i + 2] = color[2]
+                    }
+                }
+            }
+        }
+        let picture = bytes.withUnsafeMutableBytes { raw in
+            CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!.makeImage()!
+        }
+
+        let output = try XCTUnwrap(HomeBackdropBand.grow(picture, sharpRows: 300))
+        let band = Int((CGFloat(width) * HomeBackdropBand.share).rounded())
+        XCTAssertEqual(output.height, height + band, "the same size as with a strip, so the page lays it out the same")
+        // The picture comes first, untouched, so it sits `band` higher than a picture with a strip: about where it
+        // always was. Copies of its last row follow it.
+        let pixels = rgbaPixels(output)
+        let source = Pixels(width: width, data: bytes)
+        for row in [0, 3, 200, height - 1] {
+            for x in [0, 301, width - 1] {
+                XCTAssertEqual(pixels.red(x, row), source.red(x, row), "picture row \(row) at \(x)")
+            }
+        }
+        XCTAssertEqual(pixels.red(301, height + band - 1), source.red(301, height - 1))
+    }
+
     func testATopStripPictureIsThePagesShapeWithTheStripAboveIt() throws {
         // A 16:9 backdrop on the media page's 3:2 strip: cropped around its center, keeping its height, with the strip
         // grown above it.

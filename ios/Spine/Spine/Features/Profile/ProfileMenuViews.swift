@@ -1602,6 +1602,7 @@ struct ProfileListDetailView: View {
     @State private var selectedPerson: PersonRef?
     @State private var isDeleteAlertPresented = false
     @State private var topSafeAreaInset: CGFloat = 0
+    @State private var statusBarHeight: CGFloat = 0
     @State private var listHeaderWidth: CGFloat = 0
     @State private var listHeaderHeight: CGFloat = 0
     /// How far the page has scrolled, so the blurred top of a list without a backdrop scrolls away with it.
@@ -1812,6 +1813,9 @@ struct ProfileListDetailView: View {
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+        // The status bar's real height, for where the backdrop's picture starts. (`topSafeAreaInset` reads 0 here,
+        // since a background sits outside the safe area; the buttons and the header are laid out around that.)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { statusBarHeight = $0 }
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: ProfileListTopSafeAreaInsetKey.self, value: proxy.safeAreaInsets.top)
@@ -2003,7 +2007,7 @@ struct ProfileListDetailView: View {
             .background(alignment: .top) {
                 if let backdropURL {
                     // The picture starts under the status bar; the strip grown above it reaches the header's top.
-                    let pictureTop = topSafeAreaInset - BackdropLayout.topOffset
+                    let pictureTop = statusBarHeight - BackdropLayout.topOffset
                     ProfileListBackdropArtwork(url: backdropURL, pictureTop: pictureTop)
                         .frame(height: stripHeight + pictureTop)
                         .frame(maxHeight: .infinity, alignment: .top)

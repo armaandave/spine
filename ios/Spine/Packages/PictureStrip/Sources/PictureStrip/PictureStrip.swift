@@ -4,8 +4,9 @@ import Foundation
 /// A strip grown above a picture from the picture's own top area, so it reads as more of the picture rather than a
 /// copy of it: small patches of that area are laid from the picture's top edge upward, each one whose edges best match
 /// what is already there, and joined along the path where the two differ least (image quilting, Efros and Freeman).
-/// Nothing is mirrored, blurred or stretched. Plain tops (sky, dark, walls, smoke) carry on convincingly; a very busy
-/// top can look patched.
+/// Nothing is mirrored, blurred or stretched. Plain tops (sky, dark, walls, smoke, grain) carry on convincingly. A busy
+/// top (faces, a sun's rim, a crowded room right at the edge) can't be carried on this way without pasted pieces or
+/// repeats, so when the patches match too poorly (`busyLimit`) the picture keeps its usual place instead.
 public enum PictureStrip {
     /// The patches are chosen on a copy this many times smaller, then cut from the picture at full size.
     static let searchScale = 6
@@ -16,9 +17,23 @@ public enum PictureStrip {
     static let candidateCount = 1200
     /// A patch is picked at random among those within this much of the best match, so the strip doesn't repeat.
     static let tolerance: Float = 0.12
+    /// The patches come from the picture's top edge only, this share of the strip's height deep (at least a patch and
+    /// a half): what is right there is what would carry on above it. Deeper down are the faces and objects, which read
+    /// as pasted pieces when copied into the strip.
+    static let sourceShare = 0.6
+    /// How much a patch's overall color must agree with what is already there, besides its edges matching, so the
+    /// strip doesn't turn into blocks of different tones.
+    static let toneWeight: Float = 0.6
+    /// How poorly the patches' edges may match what is already there, on average (summed squared difference of the
+    /// three channels on the smaller copy, about 8 levels in 255 per channel), before the top counts as too busy. Plain
+    /// tops measured 0.5 to 125 (sky, smoke, walls, dark scenes), busy ones 457 to 1,050 (a kitchen, hair in close-up,
+    /// a sun's rim behind hats).
+    static let busyLimit: Float = 400
 
     /// The picture with `band` rows grown above it. `sharpRows`: how far down the picture is still sharp; the
-    /// patches come only from there. The same picture always grows the same strip.
+    /// patches come only from there. The same picture always grows the same strip. When the top is too busy
+    /// (`busyLimit`), the picture comes first and `band` rows of its last row follow it instead, so a page that places
+    /// the picture under the status bar shows it `band` higher: about where it always was, with no strip.
     public static func grow(_ picture: CGImage, band requestedBand: Int, sharpRows: Int) -> CGImage? {
         let width = picture.width
         let height = picture.height
@@ -29,8 +44,8 @@ public enum PictureStrip {
         let lowWidth = width / scale
         let blockF = block * scale
         let overlapF = overlap * scale
-        // The area the patches come from: the sharp top of the picture, about twice the strip's height.
-        let sourceRows = min(sharpRows, height, Int(Double(band) * 2.2) + blockF)
+        // The area the patches come from: the sharp top edge of the picture (`sourceShare`).
+        let sourceRows = min(sharpRows, height, max(blockF * 3 / 2, Int(Double(band) * sourceShare)))
         let lowSourceRows = sourceRows / scale
         guard lowWidth > block * 2, lowSourceRows > block + overlap else {
             return pixels.withBand(band, rows: Array(repeating: 0, count: band))
@@ -56,9 +71,23 @@ public enum PictureStrip {
             (y: Int(random.next() % UInt64(lowSourceRows - block + 1)),
              x: Int(random.next() % UInt64(lowWidth - block + 1)))
         }
+        // Each candidate's overall color, for the tone check.
+        let candidateMeans: [(Float, Float, Float)] = candidates.map { candidate in
+            var r: Float = 0, g: Float = 0, b: Float = 0
+            for row in 0..<block {
+                for column in 0..<block {
+                    let i = ((candidate.y + row) * lowWidth + candidate.x + column) * 3
+                    r += low[i]; g += low[i + 1]; b += low[i + 2]
+                }
+            }
+            let n = Float(block * block)
+            return (r / n, g / n, b / n)
+        }
 
         struct Placement { let x, y, width, height, sourceX, sourceY: Int }
         var placements: [Placement] = []
+        var bestTotal: Float = 0
+        var bestCount = 0
         let step = block - overlap
         var errors = [Float](repeating: 0, count: candidates.count)
         var y = canvasRows - block
@@ -68,7 +97,20 @@ public enum PictureStrip {
             var x = 0
             while x < lowWidth {
                 let blockWidth = min(block, lowWidth - x)
-                // How well each candidate matches what is already there.
+                // The overall color of what is already there under this patch.
+                var tr: Float = 0, tg: Float = 0, tb: Float = 0
+                var known = 0
+                for row in 0..<blockHeight {
+                    for column in 0..<blockWidth where filled[(top + row) * lowWidth + x + column] {
+                        let a = ((top + row) * lowWidth + x + column) * 3
+                        tr += canvas[a]; tg += canvas[a + 1]; tb += canvas[a + 2]
+                        known += 1
+                    }
+                }
+                if known > 0 {
+                    tr /= Float(known); tg /= Float(known); tb /= Float(known)
+                }
+                // How well each candidate matches what is already there: its edges, then its overall tone.
                 var best = Float.greatestFiniteMagnitude
                 for (index, candidate) in candidates.enumerated() {
                     var sum: Float = 0
@@ -84,11 +126,18 @@ public enum PictureStrip {
                             count += 1
                         }
                     }
-                    let error = count > 0 ? sum / Float(count) : 0
+                    var error = count > 0 ? sum / Float(count) : 0
+                    if known > 0 {
+                        let mean = candidateMeans[index]
+                        let dr = mean.0 - tr, dg = mean.1 - tg, db = mean.2 - tb
+                        error += toneWeight * (dr * dr + dg * dg + db * db)
+                    }
                     errors[index] = error
                     best = min(best, error)
                 }
                 let limit = best * (1 + tolerance) + 1e-6
+                bestTotal += best
+                bestCount += 1
                 let good = errors.indices.filter { errors[$0] <= limit }
                 let chosen = candidates[good[Int(random.next() % UInt64(good.count))]]
                 let sourceY = chosen.y + block - blockHeight
@@ -110,6 +159,11 @@ public enum PictureStrip {
                 x += step
             }
             y -= step
+        }
+
+        // Too busy to carry on: the picture keeps its usual place.
+        if bestTotal / Float(max(bestCount, 1)) > busyLimit {
+            return pixels.pictureFirst(followedBy: band)
         }
 
         // The same patches cut from the picture at full size, each joined along its least different path.
@@ -190,6 +244,18 @@ struct Pixels {
             }
         }
         return out
+    }
+
+    /// The picture, then `band` copies of its last row: the same size as the picture with a strip on top.
+    func pictureFirst(followedBy band: Int) -> CGImage? {
+        var out = [UInt8](repeating: 255, count: width * (height + band) * 4)
+        out.replaceSubrange(0..<height * width * 4, with: data)
+        let last = (height - 1) * width * 4
+        for row in 0..<band {
+            let start = (height + row) * width * 4
+            out.replaceSubrange(start..<start + width * 4, with: data[last..<last + width * 4])
+        }
+        return Pixels.image(out, width: width, height: height + band)
     }
 
     /// The picture with `band` rows on top: a copy of its first row each (when no strip could be grown).
@@ -295,8 +361,8 @@ struct StripCanvas {
             for column in 0..<w {
                 var sum: Float = 0
                 var count: Float = 0
-                for dy in -2...2 {
-                    for dx in -2...2 {
+                for dy in -3...3 {
+                    for dx in -3...3 {
                         let r = row + dy, c = column + dx
                         if r >= 0, r < h, c >= 0, c < w { sum += take[r * w + c]; count += 1 }
                     }

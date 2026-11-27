@@ -648,6 +648,7 @@ struct ProfileView: View {
     /// Only the hero reads it, so scrolling redraws the header, not the whole page.
     @State private var heroScroll = ProfileHeroScroll()
     @State private var topSafeAreaInset: CGFloat = 0
+    @State private var statusBarHeight: CGFloat = 0
     @State private var isProfileBackdropSearchPresented = false
     @State private var pendingSocialAction: ProfileSocialAction?
 
@@ -987,6 +988,9 @@ struct ProfileView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
+        // The status bar's real height, for where the backdrop's picture starts. (`topSafeAreaInset` reads 0 here,
+        // since a background sits outside the safe area; the buttons and the hero are laid out around that.)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { statusBarHeight = $0 }
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: ProfileTopSafeAreaInsetKey.self, value: proxy.safeAreaInsets.top)
@@ -1222,7 +1226,7 @@ struct ProfileView: View {
         .padding(.top, backdropURL == nil ? topSafeAreaInset + 28 : topSafeAreaInset + 74 + backdropContentOffset)
         .background(alignment: .top) {
             if let backdropURL {
-                ProfileBackdropArtwork(urlString: backdropURL, pictureTop: topSafeAreaInset - BackdropLayout.topOffset)
+                ProfileBackdropArtwork(urlString: backdropURL, pictureTop: statusBarHeight - BackdropLayout.topOffset)
                     .frame(height: topSafeAreaInset + ProfileHeroBackdropLayout.backdropHeight)
                     .offset(y: BackdropLayout.topOffset)
                     .onLongPressGesture {
