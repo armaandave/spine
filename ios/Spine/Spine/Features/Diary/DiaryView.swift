@@ -393,9 +393,6 @@ struct MediaDiaryView: View {
             // A faint wash of this title's artwork, like the Diary tab's.
             LogBackdrop(url: URL(string: artworkOverride.url ?? viewModel.entries.first?.media.displayPosterURL ?? ""))
         }
-        .overlay(alignment: .top) {
-            DiaryTopSoftScrim()
-        }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden()
@@ -571,9 +568,6 @@ struct DiaryView: View {
                 // A faint wash of the newest log's artwork, like the log sheet's.
                 LogBackdrop(url: URL(string: viewModel.entries.first?.media.displayPosterURL ?? ""))
             }
-            .overlay(alignment: .top) {
-                DiaryTopSoftScrim()
-            }
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
             // Only the user's own switches: a reload also returns to the diary, silently.
@@ -713,6 +707,7 @@ struct DiaryView: View {
             .padding(.top, 18)
             .padding(.bottom, 28)
         }
+        .diaryCleanTop()
     }
 
     private func monthIndexAction(proxy: ScrollViewProxy) -> (String) -> Void {

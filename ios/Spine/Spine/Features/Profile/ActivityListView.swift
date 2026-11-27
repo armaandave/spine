@@ -65,9 +65,6 @@ struct ActivityListView: View {
         .background {
             LogBackdrop(url: URL(string: viewModel.items.first?.media?.displayPosterURL ?? ""))
         }
-        .overlay(alignment: .top) {
-            DiaryTopSoftScrim()
-        }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
@@ -114,6 +111,9 @@ struct ActivityListView: View {
                 }
             } else {
                 ForEach(sections) { section in
+                    if section.id != sections.first?.id {
+                        DiaryMonthGap()
+                    }
                     monthSection(section)
                 }
             }
@@ -163,8 +163,7 @@ struct ActivityListView: View {
             ActivityListRow(activity: item, showsSeparator: !isLast)
         }
         .buttonStyle(DiaryRowButtonStyle())
-        .diaryCard(roundsTop: isFirst, roundsBottom: isLast)
-        .padding(.bottom, isLast ? 18 : 0)
+        .diaryCard(roundsTop: isFirst, roundsBottom: isLast, underTab: true)
     }
 
     @ViewBuilder

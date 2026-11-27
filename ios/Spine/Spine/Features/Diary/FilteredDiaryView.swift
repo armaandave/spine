@@ -61,9 +61,6 @@ struct FilteredDiaryView: View {
         .background {
             LogBackdrop(url: URL(string: viewModel.entries.first?.media.displayPosterURL ?? ""))
         }
-        .overlay(alignment: .top) {
-            DiaryTopSoftScrim()
-        }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)

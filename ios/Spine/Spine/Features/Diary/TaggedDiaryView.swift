@@ -125,9 +125,6 @@ struct TaggedDiaryView: View {
             // A faint wash of the newest log's artwork, like the Diary tab's.
             LogBackdrop(url: URL(string: viewModel.entries.first?.media.displayPosterURL ?? ""))
         }
-        .overlay(alignment: .top) {
-            DiaryTopSoftScrim()
-        }
         .navigationTitle(tag)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
@@ -213,6 +210,9 @@ struct TaggedDiaryView: View {
                         onUnauthorized: onUnauthorized
                     )
                 }
+                // The switch is what pins here, so the months' cards scroll under its blur instead of
+                // keeping their top edge under a pinned tab.
+                .environment(\.diaryPinnedHeaderTop, nil)
             case .grid:
                 mediaGrid
             }
