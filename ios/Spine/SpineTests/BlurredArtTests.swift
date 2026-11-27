@@ -1,5 +1,6 @@
 import CoreGraphics
 import Nuke
+import PictureStrip
 import SwiftUI
 import UIKit
 import XCTest
@@ -639,6 +640,55 @@ final class BlurredArtTests: XCTestCase {
         let output = try XCTUnwrap(TopStripProcessor(aspect: 1.5).process(source))
         let data = try XCTUnwrap(ImageEncoders.Default().encode(output))
         XCTAssertEqual(AssetType(data), .jpeg)
+    }
+
+    func testAPageWiderThanItsPictureKeepsThePicturesOwnTop() {
+        // A 16:9 backdrop on a page about 1.94 wide (the media page's picture between the status bar and the poster):
+        // all of its width, and its rows from the very top down; only the bottom is left out.
+        let crop = TopStripProcessor.cropRect(width: 1280, height: 720, aspect: 1.94)
+        XCTAssertEqual(crop, CGRect(x: 0, y: 0, width: 1280, height: 660))
+    }
+
+    func testAFaceIsAvoidedWithTheHairAboveIt() {
+        // Vision's box for a face in a 1000 x 500 picture (a share of it, origin at the bottom left): from 40% to 50%
+        // across and 70% to 90% up, so 50 to 150 px down from the top. The area left out covers it, a quarter of its
+        // width wider on both sides, and half its height above it for the hair, up to the picture's top.
+        let area = TopStrip.avoidArea(
+            forFace: CGRect(x: 0.4, y: 0.7, width: 0.1, height: 0.2),
+            in: CGSize(width: 1000, height: 500)
+        )
+        XCTAssertEqual(area.minX, 375, accuracy: 0.001)
+        XCTAssertEqual(area.maxX, 525, accuracy: 0.001)
+        XCTAssertEqual(area.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(area.maxY, 150, accuracy: 0.001)
+    }
+
+    func testTheStripTakesNoPatchesFromAreasItAvoids() {
+        // Plain grey grain grows a strip; with all of its top avoided (as faces are), there is nothing left to take
+        // patches from, so there is no strip.
+        let width = 600, height = 400
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        var state: UInt32 = 7
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                state = state &* 1_664_525 &+ 1_013_904_223
+                let grain = Int(state >> 28) - 8
+                let i = (y * width + x) * 4
+                bytes[i] = UInt8(clamping: 110 + grain)
+                bytes[i + 1] = UInt8(clamping: 110 + grain)
+                bytes[i + 2] = UInt8(clamping: 110 + grain)
+            }
+        }
+        let picture = bytes.withUnsafeMutableBytes { raw in
+            CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!.makeImage()!
+        }
+
+        XCTAssertNotNil(PictureStrip.grow(picture, band: 102, sharpRows: height))
+        let wholeTop = CGRect(x: 0, y: 0, width: width, height: 120)
+        XCTAssertNil(PictureStrip.grow(picture, band: 102, sharpRows: height, avoiding: [wholeTop]))
     }
 
     func testThePictureProcessorHasAStableIdentifierThatNamesItsNumbers() {

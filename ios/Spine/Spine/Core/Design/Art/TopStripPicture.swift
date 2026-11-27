@@ -1,9 +1,11 @@
 import CoreGraphics
+import CoreML
 import Nuke
 import NukeUI
 import PictureStrip
 import SwiftUI
 import UIKit
+import Vision
 
 /// A picture at the top of a page that starts under the status bar instead of behind it, with the strip behind the
 /// status bar grown from the picture's own top (the PictureStrip package): the media page's and a list's backdrop, a
@@ -42,10 +44,37 @@ nonisolated enum TopStrip {
     static func isNoStrip(_ image: PlatformImage) -> Bool {
         (image.cgImage?.width ?? 0) <= 1
     }
+
+    /// The faces in `picture` as areas the strip takes no patches from (`avoidArea`): a piece of a face copied into the
+    /// strip reads as a pasted face. Nil when Vision couldn't look, so no strip is made (and kept) without the check.
+    static func faceAreas(in picture: CGImage) -> [CGRect]? {
+        let request = VNDetectFaceRectanglesRequest()
+        #if targetEnvironment(simulator)
+        // The simulator can't make Vision's usual inference context ("Could not create inference context") and would
+        // find no faces at all; the CPU works there.
+        if let cpu = MLComputeDevice.allComputeDevices.first(where: { if case .cpu = $0 { true } else { false } }) {
+            request.setComputeDevice(cpu, for: .main)
+        }
+        #endif
+        guard (try? VNImageRequestHandler(cgImage: picture, options: [:]).perform([request])) != nil else { return nil }
+        let size = CGSize(width: picture.width, height: picture.height)
+        return (request.results ?? []).map { avoidArea(forFace: $0.boundingBox, in: size) }
+    }
+
+    /// A face Vision found (`box`: a share of the picture, origin at the bottom left), widened by a quarter on both sides
+    /// and raised by half its height for the hair above it, in the picture's pixels with the origin at the top left.
+    static func avoidArea(forFace box: CGRect, in size: CGSize) -> CGRect {
+        CGRect(
+            x: (box.minX - box.width * 0.25) * size.width,
+            y: (1 - box.maxY - box.height * 0.5) * size.height,
+            width: box.width * 1.5 * size.width,
+            height: box.height * 1.5 * size.height
+        )
+    }
 }
 
-/// Crops the image around its center to the page's shape (`aspect`, width over height) and grows `TopStrip.share` of
-/// its width above it: the strip, then the picture, in one opaque bitmap. A busy top gives `TopStrip.noStrip`.
+/// Crops the image to the page's shape (`aspect`, width over height) and grows `TopStrip.share` of its width above it:
+/// the strip, then the picture, in one opaque bitmap. A busy top gives `TopStrip.noStrip`.
 nonisolated struct TopStripProcessor: ImageProcessing, Hashable {
     /// Rounded, so the same page on the same phone always makes the same cache key.
     let aspect: CGFloat
@@ -58,7 +87,9 @@ nonisolated struct TopStripProcessor: ImageProcessing, Hashable {
         "com.armaan.spine.topstrip?aspect=\(aspect)&share=\(TopStrip.share)&quilt=\(PictureStrip.version)"
     }
 
-    /// The part of a `width` x `height` image with `aspect`'s shape, centered.
+    /// The part of a `width` x `height` image with `aspect`'s shape: centered across, and from the very top down, so the
+    /// strip grows from the picture's own top edge. Cutting into the top instead puts heads and hats right where the
+    /// strip starts; the bottom fades out under the page anyway.
     static func cropRect(width: CGFloat, height: CGFloat, aspect: CGFloat) -> CGRect {
         var cropWidth = width
         var cropHeight = width / aspect
@@ -68,12 +99,7 @@ nonisolated struct TopStripProcessor: ImageProcessing, Hashable {
         }
         cropWidth = max(1, cropWidth.rounded())
         cropHeight = max(1, cropHeight.rounded())
-        return CGRect(
-            x: ((width - cropWidth) / 2).rounded(),
-            y: ((height - cropHeight) / 2).rounded(),
-            width: cropWidth,
-            height: cropHeight
-        )
+        return CGRect(x: ((width - cropWidth) / 2).rounded(), y: 0, width: cropWidth, height: cropHeight)
     }
 
     func process(_ image: PlatformImage) -> PlatformImage? {
@@ -81,7 +107,10 @@ nonisolated struct TopStripProcessor: ImageProcessing, Hashable {
         let crop = Self.cropRect(width: CGFloat(source.width), height: CGFloat(source.height), aspect: aspect)
         guard let picture = source.cropping(to: crop) else { return nil }
         let band = max(1, Int((CGFloat(picture.width) * TopStrip.share).rounded()))
-        guard let grown = PictureStrip.grow(picture, band: band, sharpRows: picture.height) else {
+        // Vision couldn't look for faces: no picture this time (a failure isn't kept), so the page shows it the way it
+        // always has and tries again on the next visit.
+        guard let faces = TopStrip.faceAreas(in: picture) else { return nil }
+        guard let grown = PictureStrip.grow(picture, band: band, sharpRows: picture.height, avoiding: faces) else {
             return TopStrip.noStrip(scale: image.scale)
         }
         return PlatformImage(cgImage: grown, scale: image.scale, orientation: image.imageOrientation)

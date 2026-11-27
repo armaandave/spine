@@ -3787,13 +3787,14 @@ private struct MediaDetailPageView: View {
                         HeroArtwork(detail: detail)
                         if let backdropURL = backdropURLString(for: detail) {
                             GeometryReader { proxy in
-                                // The picture starts under the status bar; the strip above it reaches the frame's top.
+                                // The picture starts under the status bar and ends where the strip always has; the
+                                // strip grown above it fills the status bar.
                                 let pictureTop = resolvedTopSafeAreaInset - BackdropLayout.topOffset
                                 BackdropArtwork(urlString: backdropURL, pictureTop: pictureTop)
                                     .frame(height: BackdropLayout.stripHeight(
                                         width: proxy.size.width,
                                         topInset: resolvedTopSafeAreaInset
-                                    ) + pictureTop)
+                                    ))
                                     .onLongPressGesture {
                                         openBackdropPicker(for: detail)
                                     }
@@ -6022,9 +6023,10 @@ struct HeroArtwork: View {
 }
 
 /// The media page's backdrop strip, 3:2. With a strip grown from its own top (`TopStripLoader`), the picture starts
-/// `pictureTop` down its frame, under the status bar; the frame is `pictureTop` taller than the picture for it. A busy
-/// top gets no strip, and the picture fills the frame's top as it always has. Either way the status bar's shade sits
-/// over the frame's first 3:2 height and the picture fades out over its own lower part.
+/// `pictureTop` down the frame, under the status bar, and still ends at the frame's bottom: it is cropped wider than
+/// 3:2 to fit, so no more of it goes under the poster than before. A busy top gets no strip, and the picture fills the
+/// frame as it always has. Either way the status bar's shade sits over the whole frame and the picture fades out over
+/// its own lower part.
 struct BackdropArtwork: View {
     let urlString: String
     var pictureTop: CGFloat = 0
@@ -6044,20 +6046,20 @@ struct BackdropArtwork: View {
                         TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
                     }
                 case .none:
-                    layers(top: 0, pictureHeight: pictureHeight) {
+                    layers(top: 0, pictureHeight: proxy.size.height) {
                         SpineAsyncImage(url: URL(string: urlString)) { phase in
                             switch phase {
                             case let .success(image):
                                 image
                                     .resizable()
                                     .scaledToFill()
-                                    .frame(width: width, height: pictureHeight)
+                                    .frame(width: width, height: proxy.size.height)
                                     .clipped()
                             default:
                                 Color.clear
                             }
                         }
-                        .frame(width: width, height: pictureHeight)
+                        .frame(width: width, height: proxy.size.height)
                     }
                 }
             }
@@ -6065,8 +6067,8 @@ struct BackdropArtwork: View {
         .clipped()
     }
 
-    /// The picture, the status bar's shade over the frame's first `pictureHeight`, and the picture fading out over its
-    /// own lower part, the picture starting `top` down the frame.
+    /// The picture, the status bar's shade over the whole frame, and the picture fading out over its own lower part,
+    /// the picture starting `top` down the frame and `pictureHeight` tall.
     private func layers<Picture: View>(
         top: CGFloat,
         pictureHeight: CGFloat,
@@ -6084,7 +6086,6 @@ struct BackdropArtwork: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: pictureHeight)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .mask(alignment: .top) {
