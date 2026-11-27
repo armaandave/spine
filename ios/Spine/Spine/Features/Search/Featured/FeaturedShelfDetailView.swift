@@ -24,8 +24,8 @@ struct FeaturedShelfDetailView: View {
 }
 
 /// What a type's page shows behind the top of the screen: the first cover of the kind shown, blurred, moving up as the
-/// page scrolls. The page sets it; the screen around the page draws it (Search draws it behind its field), since the
-/// art runs above the page.
+/// page scrolls. The page sets it; the screen around the page draws it while the page is shown (Search draws it behind
+/// its field), since the art runs above the page.
 @MainActor
 @Observable
 final class FeaturedTopArt {
@@ -59,6 +59,8 @@ struct FeaturedTypeLayer: View {
     /// The kind shown, by its shelf key; until one is picked, the type's first.
     @State private var kindKey: String?
     @State private var position = ScrollPosition(edge: .top)
+    /// Coming back from a list keeps the page where it was; only a new page starts at the top.
+    @State private var hasAppeared = false
 
     var body: some View {
         let layer = store.layer(mediaType: mediaType)
@@ -83,21 +85,24 @@ struct FeaturedTypeLayer: View {
         }
         .featuredLayerLifecycle(store: store, mediaType: mediaType)
         .onAppear {
-            top.scroll.offset = 0
-        }
-        .onChange(of: artURL(layer.response), initial: true) { _, url in
-            withAnimation(.smooth(duration: 0.6)) {
-                top.url = url
+            if !hasAppeared {
+                hasAppeared = true
+                top.scroll.offset = 0
             }
+            showArt(artURL(layer.response))
         }
-        .onDisappear {
-            // Another type's page may have shown its own art already.
-            guard top.url == artURL(layer.response) else { return }
-            withAnimation(.smooth(duration: 0.35)) {
-                top.url = nil
-            }
+        .onChange(of: artURL(layer.response)) { _, url in
+            showArt(url)
         }
         .sensoryFeedback(.selection, trigger: kindKey)
+    }
+
+    /// Cross-fades to a new kind's (or type's) art; the screen around the page decides when it shows.
+    private func showArt(_ url: URL?) {
+        guard top.url != url else { return }
+        withAnimation(.smooth(duration: 0.6)) {
+            top.url = url
+        }
     }
 
     private var displayTitle: String {

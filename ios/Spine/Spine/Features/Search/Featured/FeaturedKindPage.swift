@@ -160,9 +160,17 @@ private struct FeaturedKindRowLine: View {
             if let url = card.source?.iconURL {
                 FeaturedSourceIcon(name: source ?? "", iconURL: url)
             }
-            if let source {
-                Text(source)
-                    .lineLimit(1)
+            // The source gives way to the period when space runs out; " · " keeps even space on both sides.
+            HStack(spacing: 0) {
+                if let source {
+                    Text(source)
+                        .lineLimit(1)
+                }
+                if case let .period(period) = badge {
+                    Text(source == nil ? period : " · \(period)")
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
             }
             switch badge {
             case let .live(label):
@@ -171,10 +179,8 @@ private struct FeaturedKindRowLine: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(FeaturedLiveDot.color)
                     .lineLimit(1)
-            case let .period(period):
-                Text(source == nil ? period : "· \(period)")
-                    .lineLimit(1)
-                    .layoutPriority(1)
+            case .period:
+                EmptyView()
             case .kind:
                 if source == nil {
                     Text(card.countText)

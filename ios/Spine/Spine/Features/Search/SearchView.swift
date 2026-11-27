@@ -616,10 +616,11 @@ private struct SearchViewContent: View {
                 // Down past the type page's plate, which sits under the field and the type bar.
                 .background(alignment: .top) {
                     LibraryBlurredTop(
-                        url: featuredTop.url,
+                        url: showsTypeLists ? featuredTop.url : nil,
                         scroll: featuredTop.scroll,
                         height: searchBarHeight + FeaturedKindLayout.artBelowPage
                     )
+                    .animation(.smooth(duration: 0.35), value: showsTypeLists)
                 }
                 .background(Color.black)
                 .mediaLensAtmosphere(theme: currentTheme)
@@ -692,6 +693,12 @@ private struct SearchViewContent: View {
     /// The Search tab itself, not a picker built on this screen: only it has the lists to show.
     private var isSearchTab: Bool {
         featuredStore != nil
+    }
+
+    /// One type's lists are on the page (not typing, not every kind, not people): their art shows behind the field.
+    private var showsTypeLists: Bool {
+        isSearchTab && !isSearchActive && draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && selectedSearchType != APIConstants.allMedia && selectedSearchType != SearchViewModel.usersScope
     }
 
     /// "Search" in big type over the box while the page shows every kind's lists; it tucks away once you search.

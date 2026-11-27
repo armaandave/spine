@@ -366,7 +366,7 @@ def card_payload(featured, request, *, items_count, previews=None, people=None, 
         "source": {
             "name": source_name or None,
             "url": (definition.source_url if definition else "") or custom_list.import_source_url or None,
-            # The name Search shows ("NYT" for "The New York Times") and its icon, as on the shelves' sources.
+            # The name and icon Search shows ("NYT" for "The New York Times").
             "short_name": short_name or None,
             "icon_url": sources.icon_url(icon, request),
         },
