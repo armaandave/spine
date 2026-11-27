@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreML
 import Nuke
 import NukeUI
 import PictureStrip
@@ -49,6 +50,13 @@ nonisolated enum TopStrip {
     /// copied into the strip reads as a pasted face.
     static func faceAreas(in picture: CGImage) -> [CGRect] {
         let request = VNDetectFaceRectanglesRequest()
+        #if targetEnvironment(simulator)
+        // The simulator can't make Vision's usual inference context ("Could not create inference context") and would
+        // find no faces at all; the CPU works there.
+        if let cpu = MLComputeDevice.allComputeDevices.first(where: { if case .cpu = $0 { true } else { false } }) {
+            request.setComputeDevice(cpu, for: .main)
+        }
+        #endif
         guard (try? VNImageRequestHandler(cgImage: picture, options: [:]).perform([request])) != nil else { return [] }
         let width = CGFloat(picture.width)
         let height = CGFloat(picture.height)
