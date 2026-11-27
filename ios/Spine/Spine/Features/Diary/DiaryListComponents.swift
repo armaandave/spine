@@ -43,6 +43,9 @@ struct DiaryEntryList<Destination: View>: View {
     var body: some View {
         ForEach(monthSections) { section in
             expandedSection(section)
+            if section.id != monthSections.last?.id {
+                DiaryMonthGap()
+            }
         }
     }
 
@@ -60,8 +63,7 @@ struct DiaryEntryList<Destination: View>: View {
                     DiaryEntryRow(entry: entry, artworkOverride: artworkOverride, showsSeparator: !isLast)
                 }
                 .buttonStyle(DiaryRowButtonStyle())
-                .diaryCard(roundsTop: isFirst, roundsBottom: isLast)
-                .padding(.bottom, isLast ? 18 : 0)
+                .diaryCard(roundsTop: isFirst, roundsBottom: isLast, underTab: true)
             }
         } header: {
             monthHeader(for: section)
@@ -195,31 +197,162 @@ private struct DiaryPinnedHeaders: ViewModifier {
                 top = newTop
             }
             .environment(\.diaryPinnedHeaderTop, top)
+            .modifier(DiaryCleanTop(top: top))
+    }
+}
+
+/// Nothing scrolled draws above where headers pin: the page fades out over the last 18 pt before it, under the
+/// status bar (or the navigation bar). One mask and no blur layers, so there is no seam between two of them.
+private struct DiaryCleanTop: ViewModifier {
+    let top: CGFloat
+
+    static let fade: CGFloat = 18
+
+    func body(content: Content) -> some View {
+        content
+            .scrollEdgeEffectHidden(true, for: .top)
+            .mask {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: Self.fade)
+                    Rectangle()
+                }
+                .padding(.top, max(0, top - Self.fade))
+                .ignoresSafeArea()
+            }
+    }
+}
+
+/// The clean top for a scroll view without pinned headers, such as the month index.
+private struct DiaryCleanTopOnly: ViewModifier {
+    @State private var top: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.top } action: { _, newTop in
+                top = newTop
+            }
+            .modifier(DiaryCleanTop(top: top))
     }
 }
 
 extension View {
-    /// For a scroll view that pins month headers: tells each header where it pins, so it can
-    /// blur the rows behind it once it does.
+    /// For a scroll view that pins month headers: tells each header where it pins, so a pinned month's card can
+    /// keep its top edge under the tab, and keeps the page clear under the status bar.
     func diaryPinnedHeaders() -> some View {
         modifier(DiaryPinnedHeaders())
     }
 
+    /// Keeps a diary page clear under the status bar, as `diaryPinnedHeaders()` does, for a scroll view with no
+    /// pinned headers.
+    func diaryCleanTop() -> some View {
+        modifier(DiaryCleanTopOnly())
+    }
+
     /// The diary's glassy card, the same even translucent fill as the log sheet's cards.
-    /// A row in the middle of a card rounds neither end.
-    func diaryCard(roundsTop: Bool = true, roundsBottom: Bool = true) -> some View {
-        let top: CGFloat = roundsTop ? 22 : 0
-        let bottom: CGFloat = roundsBottom ? 22 : 0
-        return background(LogComposerStyle.rowBackground)
-            .clipShape(UnevenRoundedRectangle(
-                cornerRadii: RectangleCornerRadii(
-                    topLeading: top,
-                    bottomLeading: bottom,
-                    bottomTrailing: bottom,
-                    topTrailing: top
-                ),
-                style: .continuous
-            ))
+    /// A row in the middle of a card rounds neither end. Under a month's tab (`underTab`), the card's top-leading
+    /// corner is the tab's, and while the month is pinned its rows slide under the card's top edge.
+    func diaryCard(roundsTop: Bool = true, roundsBottom: Bool = true, underTab: Bool = false) -> some View {
+        modifier(DiaryCard(roundsTop: roundsTop, roundsBottom: roundsBottom, underTab: underTab))
+    }
+}
+
+private struct DiaryCard: ViewModifier {
+    let roundsTop: Bool
+    let roundsBottom: Bool
+    let underTab: Bool
+
+    @Environment(\.diaryPinnedHeaderTop) private var pinnedTop
+
+    static let radius: CGFloat = 22
+
+    func body(content: Content) -> some View {
+        let top: CGFloat = roundsTop ? Self.radius : 0
+        let bottom: CGFloat = roundsBottom ? Self.radius : 0
+        let shape = UnevenRoundedRectangle(
+            cornerRadii: RectangleCornerRadii(
+                topLeading: underTab ? 0 : top,
+                bottomLeading: bottom,
+                bottomTrailing: bottom,
+                topTrailing: top
+            ),
+            style: .continuous
+        )
+        if underTab, pinnedTop != nil {
+            // A pinned month's card keeps its top edge at its tab's base: the rows' content fades out over the
+            // last 18 pt before it, and everything above it (the card's fill too) is cut away. The scroll view's
+            // coordinate space starts below its top inset, where headers pin, so the edge is the tab's height.
+            let edge = DiaryMonthHeader.height
+            content
+                .mask { DiaryPinnedEdgeFade(edge: edge) }
+                .background(LogComposerStyle.rowBackground)
+                .clipShape(shape)
+                .mask { DiaryPinnedEdgeCut(edge: edge) }
+        } else {
+            content
+                .background(LogComposerStyle.rowBackground)
+                .clipShape(shape)
+        }
+    }
+}
+
+/// A row's mask while months pin: clear above the pinned card edge, opaque below it, rounding the trailing corner
+/// the way the card's top corner rounds. Every row reads the same edge, so a corner that spans two rows lines up.
+/// Moved straight from the row's position (no state), and overdrawn below so a raised mask still covers the row.
+private struct DiaryPinnedEdgeCut: View {
+    let edge: CGFloat
+
+    var body: some View {
+        UnevenRoundedRectangle(
+            cornerRadii: RectangleCornerRadii(topLeading: 0, bottomLeading: 0, bottomTrailing: 0, topTrailing: DiaryCard.radius),
+            style: .continuous
+        )
+        .padding(.bottom, -DiaryPinnedEdge.overdraw)
+        .visualEffect { content, proxy in
+            content.offset(y: DiaryPinnedEdge.cut(edge: edge, rowTop: proxy.frame(in: .scrollView).minY))
+        }
+    }
+}
+
+/// The rows' content fades out over the 18 pt before the pinned card edge; the card's fill stays crisp.
+private struct DiaryPinnedEdgeFade: View {
+    let edge: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: DiaryPinnedEdge.fade)
+            Rectangle()
+        }
+        .padding(.bottom, -DiaryPinnedEdge.overdraw)
+        .visualEffect { content, proxy in
+            content.offset(y: DiaryPinnedEdge.cut(edge: edge, rowTop: proxy.frame(in: .scrollView).minY))
+        }
+    }
+}
+
+/// Read inside `visualEffect`, off the main actor.
+nonisolated enum DiaryPinnedEdge {
+    static let fade: CGFloat = 18
+    /// How far below a row its masks reach, so lifting them over a row just under the edge leaves no gap.
+    static let overdraw: CGFloat = 100
+
+    /// How far into a row the pinned card edge is: positive once the row has started under it. Rows farther
+    /// below stop at -60, which already lifts the corner and the fade clear of them.
+    static func cut(edge: CGFloat, rowTop: CGFloat) -> CGFloat {
+        max(edge - rowTop, -60)
+    }
+}
+
+/// The space between two months. It sits outside both months, so a pinned tab leaves as its card's bottom edge
+/// reaches it, never floating on its own.
+struct DiaryMonthGap: View {
+    static let height: CGFloat = 22
+
+    var body: some View {
+        Color.clear
+            .frame(height: Self.height)
+            .accessibilityHidden(true)
     }
 }
 
@@ -272,87 +405,52 @@ struct DiaryMonthSection: Identifiable {
     }
 }
 
-/// A month's title in a Liquid Glass capsule. It stays pinned while that month scrolls
-/// under it; with an action, a tap opens the month index.
+/// A month's title on a small tab that grows out of the top-leading corner of the month's card, in the card's
+/// fill: the card's corner is the tab's corner, and an inside curve takes the tab into the card's top edge. It stays
+/// pinned while that month scrolls under it, with the card's top edge under it (`diaryCard(underTab:)`); with an
+/// action, a tap opens the month index.
 struct DiaryMonthHeader: View {
     let title: String
     var isLoading = false
     var action: (() -> Void)? = nil
 
-    @Environment(\.diaryPinnedHeaderTop) private var pinnedTop
-
-    /// How far the pinned blur reaches above the header.
-    private static let bandOverhang: CGFloat = 16
+    /// The tab's height. A pinned month's card keeps its top edge this far below where headers pin.
+    static let height: CGFloat = 26
 
     var body: some View {
-        Group {
-            if let action {
-                Button(action: action) {
-                    strip
-                }
-                .buttonStyle(.plain)
-                .disabled(isLoading)
-                .accessibilityLabel(title)
-                .accessibilityValue(isLoading ? "Loading" : "Expanded")
-                .accessibilityHint("Hides diary entries for all months")
-            } else {
+        if let action {
+            Button(action: action) {
                 strip
             }
+            .buttonStyle(.plain)
+            .disabled(isLoading)
+            .accessibilityLabel(title)
+            .accessibilityValue(isLoading ? "Loading" : "Expanded")
+            .accessibilityHint("Hides diary entries for all months")
+        } else {
+            strip
         }
-        .background {
-            // While pinned, rows scrolling under the header blur away across the full width
-            // instead of running into the capsule. It fades in over the last stretch before
-            // the header pins, read straight from its position so no state flips mid-layout.
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .mask {
-                    LinearGradient(
-                        // Soft at both ends: the top fades in across the overhang, under the
-                        // status-bar blur's fade, so neither edge shows as a line.
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.3),
-                            .init(color: .black, location: 0.75),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-                // Out past the page margins to the screen edges, and up under the status-bar
-                // blur's fade so the two blurs meet without a seam.
-                .padding(.horizontal, -24)
-                .padding(.top, -Self.bandOverhang)
-                .visualEffect { [pinnedTop] content, proxy in
-                    guard let pinnedTop else { return content.opacity(0) }
-                    // The padding only lets the band draw outside the header; this is the header's own top.
-                    let distance = proxy.frame(in: .scrollView).minY - pinnedTop
-                    return content.opacity(min(1, max(0, 1 - distance / 24)))
-                }
-                .allowsHitTesting(false)
-        }
-        // Dark glass and text on any page, whatever the phone's appearance.
-        .environment(\.colorScheme, .dark)
     }
 
-    /// The capsule on a full-width strip. The whole strip takes taps, so a tap beside the
-    /// capsule of a pinned header doesn't open the row blurred behind it.
+    /// The tab on a full-width strip. The whole strip takes taps, so a tap beside the tab of a
+    /// pinned month never reaches a row under it.
     private var strip: some View {
-        // A darker tint keeps the title readable over rows scrolling under it.
-        let glass = Glass.regular.tint(.black.opacity(0.3))
-        return label
-            .glassEffect(action == nil ? glass : glass.interactive(), in: .capsule)
+        label
+            .background(alignment: .leading) {
+                DiaryMonthTabShape()
+                    .fill(LogComposerStyle.rowBackground)
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 8)
+            .frame(height: Self.height)
             .contentShape(Rectangle())
     }
 
     private var label: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Text(title)
-                // One line at every text size, so the capsule never wraps.
+                // One line, so the tab never wraps.
                 .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                .minimumScaleFactor(0.7)
 
             if action != nil {
                 if isLoading {
@@ -360,17 +458,51 @@ struct DiaryMonthHeader: View {
                         .controlSize(.mini)
                         .tint(.white.opacity(0.6))
                 } else {
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.5))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.45))
                         .accessibilityHidden(true)
                 }
             }
         }
-        .font(.subheadline.weight(.semibold))
+        .font(.system(size: 13, weight: .semibold))
         .foregroundStyle(.white)
-        .padding(.horizontal, 14)
-        .frame(minHeight: 34)
+        .padding(.leading, 12)
+        .padding(.trailing, 9)
+        .frame(height: Self.height)
+    }
+}
+
+/// The month's tab, drawn in the frame of its words: a 10 pt corner on the leading side (the card's corner), a
+/// 9 pt corner on the trailing side, then an 8 pt inside curve past the frame into the card's top edge.
+struct DiaryMonthTabShape: Shape {
+    static let leadingRadius: CGFloat = 10
+    static let trailingRadius: CGFloat = 9
+    static let joinRadius: CGFloat = 8
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + Self.leadingRadius))
+        path.addArc(
+            tangent1End: CGPoint(x: rect.minX, y: rect.minY),
+            tangent2End: CGPoint(x: rect.minX + Self.leadingRadius, y: rect.minY),
+            radius: Self.leadingRadius
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - Self.trailingRadius, y: rect.minY))
+        path.addArc(
+            tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
+            tangent2End: CGPoint(x: rect.maxX, y: rect.minY + Self.trailingRadius),
+            radius: Self.trailingRadius
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - Self.joinRadius))
+        path.addArc(
+            tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+            tangent2End: CGPoint(x: rect.maxX + Self.joinRadius, y: rect.maxY),
+            radius: Self.joinRadius
+        )
+        path.closeSubpath()
+        return path
     }
 }
 

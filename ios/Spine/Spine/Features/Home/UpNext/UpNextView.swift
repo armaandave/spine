@@ -33,9 +33,6 @@ struct UpNextView: View {
         .background {
             LogBackdrop(url: URL(string: model.items.first?.media.displayPosterURL ?? ""))
         }
-        .overlay(alignment: .top) {
-            DiaryTopSoftScrim()
-        }
         // A dark page whatever the phone's appearance, so the refresh spinner draws for a dark background.
         .environment(\.colorScheme, .dark)
         // The title is the page's own, as the Diary's is: the bar keeps only the back button.
@@ -85,7 +82,11 @@ struct UpNextView: View {
             }
         } else {
             let refs = items.map(\.media.ref)
-            ForEach(UpNextPresentation.monthSections(items, today: today)) { section in
+            let sections = UpNextPresentation.monthSections(items, today: today)
+            ForEach(sections) { section in
+                if section.id != sections.first?.id {
+                    DiaryMonthGap()
+                }
                 Section {
                     // Each row is its own item in the lazy stack, a slice of the month's card, as on the Diary.
                     ForEach(section.items) { item in
@@ -109,8 +110,7 @@ struct UpNextView: View {
                             UpNextRow(item: item, today: today, showsSeparator: !isLast)
                         }
                         .buttonStyle(DiaryRowButtonStyle())
-                        .diaryCard(roundsTop: isFirst, roundsBottom: isLast)
-                        .padding(.bottom, isLast ? 18 : 0)
+                        .diaryCard(roundsTop: isFirst, roundsBottom: isLast, underTab: true)
                     }
                 } header: {
                     DiaryMonthHeader(title: section.title)
