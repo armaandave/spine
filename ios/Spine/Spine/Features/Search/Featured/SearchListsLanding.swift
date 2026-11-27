@@ -79,7 +79,7 @@ enum SearchListsSummary {
     }
 }
 
-/// "LISTS" over the kinds. The rows split the height down to the tab bar so that every kind fits exactly when
+/// "FEATURED LISTS" over the kinds. The rows split the height down to the tab bar so that every kind fits exactly when
 /// they're all turned on (fewer end higher), and scroll only on a screen too short for that.
 private struct SearchListsRows<Rows: View>: View {
     let everyKind: Int
@@ -115,7 +115,7 @@ private struct SearchListsHeading: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("LISTS")
+            Text("FEATURED LISTS")
                 .font(.system(size: 13, weight: .bold))
                 .tracking(0.8)
                 .foregroundStyle(.white.opacity(0.55))
