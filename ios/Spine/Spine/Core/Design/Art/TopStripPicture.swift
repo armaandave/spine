@@ -45,10 +45,9 @@ nonisolated enum TopStrip {
         (image.cgImage?.width ?? 0) <= 1
     }
 
-    /// The faces in `picture`, each widened by a quarter on both sides and raised by half its height for the hair above
-    /// it, in the picture's pixels (origin at the top left). The strip takes no patches from them: a piece of a face
-    /// copied into the strip reads as a pasted face.
-    static func faceAreas(in picture: CGImage) -> [CGRect] {
+    /// The faces in `picture` as areas the strip takes no patches from (`avoidArea`): a piece of a face copied into the
+    /// strip reads as a pasted face. Nil when Vision couldn't look, so no strip is made (and kept) without the check.
+    static func faceAreas(in picture: CGImage) -> [CGRect]? {
         let request = VNDetectFaceRectanglesRequest()
         #if targetEnvironment(simulator)
         // The simulator can't make Vision's usual inference context ("Could not create inference context") and would
@@ -57,19 +56,20 @@ nonisolated enum TopStrip {
             request.setComputeDevice(cpu, for: .main)
         }
         #endif
-        guard (try? VNImageRequestHandler(cgImage: picture, options: [:]).perform([request])) != nil else { return [] }
-        let width = CGFloat(picture.width)
-        let height = CGFloat(picture.height)
-        return (request.results ?? []).map { face in
-            // Vision's box is a share of the picture, with its origin at the bottom left.
-            let box = face.boundingBox
-            return CGRect(
-                x: (box.minX - box.width * 0.25) * width,
-                y: (1 - box.maxY - box.height * 0.5) * height,
-                width: box.width * 1.5 * width,
-                height: box.height * 1.5 * height
-            )
-        }
+        guard (try? VNImageRequestHandler(cgImage: picture, options: [:]).perform([request])) != nil else { return nil }
+        let size = CGSize(width: picture.width, height: picture.height)
+        return (request.results ?? []).map { avoidArea(forFace: $0.boundingBox, in: size) }
+    }
+
+    /// A face Vision found (`box`: a share of the picture, origin at the bottom left), widened by a quarter on both sides
+    /// and raised by half its height for the hair above it, in the picture's pixels with the origin at the top left.
+    static func avoidArea(forFace box: CGRect, in size: CGSize) -> CGRect {
+        CGRect(
+            x: (box.minX - box.width * 0.25) * size.width,
+            y: (1 - box.maxY - box.height * 0.5) * size.height,
+            width: box.width * 1.5 * size.width,
+            height: box.height * 1.5 * size.height
+        )
     }
 }
 
@@ -107,12 +107,10 @@ nonisolated struct TopStripProcessor: ImageProcessing, Hashable {
         let crop = Self.cropRect(width: CGFloat(source.width), height: CGFloat(source.height), aspect: aspect)
         guard let picture = source.cropping(to: crop) else { return nil }
         let band = max(1, Int((CGFloat(picture.width) * TopStrip.share).rounded()))
-        guard let grown = PictureStrip.grow(
-            picture,
-            band: band,
-            sharpRows: picture.height,
-            avoiding: TopStrip.faceAreas(in: picture)
-        ) else {
+        // Vision couldn't look for faces: no picture this time (a failure isn't kept), so the page shows it the way it
+        // always has and tries again on the next visit.
+        guard let faces = TopStrip.faceAreas(in: picture) else { return nil }
+        guard let grown = PictureStrip.grow(picture, band: band, sharpRows: picture.height, avoiding: faces) else {
             return TopStrip.noStrip(scale: image.scale)
         }
         return PlatformImage(cgImage: grown, scale: image.scale, orientation: image.imageOrientation)

@@ -649,6 +649,20 @@ final class BlurredArtTests: XCTestCase {
         XCTAssertEqual(crop, CGRect(x: 0, y: 0, width: 1280, height: 660))
     }
 
+    func testAFaceIsAvoidedWithTheHairAboveIt() {
+        // Vision's box for a face in a 1000 x 500 picture (a share of it, origin at the bottom left): from 40% to 50%
+        // across and 70% to 90% up, so 50 to 150 px down from the top. The area left out covers it, a quarter of its
+        // width wider on both sides, and half its height above it for the hair, up to the picture's top.
+        let area = TopStrip.avoidArea(
+            forFace: CGRect(x: 0.4, y: 0.7, width: 0.1, height: 0.2),
+            in: CGSize(width: 1000, height: 500)
+        )
+        XCTAssertEqual(area.minX, 375, accuracy: 0.001)
+        XCTAssertEqual(area.maxX, 525, accuracy: 0.001)
+        XCTAssertEqual(area.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(area.maxY, 150, accuracy: 0.001)
+    }
+
     func testTheStripTakesNoPatchesFromAreasItAvoids() {
         // Plain grey grain grows a strip; with all of its top avoided (as faces are), there is nothing left to take
         // patches from, so there is no strip.
