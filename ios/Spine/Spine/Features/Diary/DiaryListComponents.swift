@@ -198,11 +198,59 @@ private struct DiaryPinnedHeaders: ViewModifier {
     }
 }
 
+/// While a header is pinned, rows scrolling under it blur away across the full width instead
+/// of running into it. It fades in over the last stretch before the header pins, read
+/// straight from its position so no state flips mid-layout.
+private struct DiaryPinnedHeaderBlur: ViewModifier {
+    @Environment(\.diaryPinnedHeaderTop) private var pinnedTop
+
+    /// How far the pinned blur reaches above the header.
+    private static let bandOverhang: CGFloat = 16
+
+    func body(content: Content) -> some View {
+        content.background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask {
+                    LinearGradient(
+                        // Soft at both ends: the top fades in across the overhang, under the
+                        // status-bar blur's fade, so neither edge shows as a line.
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.3),
+                            .init(color: .black, location: 0.75),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                // Out past the page margins to the screen edges, and up under the status-bar
+                // blur's fade so the two blurs meet without a seam.
+                .padding(.horizontal, -24)
+                .padding(.top, -Self.bandOverhang)
+                .visualEffect { [pinnedTop] content, proxy in
+                    guard let pinnedTop else { return content.opacity(0) }
+                    // The padding only lets the band draw outside the header; this is the header's own top.
+                    let distance = proxy.frame(in: .scrollView).minY - pinnedTop
+                    return content.opacity(min(1, max(0, 1 - distance / 24)))
+                }
+                .allowsHitTesting(false)
+                .environment(\.colorScheme, .dark)
+        }
+    }
+}
+
 extension View {
     /// For a scroll view that pins month headers: tells each header where it pins, so it can
     /// blur the rows behind it once it does.
     func diaryPinnedHeaders() -> some View {
         modifier(DiaryPinnedHeaders())
+    }
+
+    /// The blur behind a pinned header, in a scroll view using `diaryPinnedHeaders()`.
+    func diaryPinnedHeaderBlur() -> some View {
+        modifier(DiaryPinnedHeaderBlur())
     }
 
     /// The diary's glassy card, the same even translucent fill as the log sheet's cards.
@@ -279,11 +327,6 @@ struct DiaryMonthHeader: View {
     var isLoading = false
     var action: (() -> Void)? = nil
 
-    @Environment(\.diaryPinnedHeaderTop) private var pinnedTop
-
-    /// How far the pinned blur reaches above the header.
-    private static let bandOverhang: CGFloat = 16
-
     var body: some View {
         Group {
             if let action {
@@ -299,38 +342,7 @@ struct DiaryMonthHeader: View {
                 strip
             }
         }
-        .background {
-            // While pinned, rows scrolling under the header blur away across the full width
-            // instead of running into the capsule. It fades in over the last stretch before
-            // the header pins, read straight from its position so no state flips mid-layout.
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .mask {
-                    LinearGradient(
-                        // Soft at both ends: the top fades in across the overhang, under the
-                        // status-bar blur's fade, so neither edge shows as a line.
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.3),
-                            .init(color: .black, location: 0.75),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-                // Out past the page margins to the screen edges, and up under the status-bar
-                // blur's fade so the two blurs meet without a seam.
-                .padding(.horizontal, -24)
-                .padding(.top, -Self.bandOverhang)
-                .visualEffect { [pinnedTop] content, proxy in
-                    guard let pinnedTop else { return content.opacity(0) }
-                    // The padding only lets the band draw outside the header; this is the header's own top.
-                    let distance = proxy.frame(in: .scrollView).minY - pinnedTop
-                    return content.opacity(min(1, max(0, 1 - distance / 24)))
-                }
-                .allowsHitTesting(false)
-        }
+        .diaryPinnedHeaderBlur()
         // Dark glass and text on any page, whatever the phone's appearance.
         .environment(\.colorScheme, .dark)
     }

@@ -116,6 +116,7 @@ struct TaggedDiaryView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 28)
             }
+            .diaryPinnedHeaders()
             .refreshable {
                 await viewModel.load()
             }
@@ -173,8 +174,10 @@ struct TaggedDiaryView: View {
             }
         }
         .pickerStyle(.segmented)
+        // White on dark glass whatever the phone's appearance, like the month headers.
+        .environment(\.colorScheme, .dark)
         .padding(.bottom, 16)
-        .background(Color(red: 0.07, green: 0.07, blue: 0.065))
+        .diaryPinnedHeaderBlur()
     }
 
     @ViewBuilder
