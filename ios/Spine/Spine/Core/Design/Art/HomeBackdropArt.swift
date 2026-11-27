@@ -1,6 +1,7 @@
 import CoreImage
 import Foundation
 import Nuke
+import PictureStrip
 import UIKit
 
 /// The picture at the top of Home: a title's backdrop framed as the media page frames it (the whole width, cropped to
@@ -49,7 +50,7 @@ nonisolated struct HomeBackdropMeltProcessor: ImageProcessing, Hashable {
         "com.armaan.spine.homebackdrop?aspect=\(HomeBackdropArt.aspect)&strip=\(HomeBackdropArt.stripAspect)"
             + "&fade=\(HomeBackdropArt.fade)&wash=\(HomeBackdropArt.wash)&washsat=\(HomeBackdropArt.washSaturation)"
             + "&mirror=1&dim=\(HomeBackdropArt.dim)&dimspan=\(HomeBackdropArt.dimSpan)"
-            + "&band=\(HomeBackdropBand.share)&quilt=1"
+            + "&band=\(HomeBackdropBand.share)&quilt=\(PictureStrip.version)"
     }
 
     /// The part of a `width` x `height` image with the strip's shape, centered.

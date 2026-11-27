@@ -24,7 +24,7 @@ nonisolated struct TopStripProcessor: ImageProcessing, Hashable {
     }
 
     var identifier: String {
-        "com.armaan.spine.topstrip?aspect=\(aspect)&share=\(TopStrip.share)&quilt=1"
+        "com.armaan.spine.topstrip?aspect=\(aspect)&share=\(TopStrip.share)&quilt=\(PictureStrip.version)"
     }
 
     /// The part of a `width` x `height` image with `aspect`'s shape, centered.

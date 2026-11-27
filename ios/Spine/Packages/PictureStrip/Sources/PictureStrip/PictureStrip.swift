@@ -8,6 +8,10 @@ import Foundation
 /// top (faces, a sun's rim, a crowded room right at the edge) can't be carried on this way without pasted pieces or
 /// repeats, so when the patches match too poorly (`busyLimit`) the picture keeps its usual place instead.
 public enum PictureStrip {
+    /// Part of every cache key a strip is stored under (the finished pictures are kept on disk): raise it whenever the
+    /// strip comes out differently, or phones keep showing strips grown the old way.
+    public static let version = 2
+
     /// The patches are chosen on a copy this many times smaller, then cut from the picture at full size.
     static let searchScale = 6
     /// A patch and how much it overlaps its neighbors, on the smaller copy (48 and 12 pixels at full size).
