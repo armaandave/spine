@@ -2020,10 +2020,10 @@ struct ProfileListDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(alignment: .top) {
                 if let backdropURL {
-                    // The picture starts under the status bar; the strip grown above it reaches the header's top.
-                    let pictureTop = statusBarHeight - BackdropLayout.topOffset
-                    ProfileListBackdropArtwork(url: backdropURL, pictureTop: pictureTop)
-                        .frame(height: stripHeight + pictureTop)
+                    // The picture starts under the status bar and ends where the strip always has; the strip grown
+                    // above it fills the status bar.
+                    ProfileListBackdropArtwork(url: backdropURL, pictureTop: statusBarHeight - BackdropLayout.topOffset)
+                        .frame(height: stripHeight)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
             }
@@ -2485,8 +2485,9 @@ private struct ProfileListCircleIconLabel: View {
 
 /// The list's backdrop across the top of the page, uncovered: a light shade under the status bar, then the image
 /// fading into the black page over its last 40%. With a strip grown from its own top (`TopStripLoader`), the picture
-/// starts `pictureTop` down the frame, under the status bar; a busy top gets no strip, and the picture fills the frame's
-/// top as it always has. The shade stays where it always has.
+/// starts `pictureTop` down the frame, under the status bar, and still ends at the frame's bottom (cropped wider than
+/// 3:2 to fit, so no more of it goes under the plate); a busy top gets no strip, and the picture fills the frame as it
+/// always has. The shade stays where it always has.
 private struct ProfileListBackdropArtwork: View {
     let url: String
     let pictureTop: CGFloat
@@ -2506,19 +2507,19 @@ private struct ProfileListBackdropArtwork: View {
                         TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
                     }
                 case .none:
-                    layers(top: 0, pictureHeight: pictureHeight) {
+                    layers(top: 0, pictureHeight: proxy.size.height) {
                         SpineAsyncImage(url: URL(string: url)) { phase in
                             if case let .success(image) = phase {
                                 image
                                     .resizable()
                                     .scaledToFill()
-                                    .frame(width: width, height: pictureHeight)
+                                    .frame(width: width, height: proxy.size.height)
                                     .clipped()
                             } else {
                                 Color.clear
                             }
                         }
-                        .frame(width: width, height: pictureHeight)
+                        .frame(width: width, height: proxy.size.height)
                     }
                 }
             }
@@ -2528,8 +2529,8 @@ private struct ProfileListBackdropArtwork: View {
         .accessibilityHidden(true)
     }
 
-    /// The picture, the light shade over the frame's first `pictureHeight`, and the picture fading out over its last
-    /// 40%, the picture starting `top` down the frame.
+    /// The picture, the light shade over the whole frame, and the picture fading out over its last 40%, the picture
+    /// starting `top` down the frame and `pictureHeight` tall.
     private func layers<Picture: View>(
         top: CGFloat,
         pictureHeight: CGFloat,
@@ -2546,7 +2547,6 @@ private struct ProfileListBackdropArtwork: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: pictureHeight)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .mask(alignment: .top) {
