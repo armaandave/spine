@@ -40,7 +40,8 @@ struct SearchListsLanding: View {
                     } label: {
                         SearchListsKindRow(shelf: shelf, height: rowHeight)
                     }
-                    .buttonStyle(.plain)
+                    // Presses in like the Lists page's glass rails.
+                    .buttonStyle(CustomListRailButtonStyle())
                 } else {
                     NavigationLink {
                         FeaturedShelfDetailView(
@@ -52,7 +53,7 @@ struct SearchListsLanding: View {
                     } label: {
                         SearchListsKindRow(shelf: shelf, height: rowHeight)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(CustomListRailButtonStyle())
                 }
             }
         }
@@ -131,29 +132,28 @@ private struct SearchListsHeading: View {
     }
 }
 
-/// "Movies" in big type, and where its lists come from at the far end.
+/// "Movies" in big type, and where its lists come from at the far end, on a glass plate. Behind the word sits the
+/// first poster in the kind's lists, blurred; its light fades out before the sources, so they sit on clear glass.
 private struct SearchListsKindRow: View {
     let shelf: FeaturedShelf
     let height: CGFloat
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(shelf.title)
-                .font(.system(size: 32, weight: .heavy))
-                .tracking(-1.1)
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .layoutPriority(1)
-            Spacer(minLength: 0)
-            SearchListsSourcesLine(sources: shelf.sources)
-        }
-        .frame(height: height)
-        .contentShape(Rectangle())
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(.white.opacity(0.1))
-                .frame(height: 0.5)
+        SearchListsPlate(height: height) {
+            HStack(spacing: 12) {
+                Text(shelf.title)
+                    .font(.system(size: 32, weight: .heavy))
+                    .tracking(-1.1)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .shadow(color: .black.opacity(0.22), radius: 5, y: 1)
+                    .layoutPriority(1)
+                Spacer(minLength: 0)
+                SearchListsSourcesLine(sources: shelf.sources)
+            }
+        } light: {
+            SearchListsPlateLight(url: SearchListsLight.artURL(for: shelf))
         }
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .ignore)
@@ -167,6 +167,83 @@ private struct SearchListsKindRow: View {
         let total = shelf.sources.count
         let named = shelf.sources.prefix(2).map(\.name).joined(separator: " and ")
         return "\(shelf.title), \(lists) from \(total) \(total == 1 ? "source" : "sources"), including \(named)"
+    }
+}
+
+/// What lights a kind's row, and how brightly.
+enum SearchListsLight {
+    /// The first poster in the kind's lists.
+    static func artURL(for shelf: FeaturedShelf) -> URL? {
+        shelf.lists.lazy.compactMap { $0.previewItems.first?.displayPosterURL }.first.flatMap(URL.init(string:))
+    }
+
+    /// How much of a poster's blurred light shows, from its measured brightness (0 to 1): a dark poster shows at 0.8
+    /// and a lighter one less, so every row's light comes out about as bright and a white poster never glares.
+    static func opacity(forLuma luma: Double) -> Double {
+        0.8 * min(1, 0.17 / max(luma, 0.01))
+    }
+}
+
+/// A row's glass: a plate 4 pt in from each end of the row, so plates stand 8 pt apart, with its light behind the
+/// glass. The whole row takes the tap.
+private struct SearchListsPlate<Content: View, Light: View>: View {
+    let height: CGFloat
+    @ViewBuilder let content: Content
+    @ViewBuilder let light: Light
+
+    private static var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 22, style: .continuous) }
+
+    var body: some View {
+        content
+            .padding(.leading, 18)
+            .padding(.trailing, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Clear glass: regular glass lets only about a third of the light behind it through.
+            .glassEffect(.clear, in: Self.shape)
+            .background { light.clipShape(Self.shape) }
+            // The page is always dark; light glass would wash out the white text.
+            .environment(\.colorScheme, .dark)
+            .padding(.vertical, 4)
+            .frame(height: height)
+            .contentShape(Rectangle())
+    }
+}
+
+/// The art behind a plate's word: blurred, taller than the plate so its edges never show, and faded out by the
+/// plate's middle. It stays hidden until its brightness is measured, then fades in at the level `SearchListsLight`
+/// gives it.
+private struct SearchListsPlateLight: View {
+    let url: URL?
+
+    @State private var luma: Double?
+
+    var body: some View {
+        GeometryReader { proxy in
+            BlurredArtBackground(
+                url: url,
+                accentHex: nil,
+                style: .card,
+                onMeasured: { luma = $0 },
+                artOpacity: luma.map(SearchListsLight.opacity(forLuma:)) ?? 0,
+                baseOpacity: 0
+            )
+            .frame(width: proxy.size.width * 0.72, height: proxy.size.height * 1.9)
+            .offset(x: -proxy.size.width * 0.1, y: -proxy.size.height * 0.45)
+        }
+        .mask {
+            LinearGradient(
+                stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: 0.26),
+                    .init(color: .clear, location: 0.62),
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        .animation(.easeOut(duration: 0.35), value: luma)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -250,7 +327,8 @@ private struct SearchListsSourceIcon: View {
     }
 }
 
-/// A row per kind you have on, each about as wide as its word, so the lists land without the rows changing.
+/// A plain glass plate per kind you have on, with a bar about as wide as its word, so the lists land without the
+/// rows changing.
 private struct SearchListsSkeleton: View {
     let kinds: [String]
 
@@ -261,25 +339,28 @@ private struct SearchListsSkeleton: View {
     var body: some View {
         SearchListsRows(everyKind: 8) { rowHeight in
             ForEach(kinds, id: \.self) { kind in
-                HStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(.white.opacity(0.08))
-                        .frame(width: Self.wordWidths[kind] ?? 120, height: 26)
-                    Spacer()
-                    HStack(spacing: 11) {
-                        ForEach(0 ..< 2, id: \.self) { _ in
-                            HStack(spacing: 6) {
-                                RoundedRectangle(cornerRadius: 4.5, style: .continuous)
-                                    .fill(.white.opacity(0.08))
-                                    .frame(width: 16, height: 16)
-                                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .fill(.white.opacity(0.06))
-                                    .frame(width: 46, height: 10)
+                SearchListsPlate(height: rowHeight) {
+                    HStack {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(.white.opacity(0.08))
+                            .frame(width: Self.wordWidths[kind] ?? 120, height: 26)
+                        Spacer()
+                        HStack(spacing: 11) {
+                            ForEach(0 ..< 2, id: \.self) { _ in
+                                HStack(spacing: 6) {
+                                    RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                                        .fill(.white.opacity(0.08))
+                                        .frame(width: 16, height: 16)
+                                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                        .fill(.white.opacity(0.06))
+                                        .frame(width: 46, height: 10)
+                                }
                             }
                         }
                     }
+                } light: {
+                    EmptyView()
                 }
-                .frame(height: rowHeight)
             }
         }
         .accessibilityElement(children: .ignore)
