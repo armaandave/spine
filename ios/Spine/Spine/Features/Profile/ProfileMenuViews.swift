@@ -1995,9 +1995,10 @@ struct ProfileListDetailView: View {
         // Never above the header, even before the width (and so the strip's height) is measured.
         let plateTop = max(0, CustomListHeaderLayout.plateTop(hasBackdrop: hasBackdrop, stripHeight: stripHeight))
         // The plate's place in the page; the live plate is drawn over it (`ProfileListPlateLayer`) so it can stop under
-        // the top buttons and condense there.
+        // the top buttons and condense there. This copy is invisible but still takes touches, so a drag that starts on
+        // the plate scrolls the page and its owner and tags open as before; VoiceOver reads it in the page's order.
         return listPlate(list, scroll: nil)
-            .hidden()
+            .opacity(0.001)
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { listScroll.slotTop = $0 }
             .background {
                 // Under a backdrop: its blur behind the glass, as wide as the page, fading in as the backdrop fades out.
@@ -2670,6 +2671,10 @@ private struct ProfileListPlateLayer<Plate: View>: View {
                 if let slotTop = scroll.slotTop {
                     plate
                         .offset(y: max(slotTop, scroll.pinLine) - scroll.layerTop)
+                        // Until it's held under the buttons, touches go through to the page and the copy in it, so
+                        // drags on the plate scroll. Held there it takes them, as Library's slim bar does.
+                        .allowsHitTesting(scroll.pastPin > 1)
+                        .accessibilityHidden(true)
                 }
             }
     }
