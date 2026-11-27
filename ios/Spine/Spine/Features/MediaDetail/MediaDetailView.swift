@@ -3787,11 +3787,13 @@ private struct MediaDetailPageView: View {
                         HeroArtwork(detail: detail)
                         if let backdropURL = backdropURLString(for: detail) {
                             GeometryReader { proxy in
-                                BackdropArtwork(urlString: backdropURL)
+                                // The picture starts under the status bar; the strip above it reaches the frame's top.
+                                let pictureTop = resolvedTopSafeAreaInset - BackdropLayout.topOffset
+                                BackdropArtwork(urlString: backdropURL, pictureTop: pictureTop)
                                     .frame(height: BackdropLayout.stripHeight(
                                         width: proxy.size.width,
                                         topInset: resolvedTopSafeAreaInset
-                                    ))
+                                    ) + pictureTop)
                                     .onLongPressGesture {
                                         openBackdropPicker(for: detail)
                                     }
@@ -3918,7 +3920,8 @@ private struct MediaDetailPageView: View {
             VStack(alignment: .leading, spacing: 0) {
                 EpisodeHeroArtwork(
                     urlString: detail.episodeStillURL,
-                    title: detail.title
+                    title: detail.title,
+                    pictureTop: resolvedTopSafeAreaInset - BackdropLayout.topOffset
                 )
                 .frame(height: resolvedTopSafeAreaInset + MediaDetailLayout.episodeAccessibilityArtworkHeight)
                 .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
@@ -3935,7 +3938,8 @@ private struct MediaDetailPageView: View {
             ZStack(alignment: .bottomLeading) {
                 EpisodeHeroArtwork(
                     urlString: detail.episodeStillURL,
-                    title: detail.title
+                    title: detail.title,
+                    pictureTop: resolvedTopSafeAreaInset - BackdropLayout.topOffset
                 )
                 .frame(height: resolvedTopSafeAreaInset + MediaDetailLayout.episodeHeroHeight)
                 .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
@@ -5790,6 +5794,9 @@ private struct EpisodeDetailLoadingView: View {
 private struct EpisodeHeroArtwork: View {
     let urlString: String?
     let title: String
+    /// Where the still starts, from the frame's top, when a strip could be grown from its own top (`TopStripLoader`):
+    /// under the status bar, the strip above it. A busy top gets no strip and the still fills the frame as it always has.
+    var pictureTop: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -5797,13 +5804,23 @@ private struct EpisodeHeroArtwork: View {
                 placeholder
 
                 if let urlString, let url = URL(string: urlString) {
-                    SpineAsyncImage(url: url) { phase in
-                        if case let .success(image) = phase {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: proxy.size.width, height: proxy.size.height)
-                                .clipped()
+                    let pictureSize = CGSize(width: proxy.size.width, height: max(0, proxy.size.height - pictureTop))
+                    TopStripLoader(request: TopStrip.request(url: url, size: pictureSize)) { result in
+                        switch result {
+                        case .loading:
+                            Color.clear
+                        case let .strip(image):
+                            TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
+                        case .none:
+                            SpineAsyncImage(url: url) { phase in
+                                if case let .success(image) = phase {
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: proxy.size.width, height: proxy.size.height)
+                                        .clipped()
+                                }
+                            }
                         }
                     }
                 }
@@ -6004,36 +6021,76 @@ struct HeroArtwork: View {
 
 }
 
+/// The media page's backdrop strip, 3:2. With a strip grown from its own top (`TopStripLoader`), the picture starts
+/// `pictureTop` down its frame, under the status bar; the frame is `pictureTop` taller than the picture for it. A busy
+/// top gets no strip, and the picture fills the frame's top as it always has. Either way the status bar's shade sits
+/// over the frame's first 3:2 height and the picture fades out over its own lower part.
 struct BackdropArtwork: View {
     let urlString: String
+    var pictureTop: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                SpineAsyncImage(url: URL(string: urlString)) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: proxy.size.width, height: proxy.size.height)
-                            .clipped()
-                    default:
-                        Color.clear
+            let width = proxy.size.width
+            let pictureHeight = max(0, proxy.size.height - pictureTop)
+            TopStripLoader(
+                request: TopStrip.request(url: URL(string: urlString), size: CGSize(width: width, height: pictureHeight))
+            ) { result in
+                switch result {
+                case .loading:
+                    Color.clear
+                case let .strip(image):
+                    layers(top: pictureTop, pictureHeight: pictureHeight) {
+                        TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
+                    }
+                case .none:
+                    layers(top: 0, pictureHeight: pictureHeight) {
+                        SpineAsyncImage(url: URL(string: urlString)) { phase in
+                            switch phase {
+                            case let .success(image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: width, height: pictureHeight)
+                                    .clipped()
+                            default:
+                                Color.clear
+                            }
+                        }
+                        .frame(width: width, height: pictureHeight)
                     }
                 }
-
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.42), location: 0),
-                        .init(color: .black.opacity(0.18), location: 0.36),
-                        .init(color: .clear, location: 0.72),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
             }
-            .mask(
+        }
+        .clipped()
+    }
+
+    /// The picture, the status bar's shade over the frame's first `pictureHeight`, and the picture fading out over its
+    /// own lower part, the picture starting `top` down the frame.
+    private func layers<Picture: View>(
+        top: CGFloat,
+        pictureHeight: CGFloat,
+        @ViewBuilder picture: () -> Picture
+    ) -> some View {
+        ZStack(alignment: .top) {
+            picture()
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.42), location: 0),
+                    .init(color: .black.opacity(0.18), location: 0.36),
+                    .init(color: .clear, location: 0.72),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: pictureHeight)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .mask(alignment: .top) {
+            VStack(spacing: 0) {
+                Color.white
+                    .frame(height: top)
                 LinearGradient(
                     stops: [
                         .init(color: .white, location: 0),
@@ -6044,9 +6101,9 @@ struct BackdropArtwork: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-            )
+                .frame(height: pictureHeight)
+            }
         }
-        .clipped()
     }
 }
 

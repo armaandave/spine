@@ -103,7 +103,7 @@ final class HomeTopArtModel {
                 self.siteArt = siteArt
                 hasSitePick = true
                 art = siteArt
-                ArtworkPrefetch.prefetch([HomeBackdropArt.request(url: siteArt.backdrop)].compactMap { $0 })
+                Self.prefetchPicture(siteArt.backdrop)
                 return
             }
         }
@@ -118,8 +118,14 @@ final class HomeTopArtModel {
            stored.dayKey == today {
             art = stored.art
             artDay = today
-            ArtworkPrefetch.prefetch([HomeBackdropArt.request(url: stored.art.backdrop)].compactMap { $0 })
+            Self.prefetchPicture(stored.art.backdrop)
         }
+    }
+
+    /// Starts making `url` into Home's picture both ways: with its strip, and as it always was (for a busy top).
+    private static func prefetchPicture(_ url: URL) {
+        if let request = HomeBackdropBand.request(url: url) { ArtworkPrefetch.prefetchStrips([request]) }
+        if let request = HomeBackdropArt.request(url: url) { ArtworkPrefetch.prefetch([request]) }
     }
 
     /// Asks the server for the site-wide picture. A failed read changes nothing.
@@ -136,7 +142,7 @@ final class HomeTopArtModel {
             hasSitePick = true
             if art != picked {
                 art = picked
-                if let request = HomeBackdropArt.request(url: picked.backdrop) { ArtworkPrefetch.prefetch([request]) }
+                Self.prefetchPicture(picked.backdrop)
                 onChange(picked)
             }
             saveSite()
@@ -200,7 +206,7 @@ final class HomeTopArtModel {
             if let data = try? JSONEncoder().encode(Stored(dayKey: key, art: picked)) {
                 defaults.set(data, forKey: Self.defaultsKey)
             }
-            if let request = HomeBackdropArt.request(url: backdrop) { ArtworkPrefetch.prefetch([request]) }
+            Self.prefetchPicture(backdrop)
             onChange(picked)
             return
         }
@@ -258,9 +264,11 @@ enum HomeTopArtSpec {
 }
 
 /// The picture: a background of the scrolling content like the glow, so it scrolls away with the page and stays at
-/// the top while the page is pulled (`GlowPlacement`). One baked image under two plain gradients. It gives way to
-/// the glow while a tile is open: the image and the shade fade out on their own, with the glow fully there under
-/// them, so there is no dip and nothing is flattened.
+/// the top while the page is pulled (`GlowPlacement`). One baked image under two plain gradients, starting under the
+/// status bar with a strip grown from its own top above it (`HomePictureUnderStatusBar`); a busy top gets no strip and
+/// the picture starts at the top of the screen as it always has. It gives way to the glow while a tile is open: the
+/// image and the shade fade out on their own, with the glow fully there under them, so there is no dip and nothing is
+/// flattened.
 struct HomeTopArtView: View {
     let art: HomeTopArtModel
     let glow: HomeGlowModel
@@ -271,6 +279,7 @@ struct HomeTopArtView: View {
         let open = glow.focused != nil
         let fade = HomeDesign.Motion.glowCrossfade(reduceMotion: reduceMotion)
         let backdrop = art.art?.backdrop
+        let topInset = glow.contentTopInset ?? GlowSpec.estimatedTopInset
         Color.clear
             .frame(height: HomeTopArtSpec.height(width: glow.screenWidth))
             // The page's black under the picture, so the glow waiting below never shows at rest, even before the
@@ -284,17 +293,34 @@ struct HomeTopArtView: View {
             }
             .overlay {
                 if let backdrop {
-                    SpineAsyncImage(
-                        url: backdrop,
-                        thumbnailSize: HomeBackdropArt.thumbnailSize,
-                        processors: HomeBackdropArt.processors
-                    ) { phase in
-                        if case let .success(image) = phase {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } else {
+                    TopStripLoader(request: HomeBackdropBand.request(url: backdrop)) { result in
+                        switch result {
+                        case .loading:
                             Color.clear
+                        case let .strip(image):
+                            HomePictureUnderStatusBar(
+                                image: image,
+                                topInset: topInset,
+                                size: CGSize(
+                                    width: glow.screenWidth,
+                                    height: HomeTopArtSpec.height(width: glow.screenWidth)
+                                )
+                            )
+                        case .none:
+                            // A busy top: the picture as it always was, from the top of the screen.
+                            SpineAsyncImage(
+                                url: backdrop,
+                                thumbnailSize: HomeBackdropArt.thumbnailSize,
+                                processors: HomeBackdropArt.processors
+                            ) { phase in
+                                if case let .success(image) = phase {
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                } else {
+                                    Color.clear
+                                }
+                            }
                         }
                     }
                     .opacity(open ? 0 : 1)
@@ -315,9 +341,29 @@ struct HomeTopArtView: View {
                 }
             }
             .clipped()
-            .modifier(GlowPlacement(topInset: glow.contentTopInset ?? GlowSpec.estimatedTopInset, topOffset: 0))
+            .modifier(GlowPlacement(topInset: topInset, topOffset: 0))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// Home's picture starting under the status bar instead of behind it, so the island and the clock never sit on it.
+/// The baked image carries a strip above the picture, grown from the picture's own top (`HomeBackdropBand`); only its
+/// lower part shows, behind the status bar. The frame (`size`, Home's picture at the screen's width) keeps its height:
+/// the picture's last points, already black under the shade, fall off its bottom.
+private struct HomePictureUnderStatusBar: View {
+    let image: Image
+    let topInset: CGFloat
+    let size: CGSize
+
+    var body: some View {
+        let band = size.width * HomeBackdropBand.share
+        image
+            .resizable()
+            .frame(width: size.width, height: size.height + band)
+            .offset(y: topInset - band)
+            .frame(width: size.width, height: size.height, alignment: .top)
+            .clipped()
     }
 }
 
