@@ -134,6 +134,11 @@ def shown(source_name):
     return name or source_name, icon
 
 
+def icon_url(icon, request):
+    """Return the absolute url of an icon file stem from ``shown``, or None for none."""
+    return request.build_absolute_uri(static(f"{ICON_FOLDER}/{icon}.png")) if icon else None
+
+
 def shelf_sources(definitions, request):
     """Return ``[{"name", "icon_url", "lists"}]`` for a shelf's lists, best known first.
 
@@ -153,7 +158,7 @@ def shelf_sources(definitions, request):
     return [
         {
             "name": name,
-            "icon_url": request.build_absolute_uri(static(f"{ICON_FOLDER}/{icons[name]}.png")) if icons[name] else None,
+            "icon_url": icon_url(icons[name], request),
             "lists": counts[name],
         }
         for name in ordered

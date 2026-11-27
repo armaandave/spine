@@ -351,6 +351,8 @@ def card_payload(featured, request, *, items_count, previews=None, people=None, 
     """
     custom_list, definition, sync = featured.custom_list, featured.definition, featured.sync
     window = featured.live_window
+    source_name = (definition.source_name if definition else "") or ""
+    short_name, icon = sources.shown(source_name) if source_name else ("", "")
     payload = {
         "id": custom_list.id,
         "name": custom_list.name,
@@ -362,8 +364,11 @@ def card_payload(featured, request, *, items_count, previews=None, people=None, 
         "media_types": list(featured.media_types),
         "kind": featured.kind,
         "source": {
-            "name": (definition.source_name if definition else "") or None,
+            "name": source_name or None,
             "url": (definition.source_url if definition else "") or custom_list.import_source_url or None,
+            # The name Search shows ("NYT" for "The New York Times") and its icon, as on the shelves' sources.
+            "short_name": short_name or None,
+            "icon_url": sources.icon_url(icon, request),
         },
         "cadence": registry.cadence_label(definition) if definition else "static",
         "period_label": (sync.edition if sync else "") or None,
