@@ -105,7 +105,7 @@ class LegacyFeaturedEndpointTests(FeaturedApiTestCase):
         self.assertEqual(response.data["count"], 2)
         headline, manual = response.data["results"]
         self.assertEqual(headline["featured"]["kind"], "community")
-        self.assertEqual(headline["featured"]["source"], {"name": None, "url": None})
+        self.assertEqual(headline["featured"]["source"], {"name": None, "url": None, "short_name": None, "icon_url": None})
         self.assertNotIn("preview_items", headline["featured"])
         self.assertEqual((manual["featured"]["kind"], manual["featured"]["cadence"]), ("editorial", "static"))
         self.assertEqual(headline["preview_items"][0]["title"], "hf 1")
@@ -255,6 +255,16 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         music = next(shelf for shelf in self.shelves()["shelves"] if shelf["key"] == "music")
         self.assertEqual([(source["name"], source["lists"]) for source in music["sources"]], [("Grammys", 2)])
 
+    def test_cards_name_their_source_as_search_shows_it(self):
+        self.add_sourced_lists(("oscars-a", "The Academy", "movie"), ("blog-a", "B Blog", "movie"))
+        layer = self.shelves(media_type="movie")
+        cards = {card["slug"]: card for shelf in layer["shelves"] for card in shelf["lists"]}
+        oscars, blog = cards["oscars-a"]["source"], cards["blog-a"]["source"]
+        self.assertEqual((oscars["name"], oscars["short_name"]), ("The Academy", "Oscars"))
+        self.assertTrue(oscars["icon_url"].endswith("/static/img/sources/oscars.png"))
+        # A source Search has no name or icon for keeps its own name.
+        self.assertEqual((blog["name"], blog["short_name"], blog["icon_url"]), ("B Blog", "B Blog", None))
+
     def test_card_shape(self):
         movie = self.shelves()["shelves"][1]
         live = movie["lists"][0]
@@ -277,7 +287,10 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         self.assertEqual(chart["preview_items"][0]["ref"]["media_id"], "cf-1")
         self.assertIsNone(chart["live"])
         manual = next(card for card in movie["lists"] if card["slug"] == "staff-picks")
-        self.assertEqual((manual["kind"], manual["cadence"], manual["source"]), ("editorial", "static", {"name": None, "url": None}))
+        self.assertEqual(
+            (manual["kind"], manual["cadence"], manual["source"]),
+            ("editorial", "static", {"name": None, "url": None, "short_name": None, "icon_url": None}),
+        )
 
     def test_chart_previews_carry_movement_notes(self):
         reordered = movie_entries("cf", 7)

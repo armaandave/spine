@@ -489,6 +489,158 @@ final class BlurredArtTests: XCTestCase {
         }
     }
 
+    func testTheStripAboveHomesPictureIsGrownFromItsOwnTopAndLeavesThePictureAlone() throws {
+        // A 600 x 400 picture: blue with fine grain, greener toward the bottom, so there's a real top to grow from.
+        let width = 600, height = 400
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        var state: UInt32 = 12345
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                state = state &* 1_664_525 &+ 1_013_904_223
+                let grain = Int(state >> 28) - 8
+                let i = (y * width + x) * 4
+                bytes[i] = UInt8(clamping: 40 + grain)
+                bytes[i + 1] = UInt8(clamping: 90 + y / 4 + grain)
+                bytes[i + 2] = UInt8(clamping: 160 + grain)
+            }
+        }
+        let picture = bytes.withUnsafeMutableBytes { raw in
+            CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!.makeImage()!
+        }
+
+        let output = try XCTUnwrap(HomeBackdropBand.grow(picture, sharpRows: 300))
+        let band = Int((CGFloat(width) * HomeBackdropBand.share).rounded())
+        XCTAssertEqual(output.width, width)
+        XCTAssertEqual(output.height, height + band, "the strip sits on top of the whole picture")
+
+        let pixels = rgbaPixels(output)
+        let source = Pixels(width: width, data: bytes)
+        // Below the join (its first 12 rows blend into the strip) the picture is exactly itself.
+        for row in [12, 50, 200, height - 1] {
+            for x in [0, 299, width - 1] {
+                XCTAssertEqual(pixels.red(x, band + row), source.red(x, row), "picture row \(row) at \(x)")
+                XCTAssertEqual(pixels.blue(x, band + row), source.blue(x, row), "picture row \(row) at \(x)")
+            }
+        }
+        // The strip carries on the picture's own colors and grain: not black, not blank, close to its top's colors.
+        var red = 0, blue = 0, distinct = Set<UInt8>()
+        for row in 0 ..< band {
+            for x in stride(from: 0, to: width, by: 7) {
+                red += Int(pixels.red(x, row))
+                blue += Int(pixels.blue(x, row))
+                distinct.insert(pixels.red(x, row))
+            }
+        }
+        let count = band * ((width + 6) / 7)
+        XCTAssertEqual(red / count, 40, accuracy: 6)
+        XCTAssertEqual(blue / count, 160, accuracy: 6)
+        XCTAssertGreaterThan(distinct.count, 8, "grain, not a flat fill")
+        // The same picture always grows the same strip (it's cached once).
+        let again = try XCTUnwrap(HomeBackdropBand.grow(picture, sharpRows: 300))
+        XCTAssertEqual(rgbaPixels(again).data, pixels.data)
+    }
+
+    func testABusyTopGetsNoStrip() throws {
+        // 600 x 400 of random 6 px blocks of color: nothing in it can be carried on without pasted pieces.
+        let width = 600, height = 400
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        var state: UInt32 = 99
+        for by in stride(from: 0, to: height, by: 6) {
+            for bx in stride(from: 0, to: width, by: 6) {
+                state = state &* 1_664_525 &+ 1_013_904_223
+                let color = [UInt8(truncatingIfNeeded: state >> 8), UInt8(truncatingIfNeeded: state >> 16), UInt8(truncatingIfNeeded: state >> 24)]
+                for y in by ..< min(by + 6, height) {
+                    for x in bx ..< min(bx + 6, width) {
+                        let i = (y * width + x) * 4
+                        bytes[i] = color[0]; bytes[i + 1] = color[1]; bytes[i + 2] = color[2]
+                    }
+                }
+            }
+        }
+        let picture = bytes.withUnsafeMutableBytes { raw in
+            CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!.makeImage()!
+        }
+
+        // The processor says so with its one-pixel answer, which is cached like a strip; the page then shows the
+        // picture the way it always has.
+        let output = try XCTUnwrap(TopStripProcessor(aspect: 1.5).process(UIImage(cgImage: picture, scale: 3, orientation: .up)))
+        XCTAssertTrue(TopStrip.isNoStrip(output))
+    }
+
+    func testAPageShowsItsPictureAsItAlwaysHasWhenThereIsNoStrip() throws {
+        let strip = UIImage(cgImage: stripedImage(width: 90, height: 60))
+        let noStrip = try XCTUnwrap(TopStrip.noStrip(scale: 3))
+        let loading = TopStripLoader<EmptyView>.result(image: nil, container: nil, failed: false)
+        let failed = TopStripLoader<EmptyView>.result(image: nil, container: nil, failed: true)
+        let busy = TopStripLoader<EmptyView>.result(image: Image(uiImage: noStrip), container: ImageContainer(image: noStrip), failed: false)
+        let grown = TopStripLoader<EmptyView>.result(image: Image(uiImage: strip), container: ImageContainer(image: strip), failed: false)
+        guard case .loading = loading else { return XCTFail("nothing yet: wait") }
+        guard case .none = failed else { return XCTFail("no picture with a strip: as it always was") }
+        guard case .none = busy else { return XCTFail("a busy top: as it always was") }
+        guard case .strip = grown else { return XCTFail("a grown strip: under the status bar") }
+    }
+
+    func testATopStripPictureIsThePagesShapeWithTheStripAboveIt() throws {
+        // A 16:9 backdrop on the media page's 3:2 strip: cropped around its center, keeping its height, with the strip
+        // grown above it.
+        let source = UIImage(cgImage: stripedImage(width: 640, height: 360), scale: 3, orientation: .up)
+        let output = try XCTUnwrap(TopStripProcessor(aspect: 1.5).process(source)?.cgImage)
+        let band = Int((CGFloat(540) * TopStrip.share).rounded())
+        XCTAssertEqual(output.width, 540)
+        XCTAssertEqual(output.height, 360 + band, "the strip sits on top of the picture")
+        // Below the join (its first 12 rows blend into the strip) the picture is the source's own rows.
+        let pixels = rgbaPixels(output)
+        for row in [12, 101, 359] {
+            let white = (row / 2) % 2 == 0
+            XCTAssertEqual(Int(pixels.red(10, band + row)), white ? 255 : 0, accuracy: 3, "picture row \(row)")
+        }
+    }
+
+    func testTheStripCarriesOnAllTheWayToTheRightEdge() throws {
+        // 603 px wide, which isn't a multiple of the six times smaller copy the patches are chosen on (nor is a 393 pt
+        // phone's 1179 px): grey stripes 12 px apart, the same in every row, so the strip simply carries them on.
+        let width = 603, height = 400
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let i = (y * width + x) * 4
+                let grey = UInt8((x % 12) * 20)
+                bytes[i] = grey; bytes[i + 1] = grey; bytes[i + 2] = grey
+            }
+        }
+        let picture = bytes.withUnsafeMutableBytes { raw in
+            CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!.makeImage()!
+        }
+
+        let output = try XCTUnwrap(HomeBackdropBand.grow(picture, sharpRows: 300))
+        let band = Int((CGFloat(width) * HomeBackdropBand.share).rounded())
+        let pixels = rgbaPixels(output)
+        // Every column of the strip carries on its own stripe, the last few too: not copies of the column before them.
+        for row in 0 ..< band {
+            for x in [0, 301, width - 4, width - 3, width - 2, width - 1] {
+                XCTAssertEqual(Int(pixels.red(x, row)), (x % 12) * 20, "strip row \(row) at \(x)")
+            }
+        }
+    }
+
+    func testAFinishedStripIsKeptOnDiskAsAJPEG() throws {
+        // The strips pipeline keeps finished pictures on disk with Nuke's default encoder, which saves a picture with an
+        // alpha channel as a PNG, several times larger. A strip has none.
+        let source = UIImage(cgImage: stripedImage(width: 640, height: 360), scale: 3, orientation: .up)
+        let output = try XCTUnwrap(TopStripProcessor(aspect: 1.5).process(source))
+        let data = try XCTUnwrap(ImageEncoders.Default().encode(output))
+        XCTAssertEqual(AssetType(data), .jpeg)
+    }
+
     func testThePictureProcessorHasAStableIdentifierThatNamesItsNumbers() {
         let identifier = HomeBackdropMeltProcessor().identifier
         XCTAssertEqual(identifier, HomeBackdropMeltProcessor().identifier)

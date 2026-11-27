@@ -116,6 +116,7 @@ struct TaggedDiaryView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 28)
             }
+            .diaryPinnedHeaders()
             .refreshable {
                 await viewModel.load()
             }
@@ -123,9 +124,6 @@ struct TaggedDiaryView: View {
         .background {
             // A faint wash of the newest log's artwork, like the Diary tab's.
             LogBackdrop(url: URL(string: viewModel.entries.first?.media.displayPosterURL ?? ""))
-        }
-        .overlay(alignment: .top) {
-            DiaryTopSoftScrim()
         }
         .navigationTitle(tag)
         .navigationBarTitleDisplayMode(.inline)
@@ -173,8 +171,10 @@ struct TaggedDiaryView: View {
             }
         }
         .pickerStyle(.segmented)
+        // White on dark glass whatever the phone's appearance, like the month headers.
+        .environment(\.colorScheme, .dark)
         .padding(.bottom, 16)
-        .background(Color(red: 0.07, green: 0.07, blue: 0.065))
+        .diaryPinnedHeaderBlur()
     }
 
     @ViewBuilder
@@ -210,6 +210,9 @@ struct TaggedDiaryView: View {
                         onUnauthorized: onUnauthorized
                     )
                 }
+                // The switch is what pins here, so the months' cards scroll under its blur instead of
+                // keeping their top edge under a pinned tab.
+                .environment(\.diaryPinnedHeaderTop, nil)
             case .grid:
                 mediaGrid
             }

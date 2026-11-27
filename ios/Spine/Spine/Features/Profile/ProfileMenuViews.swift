@@ -1602,6 +1602,7 @@ struct ProfileListDetailView: View {
     @State private var selectedPerson: PersonRef?
     @State private var isDeleteAlertPresented = false
     @State private var topSafeAreaInset: CGFloat = 0
+    @State private var statusBarHeight: CGFloat = 0
     @State private var listHeaderWidth: CGFloat = 0
     @State private var listHeaderHeight: CGFloat = 0
     /// How far the page has scrolled, so the blurred top of a list without a backdrop scrolls away with it.
@@ -1821,6 +1822,9 @@ struct ProfileListDetailView: View {
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+        // The status bar's real height, for where the backdrop's picture starts. (`topSafeAreaInset` reads 0 here,
+        // since a background sits outside the safe area; the buttons and the header are laid out around that.)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { statusBarHeight = $0 }
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: ProfileListTopSafeAreaInsetKey.self, value: proxy.safeAreaInsets.top)
@@ -2016,8 +2020,10 @@ struct ProfileListDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(alignment: .top) {
                 if let backdropURL {
-                    ProfileListBackdropArtwork(url: backdropURL)
-                        .frame(height: stripHeight)
+                    // The picture starts under the status bar; the strip grown above it reaches the header's top.
+                    let pictureTop = statusBarHeight - BackdropLayout.topOffset
+                    ProfileListBackdropArtwork(url: backdropURL, pictureTop: pictureTop)
+                        .frame(height: stripHeight + pictureTop)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
             }
@@ -2478,35 +2484,75 @@ private struct ProfileListCircleIconLabel: View {
 }
 
 /// The list's backdrop across the top of the page, uncovered: a light shade under the status bar, then the image
-/// fading into the black page over its last 40%.
+/// fading into the black page over its last 40%. With a strip grown from its own top (`TopStripLoader`), the picture
+/// starts `pictureTop` down the frame, under the status bar; a busy top gets no strip, and the picture fills the frame's
+/// top as it always has. The shade stays where it always has.
 private struct ProfileListBackdropArtwork: View {
     let url: String
+    let pictureTop: CGFloat
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                SpineAsyncImage(url: URL(string: url)) { phase in
-                    if case let .success(image) = phase {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: proxy.size.width, height: proxy.size.height)
-                            .clipped()
-                    } else {
-                        Color.clear
+            let width = proxy.size.width
+            let pictureHeight = max(0, proxy.size.height - pictureTop)
+            TopStripLoader(
+                request: TopStrip.request(url: URL(string: url), size: CGSize(width: width, height: pictureHeight))
+            ) { result in
+                switch result {
+                case .loading:
+                    Color.clear
+                case let .strip(image):
+                    layers(top: pictureTop, pictureHeight: pictureHeight) {
+                        TopStripImage(image: image, pictureTop: pictureTop, size: proxy.size)
+                    }
+                case .none:
+                    layers(top: 0, pictureHeight: pictureHeight) {
+                        SpineAsyncImage(url: URL(string: url)) { phase in
+                            if case let .success(image) = phase {
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: width, height: pictureHeight)
+                                    .clipped()
+                            } else {
+                                Color.clear
+                            }
+                        }
+                        .frame(width: width, height: pictureHeight)
                     }
                 }
-
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.25), location: 0),
-                        .init(color: .black.opacity(0), location: 0.22),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
             }
-            .mask(
+        }
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// The picture, the light shade over the frame's first `pictureHeight`, and the picture fading out over its last
+    /// 40%, the picture starting `top` down the frame.
+    private func layers<Picture: View>(
+        top: CGFloat,
+        pictureHeight: CGFloat,
+        @ViewBuilder picture: () -> Picture
+    ) -> some View {
+        ZStack(alignment: .top) {
+            picture()
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.25), location: 0),
+                    .init(color: .black.opacity(0), location: 0.22),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: pictureHeight)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .mask(alignment: .top) {
+            VStack(spacing: 0) {
+                Color.white
+                    .frame(height: top)
                 LinearGradient(
                     stops: [
                         .init(color: .white, location: 0),
@@ -2516,11 +2562,9 @@ private struct ProfileListBackdropArtwork: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-            )
+                .frame(height: pictureHeight)
+            }
         }
-        .clipped()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 

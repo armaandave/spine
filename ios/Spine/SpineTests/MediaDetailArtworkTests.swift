@@ -264,7 +264,7 @@ private enum ArtworkRefreshError: LocalizedError {
     var errorDescription: String? { "Refresh failed." }
 }
 
-private actor ArtworkScriptedMediaRepository: MediaRepository {
+private final class ArtworkScriptedMediaRepository: MediaRepository {
     private var results: [Result<MediaDetail, Error>]
     private var ratingResults: [Result<MediaExternalRatingsResponse, Error>]
     private(set) var ratingRequestCount = 0

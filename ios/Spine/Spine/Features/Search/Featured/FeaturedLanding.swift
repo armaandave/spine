@@ -6,6 +6,8 @@ struct FeaturedLanding: View {
     let store: FeaturedListsStore
     let selectedMediaType: String
     let enabledMediaTypes: [String]
+    /// The art a type's page shows behind the top of Search.
+    let top: FeaturedTopArt
     let onSelect: (FeaturedListSelection) -> Void
     /// A big word tapped: picks that media type, as the picker does.
     let onPickKind: (String) -> Void
@@ -19,7 +21,7 @@ struct FeaturedLanding: View {
                 onPickKind: onPickKind
             )
         } else {
-            FeaturedTypeLayer(store: store, mediaType: selectedMediaType, onSelect: onSelect)
+            FeaturedTypeLayer(store: store, mediaType: selectedMediaType, top: top, onSelect: onSelect)
                 .id(selectedMediaType)
         }
     }
