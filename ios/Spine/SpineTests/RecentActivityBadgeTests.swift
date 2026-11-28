@@ -42,6 +42,21 @@ final class RecentActivityBadgeTests: XCTestCase {
         """)))
     }
 
+    func testALogShowsItsStarsAndHeart() throws {
+        let marks = RecentActivityBadge.marks(for: try activity(object: """
+        {"type": "diary", "id": 7, "rating": "4.5", "liked": true}
+        """))
+
+        XCTAssertEqual(marks?.stars, [.star, .star, .star, .star, .halfStar])
+        XCTAssertEqual(marks?.liked, true)
+    }
+
+    func testOnlyALogShowsStarsAndHeart() throws {
+        XCTAssertNil(RecentActivityBadge.marks(for: try activity(object: """
+        {"type": "progress_day", "id": 9, "rating": "4", "liked": true, "label": "40 pages", "unit": "pages", "amount": 40}
+        """)))
+    }
+
     // MARK: Helpers
 
     private func badge(
