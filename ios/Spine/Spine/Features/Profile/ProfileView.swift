@@ -936,8 +936,8 @@ struct ProfileView: View {
                                     // Over the This Year wall, whose top tucks under the Stats row.
                                     .zIndex(1)
                                 if let year = viewModel.year, year.titles > 0 {
-                                    ProfileYearSection(year: year) { mediaType in
-                                        statsView(profile, period: .year(year.year), mediaType: mediaType)
+                                    ProfileYearSection(year: year, pictureURL: profileBackdropURL(from: profile)) { mediaType, period in
+                                        statsView(profile, period: period, mediaType: mediaType)
                                     }
                                     .padding(.horizontal, 16)
                                 }

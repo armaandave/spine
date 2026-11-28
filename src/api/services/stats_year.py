@@ -11,6 +11,11 @@ type's numbers are the ones the Stats page shows for this year:
 - ``titles``: the turned-on types' titles added up, so the total is what the rows add up
   to. Global's header (STAT-105) also counts the types the owner turned off; the section
   shows only the turned-on ones (STAT-312).
+- ``ratings``: the rated logs in ten star buckets (STAT-204), for the line beside the
+  total.
+
+``all_time`` holds the same four over All Time, for the section's All Time switch: the
+Stats page's All Time numbers, worked out by the same code from the same calculation.
 
 Only what the section shows is worked out, not the whole Stats page.
 
@@ -32,7 +37,7 @@ from itertools import islice
 
 from django.conf import settings
 
-from api.services import stats_v2_activity
+from api.services import stats_v2_activity, stats_v2_ratings
 from api.services.stats_scope import TV_ITEM_TYPES, StatsScope
 from api.services.stats_v2 import media_type_rows
 from app import user_calendar
@@ -59,16 +64,27 @@ def year_scope(owner, viewer, *, request=None):
 
 def build_year(scope):
     """Return the This Year payload for a year scope."""
-    rows = media_type_rows(scope)
-    media_types = [row["media_type"] for row in rows]
+    numbers = section_numbers(scope)
+    media_types = [row["media_type"] for row in numbers["media_types"]]
+    all_time = scope.all_time()
     return {
         "year": scope.start_date.year,
         "range": scope.range_payload(),
         "audience": scope.audience,
+        **numbers,
+        "posters": wall_posters(scope, media_types),
+        "all_time": {"range": all_time.range_payload(), **section_numbers(all_time)},
+    }
+
+
+def section_numbers(scope):
+    """Return the section's numbers for one range: titles, types, time and ratings."""
+    rows = media_type_rows(scope)
+    return {
         "titles": sum(row["titles"] for row in rows),
         "media_types": rows,
         "time": stats_v2_activity.build_time(scope),
-        "posters": wall_posters(scope, media_types),
+        "ratings": stats_v2_ratings.build_ratings(scope),
     }
 
 
