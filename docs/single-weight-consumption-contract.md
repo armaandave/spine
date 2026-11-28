@@ -580,6 +580,15 @@ show's stars and heart are the show's own (TV-500).
 - The stars and the heart keep the same colors on every poster.
 - A title that isn't Completed shows its type's progress badge, or nothing.
 
+### SW-702: A log's poster on Recent Activity shows its stars and heart
+
+On a profile's Recent Activity rail, a log's poster shows that log's rating as
+stars and its like as a heart, in SW-701's pill, sized to the rail's poster.
+
+- A log with no rating and no like has no pill.
+- A day of progress keeps its own pill ("+40 p."); a start or a status move has
+  none.
+
 ## Contract change policy
 
 The numbered laws above are normative product behavior. Implementation details

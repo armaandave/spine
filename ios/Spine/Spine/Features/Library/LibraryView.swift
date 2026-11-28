@@ -1034,6 +1034,9 @@ struct PosterBadgeLabel: View {
 /// height, drawn with the feed's glowing marks at 8 pt. Five stars and a heart come to 68 pt of the 70 a poster has.
 struct PosterMarksPill: View {
     let marks: LibraryPosterMarks
+    /// The pill against Library's grid poster: a smaller poster (Recent Activity's) draws it smaller by the same
+    /// amount, so it sits on that poster as it does here.
+    var scale: CGFloat = 1
 
     /// 65% of the progress pill's 19 pt.
     static let height: CGFloat = 12.35
@@ -1045,22 +1048,22 @@ struct PosterMarksPill: View {
     private static let heartBox = CGSize(width: 8.2, height: 7.6)
 
     var body: some View {
-        HStack(spacing: 3.5) {
+        HStack(spacing: 3.5 * scale) {
             if !marks.stars.isEmpty {
-                HStack(spacing: 0.5) {
+                HStack(spacing: 0.5 * scale) {
                     ForEach(Array(marks.stars.enumerated()), id: \.offset) { _, mark in
-                        FeedMarkView(mark: mark, ink: .dark, size: Self.markSize, glow: Self.glow)
-                            .frame(width: Self.starBox.width, height: Self.starBox.height)
+                        FeedMarkView(mark: mark, ink: .dark, size: Self.markSize * scale, glow: Self.glow)
+                            .frame(width: Self.starBox.width * scale, height: Self.starBox.height * scale)
                     }
                 }
             }
             if marks.liked {
-                FeedMarkView(mark: .heart, ink: .dark, size: Self.markSize, glow: Self.glow)
-                    .frame(width: Self.heartBox.width, height: Self.heartBox.height)
+                FeedMarkView(mark: .heart, ink: .dark, size: Self.markSize * scale, glow: Self.glow)
+                    .frame(width: Self.heartBox.width * scale, height: Self.heartBox.height * scale)
             }
         }
-        .padding(.horizontal, 5)
-        .frame(height: Self.height)
+        .padding(.horizontal, 5 * scale)
+        .frame(height: Self.height * scale)
         .glassEffect(.regular.tint(.black.opacity(0.3)), in: .capsule)
     }
 }
@@ -1076,11 +1079,16 @@ struct LibraryPosterMarks {
 
     static func marks(for item: LibraryItem) -> LibraryPosterMarks? {
         guard LibraryViewModel.hasStatus(item, "Completed") else { return nil }
-        let rating = item.tracking.rating ?? ""
-        let stars = PostPageStyle.starSymbols(rating: rating).compactMap(FeedMark.init(starSymbol:))
         // Movies, music, books, games, manga and comics carry the heart on the row. A show's and an anime's is on your
         // own state, which every Library row carries, since the Library is always yours.
         let liked = item.tracking.liked ?? item.media.userState?.hasLiked ?? false
+        return marks(rating: item.tracking.rating, liked: liked)
+    }
+
+    /// Stars and a heart to draw, or none when there are neither.
+    static func marks(rating: String?, liked: Bool) -> LibraryPosterMarks? {
+        let rating = rating ?? ""
+        let stars = PostPageStyle.starSymbols(rating: rating).compactMap(FeedMark.init(starSymbol:))
         guard !stars.isEmpty || liked else { return nil }
         return LibraryPosterMarks(stars: stars, liked: liked, rating: Double(rating.ratingHalfSteps) / 2)
     }
