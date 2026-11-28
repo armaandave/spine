@@ -16,7 +16,12 @@ struct ProfileYearSection<Destination: View>: View {
     /// The section's size; the design's until it's measured.
     @State private var width: CGFloat = 398
     @State private var height: CGFloat = 600
-    @State private var showsAllTime = false
+    @State private var allTimeChosen = false
+
+    /// All Time shows only while the server sends its numbers; without them the section is this year's alone.
+    private var showsAllTime: Bool {
+        allTimeChosen && year.allTime != nil
+    }
 
     private var shown: ProfileYearNumbers {
         showsAllTime ? year.allTime ?? year.thisYear : year.thisYear
@@ -136,7 +141,7 @@ struct ProfileYearSection<Destination: View>: View {
 
         if year.allTime != nil {
             Button {
-                withAnimation(.smooth(duration: 0.5)) { showsAllTime.toggle() }
+                withAnimation(.smooth(duration: 0.5)) { allTimeChosen.toggle() }
             } label: {
                 words
                     // A 44 pt tap area; taken back out below, so the words keep their own height.
