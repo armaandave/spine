@@ -13,6 +13,7 @@ from django.conf import settings
 
 from api.services import stats_year
 from api.tests.test_stats_v2_activity import YEAR_2026, ActivityBase, utc_day
+from api.tests.test_stats_v2_shape import ALL_TIME
 from app import book_tracking
 from app.models import MediaTypes
 
@@ -37,10 +38,10 @@ class StatsYearTests(ActivityBase):
         film = self.item(MediaTypes.MOVIE.value, "film")
         self.set_item(film, runtime_minutes=120)
         self.log(film, utc_day(2026, 3, 2))
-        self.log(film, utc_day(2026, 4, 2))
+        self.log(film, utc_day(2026, 4, 2), rating=7)
         # Last year, and a log only the owner sees (film, album, book and game logs
         # are always public).
-        self.log(self.item(MediaTypes.MOVIE.value, "old"), utc_day(2025, 6, 1))
+        self.log(self.item(MediaTypes.MOVIE.value, "old"), utc_day(2025, 6, 1), rating=9)
         self.log(self.item(MediaTypes.MANGA.value, "hidden"), utc_day(2026, 5, 1), visibility="private")
         # Pages read this year count, though the book isn't finished.
         novel = self.item(MediaTypes.BOOK.value, "novel")
@@ -57,12 +58,37 @@ class StatsYearTests(ActivityBase):
                 self.assertEqual(year["titles"], summary["header"]["titles"])
                 self.assertEqual(year["media_types"], summary["media_types"])
                 self.assertEqual(year["time"], summary["time"])
+                self.assertEqual(year["ratings"], summary["ratings"])
 
         owner = self.year()
         self.assertEqual(owner["titles"], 3)
+        self.assertEqual(owner["ratings"]["rated"], 1)
         book = next(row for row in owner["time"]["rows"] if row["media_type"] == "book")
         self.assertEqual((book["unit"], book["value"]), ("pages", 40))
         self.assertEqual(self.year(self.stranger)["titles"], 2)
+
+    def test_all_time_numbers_are_the_stats_pages_all_time_numbers(self):
+        film = self.item(MediaTypes.MOVIE.value, "film")
+        self.set_item(film, runtime_minutes=120)
+        self.log(film, utc_day(2026, 3, 2), rating=8)
+        # Earlier years count only in All Time, and only the owner sees the manga.
+        self.log(self.item(MediaTypes.MOVIE.value, "old"), utc_day(2023, 6, 1), rating=6)
+        self.log(self.item(MediaTypes.MANGA.value, "hidden"), utc_day(2025, 5, 1), rating=4, visibility="private")
+
+        for viewer in (self.owner, self.follower, self.stranger):
+            with self.subTest(viewer=viewer.username):
+                all_time = self.year(viewer)["all_time"]
+                summary = self.summary(ALL_TIME, viewer=viewer)
+                self.assertEqual(all_time["range"], summary["range"])
+                self.assertEqual(all_time["titles"], summary["header"]["titles"])
+                self.assertEqual(all_time["media_types"], summary["media_types"])
+                self.assertEqual(all_time["time"], summary["time"])
+                self.assertEqual(all_time["ratings"], summary["ratings"])
+
+        owner = self.year()
+        self.assertEqual((owner["titles"], owner["all_time"]["titles"]), (1, 3))
+        self.assertEqual((owner["ratings"]["rated"], owner["all_time"]["ratings"]["rated"]), (1, 3))
+        self.assertEqual(self.year(self.stranger)["all_time"]["titles"], 2)
 
     def test_a_type_turned_off_stays_out_of_the_total_and_the_wall(self):
         self.log(self.item(MediaTypes.MOVIE.value, "film"), utc_day(2026, 3, 2))

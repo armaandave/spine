@@ -29,12 +29,32 @@ final class ProfileYearTests: XCTestCase {
         XCTAssertEqual(year.titles, 30)
         XCTAssertEqual(year.posters.map(\.title), ["Sinners"])
 
-        let rows = ProfileYearPresentation.rows(for: year)
+        let rows = ProfileYearPresentation.rows(for: year.thisYear)
         XCTAssertEqual(rows.map(\.mediaType), ["movie", "book", "music", "game"])
         XCTAssertEqual(rows.map(\.isEmpty), [false, false, false, true])
         // Movies and books have time; the album's runtime is unknown (0) and Games has nothing this year.
         XCTAssertEqual(rows.map { $0.measure != nil }, [true, true, false, false])
         XCTAssertEqual(rows[0].measure, StatsTimeSection.value(for: year.time.rows[0]))
+        // A server without the All Time switch's numbers.
+        XCTAssertNil(year.allTime)
+        XCTAssertNil(year.ratings)
+    }
+
+    func testAllTimeHasItsOwnNumbersAndRatingsBesideTheYears() throws {
+        let year = try JSONDecoder.api.decode(ProfileYear.self, from: Data(Self.withAllTime.utf8))
+
+        XCTAssertEqual(year.ratings?.rated, 2)
+        let allTime = try XCTUnwrap(year.allTime)
+        XCTAssertEqual(allTime.titles, 140)
+        XCTAssertEqual(allTime.ratings?.rated, 118)
+        let rows = ProfileYearPresentation.rows(for: allTime, allTime: true)
+        XCTAssertEqual(rows.map(\.mediaType), ["movie", "game"])
+        // Games has nothing this year, but something of all time.
+        XCTAssertEqual(rows.map(\.isEmpty), [false, false])
+        XCTAssertEqual(rows[1].count, ListCountWords.text(count: 4, mediaTypes: ["game"], isPeople: false))
+        // Dealing the wall again keeps both ranges' numbers.
+        XCTAssertEqual(year.withPosters([]).allTime, allTime)
+        XCTAssertEqual(year.withPosters([]).ratings, year.ratings)
     }
 
     func testTheWallStaysTheSameForTheSessionUntilANewDeal() throws {
@@ -62,6 +82,44 @@ final class ProfileYearTests: XCTestCase {
         """
         return try JSONDecoder.api.decode(MediaSummary.self, from: Data(json.utf8))
     }
+
+    private static let withAllTime = """
+    {
+      "year": 2026,
+      "range": {"start_date": "2026-01-01", "end_date": "2026-12-31", "timezone": "America/New_York", "is_all_time": false},
+      "audience": "owner",
+      "titles": 3,
+      "media_types": [
+        {"media_type": "movie", "titles": 3, "logs": 3},
+        {"media_type": "game", "titles": 0, "logs": 0}
+      ],
+      "time": {"rows": [], "hours_total": null},
+      "ratings": {
+        "average_stars": "4.00",
+        "rated": 2,
+        "distribution": [
+          {"stars": "4.0", "count": 2, "rating_min": "7.5", "rating_max": "8.4", "by_type": {"movie": 2}}
+        ]
+      },
+      "posters": [],
+      "all_time": {
+        "range": {"start_date": null, "end_date": null, "timezone": "America/New_York", "is_all_time": true},
+        "titles": 140,
+        "media_types": [
+          {"media_type": "movie", "titles": 136, "logs": 150},
+          {"media_type": "game", "titles": 4, "logs": 4}
+        ],
+        "time": {"rows": [], "hours_total": null},
+        "ratings": {
+          "average_stars": "3.50",
+          "rated": 118,
+          "distribution": [
+            {"stars": "3.5", "count": 118, "rating_min": "6.5", "rating_max": "7.4", "by_type": {"movie": 118}}
+          ]
+        }
+      }
+    }
+    """
 
     private static let payload = """
     {

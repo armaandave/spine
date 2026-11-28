@@ -5,17 +5,29 @@ import SwiftUI
 /// (STAT-312), on a glass plate over a wall of the year's posters. The wall runs off the screen's left and right
 /// edges. Its top tucks under the Stats row, fading in from under the menu's glass, and it runs on below the plate,
 /// fading off the bottom of the screen. Under 12 posters there's no wall: the numbers sit on glass like the menu's. Each type with something
-/// this year opens the Stats page on that type and year.
+/// this year opens the Stats page on that type and year. "This Year / All Time" switches the numbers and the ratings
+/// line beside the total to All Time and back; the wall stays this year's.
 struct ProfileYearSection<Destination: View>: View {
     let year: ProfileYear
-    @ViewBuilder let destination: (String) -> Destination
+    /// The picture behind the profile's header, whose color the ratings line takes, as the signature's does.
+    let pictureURL: String?
+    @ViewBuilder let destination: (String, StatsPeriod) -> Destination
 
     /// The section's size; the design's until it's measured.
     @State private var width: CGFloat = 398
     @State private var height: CGFloat = 600
+    @State private var showsAllTime = false
+
+    private var shown: ProfileYearNumbers {
+        showsAllTime ? year.allTime ?? year.thisYear : year.thisYear
+    }
+
+    private var period: StatsPeriod {
+        showsAllTime ? .allTime : .year(year.year)
+    }
 
     var body: some View {
-        let rows = ProfileYearPresentation.rows(for: year)
+        let rows = ProfileYearPresentation.rows(for: shown, allTime: showsAllTime)
         Group {
             if year.posters.count >= ProfileYearWall.minimumPosters {
                 wall(rows)
@@ -66,23 +78,18 @@ struct ProfileYearSection<Destination: View>: View {
 
     private func numbers(_ rows: [ProfileYearRow]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("This Year".uppercased())
-                .font(.system(size: 13, weight: .black))
-                .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.7))
-                .padding(.bottom, 4)
-
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(year.titles.formatted())
-                    .font(RatingsGlowChart.numberFont)
-                    .tracking(-2)
-                    .foregroundStyle(.white)
-                Text(year.titles == 1 ? "title" : "titles")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.64))
+            ProfileYearHeaderLayout {
+                rangeSwitch
+                total
+                if let ratings = shown.ratings {
+                    ProfileRatingsLine(counts: ProfileSignatureGeometry.counts(ratings), pictureURL: pictureURL)
+                        // A range nobody rated in fades out as its line flattens.
+                        .opacity(ProfileSignatureGeometry.shows(ratings) ? 1 : 0)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(ProfileSignatureGeometry.accessibilityLabel(ratings))
+                        .accessibilityHidden(!ProfileSignatureGeometry.shows(ratings))
+                }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(ProfileYearPresentation.totalAccessibilityLabel(year))
 
             VStack(spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
@@ -93,20 +100,73 @@ struct ProfileYearSection<Destination: View>: View {
                             .accessibilityLabel(row.accessibilityLabel)
                     } else {
                         NavigationLink {
-                            destination(row.mediaType)
+                            destination(row.mediaType, period)
                         } label: {
                             rowLabel(row, isLast: isLast)
                         }
                         .buttonStyle(ProfileMenuRowButtonStyle())
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(row.accessibilityLabel)
-                        .accessibilityHint("Opens \(year.year) stats")
+                        .accessibilityHint(showsAllTime ? "Opens all-time stats" : "Opens \(year.year) stats")
                         .accessibilityAddTraits(.isButton)
                     }
                 }
             }
             .padding(.top, 10)
         }
+    }
+
+    /// "THIS YEAR / ALL TIME": a tap anywhere on it switches to the other, the one shown in full.
+    @ViewBuilder
+    private var rangeSwitch: some View {
+        let words = HStack(spacing: 5) {
+            Text("This Year".uppercased())
+                .opacity(showsAllTime ? ProfileYearHeaderLayout.unchosen : 1)
+            if year.allTime != nil {
+                Text("/")
+                    .opacity(ProfileYearHeaderLayout.unchosen)
+                Text("All Time".uppercased())
+                    .opacity(showsAllTime ? 1 : ProfileYearHeaderLayout.unchosen)
+            }
+        }
+        .font(ProfileYearHeaderLayout.switchFont)
+        .tracking(0.8)
+        .foregroundStyle(.white.opacity(0.7))
+        .lineLimit(1)
+
+        if year.allTime != nil {
+            Button {
+                withAnimation(.smooth(duration: 0.5)) { showsAllTime.toggle() }
+            } label: {
+                words
+                    // A 44 pt tap area; taken back out below, so the words keep their own height.
+                    .padding(.vertical, ProfileYearHeaderLayout.tapInset)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, -ProfileYearHeaderLayout.tapInset)
+            .sensoryFeedback(.selection, trigger: showsAllTime)
+            .accessibilityLabel(showsAllTime ? "All time" : "This year")
+            .accessibilityHint(showsAllTime ? "Shows this year" : "Shows all time")
+        } else {
+            words
+        }
+    }
+
+    private var total: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(shown.titles.formatted())
+                .font(RatingsGlowChart.numberFont)
+                .tracking(-2)
+                .foregroundStyle(.white)
+                .contentTransition(.numericText(value: Double(shown.titles)))
+            Text(shown.titles == 1 ? "title" : "titles")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.white.opacity(0.64))
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(ProfileYearPresentation.totalAccessibilityLabel(shown, allTime: showsAllTime))
     }
 
     private func rowLabel(_ row: ProfileYearRow, isLast: Bool) -> some View {
@@ -116,6 +176,7 @@ struct ProfileYearSection<Destination: View>: View {
                 .foregroundStyle(.white.opacity(row.isEmpty ? 0.58 : 0.9))
                 .monospacedDigit()
                 .lineLimit(1)
+                .contentTransition(.numericText())
             Spacer(minLength: 10)
             if let measure = row.measure {
                 Text(measure)
@@ -123,6 +184,7 @@ struct ProfileYearSection<Destination: View>: View {
                     .foregroundStyle(.white.opacity(0.64))
                     .monospacedDigit()
                     .lineLimit(1)
+                    .contentTransition(.numericText())
             }
         }
         .frame(height: 34)
@@ -134,6 +196,44 @@ struct ProfileYearSection<Destination: View>: View {
                     .frame(height: 0.5)
             }
         }
+    }
+}
+
+/// The section's top: the range switch, the total 4 pt under it, and the ratings line to the right of both, running
+/// from the switch's cap height down to the total's baseline and on to the section's trailing edge.
+struct ProfileYearHeaderLayout: Layout {
+    static let switchFont = Font.system(size: 13, weight: .black)
+    /// The switch's capital letters' height, where the line's top sits above their baseline.
+    static let switchCapHeight = UIFont.systemFont(ofSize: 13, weight: .black).capHeight
+    /// The range not shown, and the slash between them.
+    static let unchosen: Double = 0.42
+    static let tapInset: CGFloat = 14
+    static let spacing: CGFloat = 4
+    /// Room between the words and the line.
+    static let gap: CGFloat = 14
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count >= 2 else { return .zero }
+        let words = subviews[0].sizeThatFits(.unspecified)
+        let total = subviews[1].sizeThatFits(.unspecified)
+        let natural = max(words.width, total.width)
+        let width = proposal.width.flatMap { $0.isFinite ? max($0, natural) : nil } ?? natural
+        return CGSize(width: width, height: words.height + Self.spacing + total.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count >= 2 else { return }
+        let words = subviews[0].dimensions(in: .unspecified)
+        let total = subviews[1].dimensions(in: .unspecified)
+        let totalTop = bounds.minY + words.height + Self.spacing
+        subviews[0].place(at: bounds.origin, proposal: .unspecified)
+        subviews[1].place(at: CGPoint(x: bounds.minX, y: totalTop), proposal: .unspecified)
+        guard subviews.count >= 3 else { return }
+        let top = bounds.minY + words[.firstTextBaseline] - Self.switchCapHeight
+        let bottom = totalTop + total[.firstTextBaseline]
+        let leading = bounds.minX + max(words.width, total.width) + Self.gap
+        let size = CGSize(width: max(bounds.maxX - leading, 0), height: max(bottom - top, 0))
+        subviews[2].place(at: CGPoint(x: leading, y: top), proposal: ProposedViewSize(size))
     }
 }
 
@@ -386,9 +486,10 @@ struct ProfileYearRow: Identifiable, Equatable {
 enum ProfileYearPresentation {
     /// One row per turned-on type, in the server's order. The count names the type ("92 films", "5 anime"), so the
     /// type's name never sits beside its own noun.
-    static func rows(for year: ProfileYear) -> [ProfileYearRow] {
-        let time = Dictionary(year.time.rows.map { ($0.mediaType, $0) }, uniquingKeysWith: { first, _ in first })
-        return year.mediaTypes.map { type in
+    static func rows(for numbers: ProfileYearNumbers, allTime: Bool = false) -> [ProfileYearRow] {
+        let during = allTime ? "of all time" : "this year"
+        let time = Dictionary(numbers.time.rows.map { ($0.mediaType, $0) }, uniquingKeysWith: { first, _ in first })
+        return numbers.mediaTypes.map { type in
             let name = MediaTypeTheme.theme(for: type.mediaType).displayName
             guard type.titles > 0 else {
                 let noun = ListCountWords.noun(count: 0, mediaTypes: [type.mediaType], isPeople: false)
@@ -397,7 +498,7 @@ enum ProfileYearPresentation {
                     count: "No \(noun) yet",
                     measure: nil,
                     isEmpty: true,
-                    accessibilityLabel: "\(name), nothing this year"
+                    accessibilityLabel: allTime ? "\(name), nothing yet" : "\(name), nothing this year"
                 )
             }
             let count = ListCountWords.text(count: type.titles, mediaTypes: [type.mediaType], isPeople: false)
@@ -407,12 +508,12 @@ enum ProfileYearPresentation {
                 count: count,
                 measure: measure,
                 isEmpty: false,
-                accessibilityLabel: [name, count, measure].compactMap { $0 }.joined(separator: ", ") + " this year"
+                accessibilityLabel: [name, count, measure].compactMap { $0 }.joined(separator: ", ") + " \(during)"
             )
         }
     }
 
-    static func totalAccessibilityLabel(_ year: ProfileYear) -> String {
-        "\(year.titles.formatted()) \(year.titles == 1 ? "title" : "titles") this year"
+    static func totalAccessibilityLabel(_ numbers: ProfileYearNumbers, allTime: Bool = false) -> String {
+        "\(numbers.titles.formatted()) \(numbers.titles == 1 ? "title" : "titles") \(allTime ? "of all time" : "this year")"
     }
 }
