@@ -12,6 +12,8 @@ final class ProfileViewModel {
     var year: ProfileYear?
     /// The signature beside the @handle (STAT-313); nil until it loads, and on a restricted profile.
     var ratings: ProfileRatings?
+    /// The lists tagged "profile" under Recent Activity; nil until they load, and on a restricted profile.
+    var pinnedLists: [CustomListSummary]?
     var isLoading = true
     var isLoadingInProgress = false
     var isLoadingActivity = false
@@ -27,6 +29,8 @@ final class ProfileViewModel {
     private let trackingRepository: TrackingRepository
     private let activityRepository: ActivityRepository
     private let socialRepository: SocialRepository
+    /// Nil leaves the pinned lists out.
+    private let listRepository: ListRepository?
     private let onUnauthorized: () -> Void
     private let username: String?
     private var requestGeneration = 0
@@ -41,6 +45,7 @@ final class ProfileViewModel {
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
         socialRepository: SocialRepository? = nil,
+        listRepository: ListRepository? = nil,
         username: String? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
@@ -48,6 +53,7 @@ final class ProfileViewModel {
         self.trackingRepository = trackingRepository
         self.activityRepository = activityRepository
         self.socialRepository = socialRepository ?? AppRepositories.current().social
+        self.listRepository = listRepository
         self.username = username
         self.onUnauthorized = onUnauthorized
     }
@@ -110,14 +116,22 @@ final class ProfileViewModel {
             recentActivityItems = []
             year = nil
             ratings = nil
+            pinnedLists = nil
             return
         }
         // The signature sits in the hero: it loads alongside the sections below, never ahead of them.
         async let ratingsLoaded: Void = loadRatings(generation: generation)
         await loadInProgressItems(generation: generation)
         await loadRecentActivity(generation: generation)
+        await loadPinnedLists(generation: generation)
         await loadYear(generation: generation)
         await ratingsLoaded
+    }
+
+    /// A list was made, edited or deleted: its tags may have changed.
+    func reloadPinnedLists() async {
+        guard !isRestricted else { return }
+        await loadPinnedLists(generation: requestGeneration)
     }
 
     func block() async {
@@ -269,6 +283,26 @@ final class ProfileViewModel {
             // The session's wall: the same one each time the profile shows, until pull to refresh or the next launch.
             let key = "\(profile?.username ?? username ?? "")/\(loaded.year)"
             year = loaded.withPosters(ProfileYearWallSession.shared.posters(for: key, from: loaded.posters, dealNew: dealsNew))
+        } catch is CancellationError {
+            return
+        } catch {
+            handleUnauthorized(error)
+        }
+    }
+
+    /// The owner's lists tagged "profile" that you may see, the last edited three. They are extra: a failed load keeps
+    /// what's on screen, and on a first load the section stays hidden.
+    private func loadPinnedLists(generation: Int) async {
+        guard let listRepository, let owner = profile?.username else { return }
+        do {
+            let response = try await listRepository.tagged(
+                ProfilePinnedLists.tag,
+                owner: owner,
+                page: nil,
+                browse: ProfilePinnedLists.browse
+            )
+            guard generation == requestGeneration else { return }
+            pinnedLists = ProfilePinnedLists.pinned(from: response.results)
         } catch is CancellationError {
             return
         } catch {
@@ -710,6 +744,7 @@ struct ProfileView: View {
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
             socialRepository: socialRepository,
+            listRepository: listRepository,
             username: username,
             onUnauthorized: onUnauthorized
         ))
@@ -770,6 +805,9 @@ struct ProfileView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Swift.Task<Void, Never> { await viewModel.reload() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .customListsDidChange)) { _ in
+                Swift.Task<Void, Never> { await viewModel.reloadPinnedLists() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
                 if selectedRef == nil && selectedPerson == nil {
@@ -930,6 +968,7 @@ struct ProfileView: View {
                                 activitySection
                                     .padding(.horizontal, 16)
                                     .padding(.top, 20)
+                                pinnedListsSection
                                 profileMenuSection(profile)
                                     .padding(.horizontal, 16)
                                     .padding(.top, 20)
@@ -1489,6 +1528,59 @@ struct ProfileView: View {
             }
             .spineContentTransition(value: activityPhase)
         }
+    }
+
+    /// Up to three lists tagged "profile". With none, your own profile says how to pin one; someone else's leaves the
+    /// section out.
+    @ViewBuilder
+    private var pinnedListsSection: some View {
+        if let lists = viewModel.pinnedLists, !lists.isEmpty || isOwnProfile {
+            ProfileSection(title: "Pinned Lists") {
+                if lists.isEmpty {
+                    EmptyProfileCard(title: "Tag a list “profile” to pin it here", systemName: "pin")
+                } else {
+                    VStack(spacing: 12) {
+                        ForEach(lists) { list in
+                            NavigationLink {
+                                listDetailView(listId: list.id)
+                            } label: {
+                                CustomListRail(list: list)
+                            }
+                            .buttonStyle(CustomListRailButtonStyle())
+                            .accessibilityLabel(list.railAccessibilityLabel)
+                            .accessibilityHint("Opens list")
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+        }
+    }
+
+    private func listDetailView(listId: Int) -> some View {
+        ProfileListDetailView(
+            listId: listId,
+            profileRepository: profileRepository,
+            listRepository: listRepository,
+            peopleRepository: peopleRepository,
+            mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
+            diaryRepository: diaryRepository,
+            activityRepository: activityRepository,
+            importCoordinator: importCoordinator,
+            storygraphImportCoordinator: storygraphImportCoordinator,
+            goodreadsImportCoordinator: goodreadsImportCoordinator,
+            marginsImportCoordinator: marginsImportCoordinator,
+            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
+            currentUserId: currentUserId ?? viewModel.profile?.id,
+            onLogout: onLogout,
+            onOpenDiary: onOpenDiary,
+            onOpenLibrary: onOpenLibrary,
+            selectedTab: selectedTab,
+            onSelectTab: onSelectTab,
+            onUnauthorized: onUnauthorized
+        )
     }
 
     private func profileMenuSection(_ profile: UserProfile) -> some View {
