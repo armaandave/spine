@@ -5334,6 +5334,41 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.profile?.hallOfFamePicks.map(\.id), [album.id])
     }
 
+    /// The owner's lists tagged "profile" are pinned, the last edited three.
+    @MainActor
+    func testProfileViewModelPinsTheLastEditedThreeListsTaggedProfile() async {
+        let owner = UserSummary(id: 1, username: "mobile", displayName: "Mobile", avatarUrl: nil)
+        let lists = (1...4).map { id in
+            CustomListSummary(
+                id: id,
+                name: "List \(id)",
+                slug: "list-\(id)",
+                description: "",
+                tags: ["Profile"],
+                visibility: "public",
+                owner: owner,
+                itemsCount: 1,
+                likeCount: 0
+            )
+        }
+        let listRepository = PinnedListsRepository(lists: lists)
+        let viewModel = ProfileViewModel(
+            profileRepository: HallOfFameProfileRepository(profile: profileFixture()),
+            trackingRepository: ScriptedLibraryTrackingRepository(responses: [:]),
+            activityRepository: ScriptedHomeActivityRepository(items: []),
+            listRepository: listRepository,
+            onUnauthorized: {}
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.pinnedLists?.map(\.id), [1, 2, 3])
+        XCTAssertEqual(listRepository.requests.map(\.tag), ["profile"])
+        XCTAssertEqual(listRepository.requests.map(\.owner), ["mobile"])
+        XCTAssertEqual(listRepository.requests.map(\.browse.sort), [.updated])
+        XCTAssertEqual(listRepository.requests.map(\.browse.resolvedDirection), [.desc])
+    }
+
     @MainActor
     func testProfileViewModelLoadsYourYearAfterTheProfile() async {
         let year = ProfileYear(
@@ -8751,6 +8786,36 @@ private func composerList(items: [MediaSummary]) -> CustomListDetail {
 }
 
 private struct FakeListRepository: ListRepository {
+    func list(membershipFor ref: MediaRef?) async throws -> [CustomListSummary] { fatalError("Not used") }
+    func peopleLists(membershipFor ref: PersonRef) async throws -> [CustomListSummary] { fatalError("Not used") }
+    func detail(id: Int) async throws -> CustomListDetail { fatalError("Not used") }
+    func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary { fatalError("Not used") }
+    func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail { fatalError("Not used") }
+    func delete(id: Int) async throws {}
+    func addItem(listId: Int, ref: MediaRef) async throws -> MediaSummary { fatalError("Not used") }
+    func removeItem(listId: Int, itemId: Int) async throws {}
+    func reorderItems(listId: Int, itemIds: [Int]) async throws -> CustomListDetail { fatalError("Not used") }
+    func people(listId: Int, page: String?) async throws -> PagedResponse<PersonListEntry> { fatalError("Not used") }
+    func addPerson(listId: Int, ref: PersonRef) async throws -> PersonListEntry { fatalError("Not used") }
+    func removePerson(listId: Int, entryId: Int) async throws {}
+    func reorderPeople(listId: Int, entryIds: [Int]) async throws -> CustomListDetail { fatalError("Not used") }
+}
+
+/// Answers the tagged lists request, newest edit first like the server, and records what was asked.
+@MainActor
+private final class PinnedListsRepository: ListRepository {
+    let lists: [CustomListSummary]
+    private(set) var requests: [(tag: String, owner: String, browse: ListBrowseState)] = []
+
+    init(lists: [CustomListSummary]) {
+        self.lists = lists
+    }
+
+    func tagged(_ tag: String, owner: String, page: String?, browse: ListBrowseState) async throws -> PagedResponse<CustomListSummary> {
+        requests.append((tag: tag, owner: owner, browse: browse))
+        return PagedResponse(count: lists.count, next: nil, previous: nil, results: lists)
+    }
+
     func list(membershipFor ref: MediaRef?) async throws -> [CustomListSummary] { fatalError("Not used") }
     func peopleLists(membershipFor ref: PersonRef) async throws -> [CustomListSummary] { fatalError("Not used") }
     func detail(id: Int) async throws -> CustomListDetail { fatalError("Not used") }
