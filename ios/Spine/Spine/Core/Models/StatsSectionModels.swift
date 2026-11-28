@@ -349,12 +349,37 @@ struct ProfileYear: Decodable, Hashable {
     /// The owner's turned-on types in the app's order, with their titles this year; zero included.
     let mediaTypes: [StatsMediaTypeCount]
     let time: StatsTime
+    /// This year's rated logs (STAT-204), for the line beside the total. Nil from servers that don't send it.
+    var ratings: StatsRatings? = nil
     /// A random pick of this year's titles with artwork, every type dealt its share; the wall's pool.
     let posters: [MediaSummary]
+    /// The same numbers over All Time, for the section's All Time switch. Nil from servers that don't send it.
+    var allTime: ProfileYearNumbers? = nil
+
+    var thisYear: ProfileYearNumbers {
+        ProfileYearNumbers(titles: titles, mediaTypes: mediaTypes, time: time, ratings: ratings)
+    }
 
     func withPosters(_ posters: [MediaSummary]) -> ProfileYear {
-        ProfileYear(year: year, titles: titles, mediaTypes: mediaTypes, time: time, posters: posters)
+        ProfileYear(
+            year: year,
+            titles: titles,
+            mediaTypes: mediaTypes,
+            time: time,
+            ratings: ratings,
+            posters: posters,
+            allTime: allTime
+        )
     }
+}
+
+/// One range's numbers in the This Year section: this year's, or All Time's.
+struct ProfileYearNumbers: Decodable, Hashable {
+    let titles: Int
+    /// The owner's turned-on types in the app's order; zero included.
+    let mediaTypes: [StatsMediaTypeCount]
+    let time: StatsTime
+    var ratings: StatsRatings? = nil
 }
 
 // MARK: - The profile's signature (STAT-313)

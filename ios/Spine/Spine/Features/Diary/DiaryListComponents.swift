@@ -677,8 +677,9 @@ struct LogRatingMarks: View {
                     .foregroundStyle(.pink)
             }
             if isRepeat {
+                // The log page's rewatch green; rows are light text on dark, like that page.
                 Image(systemName: "arrow.clockwise")
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(ArtInk.dark.rewatch)
             }
             if summary.hasReview {
                 Image(systemName: "text.alignleft")

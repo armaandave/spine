@@ -975,8 +975,8 @@ struct ProfileView: View {
                                     // Over the This Year wall, whose top tucks under the Stats row.
                                     .zIndex(1)
                                 if let year = viewModel.year, year.titles > 0 {
-                                    ProfileYearSection(year: year) { mediaType in
-                                        statsView(profile, period: .year(year.year), mediaType: mediaType)
+                                    ProfileYearSection(year: year, pictureURL: profileBackdropURL(from: profile)) { mediaType, period in
+                                        statsView(profile, period: period, mediaType: mediaType)
                                     }
                                     .padding(.horizontal, 16)
                                 }
@@ -2221,6 +2221,15 @@ enum RecentActivityBadge {
         }
     }
 
+    /// A log's stars and heart, in Library's stars pill (SW-702). A log with neither has no pill.
+    static func marks(for activity: ActivityItem) -> LibraryPosterMarks? {
+        guard case .log = activity.post else { return nil }
+        return LibraryPosterMarks.marks(rating: activity.object.rating, liked: activity.object.liked == true)
+    }
+
+    /// Library's stars pill sized to the rail's smaller poster.
+    static let marksScale = PosterSlot.profileRail.size.width / PosterSlot.tagGrid.size.width
+
     /// "2h 30m", "2h" or "45m"; from 10 hours up, whole hours ("13h" for 12h 45m), so it stays on one line.
     private static func time(minutes: Double) -> String {
         if minutes >= 600 { return "\(Int((minutes / 60).rounded()))h" }
@@ -2368,6 +2377,9 @@ private struct RecentActivityPoster: View {
                     PosterBadgeLabel(text: badge)
                         .lineLimit(1)
                         .padding(5)
+                } else if let marks = RecentActivityBadge.marks(for: item.activity) {
+                    PosterMarksPill(marks: marks, scale: RecentActivityBadge.marksScale)
+                        .padding(5)
                 }
             }
         case let .person(person):
@@ -2406,6 +2418,8 @@ private struct RecentActivityPoster: View {
         case let .media(media):
             if RecentActivityBadge.text(for: item.activity) != nil, let told = item.activity.object.label {
                 "View \(media.title), \(told)"
+            } else if let marks = RecentActivityBadge.marks(for: item.activity) {
+                "View \(media.title), \(marks.spokenText)"
             } else {
                 "View \(media.title)"
             }
